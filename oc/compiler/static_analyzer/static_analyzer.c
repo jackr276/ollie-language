@@ -723,6 +723,7 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 								df_node->visited = TRUE;
 								dynamic_array_add(&worklist, df_node);
 							}
+
 						}
 					}
 				}

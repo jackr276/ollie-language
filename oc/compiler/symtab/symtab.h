@@ -260,6 +260,13 @@ struct symtab_variable_record_t{
 	 * This is what really matters to us in the register allocator
 	 */
 	u_int16_t class_relative_function_parameter_order;
+	/**
+	 * Is this variable user defined or not? Remember that we have special
+	 * SSA variables that we use just for the compiler internally. For variables
+	 * like those, we aren't going to bother with mutability or intiailization
+	 * checking
+	 */
+	u_int8_t is_user_defined;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so

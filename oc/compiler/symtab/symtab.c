@@ -655,6 +655,9 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 	 */
 	record->function_declared_in = function_declared_in;
 
+	//These are user defined
+	record->is_user_defined = TRUE;
+
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;
@@ -686,6 +689,9 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 
 	//Store the visibility level
 	record->visibility = visibility;
+
+	//These are user defined
+	record->is_user_defined = TRUE;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -725,6 +731,9 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, 
 	//These are always private
 	record->visibility = VISIBILITY_TYPE_PRIVATE;
 
+	//These are user defined
+	record->is_user_defined = TRUE;
+
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;
@@ -757,6 +766,9 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 
 	//Store the stack region too
 	record->stack_region = stack_region;
+
+	//These are not user defined
+	record->is_user_defined = FALSE;
 	
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
@@ -799,6 +811,9 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
 
+	//These are not user defined
+	record->is_user_defined = FALSE;
+
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;
@@ -839,6 +854,9 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 
 	//This is still a function parameter at heart
 	record->membership = FUNCTION_PARAMETER;
+
+	//These are user defined in a way
+	record->is_user_defined = TRUE;
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
