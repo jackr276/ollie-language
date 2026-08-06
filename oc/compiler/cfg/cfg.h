@@ -175,6 +175,8 @@ struct basic_block_t{
 
 	//The reference to a jump table. This is often not used at all
 	jump_table_t* jump_table;
+	//What is the lexical scope where this block was defined?
+	symtab_variable_sheaf_t* lexical_scope_contained_in;
 	//The case statement value -- usually blank
 	int64_t case_stmt_val;
 	//The function that we're defined in

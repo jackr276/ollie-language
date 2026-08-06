@@ -568,6 +568,31 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 
 /**
+ * Is the given variable within scope for a given lexical scope. We do this by traversing up the lexical
+ * scope to see if, at any point, the variable's scope ID matches one of our scopes
+ */
+static inline u_int8_t is_variable_in_scope(symtab_variable_sheaf_t* lexical_scope, u_int32_t variable_scope_id){
+	symtab_variable_sheaf_t* cursor = lexical_scope;
+
+	//Run through this scope and all higher ones
+	while(cursor != NULL){
+		/**
+		 * If at any point the variable's scope is equal
+		 * then we are good here
+		 */
+		if(cursor->lexical_scope_id == variable_scope_id){
+			return TRUE;
+		}
+
+		cursor = cursor->previous_level;
+	}
+
+	//If we made it here then we're not in scope
+	return FALSE;
+}
+
+
+/**
  * if(x0 == 0){
  * 	x1 = 2;
  * } else {
@@ -730,7 +755,9 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 						/**
 						 * TODO DOCUMENT
 						 */
-						} else if(record->is_user_defined == TRUE && record->type_defined_as->mutability == NOT_MUTABLE){
+						} else if(record->is_user_defined == TRUE 
+									&& record->type_defined_as->mutability == NOT_MUTABLE
+									&& is_variable_in_scope(df_node->lexical_scope_contained_in, record->lexical_scope_id) == TRUE){
 							instruction_t* phi_stmt = emit_phi_function(record);
 
 							//Add the phi statement into the block	
