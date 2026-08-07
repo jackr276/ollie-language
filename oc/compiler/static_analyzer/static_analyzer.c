@@ -1480,14 +1480,17 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		return SUCCESS;
 	}
 
+	//Extract the linked var for our use
+	symtab_variable_record_t* linked_var = variable->linked_var;
+
 	switch(get_variable_initialization_state(variable)){
 		/**
 		 * Obvious case - it's never been initialized 
 		 * so this is a pure use before initialization
 		 */
 		case VARIABLE_STATE_UNINITIALIZED:
-			sprintf(error_info, "Variable %s is used before initialization. First defined here: ", variable->linked_var->var_name.string);
-			print_variable_name_to_buffer(error_info, variable->linked_var);
+			sprintf(error_info, "Variable %s is used before initialization. First defined here: ", get_true_variable_name(linked_var));
+			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
 			return FAILURE;
@@ -1498,8 +1501,8 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		 *
 		 */
 		case VARIABLE_STATE_MAYBE_INITIALIZED:
-			sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", variable->linked_var->var_name.string);
-			print_variable_name_to_buffer(error_info, variable->linked_var);
+			sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", get_true_variable_name(linked_var));
+			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
 			return FAILURE;
@@ -1626,7 +1629,7 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		 * immutable means that it can only ever be assigned once
 		 */
 		case VARIABLE_STATE_MAYBE_INITIALIZED:
-			sprintf(error_info, "Variable %s was declared with an immutable type but may be mutated. First defined here:", linked_var->var_name.string);
+			sprintf(error_info, "Variable %s was declared with an immutable type but may be mutated. First defined here:", get_true_variable_name(linked_var));
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
@@ -1637,7 +1640,7 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		 * immutalbe means that it can only ever be assigned once
 		 */
 		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
-			sprintf(error_info, "Variable %s was declared with an immutable type but is mutated. First defined here:", linked_var->var_name.string);
+			sprintf(error_info, "Variable %s was declared with an immutable type but is mutated. First defined here:", get_true_variable_name(linked_var));
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
@@ -1789,7 +1792,7 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				 * with this value. Therefore, this tells us that the variable was never mutated
 				 */
 				if(cursor->ssa_counter == 2){
-					sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", cursor->var_name.string);
+					sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", get_true_variable_name(cursor));
 					print_variable_name_to_buffer(info, cursor);
 					print_static_analyzer_message(MESSAGE_TYPE_WARNING, info, cursor->line_number);
 					(*warning_count)++;

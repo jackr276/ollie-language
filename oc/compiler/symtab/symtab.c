@@ -2493,6 +2493,9 @@ void print_variable_name_to_buffer(char* buffer, symtab_variable_record_t* recor
 	//Internal buffer for printing
 	char internal_buffer[1000];
 
+	//Dealias first if need be
+	record = dealias_variable(record);
+
 	switch(record->membership){
 		/**
 		 * For function parameters we just print out 
