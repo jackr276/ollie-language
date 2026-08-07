@@ -1558,11 +1558,19 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 
 
 /**
+ * For an instruction to comply with mutability constraints, the assignee must not be 
+ * overwriting an initialized or maybe initialized variable if it's immutable. Of course
+ * if it's mutable then we won't even bother checking. 
  *
- * TODO DOC
+ * The way that we do this revolves around the "overwritten generation". In the SSA renamer, 
+ * whenever we rename a variable on the LHS, we maintain a mapping of the new generation
+ * to the overwritten generation. Once we get here, we reference that mapping and are able
+ * to from there get the intialization state of the overwritten generation
+ *
  * NOTE: we assume that the caller will never pass a phi function as a parameter
  */
 static inline u_int8_t does_instruction_comply_with_mutability_constraints(instruction_t* instruction){
+	//Assignee is what we care to check for this
 	three_addr_var_t* assignee = instruction->operands.oir.assignee;
 
 	/**
@@ -1609,8 +1617,6 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		return SUCCESS;
 	}
 
-	//TODO WE NEED TO UPDATE PRINTING FOR PARAMETER VARIABLES
-
 	/**
 	 * Otherwise, we'll need to lookup what the state of the overwritten
 	 * generation was. If it was definitely or maybe initialized, then
@@ -1637,7 +1643,7 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 
 		/**
 		 * This is a definite mutation - definite violation because being
-		 * immutalbe means that it can only ever be assigned once
+		 * immutable means that it can only ever be assigned once
 		 */
 		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
 			sprintf(error_info, "Variable %s was declared with an immutable type but is mutated. First defined here:", get_true_variable_name(linked_var));
@@ -1672,10 +1678,7 @@ static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_b
 	//Grab a leader statement out
 	instruction_t* cursor = block->leader_statement;
 
-	/**
-	 *
-	 * TODO DOC
-	 */
+	//Run through all instructions in the block
 	while(cursor != NULL){
 		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
 			cursor = cursor->next_statement;
@@ -1683,7 +1686,11 @@ static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_b
 		}
 
 		/**
-		 * TODO DOC
+		 * Perform both mutability and definite assignment analysis. They're
+		 * totally independent so the result of one doesn't impact the other. 
+		 * Just one failure here will cause the entire compilation to
+		 * fail but we will keep going for all blocks in the function
+		 * to get a comprehensive picture
 		 */
 		result &= does_instruction_comply_with_definite_assignment(cursor);
 		result &= does_instruction_comply_with_mutability_constraints(cursor);
