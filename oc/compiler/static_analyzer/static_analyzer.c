@@ -780,11 +780,11 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 	dynamic_array_t* function_blocks = &(variable_function->function_blocks);
 
 	/**
-	 * Extract what block this variable was defined in. Note that defined in
+	 * Extract what block this variable was declared in. Note that declared in
 	 * does not mean where it was initialized. It means the literal block 
 	 * where the variable itself was declared by the user
 	 */
-	basic_block_t* block_defined_in = variable->block_defined_in;
+	basic_block_t* block_declared_in = variable->block_declared_in;
 
 	/**
 	 * Reset the "has_phi_function" tag on all of our blocks
@@ -832,12 +832,12 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 			}
 
 			/**
-			 * If the block that this variable was defined in does not dominate
+			 * If the block that this variable was declared in does not dominate
 			 * the join node we're looking at, then the variable is not defined
 			 * at the join node and a phi function inserted here could lead
 			 * to false positives during mutability checking
 			 */
-			if(does_block_dominate_target(block_defined_in, df_node) == FALSE){
+			if(does_block_dominate_target(block_declared_in, df_node) == FALSE){
 				continue;
 			}
 

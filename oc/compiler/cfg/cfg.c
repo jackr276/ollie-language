@@ -8057,14 +8057,8 @@ void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
  * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
  */
 static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
-	//Just to double check
-	if(a == NULL){
-		printf("Fatal error. Attempting to merge null block");
-		exit(1);
-	}
-
 	//If b is null, we just return a
-	if(b == NULL || b->leader_statement == NULL){
+	if(b->leader_statement == NULL){
 		return a;
 	}
 
@@ -11617,30 +11611,27 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 		/**
 		 * If we are able to merge these two blocks, then we will. If we are not, then we will
 		 * emit a jump from the function's start to the compound statement start
-		 *
-		 *
-		 * TODO VERY UNCERTAIN ABOUT THIS
 		 */
-		//if(can_blocks_be_merged(function_starting_block, compound_statement_results.starting_block) == TRUE){
+		if(can_blocks_be_merged(function_starting_block, compound_statement_results.starting_block) == TRUE){
 			//Merge the two since we can
- 		//	compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
+ 			compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
 
 			/**
 			 * Due to the way that the merging works, we need to make sure that the reassignment
 			 * is valid. If it's just one big block, then the prior assignment above is actually
 			 * fine
 			 */
-		//	if(compound_statement_results.starting_block != compound_statement_results.final_block){
-		//		compound_statement_exit_block = compound_statement_results.final_block;
-		//	}
+			if(compound_statement_results.starting_block != compound_statement_results.final_block){
+				compound_statement_exit_block = compound_statement_results.final_block;
+			}
 
-		//} else {
+		} else {
 			//Could not merge, just jump into this block
 			emit_jump(function_starting_block, compound_statement_results.starting_block);
 
 			//We can just straight assign here
 			compound_statement_exit_block = compound_statement_results.final_block;
-		//}
+		}
 
 		//If these two are not equal, we'll add a successor as the exit block
 		if(compound_statement_exit_block != function_exit_block){
