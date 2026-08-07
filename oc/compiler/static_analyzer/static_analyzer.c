@@ -581,6 +581,49 @@ static inline u_int8_t does_block_dominate_target(basic_block_t* block, basic_bl
 
 
 /**
+ * if(x0 == 0){
+ * 	x1 = 2;
+ * } else {
+ * 	x2 = 3;
+ * }
+ * 
+ * x3 <- phi(x1, x2)
+ * t4 <- x3 + 1 <------ use that requires x3 be known at the start of the block
+ *
+ * This means that x3 is x1 if it comes from the first branch and x2 if it comes
+ * from the second branch
+ *
+ * To insert phi functions, we take the following approach:
+ * 	worklist <- {}
+ *
+ * 	For each SSA eligible variable V:
+ * 		For each block B in the function assigns V:
+ * 			add it onto the worklist
+ * 			Flag B as having been on the worklist
+ *
+ * 		While worklist is not empty:
+ * 			Remove block B from the worklist
+ *
+ * 			for each dominance frontier block D of block B:
+ * 				if D already has a phi function for V: <-------- avoid double insertions
+ * 					continue
+ *
+ * 				if a variable is not LIVE_IN 
+ * 					continue
+ *
+ * 				Add the phi function
+ * 				Flag D as having a phi function
+ *
+ * 				if(D has never been on the worklist):
+ * 					Add D to the worklist
+ * 					Flag D as having been on the worklist
+ *
+ * We will use the "visited" tag to keep track of whether or not we've already
+ * evaluated had this block on the worklist or not. We will need to reset this
+ * for the function blocks for each variable that we compute
+ *
+ * Pruned phi function insertion will only happen for mutable and non-user defined variables
+ * because we do not care to preserve assignment information if variables are overwritten
  */
 static inline void pruned_phi_function_insertion(symtab_variable_record_t* variable, dynamic_array_t* worklist){
 	/**
@@ -740,7 +783,6 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 			}
 
 			if(does_block_dominate_target(block_defined_in, df_node) == FALSE){
-				printf("VARIABLE %s: DEFINED IN BLOCK .L%d does NOT dominate DF node .L%d\n", variable->var_name.string, block_defined_in->block_id, df_node->block_id);
 				continue;
 			}
 
@@ -766,46 +808,19 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 
 
 /**
- * if(x0 == 0){
- * 	x1 = 2;
- * } else {
- * 	x2 = 3;
- * }
- * 
- * x3 <- phi(x1, x2)
- * t4 <- x3 + 1 <------ use that requires x3 be known at the start of the block
+ * Insert phi functions for all eligible variables in the symbol table. There
+ * are 2 separate classes of variables that we will consider in our calculation:
  *
- * This means that x3 is x1 if it comes from the first branch and x2 if it comes
- * from the second branch
+ * 	1.) Mutable and non-user defined variables: these variables do not have any
+ * 		constraints on mutability so we will prune the phi function insertion
+ * 		by whether or not the variable is LIVE_IN at the start of the join
+ * 		node. See the full algorithm in the dedicated function
  *
- * To insert phi functions, we take the following approach:
- * 	worklist <- {}
- *
- * 	For each SSA eligible variable V:
- * 		For each block B in the function assigns V:
- * 			add it onto the worklist
- * 			Flag B as having been on the worklist
- *
- * 		While worklist is not empty:
- * 			Remove block B from the worklist
- *
- * 			for each dominance frontier block D of block B:
- * 				if D already has a phi function for V: <-------- avoid double insertions
- * 					continue
- *
- * 				if a variable is not LIVE_IN 
- * 					continue
- *
- * 				Add the phi function
- * 				Flag D as having a phi function
- *
- * 				if(D has never been on the worklist):
- * 					Add D to the worklist
- * 					Flag D as having been on the worklist
- *
- * We will use the "visited" tag to keep track of whether or not we've already
- * evaluated had this block on the worklist or not. We will need to reset this
- * for the function blocks for each variable that we compute
+ * 	2.) Non-mutable non-user defined: these variables do have constraints on
+ * 		mutability so we need to keep track of every place where the value
+ * 		could be overwritten. To do this, we do not prune SSA using live in
+ *		and insert phi functions at every join node that is dominated by
+ *		the declaration of the given variable
  */
 static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 	/**
@@ -842,6 +857,11 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 					continue;
 				}
 
+				/**
+				 * If it's mutable or not user defined(we made it up like a ternary var), we will
+				 * do the pruned insertion. Otherwise, we will do the non-pruned insertion at all
+				 * dominated join nodes
+				 */
 				if(record->type_defined_as->mutability == MUTABLE || record->is_user_defined == FALSE){
 					pruned_phi_function_insertion(record, &worklist);
 				} else {
