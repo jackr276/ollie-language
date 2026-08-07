@@ -1620,26 +1620,26 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 			return SUCCESS;
 
 		/**
-		 * This is a potential mutation - still a violation for us
+		 * This is a potential mutation - still a violation because being
+		 * immutable means that it can only ever be assigned once
 		 */
 		case VARIABLE_STATE_MAYBE_INITIALIZED:
 			sprintf(error_info, "Variable %s was declared with an immutable type but may be mutated. First defined here:", linked_var->var_name.string);
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
-			//return FAILURE;
-			return SUCCESS;
+			return FAILURE;
 
 		/**
-		 * This is a definite mutation - definite violation
+		 * This is a definite mutation - definite violation because being
+		 * immutalbe means that it can only ever be assigned once
 		 */
 		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
 			sprintf(error_info, "Variable %s was declared with an immutable type but is mutated. First defined here:", linked_var->var_name.string);
 			print_variable_name_to_buffer(error_info, linked_var);
 			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
 			(*error_count)++;
-			//return FAILURE;
-			return SUCCESS;
+			return FAILURE;
 
 		//Should never happen but just in case
 		default:
@@ -1707,7 +1707,10 @@ static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_b
 
 
 /**
- * TODO DOC
+ * Run through all functions in the CFG and perform initialization and mutability
+ * analysis on each of them. We do not have a hard stop if we find one place where
+ * we fail and will scan the entire CFG to get all places where mutability or
+ * definitie initialization may be violated
  */
 static inline u_int8_t perform_definite_assignment_and_mutability_analysis(cfg_t* cfg){
 	//Assume success off the bat
