@@ -11518,15 +11518,18 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			//Very important that we emit this first for the below reason
 			three_addr_var_t* parameter_var = emit_var(parameter);
 
-			//Emit the alias that we're assigning to
-			three_addr_var_t* alias_var = emit_var(alias);
-
 			/**
 			 * Flag that the parameter does have this alias. Note that once we do this, any time
 			 * emit_var() is called on the parameter, the alias will be used instead so the order
 			 * here is very important. Once this is done - there is no going back
+			 *
+			 * NOTE: this has to be done *after* we emit the parameter var, otherwise we'll lose it
+			 * the original parameter var forever
 			 */
 			parameter->alias = alias;
+
+			//Emit the alias that we're assigning to
+			three_addr_var_t* alias_var = emit_var(alias);
 
 			//Emit the assignment here
 			instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var, line_number);

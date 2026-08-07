@@ -2040,11 +2040,9 @@ void print_initialization_states_for_ssa_variable(symtab_variable_record_t* vari
 				break;
 		}
 
-
 		if(i != variable->ssa_counter - 1){
 			printf(", ");
 		}
-
 	}
 
 	printf("]\n");

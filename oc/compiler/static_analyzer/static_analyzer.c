@@ -1606,6 +1606,8 @@ static inline u_int8_t does_instruction_comply_with_mutability_constraints(instr
 		return SUCCESS;
 	}
 
+	//TODO WE NEED TO UPDATE PRINTING FOR PARAMETER VARIABLES
+
 	/**
 	 * Otherwise, we'll need to lookup what the state of the overwritten
 	 * generation was. If it was definitely or maybe initialized, then
