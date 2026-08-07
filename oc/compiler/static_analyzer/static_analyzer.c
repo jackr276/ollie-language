@@ -668,10 +668,7 @@ static inline void pruned_phi_function_insertion(symtab_variable_record_t* varia
 		/**
 		 * For each block that assigns our variable, run through
 		 * every block in that block's dominance frontier(just barely
-		 * not dominated by that block). If the block in the dominance
-		 * frontier either uses the variable, *or* the variable is
-		 * live_out at that block, we'll need to insert a phi function
-		 * join node
+		 * not dominated by that block)
 		 */
 		for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
 			basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
@@ -714,8 +711,50 @@ static inline void pruned_phi_function_insertion(symtab_variable_record_t* varia
 	}
 }
 
-
 /**
+ * if(x0 == 0){
+ * 	x1 = 2;
+ * } else {
+ * 	x2 = 3;
+ * }
+ * 
+ * x3 <- phi(x1, x2)
+ * x4 <- 5 <------ Another assignment that overwrite the x3 assignment. If x4 is
+ * non-mutable, this would constitute a mutability violation
+ *
+ * To insert phi functions, we take the following approach:
+ * 	worklist <- {}
+ *
+ * 	For each SSA eligible variable V:
+ * 		For each block B in the function assigns V:
+ * 			add it onto the worklist
+ * 			Flag B as having been on the worklist
+ *
+ * 		While worklist is not empty:
+ * 			Remove block B from the worklist
+ *
+ * 			for each dominance frontier block D of block B:
+ * 				if D already has a phi function for V: <-------- avoid double insertions
+ * 					continue
+ *
+ * 				if a variable's declaration does not dominate D:
+ * 					continue
+ *
+ * 				Add the phi function
+ * 				Flag D as having a phi function
+ *
+ * 				if(D has never been on the worklist):
+ * 					Add D to the worklist
+ * 					Flag D as having been on the worklist
+ *
+ * We will use the "visited" tag to keep track of whether or not we've already
+ * evaluated had this block on the worklist or not. We will need to reset this
+ * for the function blocks for each variable that we compute
+ *
+ * If a variable's declaration does not dominate the join node, then it is not
+ * possible for that variable to exist(be in scope) at the join node, and therefore
+ * we should not insert any phi functions. If we were to insert at a non-dominated
+ * node we would get false positives during mutability checking
  */
 static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* variable, dynamic_array_t* worklist){
 	/**
@@ -767,10 +806,7 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 		/**
 		 * For each block that assigns our variable, run through
 		 * every block in that block's dominance frontier(just barely
-		 * not dominated by that block). If the block in the dominance
-		 * frontier either uses the variable, *or* the variable is
-		 * live_out at that block, we'll need to insert a phi function
-		 * join node
+		 * not dominated by that block).
 		 */
 		for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
 			basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
@@ -782,6 +818,12 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
 				continue;
 			}
 
+			/**
+			 * If the block that this variable was defined in does not dominate
+			 * the join node we're looking at, then the variable is not defined
+			 * at the join node and a phi function inserted here could lead
+			 * to false positives during mutability checking
+			 */
 			if(does_block_dominate_target(block_defined_in, df_node) == FALSE){
 				continue;
 			}
