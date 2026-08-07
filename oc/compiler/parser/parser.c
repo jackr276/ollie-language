@@ -153,20 +153,6 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* base_member_type, lightstack_t* bounds_stack, mutability_type_t mutability);
 static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* current_type, mutability_type_t mutability);
 
-/**
- * Wrapper for allocating nodes that will populate the lexical level for us in the variable
- * symtab
- */
-static inline generic_ast_node_t* ast_node_alloc_wrapper(ast_node_type_t node_type, side_type_t side){
-	//Can't be too careful
-	if(variable_symtab->current == NULL){
-		fprintf(stderr, "Fatal internal compiler error: attempt to initialize a node outside of any known scope\n");
-		exit(1);
-	}
-
-
-	return ast_node_alloc(node_type, side, variable_symtab->current);
-}
 
 /**
  * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
@@ -923,7 +909,7 @@ static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t
 	//Increment the number of errors
 	num_errors++;
 	//Allocate and return an error node
-	return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 }
 
 
@@ -958,7 +944,7 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Create our constant node
-	generic_ast_node_t* constant_node = ast_node_alloc_wrapper(AST_NODE_TYPE_CONSTANT, side);
+	generic_ast_node_t* constant_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 	constant_node->line_number = parser_line_num;
 
 	switch(lookahead.tok){
@@ -1078,7 +1064,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	//We can create the node now
-	generic_ast_node_t* return_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
 
 	//Now we can optionally see the semicolon immediately. Let's check if we have that
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -1248,7 +1234,7 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 
 	//Since we've made it all of the way down here, now is our time to create the ast node
 	//and give it back
-	generic_ast_node_t* raises_node = ast_node_alloc_wrapper(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* raises_node = ast_node_alloc(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
 
 	//Store the line number and the error id value
 	raises_node->line_number = parser_line_num;
@@ -1314,7 +1300,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 	}
 
 	//Now we know that we've got a valid one so we can allocate here
-	generic_ast_node_t* error_handle_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ERROR_HANDLE_STMT, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* error_handle_node = ast_node_alloc(AST_NODE_TYPE_ERROR_HANDLE_STMT, SIDE_TYPE_RIGHT);
 
 	//Stash away the error type in here
 	error_handle_node->optional_storage.error_type = error_type;
@@ -1373,7 +1359,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			}
 
 			//Otherwise we're fine so make it
-			result_node = ast_node_alloc_wrapper(AST_NODE_TYPE_IGNORE_STMT, SIDE_TYPE_RIGHT);
+			result_node = ast_node_alloc(AST_NODE_TYPE_IGNORE_STMT, SIDE_TYPE_RIGHT);
 			break;
 
 		default:
@@ -1463,7 +1449,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 	push_token(&grouping_stack, lookahead);
 
 	//We're valid now so let's allocate(side type is irrelevant)
-	generic_ast_node_t* parent_handle_clause = ast_node_alloc_wrapper(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* parent_handle_clause = ast_node_alloc(AST_NODE_TYPE_HANDLE_STMT, SIDE_TYPE_RIGHT);
 	parent_handle_clause->line_number = parser_line_num;
 
 	//What is the upper bound of the error that we need to handle? We know that the lower
@@ -1610,7 +1596,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
  */
 static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t* elaborative_param_type){
 	//Allocate it
-	generic_ast_node_t* elaborative_param_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
 
 	//Set the count to be 0
 	elaborative_param_node->optional_storage.elaborative_param_count = 0;
@@ -1645,7 +1631,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 	lexitem_t lookahead;
 
 	//Allocate it
-	generic_ast_node_t* elaborative_param_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
+	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
 
 	//Extract the elaborated type - this is what we'll be comparing to
 	generic_type_t* type_being_elaborated = elaborative_param_type->internal_types.elaborates;
@@ -2039,7 +2025,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	//This is the most common case - that we have a simple, direct function call
 	if(function_record != NULL){
 		//Allocate this as a regular function call node
-		function_call_node = ast_node_alloc_wrapper(AST_NODE_TYPE_FUNCTION_CALL, side);
+		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
 
 		//Store the function record in the node
 		function_call_node->func_record = function_record;
@@ -2069,7 +2055,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		}
 
 		//Now that we know this exists, we'll allocate this one as an indirect function call
-		function_call_node = ast_node_alloc_wrapper(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
+		function_call_node = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
 
 		//Store our funcion signature
 		function_signature = function_type->internal_types.function_type;
@@ -2250,7 +2236,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			//Error out
-			return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, side);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
 	/**
@@ -2268,7 +2254,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//Print out the actual function record as well
 			num_errors++;
 			//Return the error node
-			return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, side);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
 		//Otherwise if it was fine, we'll now pop the grouping stack
@@ -2417,7 +2403,7 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	}
 
 	//Create a constant node
-	generic_ast_node_t* const_node = ast_node_alloc_wrapper(AST_NODE_TYPE_CONSTANT, side);
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 	/**
 	 * Sizeof is a size value, so we will need to use a generic size 
@@ -2484,7 +2470,7 @@ static generic_ast_node_t* typesize_statement(ollie_token_stream_t* token_stream
 	}
 
 	//Create a constant node
-	generic_ast_node_t* const_node = ast_node_alloc_wrapper(AST_NODE_TYPE_CONSTANT, side);
+	generic_ast_node_t* const_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 	/**
 	 * Create this as a size constant. We should not need to coerce anything
@@ -2566,7 +2552,7 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 	}
 
 	//Let's now allocate the final node and give it back
-	generic_ast_node_t* paramcount_node = ast_node_alloc_wrapper(AST_NODE_TYPE_PARAMCOUNT_STMT, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* paramcount_node = ast_node_alloc(AST_NODE_TYPE_PARAMCOUNT_STMT, SIDE_TYPE_RIGHT);
 
 	/**
 	 * A paramcount node can only ever have a type of "size" because
@@ -2637,7 +2623,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 					//Most common case - not an enum
 					if(found_var->membership != ENUM_MEMBER){
 						//We know that this is valid, so we can allocate the identifier
-						generic_ast_node_t* ident_node = ast_node_alloc_wrapper(AST_NODE_TYPE_IDENTIFIER, side);
+						generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side);
 
 						//Fill out the info we need
 						ident_node->is_assignable = TRUE;
@@ -2650,7 +2636,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 					//Otherwise it is an enum. We'll need to allocate a constant for this
 					} else {
-						generic_ast_node_t* enum_member_node = ast_node_alloc_wrapper(AST_NODE_TYPE_CONSTANT, side);
+						generic_ast_node_t* enum_member_node = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 						//We'll need the enum and inferred types stored
 						enum_member_node->optional_storage.enum_type = found_var->type_defined_as;
@@ -2700,7 +2686,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				 */
 				if(found_function != NULL){
 					//Allocate the function constant node
-					generic_ast_node_t* function_constant = ast_node_alloc_wrapper(AST_NODE_TYPE_CONSTANT, side);
+					generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 					function_constant->line_number = parser_line_num;
 
@@ -2804,7 +2790,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				 * And now that we've determined that all of this is above board, we can finally
 				 * return our function constant node and be done
 				 */
-				generic_ast_node_t* function_constant = ast_node_alloc_wrapper(AST_NODE_TYPE_CONSTANT, side);
+				generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
 
 				//Package up everything that we'll need
 				function_constant->is_assignable = FALSE;
@@ -3111,7 +3097,7 @@ loop_end:
 
 	//If we make it here however, that means that we did see the assign keyword. Since
 	//this is the case, we'll make a new assignment node and take the appropriate actions here 
-	generic_ast_node_t* asn_expr_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
 	//Add in the line number
 	asn_expr_node->line_number = current_line;
 
@@ -3288,7 +3274,7 @@ loop_end:
 		}
 
 		//By the time that we get here, we know that all coercion has been completed
-		generic_ast_node_t* binary_op_node = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+		generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
 		//Store the type and operator
 		binary_op_node->inferred_type = final_type;
 		binary_op_node->binary_operator = binary_op;
@@ -3366,7 +3352,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 	}
 
 	//Now we'll allocate and pack up everything that we need
-	generic_ast_node_t* union_accessor_node = ast_node_alloc_wrapper(AST_NODE_TYPE_UNION_POINTER_ACCESSOR, side);
+	generic_ast_node_t* union_accessor_node = ast_node_alloc(AST_NODE_TYPE_UNION_POINTER_ACCESSOR, side);
 
 	union_accessor_node->line_number = parser_line_num;
 	union_accessor_node->variable = union_member;
@@ -3432,7 +3418,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 	}
 
 	//Otherwise we'll now make the node here
-	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc_wrapper(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
+	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
 	//Add the line number
 	struct_pointer_access_node->line_number = parser_line_num;
 	
@@ -3500,7 +3486,7 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
 	}
 
 	//Otherwise we'll now make the node here
-	generic_ast_node_t* struct_access_node = ast_node_alloc_wrapper(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
+	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
 	//Add the line number
 	struct_access_node->line_number = current_line;
 
@@ -3557,7 +3543,7 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Otherwise if we get here, we know that we do indeed have the needed union type. We can now go 
 	//ahead with constructing the accessor
-	generic_ast_node_t* union_accessor = ast_node_alloc_wrapper(AST_NODE_TYPE_UNION_ACCESSOR, side);
+	generic_ast_node_t* union_accessor = ast_node_alloc(AST_NODE_TYPE_UNION_ACCESSOR, side);
 
 	//Let's now populate with the appropriate variable and type
 	union_accessor->variable = union_variable;
@@ -3669,7 +3655,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	}
 
 	//Now that we've done all of our checks have been done, we can create the actual node
-	generic_ast_node_t* accessor_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ARRAY_ACCESSOR, side);
+	generic_ast_node_t* accessor_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, side);
 
 	//Add the line number
 	accessor_node->line_number = current_line;
@@ -3708,7 +3694,7 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
 	}
 
 	//Otherwise let's allocate this
-	generic_ast_node_t* postoperation_node = ast_node_alloc_wrapper(AST_NODE_TYPE_POSTOPERATION, side);
+	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
 
 	//The parent node is a child of this one
 	add_child_node(postoperation_node, parent_node);
@@ -3855,7 +3841,7 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 		temp_holder = parent;
 
 		//The new parent now becomes a postfix expression
-		parent = ast_node_alloc_wrapper(AST_NODE_TYPE_POSTFIX_EXPR, side);
+		parent = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
 
 		//The old parent now becomes a child to the new postfix expression node
 		add_child_node(parent, temp_holder);
@@ -3950,7 +3936,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 	//Otherwise, if we get down here we know that we have a unary operator
 	
 	//We'll first create the unary operator node for ourselves here
-	generic_ast_node_t* unary_op = ast_node_alloc_wrapper(AST_NODE_TYPE_UNARY_OPERATOR, side);
+	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
 	//Assign the operator to this
 	unary_op->unary_operator = lookahead.tok;
 
@@ -4241,7 +4227,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 	}
 
 	//One we get here, we have both nodes that we need
-	generic_ast_node_t* unary_node = ast_node_alloc_wrapper(AST_NODE_TYPE_UNARY_EXPR, side);
+	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
 	
 	//The unary operator always comes first
 	add_child_node(unary_node, unary_op);
@@ -4709,7 +4695,7 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 
 	//Fail out if this is not
 	if(castability == NOT_CASTABLE){
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	/**
@@ -4738,7 +4724,7 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 			//Castable with truncation requires a special AST node to handle
 			case CASTABLE_WITH_TRUNCATION:
 				//Create the final node and our inferred type
-				final_node = ast_node_alloc_wrapper(AST_NODE_TYPE_TRUNCATING_CAST, side);
+				final_node = ast_node_alloc(AST_NODE_TYPE_TRUNCATING_CAST, side);
 				
 				//Add in the type and our variable as well
 				final_node->inferred_type = casting_to_type;
@@ -4963,7 +4949,7 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		
 		/**
 		 * If we are multiplying *and* the type is commutative, we will 
@@ -5147,7 +5133,7 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		}
 
 		//Now that everything above is good, we can make the operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = op.tok;
 
@@ -5312,7 +5298,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 			}
 
 			//Only now are we good to allocate
-			sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+			sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 			//We'll now assign the binary expression it's operator
 			sub_tree_root->binary_operator = lookahead.tok;
 
@@ -5501,7 +5487,7 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 			//Only now do we allocate the operator node, since we know that we've
 			//passed all validations
-			sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+			sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 			//We'll now assign the binary expression it's operator
 			sub_tree_root->binary_operator = lookahead.tok;
 
@@ -5667,7 +5653,7 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -5803,7 +5789,7 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		sub_tree_root->binary_operator = lookahead.tok;
 
 		/**
@@ -5938,7 +5924,7 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -6076,7 +6062,7 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -6225,7 +6211,7 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -6365,7 +6351,7 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 		}
 
 		//We now need to make an operator node
-		sub_tree_root = ast_node_alloc_wrapper(AST_NODE_TYPE_BINARY_EXPR, side);
+		sub_tree_root = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, side);
 		//We'll now assign the binary expression it's operator
 		sub_tree_root->binary_operator = lookahead.tok;
 
@@ -6408,7 +6394,7 @@ static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream,
 
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
 
 	//Store the line number
 	initializer_list_node->line_number = parser_line_num;
@@ -6461,7 +6447,7 @@ static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream
 
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc_wrapper(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
 
 	//Store the line number
 	initializer_list_node->line_number = parser_line_num;
@@ -6579,7 +6565,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	}
 
 	//Allocate the ternary expression node
-	generic_ast_node_t* in_expression_node = ast_node_alloc_wrapper(AST_NODE_TYPE_TERNARY_EXPRESSION, side);
+	generic_ast_node_t* in_expression_node = ast_node_alloc(AST_NODE_TYPE_TERNARY_EXPRESSION, side);
 
 	//The first child is the conditional
 	add_child_node(in_expression_node, conditional);
@@ -6891,7 +6877,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	}
 
 	//Now that we're here we can allocate the node
-	generic_ast_node_t* root_node = ast_node_alloc_wrapper(AST_NODE_TYPE_IN_EXPRESSION, side); 
+	generic_ast_node_t* root_node = ast_node_alloc(AST_NODE_TYPE_IN_EXPRESSION, side); 
 
 	/**
 	 * An in statement will always give back a return type of an immutable 8 bit integer. This is because we've only
@@ -6958,7 +6944,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 		 * This rule prints out any/all errors so we don't need to worry about that
 		 */
 		if(is_constant_valid_for_in_statement_type(comparing_to_type, expression) == FALSE){
-			return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, side);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
 		/**
@@ -9593,7 +9579,7 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 	lexitem_t lookahead;
 
 	//The top level node is the special statement chain node
-	generic_ast_node_t* top_level_node = ast_node_alloc_wrapper(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
+	generic_ast_node_t* top_level_node = ast_node_alloc(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
 	//Cache the line number
 	top_level_node->line_number = parser_line_num;
 
@@ -9669,7 +9655,7 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 	}
 
 	//The top level node is the special statement chain node
-	generic_ast_node_t* top_level_node = ast_node_alloc_wrapper(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
+	generic_ast_node_t* top_level_node = ast_node_alloc(AST_NODE_TYPE_EXPR_CHAIN, SIDE_TYPE_LEFT);
 	//Cache the line number
 	top_level_node->line_number = parser_line_num;
 
@@ -9746,7 +9732,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
 	}
 
 	//Let's create the label ident node
-	generic_ast_node_t* label_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_LABEL_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* label_stmt = ast_node_alloc(AST_NODE_TYPE_LABEL_STMT, SIDE_TYPE_LEFT);
 	label_stmt->line_number = parser_line_num;
 
 	/**
@@ -9847,7 +9833,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	 * Let's first create our if statement. This is an overall header for the if statement as a whole. Everything
 	 * will be a child of this statement
 	 */
-	generic_ast_node_t* if_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_IF_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* if_stmt = ast_node_alloc(AST_NODE_TYPE_IF_STMT, SIDE_TYPE_LEFT);
 	if_stmt->line_number = parser_line_num;
 
 	//Remember, we've already seen the if token, so now we just need to see an L_PAREN
@@ -9909,7 +9895,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//So long as we see "else if's", we will keep repeating this process
 	while(lookahead.tok == ELSE && lookahead2.tok == IF){
 		//We've found one - let's create our fresh else if node
-		generic_ast_node_t* else_if_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ELSE_IF_STMT, SIDE_TYPE_LEFT);
+		generic_ast_node_t* else_if_node = ast_node_alloc(AST_NODE_TYPE_ELSE_IF_STMT, SIDE_TYPE_LEFT);
 
 		//Remember, we've already seen the if token, so now we just need to see an L_PAREN
 		lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10059,7 +10045,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	//We could optionally see a conditional jump statement here with the "when" keyword
 	if(lookahead.tok == WHEN){
 		//We know that this will be a conditional jump, so allocate as such
-		jump_node = ast_node_alloc_wrapper(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
+		jump_node = ast_node_alloc(AST_NODE_TYPE_CONDITIONAL_JUMP_STMT, SIDE_TYPE_LEFT);
 
 		//Store the block name in here
 		jump_node->string_value = jumping_to_block_name;
@@ -10111,7 +10097,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	//Otherwise it's not a conditional, just a direct jump
 	} else {
 		//This is a direct jump so allocate accordingly
-		jump_node = ast_node_alloc_wrapper(AST_NODE_TYPE_JUMP_STMT, SIDE_TYPE_LEFT);
+		jump_node = ast_node_alloc(AST_NODE_TYPE_JUMP_STMT, SIDE_TYPE_LEFT);
 
 		//Store the name in here
 		jump_node->string_value = jumping_to_block_name;
@@ -10158,7 +10144,7 @@ static generic_ast_node_t* continue_statement(ollie_token_stream_t* token_stream
 	}
 
 	//Once we get here, we've already seen the continue keyword, so we can make the node
-	generic_ast_node_t* continue_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_CONTINUE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* continue_stmt = ast_node_alloc(AST_NODE_TYPE_CONTINUE_STMT, SIDE_TYPE_LEFT);
 	//Store the line number
 	continue_stmt->line_number = parser_line_num;
 
@@ -10249,7 +10235,7 @@ static generic_ast_node_t* break_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Once we get here, we've already seen the break keyword, so we can make the node
-	generic_ast_node_t* break_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_BREAK_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* break_stmt = ast_node_alloc(AST_NODE_TYPE_BREAK_STMT, SIDE_TYPE_LEFT);
 	//Store the line number
 	break_stmt->line_number = parser_line_num;
 
@@ -10334,7 +10320,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//We can create the node now
-	generic_ast_node_t* return_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
 
 	//Now we can optionally see the semicolon immediately. Let's check if we have that
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -10520,7 +10506,7 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 
 	//Since we've made it all of the way down here, now is our time to create the ast node
 	//and give it back
-	generic_ast_node_t* raises_node = ast_node_alloc_wrapper(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* raises_node = ast_node_alloc(AST_NODE_TYPE_RAISE_STMT, SIDE_TYPE_LEFT);
 
 	//Store the line number and the error id value
 	raises_node->line_number = parser_line_num;
@@ -10721,7 +10707,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * find a c-style node. All of our processing depends on what the first thing that we see
 	 * looks like
 	 */
-	generic_ast_node_t* switch_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_SWITCH_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* switch_stmt_node = ast_node_alloc(AST_NODE_TYPE_SWITCH_STMT, SIDE_TYPE_LEFT);
 
 	//We will find these throughout our search
 	switch_stmt_node->optional_storage.switch_bounds.upper_bound = INT_MIN;
@@ -11006,7 +10992,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//First create the actual node
-	generic_ast_node_t* while_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_WHILE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* while_stmt_node = ast_node_alloc(AST_NODE_TYPE_WHILE_STMT, SIDE_TYPE_LEFT);
 	while_stmt_node->line_number = parser_line_num;
 
 	//We already have seen the while keyword, so now we need to see parenthesis surrounding a conditional expression
@@ -11078,7 +11064,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
  */
 static generic_ast_node_t* loop_statement(ollie_token_stream_t* token_stream){
 	//Allocate our overall node
-	generic_ast_node_t* loop_statement = ast_node_alloc_wrapper(AST_NODE_TYPE_LOOP_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* loop_statement = ast_node_alloc(AST_NODE_TYPE_LOOP_STMT, SIDE_TYPE_LEFT);
 
 	//This is a valid nesting level for breaks/continues
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
@@ -11118,7 +11104,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
 	//Let's first create the overall global root node
-	generic_ast_node_t* do_while_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_DO_WHILE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* do_while_stmt_node = ast_node_alloc(AST_NODE_TYPE_DO_WHILE_STMT, SIDE_TYPE_LEFT);
 	do_while_stmt_node->line_number = parser_line_num;
 
 	//Remember by the time that we've gotten here, we have already seen the do keyword
@@ -11220,7 +11206,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	initialize_variable_scope(variable_symtab, current_function);
 
 	//We've already seen the for keyword, so let's create the root level node
-	generic_ast_node_t* for_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
 	for_stmt_node->line_number = parser_line_num; 
 
 	//We now need to first see a left paren
@@ -11249,7 +11235,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Allocate the condition node
-	generic_ast_node_t* condition_node = ast_node_alloc_wrapper(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
+	generic_ast_node_t* condition_node = ast_node_alloc(AST_NODE_TYPE_FOR_LOOP_CONDITION, SIDE_TYPE_LEFT);
 	//This is the next child for the for loop
 	add_child_node(for_stmt_node, condition_node);
 
@@ -11380,7 +11366,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	}
 
 	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
 
 	//Now we can keep going until we see a closing curly
 	//We'll seed the search
@@ -11550,7 +11536,7 @@ static generic_ast_node_t* assembly_inline_statement(ollie_token_stream_t* token
 	}
 
 	//Otherwise it's presumably good, so we can allocate the node
-	generic_ast_node_t* assembly_node = ast_node_alloc_wrapper(AST_NODE_TYPE_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* assembly_node = ast_node_alloc(AST_NODE_TYPE_ASM_INLINE_STMT, SIDE_TYPE_LEFT);
 
 	//Copy the dynamic string over
 	assembly_node->string_value = lookahead.lexeme;
@@ -11610,7 +11596,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream){
 
 	//Now if we see that this is NULL, we'll allocate here
 	if(deferred_stmts_node == NULL){
-		deferred_stmts_node = ast_node_alloc_wrapper(AST_NODE_TYPE_DEFER_STMT, SIDE_TYPE_LEFT);
+		deferred_stmts_node = ast_node_alloc(AST_NODE_TYPE_DEFER_STMT, SIDE_TYPE_LEFT);
 	}
 
 	//We now expect to see a compound statement
@@ -11651,7 +11637,7 @@ static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream){
 	}
 
 	//Create and populate the node
-	generic_ast_node_t* idle_statement = ast_node_alloc_wrapper(AST_NODE_TYPE_IDLE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* idle_statement = ast_node_alloc(AST_NODE_TYPE_IDLE_STMT, SIDE_TYPE_LEFT);
 	idle_statement->line_number = parser_line_num;
 
 	//We'll create and return an idle statement
@@ -11705,7 +11691,7 @@ static generic_ast_node_t* statement(ollie_token_stream_t* token_stream){
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
@@ -11812,7 +11798,7 @@ static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream)
 
 	//If we see default, we can just make the default node. We may change this class later, but this
 	//will do for now
-	generic_ast_node_t* default_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_DEFAULT_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* default_stmt = ast_node_alloc(AST_NODE_TYPE_DEFAULT_STMT, SIDE_TYPE_LEFT);
 
 	//All that we need to see now is a colon
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -11903,7 +11889,7 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 
 	//Create the node. This could change later on based on whether we have a c-style switch
 	//statement or not
-	generic_ast_node_t* case_stmt = ast_node_alloc_wrapper(AST_NODE_TYPE_CASE_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* case_stmt = ast_node_alloc(AST_NODE_TYPE_CASE_STMT, SIDE_TYPE_LEFT);
 	
 	//Push the case statement nesting level here
 	push_nesting_level(&nesting_stack, NESTING_CASE_CONDITION);
@@ -12120,13 +12106,13 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	//Check for function duplciates
 	if(do_duplicate_functions_exist(name.string) == TRUE){
 		//Return a fresh error node
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check for type duplicates
 	if(do_duplicate_types_exist(name.string) == TRUE){
 		//Return a fresh error node
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -12214,7 +12200,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 			//Fall through
 		case TYPE_CLASS_STRUCT:
-			declaration_node = ast_node_alloc_wrapper(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 			declaration_node->variable = declared_var;
 			declaration_node->inferred_type = declared_var->type_defined_as;
 			declaration_node->line_number = parser_line_num;
@@ -12226,7 +12212,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		 * so we'll make a node now and sort through that later in the CFG
 		 */
 		default:
-			declaration_node = ast_node_alloc_wrapper(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
+			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 			declaration_node->variable = declared_var;
 			declaration_node->inferred_type = declared_var->type_defined_as;
 			declaration_node->line_number = parser_line_num;
@@ -12597,7 +12583,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	u_int32_t token_index_of_declaration = token_stream->token_pointer - 1;
 
 	//Let's first declare the root node
-	generic_ast_node_t* let_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
+	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12639,13 +12625,13 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Check for function duplicates
 	if(do_duplicate_functions_exist(name.string) == TRUE){
 		//Return a fresh error node
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check for duplicate types
 	if(do_duplicate_types_exist(name.string) == TRUE){
 		//Return a fresh error node
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Check that it isn't some duplicated variable name. We will only check in the
@@ -12698,7 +12684,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
@@ -13798,18 +13784,18 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 
 	//Check for duplicated functions
 	if(do_duplicate_functions_exist(function_name.string) == TRUE){
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Now duplicated variables
 	if(do_duplicate_variables_exist(function_name.string) == TRUE){
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	} 
 
 	//Check for duplicate types
 	if(do_duplicate_types_exist(function_name.string) == TRUE){
 		//Create and return an error node
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//The main function may not be predeclared
@@ -14130,13 +14116,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		//Check for duplicate variables here
 		if(do_duplicate_variables_exist(function_name.string) == TRUE){
 			//Create and return an error node
-			return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Check for duplicate types
 		if(do_duplicate_types_exist(function_name.string) == TRUE){
 			//Create and return an error node
-			return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
@@ -14210,7 +14196,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * It also requires a symtab record of the function, but this will be assigned
 	 * later once we have it
 	 */
-	generic_ast_node_t* function_node = ast_node_alloc_wrapper(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 
 	//Associate this with the function node
 	function_node->func_record = function_record;
@@ -14233,7 +14219,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//We have a bad parameter list, we just fail out
 	if(status == FAILURE){
-		return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	/**
@@ -14391,7 +14377,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	
 		//We now need to check and see if our jump statements are actually valid
 		if(check_jump_labels() == FAILURE){
-			return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		/**
@@ -14404,7 +14390,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		if(specific_error_list == TRUE){
 			//If this fails then we are done
 			if(validate_error_list_against_raised_errors(function_record) == FAILURE){
-				return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 
 			}
 		}
@@ -14693,7 +14679,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	} while(TRUE);
 
 	//We're now safe to allocate this ast node
-	generic_ast_node_t* namespace_node = ast_node_alloc_wrapper(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
+	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
 
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -14792,7 +14778,7 @@ static generic_ast_node_t* declaration_partition(ollie_token_stream_t* token_str
 
 			//If it's bad, we'll return an error node
 			if(status == FAILURE){
-				return ast_node_alloc_wrapper(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 			}
 
 			//Otherwise we'll just return null, the caller will know what to do with it
@@ -14826,7 +14812,7 @@ static generic_ast_node_t* program(dynamic_array_t* build_order){
 	//If prog is null we make it here
 	if(prog == NULL){
 		//Create the ROOT of the tree
-		prog = ast_node_alloc_wrapper(AST_NODE_TYPE_PROG, SIDE_TYPE_LEFT);
+		prog = ast_node_alloc(AST_NODE_TYPE_PROG, SIDE_TYPE_LEFT);
 	}
 
 	/**

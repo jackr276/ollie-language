@@ -8100,23 +8100,24 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		return a;
 	}
 
-	//What if a was never even assigned?
+	/**
+	 * Merge entry and exit statements int
+	 */
 	if(a->exit_statement == NULL){
 		a->leader_statement = b->leader_statement;
 		a->exit_statement = b->exit_statement;
 	} else {
-		//Otherwise it's a "true merge"
-		//The leader statement in b will be connected to a's tail
+		//Chain the old exit to the start of b
 		a->exit_statement->next_statement = b->leader_statement;
-		//Connect backwards too
+		//B's leader is now chained to the xit
 		b->leader_statement->previous_statement = a->exit_statement;
-		//Now once they're connected we'll set a's exit to be b's exit
 		a->exit_statement = b->exit_statement;
 	}
 
-
-	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
-	//Let's merge predecessors first if we have any
+	/**
+	 * If we're gonna merge two blocks, then they'll share all the same successors and predecessors
+	 * Let's merge predecessors first if we have any
+	 */
 	for(int32_t i = 0; i < b->predecessors.current_index; i++){
 		//Add b's predecessor as one to a
 		add_predecessor_only(a, b->predecessors.internal_array[i]);
@@ -8128,9 +8129,11 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		add_successor_only(a, b->successors.internal_array[i]);
 	}
 
-	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
-	//This is now wrong though. So, for each successor of B, it will need
-	//to have A as predecessor
+	/**
+	 * FOR EACH Successor of B, it will have a reference to B as a predecessor.
+	 * This is now wrong though. So, for each successor of B, it will need
+	 * to have A as predecessor
+	 */
 	for(int32_t i = 0; i < b->successors.current_index; i++){
 		//Grab the block first
 		basic_block_t* successor_block = b->successors.internal_array[i];
@@ -8138,11 +8141,11 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		//If the successor block has predecessors
 		if(successor_block->predecessors.internal_array != NULL){
 			//Now for each of the predecessors that equals b, it needs to now point to A
-			for(int32_t i = 0; i < successor_block->predecessors.current_index; i++){
+			for(int32_t j = 0; j < successor_block->predecessors.current_index; j++){
 				//If it's pointing to b, it needs to be updated
-				if(successor_block->predecessors.internal_array[i] == b){
+				if(successor_block->predecessors.internal_array[j] == b){
 					//Update it to now be correct
-					successor_block->predecessors.internal_array[i] = a;
+					successor_block->predecessors.internal_array[j] = a;
 				}
 			}
 		}
@@ -8157,13 +8160,13 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->jump_table = b->jump_table;
 	b->jump_table = NULL;
 
-	//For each statement in b, all of it's old statements are now "defined" in a
+	/**
+	 * For each statement in B, we need to flag that it's
+	 * now defined inside of a
+	 */
 	instruction_t* b_stmt = b->leader_statement;
-
 	while(b_stmt != NULL){
 		b_stmt->block_contained_in = a;
-
-		//Push it up
 		b_stmt = b_stmt->next_statement;
 	}
 	
