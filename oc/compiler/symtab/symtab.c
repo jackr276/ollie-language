@@ -673,11 +673,16 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
  * case where we do have it
  */
 static inline symtab_variable_record_t* dealias_variable(symtab_variable_record_t* record){
-	while(record->alias != NULL){
-		record = record->alias;
-	}
-	
+	//Holder for our current level
+	symtab_variable_record_t* current = record;
 
+	//Work our way up the aliasing tree until we hit a root
+	while(current->aliases != NULL){
+		current = current->aliases;
+	}
+
+	//Give back whatever we got
+	return current;
 }
 
 
@@ -722,7 +727,11 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
  * variable name
  */
 char* get_true_variable_name(symtab_variable_record_t* variable){
+	//First dealias it
+	variable = dealias_variable(variable);
 
+	//Then give back a pointer to the name
+	return variable->var_name.string;
 }
 
 
