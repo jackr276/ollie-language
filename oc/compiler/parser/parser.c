@@ -14082,6 +14082,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_jump_statements);
 
+	/**
+	 * We also have the AST function node, this will be intialized immediately
+	 * It also requires a symtab record of the function, but this will be assigned
+	 * later once we have it
+	 */
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
+
 	//Now we must see a valid identifier as the name
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -14184,25 +14191,18 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 	}
 
+	//Associate this with the function node
+	function_node->func_record = function_record;
+
+	//Extract the signature for ease of use
+	function_type_t* function_signature = function_record->signature->internal_types.function_type;
+
 	/**
 	 * We'll need to initialize a new variable scope here. This variable scope is designed
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
 	 */
 	initialize_variable_scope(variable_symtab, function_record);
-
-	/**
-	 * We also have the AST function node, this will be intialized immediately
-	 * It also requires a symtab record of the function, but this will be assigned
-	 * later once we have it
-	 */
-	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
-
-	//Associate this with the function node
-	function_node->func_record = function_record;
-
-	//Extract the signature for ease of use
-	function_type_t* function_signature = function_record->signature->internal_types.function_type;
 
 	/**
 	 * IMPORTANT: we need to hang onto this overarching function scope
