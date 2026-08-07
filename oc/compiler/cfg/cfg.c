@@ -1785,38 +1785,6 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 
 
 /**
- * Is a given variable eligible for undefined initialization in the SSA constructor?
- *
- * This is eligible for variables that are *not* memory regions and are strictly local
- * variables. For example function parameters are always assumed assigned and therefore exempt
- *
- * Static and global variables are also completely exempt from this because they're assumed to
- * be in-memory from the start
- *
- *
- * TOOD TF IS THIS??
- */
-static inline u_int8_t is_variable_undefined_initialization_eligible(symtab_variable_record_t* variable){
-	switch(variable->membership){
-		case STATIC_VARIABLE:
-		case GLOBAL_VARIABLE:
-			return FALSE;
-		default:
-			break;
-	}
-
-	switch(variable->type_defined_as->type_class){
-		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_UNION:
-			return FALSE;
-		default:
-			return TRUE;
-	}
-}
-
-
-/**
  * Emit a pointer arithmetic statement that can arise from either a ++ or -- on a pointer
  *
  * my_ptr++ will become my_ptr = my_ptr + ____
@@ -8189,15 +8157,21 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 			continue;
 		}
 
-		//TODO
+		//Run through the kespace
 		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			//Remember records may be chained
 			symtab_variable_record_t* cursor = sheaf->records[j];
 			while(cursor != NULL){
-				if(cursor->is_user_defined == TRUE){
-					if(cursor->block_declared_in == b){
-						cursor->block_declared_in = a;
-					}
+				/**
+				 * If the cursor was declared in block b, update
+				 * it to now point to block a
+				 */
+				if(cursor->block_declared_in == b){
+					cursor->block_declared_in = a;
 				}
+
+				//Bump up to the next one
+				cursor = cursor->next;
 			}
 
 		}
@@ -11514,7 +11488,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * Store that this parameter was *defined* inside of the function entry block. Notice
 		 * how it's *defined* and NOT *initialized*, they mean two different things
 		 */
-		parameter->block_defined_in = function_entry_block;
+		parameter->block_declared_in = function_entry_block;
 
 		/**
 		 * Parameter aliasing:
@@ -11545,7 +11519,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			 * Store that this alias was *defined* inside of the function entry block. Notice
 			 * how it's *defined* and NOT *initialized*, they mean two different things
 			 */
-			alias->block_defined_in = function_entry_block;
+			alias->block_declared_in = function_entry_block;
 
 			//Very important that we emit this first for the below reason
 			three_addr_var_t* parameter_var = emit_var(parameter);
@@ -12215,7 +12189,7 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 	 * block. Notice how it's *defined* and NOT *initialized*,
 	 * they mean two different things
 	 */
-	variable->block_defined_in = current_block;
+	variable->block_declared_in = current_block;
 
 	/**
 	 * If we have a memory region or a stack variable, we'll 
@@ -12709,7 +12683,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	 * block. Notice how it's *defined* and NOT *initialized*,
 	 * they mean two different things
 	 */
-	variable->block_defined_in = starting_block;
+	variable->block_declared_in = starting_block;
 
 	//The current block is the start block
 	basic_block_t* current_block = starting_block;
