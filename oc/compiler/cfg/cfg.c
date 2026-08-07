@@ -13,6 +13,7 @@
 */
 
 #include "cfg.h"
+#include <assert.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,6 +27,7 @@
 #include "../utils/constants.h"
 #include "../utils/parameter_result_array/parameter_result_array.h"
 #include "../graph_analyzer/graph_analyzer.h"
+
 
 //Keep global references to the number of errors and warnings
 u_int32_t* num_errors_ref;
@@ -1779,35 +1781,6 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 
 	//Done with this now so remove it
 	dynamic_array_dealloc(&reverse_post_order_reverse_cfg);
-}
-
-
-/**
- * Is a given variable eligible for undefined initialization in the SSA constructor?
- *
- * This is eligible for variables that are *not* memory regions and are strictly local
- * variables. For example function parameters are always assumed assigned and therefore exempt
- *
- * Static and global variables are also completely exempt from this because they're assumed to
- * be in-memory from the start
- */
-static inline u_int8_t is_variable_undefined_initialization_eligible(symtab_variable_record_t* variable){
-	switch(variable->membership){
-		case STATIC_VARIABLE:
-		case GLOBAL_VARIABLE:
-			return FALSE;
-		default:
-			break;
-	}
-
-	switch(variable->type_defined_as->type_class){
-		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_UNION:
-			return FALSE;
-		default:
-			return TRUE;
-	}
 }
 
 
@@ -8084,34 +8057,32 @@ void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
  * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
  */
 static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
-	//Just to double check
-	if(a == NULL){
-		printf("Fatal error. Attempting to merge null block");
-		exit(1);
-	}
-
 	//If b is null, we just return a
-	if(b == NULL || b->leader_statement == NULL){
+	if(b->leader_statement == NULL){
 		return a;
 	}
 
-	//What if a was never even assigned?
+	//What function are we in - will be important for updates
+	symtab_function_record_t* function_contained_in = a->function_defined_in;
+
+	/**
+	 * Merge entry and exit statements int
+	 */
 	if(a->exit_statement == NULL){
 		a->leader_statement = b->leader_statement;
 		a->exit_statement = b->exit_statement;
 	} else {
-		//Otherwise it's a "true merge"
-		//The leader statement in b will be connected to a's tail
+		//Chain the old exit to the start of b
 		a->exit_statement->next_statement = b->leader_statement;
-		//Connect backwards too
+		//B's leader is now chained to the xit
 		b->leader_statement->previous_statement = a->exit_statement;
-		//Now once they're connected we'll set a's exit to be b's exit
 		a->exit_statement = b->exit_statement;
 	}
 
-
-	//If we're gonna merge two blocks, then they'll share all the same successors and predecessors
-	//Let's merge predecessors first if we have any
+	/**
+	 * If we're gonna merge two blocks, then they'll share all the same successors and predecessors
+	 * Let's merge predecessors first if we have any
+	 */
 	for(int32_t i = 0; i < b->predecessors.current_index; i++){
 		//Add b's predecessor as one to a
 		add_predecessor_only(a, b->predecessors.internal_array[i]);
@@ -8123,9 +8094,11 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		add_successor_only(a, b->successors.internal_array[i]);
 	}
 
-	//FOR EACH Successor of B, it will have a reference to B as a predecessor.
-	//This is now wrong though. So, for each successor of B, it will need
-	//to have A as predecessor
+	/**
+	 * FOR EACH Successor of B, it will have a reference to B as a predecessor.
+	 * This is now wrong though. So, for each successor of B, it will need
+	 * to have A as predecessor
+	 */
 	for(int32_t i = 0; i < b->successors.current_index; i++){
 		//Grab the block first
 		basic_block_t* successor_block = b->successors.internal_array[i];
@@ -8133,11 +8106,11 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		//If the successor block has predecessors
 		if(successor_block->predecessors.internal_array != NULL){
 			//Now for each of the predecessors that equals b, it needs to now point to A
-			for(int32_t i = 0; i < successor_block->predecessors.current_index; i++){
+			for(int32_t j = 0; j < successor_block->predecessors.current_index; j++){
 				//If it's pointing to b, it needs to be updated
-				if(successor_block->predecessors.internal_array[i] == b){
+				if(successor_block->predecessors.internal_array[j] == b){
 					//Update it to now be correct
-					successor_block->predecessors.internal_array[i] = a;
+					successor_block->predecessors.internal_array[j] = a;
 				}
 			}
 		}
@@ -8152,14 +8125,50 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	a->jump_table = b->jump_table;
 	b->jump_table = NULL;
 
-	//For each statement in b, all of it's old statements are now "defined" in a
+	/**
+	 * For each statement in B, we need to flag that it's
+	 * now defined inside of a
+	 */
 	instruction_t* b_stmt = b->leader_statement;
-
 	while(b_stmt != NULL){
 		b_stmt->block_contained_in = a;
-
-		//Push it up
 		b_stmt = b_stmt->next_statement;
+	}
+
+	/**
+	 * All variables maintain a "block declared in" tag that tells us
+	 * where the variable was literally declared by the user. This is
+	 * very important to us for mutability checking. Since block B is
+	 * now block A, any variables that were declared in B now becom
+	 * declared in A. We will crawl all sheafs related to this function
+	 * and update any "declared in" tags from B to a
+	 */
+	for(int32_t i = 0; i < variable_symtab->sheafs.current_index; i++){
+		symtab_variable_sheaf_t* sheaf = variable_symtab->sheafs.internal_array[i];
+
+		//Not in the function skip it
+		if(sheaf->function_contained_in != function_contained_in){
+			continue;
+		}
+
+		//Run through the kespace
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			//Remember records may be chained
+			symtab_variable_record_t* cursor = sheaf->records[j];
+			while(cursor != NULL){
+				/**
+				 * If the cursor was declared in block b, update
+				 * it to now point to block a
+				 */
+				if(cursor->block_declared_in == b){
+					cursor->block_declared_in = a;
+				}
+
+				//Bump up to the next one
+				cursor = cursor->next;
+			}
+
+		}
 	}
 	
 	//IMPORTANT--wipe b's statements out
@@ -11294,7 +11303,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	results.starting_block = starting_block;
 	results.final_block = current_block;
 
-	//Give back results
+	//Give back the results
 	return results;
 }
 
@@ -11470,6 +11479,12 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function_record->function_parameters), i);
 
 		/**
+		 * Store that this parameter was *defined* inside of the function entry block. Notice
+		 * how it's *defined* and NOT *initialized*, they mean two different things
+		 */
+		parameter->block_declared_in = function_entry_block;
+
+		/**
 		 * Parameter aliasing:
 		 *
 		 * To avoid any issues with precoloring interference way down the line
@@ -11494,18 +11509,27 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 			//Create the aliased variable
 			symtab_variable_record_t* alias = create_parameter_alias_variable(current_function, parameter, variable_symtab, increment_and_get_temp_id());
 
+			/**
+			 * Store that this alias was *defined* inside of the function entry block. Notice
+			 * how it's *defined* and NOT *initialized*, they mean two different things
+			 */
+			alias->block_declared_in = function_entry_block;
+
 			//Very important that we emit this first for the below reason
 			three_addr_var_t* parameter_var = emit_var(parameter);
-
-			//Emit the alias that we're assigning to
-			three_addr_var_t* alias_var = emit_var(alias);
 
 			/**
 			 * Flag that the parameter does have this alias. Note that once we do this, any time
 			 * emit_var() is called on the parameter, the alias will be used instead so the order
 			 * here is very important. Once this is done - there is no going back
+			 *
+			 * NOTE: this has to be done *after* we emit the parameter var, otherwise we'll lose it
+			 * the original parameter var forever
 			 */
 			parameter->alias = alias;
+
+			//Emit the alias that we're assigning to
+			three_addr_var_t* alias_var = emit_var(alias);
 
 			//Emit the assignment here
 			instruction_t* alias_assignment = emit_assignment_instruction(alias_var, parameter_var, line_number);
@@ -12153,6 +12177,13 @@ static inline void visit_static_declare_statement(generic_ast_node_t* node){
  */
 static void visit_declaration_statement(basic_block_t* current_block, generic_ast_node_t* node){
 	symtab_variable_record_t* variable = node->variable;
+	
+	/**
+	 * Record that this variable was *defined* in this
+	 * block. Notice how it's *defined* and NOT *initialized*,
+	 * they mean two different things
+	 */
+	variable->block_declared_in = current_block;
 
 	/**
 	 * If we have a memory region or a stack variable, we'll 
@@ -12638,6 +12669,16 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	//Create the return package here
 	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
+	//Extract the variable
+	symtab_variable_record_t* variable = node->variable;
+
+	/**
+	 * Record that this variable was *defined* in this
+	 * block. Notice how it's *defined* and NOT *initialized*,
+	 * they mean two different things
+	 */
+	variable->block_declared_in = starting_block;
+
 	//The current block is the start block
 	basic_block_t* current_block = starting_block;
 
@@ -12658,13 +12699,13 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION:
 			//Create a stack region for this variable and store it in the associated region
-			node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
 			/**
 			 * Let's now emit the synthetic initialization for assignment
 			 * analysis purposes
 			 */
-			instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable), node->line_number);
+			instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
 			add_statement(current_block, synethtic_initialization);
 
 			//Emit the memory address variable
@@ -12694,15 +12735,15 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 */
 			if(node->variable->stack_variable == TRUE){
 				//Create a stack region for this variable and store it in the associated region
-				node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+				variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
 				//Now emit the synthetic initialization
-				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable), node->line_number);
+				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
 				add_statement(current_block, synethtic_initialization);
 			}
 
 			//Emit it
-			assignee = emit_var(node->variable);
+			assignee = emit_var(variable);
 
 			//Let the helper rule deal with the rest here
 			return emit_simple_initialization(current_block, assignee, node->first_child);

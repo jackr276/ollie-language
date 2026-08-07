@@ -655,12 +655,34 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 	 */
 	record->function_declared_in = function_declared_in;
 
+	//These are user defined
+	record->is_user_defined = TRUE;
+
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;
 	record->counter_stack.current_size = 0;
 
 	return record;
+}
+
+
+/**
+ * Dealias the given variable record until we cannot dealias it anymore. Most of the time
+ * variable records are not aliased, this is just as insurance for the function parameter
+ * case where we do have it
+ */
+static inline symtab_variable_record_t* dealias_variable(symtab_variable_record_t* record){
+	//Holder for our current level
+	symtab_variable_record_t* current = record;
+
+	//Work our way up the aliasing tree until we hit a root
+	while(current->aliases != NULL){
+		current = current->aliases;
+	}
+
+	//Give back whatever we got
+	return current;
 }
 
 
@@ -687,12 +709,29 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 	//Store the visibility level
 	record->visibility = visibility;
 
+	//These are user defined
+	record->is_user_defined = TRUE;
+
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;
 	record->counter_stack.current_size = 0;
 
 	return record;
+}
+
+
+/**
+ * Get the true variable name - this goes around any aliasing
+ * to ensure that we are always grabbing the actual underlying
+ * variable name
+ */
+char* get_true_variable_name(symtab_variable_record_t* variable){
+	//First dealias it
+	variable = dealias_variable(variable);
+
+	//Then give back a pointer to the name
+	return variable->var_name.string;
 }
 
 
@@ -724,6 +763,9 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, 
 
 	//These are always private
 	record->visibility = VISIBILITY_TYPE_PRIVATE;
+
+	//These are user defined
+	record->is_user_defined = TRUE;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
@@ -757,6 +799,9 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
 
 	//Store the stack region too
 	record->stack_region = stack_region;
+
+	//These are not user defined
+	record->is_user_defined = FALSE;
 	
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
@@ -799,6 +844,9 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
 
+	//These are not user defined
+	record->is_user_defined = FALSE;
+
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
 	record->counter_stack.top_index = 0;
@@ -839,6 +887,16 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 
 	//This is still a function parameter at heart
 	record->membership = FUNCTION_PARAMETER;
+
+	//These are user defined in a way
+	record->is_user_defined = TRUE;
+
+	/**
+	 * Record that this record aliases the given variable so
+	 * that, in the future, if we need to drill down and get
+	 * it we will be able to
+	 */
+	record->aliases = aliases;
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
@@ -2001,6 +2059,37 @@ symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, m
 
 
 /**
+ * Print out the initialization state array for a variable. This is a debugging
+ * only function
+ */
+void print_initialization_states_for_ssa_variable(symtab_variable_record_t* variable){
+	printf("[");
+
+	for(int32_t i = 0; i < variable->ssa_counter; i++){
+		variable_initialization_state_t state = variable->initialization_state_map[i];
+
+		switch(state){
+			case VARIABLE_STATE_DEFINITELY_INITIALIZED:
+				printf("DEFINITELY_INITIALIZED");
+				break;
+			case VARIABLE_STATE_UNINITIALIZED:
+				printf("UNINITIALIZED");
+				break;
+			case VARIABLE_STATE_MAYBE_INITIALIZED:
+				printf("MAYBE_INITIALIZED");
+				break;
+		}
+
+		if(i != variable->ssa_counter - 1){
+			printf(", ");
+		}
+	}
+
+	printf("]\n");
+}
+
+
+/**
  * Lookup a label in the symtab
  */
 symtab_label_record_t* lookup_label(label_symtab_t* label_symtab, char* name){
@@ -2403,6 +2492,9 @@ void print_function_name_to_buffer(char* buffer, symtab_function_record_t* recor
 void print_variable_name_to_buffer(char* buffer, symtab_variable_record_t* record){
 	//Internal buffer for printing
 	char internal_buffer[1000];
+
+	//Dealias first if need be
+	record = dealias_variable(record);
 
 	switch(record->membership){
 		/**

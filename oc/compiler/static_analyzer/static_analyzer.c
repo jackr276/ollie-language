@@ -5,7 +5,11 @@
  */
 
 #include "static_analyzer.h"
+#include "../graph_analyzer/graph_analyzer.h"
+#include <assert.h>
+#include <stdio.h>
 #include <sys/types.h>
+#include <sys/ucontext.h>
 
 //Store these globally for easy access
 static three_addr_var_t* instruction_pointer_var;
@@ -118,25 +122,6 @@ static inline u_int8_t does_variable_dynamic_array_contain_symtab_variable(dynam
 		}
 	}
 
-	return FALSE;
-}
-
-
-/**
- * This simple utility will scan a dynamic array of variables and invoke the variables_equal() function
- * on each of them for the given variable
- */
-static inline u_int8_t does_variable_dynamic_array_contain_variable(dynamic_array_t* array, three_addr_var_t* variable){
-	for(int32_t i = 0; i < array->current_index; i++){
-		three_addr_var_t* candidate = dynamic_array_get_at(array, i);
-
-		//If we have one equals then the whole thing works
-		if(variables_equal(candidate, variable) == TRUE){
-			return TRUE;
-		}
-	}
-
-	//If we made it here then no match
 	return FALSE;
 }
 
@@ -312,42 +297,133 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
  * Generate a new name for the given three address variable
  *
  * For a left hand side(assignment) new name:
- * 	push the current SSA generation number onto the counter stack
- * 	variable's SSA generation is the current number
- * 	bump the SSA generation number for the next go 
+ * 	- Grab the next generation level from the counter
+ * 	- Use the lightstack to get the generation level that we're overwriting
+ * 	  if it exists
+ * 	- Incrememnt the counter for the next go around
+ * 	- Push the current generation level to the lightstack because it's now 
+ * 	  the previous generation for the next go around
+ * 	- Store the SSA generation to the three address variable
+ *  - Store the overwrite mapping such that map[new_generation] = previous(overwritten) generation
  */
 static inline void lhs_new_name(three_addr_var_t* var){
 	//Grab the linked variable out
 	symtab_variable_record_t* linked_var = var->linked_var;
 
 	//Grab the name out of the counter
-	int32_t generation_level = linked_var->ssa_counter;
+	int32_t current_generation_level = linked_var->ssa_counter;
+
+	/**
+	 * Get the generation level that is overwritten. We do this
+	 * by peeking on the lighstack. If there is nothing on the
+	 * lighstack, we'll use a sentinel value of -1 to show
+	 * that it overwrites nothing
+	 */
+	int32_t overwritten_generation_level;
+	if(linked_var->counter_stack.top_index != 0){
+		overwritten_generation_level = lightstack_peek(&(linked_var->counter_stack));
+	} else {
+		overwritten_generation_level = OVERWRITES_NOTHING;
+	}
 
 	//Now we increment the counter for the next go around
 	(linked_var->ssa_counter)++;
 
-	//We'll also push this generation level onto the stack
-	lightstack_push(&(linked_var->counter_stack), generation_level);
+	//Put the current generation level on the stack
+	lightstack_push(&(linked_var->counter_stack), current_generation_level);
 
-	//Store the generation level in here
-	var->ssa_generation = generation_level;
+	//Update the three address variable itself
+	var->ssa_generation = current_generation_level;
+
+	/**
+	 * Variable overwrite mapping - use the current generation
+	 * level as an index and the overwritten generation as a value
+	 *
+	 * First we'll resize if it's needed
+	 */
+	dynamic_integer_array_resize_to_fit_index_if_needed(&(linked_var->ssa_overwritten_generation_map), current_generation_level);
+	linked_var->ssa_overwritten_generation_map.internal_array[current_generation_level] = overwritten_generation_level;
 }
 
 
 /**
- * For a left hand side(assignment) new name:
- * 	push the current SSA generation number onto the counter stack
- * 	bump the SSA generation number
+ * For a left hand size(assignment) for a phi function specifically:
+ * 	- Grab the next generation level from the counter
+ * 	- Incrememnt the counter for the next go around
+ * 	- Push the current generation level to the lightstack because it's now 
+ * 	  the previous generation for the next go around
+ *  - Store the overwrite mapping such that map[new_generation] = -1. This is because
+ *    phi functions do not explicitly overwrite one value only. They instead overwrite
+ *    multiple values potentially
+ */
+static inline void phi_function_lhs_new_name(three_addr_var_t* phi_assignee){
+	//Grab the linked variable out
+	symtab_variable_record_t* linked_var = phi_assignee->linked_var;
+
+	//Grab the name out of the counter
+	int32_t current_generation_level = linked_var->ssa_counter;
+
+	//Now we increment the counter for the next go around
+	(linked_var->ssa_counter)++;
+
+	//Put the current generation level on the stack
+	lightstack_push(&(linked_var->counter_stack), current_generation_level);
+
+	//Update the three address variable itself
+	phi_assignee->ssa_generation = current_generation_level;
+
+	/**
+	 * Variable overwrite mapping - use the current generation
+	 * level as an index and the overwritten generation as a value
+	 *
+	 * First we'll resize if it's needed
+	 */
+	dynamic_integer_array_resize_to_fit_index_if_needed(&(linked_var->ssa_overwritten_generation_map), current_generation_level);
+	linked_var->ssa_overwritten_generation_map.internal_array[current_generation_level] = OVERWRITES_NOTHING;
+}
+
+
+/**
+ * For a left hand side(assignment) new name without an explicit three_addr_var:
+ * 	- Grab the next generation level from the counter
+ * 	- Use the lightstack to get the generation level that we're overwriting
+ * 	  if it exists
+ * 	- Incrememnt the counter for the next go around
+ * 	- Push the current generation level to the lightstack because it's now 
+ * 	  the previous generation for the next go around
+ *  - Store the overwrite mapping such that map[new_generation] = previous(overwritten) generation
  */
 static inline void lhs_new_name_direct(symtab_variable_record_t* variable){
-	//Store the old generation level
-	u_int16_t generation_level = variable->ssa_counter;
+	//Grab the name out of the counter
+	int32_t current_generation_level = variable->ssa_counter;
 
-	//Increment the counter
+	/**
+	 * Get the generation level that is overwritten. We do this
+	 * by peeking on the lighstack. If there is nothing on the
+	 * lighstack, we'll use a sentinel value of -1 to show
+	 * that it overwrites nothing
+	 */
+	int32_t overwritten_generation_level;
+	if(variable->counter_stack.top_index != 0){
+		overwritten_generation_level = lightstack_peek(&(variable->counter_stack));
+	} else {
+		overwritten_generation_level = OVERWRITES_NOTHING;
+	}
+
+	//Now we increment the counter for the next go around
 	(variable->ssa_counter)++;
 
-	//Push the old generation level onto here
-	lightstack_push(&(variable->counter_stack), generation_level);
+	//Put the current generation level on the stack
+	lightstack_push(&(variable->counter_stack), current_generation_level);
+
+	/**
+	 * Variable overwrite mapping - use the current generation
+	 * level as an index and the overwritten generation as a value
+	 *
+	 * First we'll resize if it's needed
+	 */
+	dynamic_integer_array_resize_to_fit_index_if_needed(&(variable->ssa_overwritten_generation_map), current_generation_level);
+	variable->ssa_overwritten_generation_map.internal_array[current_generation_level] = overwritten_generation_level;
 }
 
 
@@ -448,17 +524,15 @@ static inline void emit_synthetic_initializations(variable_symtab_t* symtab){
 					continue;
 				}
 
+				/**
+				 * We will need to maintain a map of what generations we've overwritten
+				 * whenever we have a new LHS assignment. We can allocate it now and it
+				 * will be populated by the renamer
+				 */
+				cursor->ssa_overwritten_generation_map = dynamic_integer_array_alloc();
+
 				//Emit the LHS new name directly here
 				lhs_new_name_direct(cursor);
-
-				//Emit the three address representation
-				three_addr_var_t* starting_variable = emit_var(cursor);
-
-				/**
-				 * This counts as a definition for this variable inside of our
-				 * given function's entry block
-				 */
-				add_variable_to_def_set(starting_variable, cursor->function_declared_in->function_entry_block);
 
 				//Bump up to the next record(remember they can be chained)
 				cursor = cursor->next;
@@ -487,6 +561,34 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 
 	//And give the statement back
 	return stmt;
+}
+
+
+/**
+ * Does the given block dominate the target? The way that we check is through
+ * the immediate dominator chain of the target block:
+ *
+ * 	target -IDOM-> block1 -IDOM-> block2 -IDOM-> block
+ *
+ * If we crawl our way up the immediate dominator chain starting at the target and
+ * eventually hit the block, then we know that this block does dominate the target
+ * block.
+ */
+static inline u_int8_t does_block_dominate_target(basic_block_t* block, basic_block_t* target){
+	basic_block_t* current = target;
+
+	//Keep going until we either find the block or run out of IDOMs
+	while(current != NULL){
+		if(current == block){
+			return TRUE;
+		}
+
+		//Crawl up the dominator chain
+		current = current->dominator_info.immediate_dominator;
+	}
+
+	//We could not find it in the IDOM chain, so it does not dominate the target
+	return FALSE;
 }
 
 
@@ -531,6 +633,249 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
  * We will use the "visited" tag to keep track of whether or not we've already
  * evaluated had this block on the worklist or not. We will need to reset this
  * for the function blocks for each variable that we compute
+ *
+ * Pruned phi function insertion will only happen for mutable and non-user defined variables
+ * because we do not care to preserve assignment information if variables are overwritten
+ */
+static inline void pruned_phi_function_insertion(symtab_variable_record_t* variable, dynamic_array_t* worklist){
+	/**
+	 * To improve efficiency, we will grab the list of all blocks for the given
+	 * function that this variable was contained within and only scan those. Remember
+	 * that things like global variables are ineligible for SSA to begin with
+	 * due to how they are stored, so this is fine for us
+	 */
+	symtab_function_record_t* variable_function = variable->function_declared_in;
+	dynamic_array_t* function_blocks = &(variable_function->function_blocks);
+
+	/**
+	 * Reset the "has_phi_function" tag on all of our blocks
+	 * for the next go around
+	 */
+	reset_status_for_phi_function_insertion(function_blocks);
+
+	/**
+	 * Queue up every block that we have on record as assigning this
+	 * given variable
+	 */
+	for(int32_t k = 0; k < function_blocks->current_index; k++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, k);
+
+		/**
+		 * Enqueue to our worklist if the block assigns this variable. Also flag
+		 * the visited tag on the block so that we don't end up reprocessing this
+		 */
+		if(does_block_assign_variable(block, variable) == TRUE){
+			dynamic_array_add(worklist, block);
+
+			//Visited acts as our "Ever on worklist" flag
+			block->visited = TRUE;
+		}
+	}
+
+	//So long as the worklist is not empty
+	while(dynamic_array_is_empty(worklist) == FALSE){
+		//O(1) removal delete from back
+		basic_block_t* node = dynamic_array_delete_from_back(worklist);
+
+		/**
+		 * For each block that assigns our variable, run through
+		 * every block in that block's dominance frontier(just barely
+		 * not dominated by that block)
+		 */
+		for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
+			basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
+
+			/**
+			 * If this already has a phi function for this run we skip it
+			 */
+			if(df_node->already_has_phi_func == TRUE){
+				continue;
+			}
+
+			/**
+			 * If a variable is LIVE_IN at the given block, we need
+			 * to know the value at the start of the block. Our
+			 * normal phi function insertion case revolves around the variable
+			 * being LIVE_IN at the block and most of the time, this is all we need to 
+			 * insert
+			 */
+			if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_in), variable) == FALSE){
+				continue;
+			}
+
+			//Add the phi statement into the block	
+			instruction_t* phi_stmt = emit_phi_function(variable);
+			add_phi_statement(df_node, phi_stmt);
+
+			//Flag that this now already has a phi function
+			df_node->already_has_phi_func = TRUE;
+
+			/**
+			 * If the dominance frontier node has never been on the worklist before, we'll
+			 * need to add it to the worklist now and flag that it's been here
+			 * to avoid reprocessing
+			 */
+			if(df_node->visited == FALSE){
+				df_node->visited = TRUE;
+				dynamic_array_add(worklist, df_node);
+			}
+		}
+	}
+}
+
+
+/**
+ * if(x0 == 0){
+ * 	x1 = 2;
+ * } else {
+ * 	x2 = 3;
+ * }
+ * 
+ * x3 <- phi(x1, x2)
+ * x4 <- 5 <------ Another assignment that overwrite the x3 assignment. If x4 is
+ * non-mutable, this would constitute a mutability violation
+ *
+ * To insert phi functions, we take the following approach:
+ * 	worklist <- {}
+ *
+ * 	For each SSA eligible variable V:
+ * 		For each block B in the function assigns V:
+ * 			add it onto the worklist
+ * 			Flag B as having been on the worklist
+ *
+ * 		While worklist is not empty:
+ * 			Remove block B from the worklist
+ *
+ * 			for each dominance frontier block D of block B:
+ * 				if D already has a phi function for V: <-------- avoid double insertions
+ * 					continue
+ *
+ * 				if a variable's declaration does not dominate D:
+ * 					continue
+ *
+ * 				Add the phi function
+ * 				Flag D as having a phi function
+ *
+ * 				if(D has never been on the worklist):
+ * 					Add D to the worklist
+ * 					Flag D as having been on the worklist
+ *
+ * We will use the "visited" tag to keep track of whether or not we've already
+ * evaluated had this block on the worklist or not. We will need to reset this
+ * for the function blocks for each variable that we compute
+ *
+ * If a variable's declaration does not dominate the join node, then it is not
+ * possible for that variable to exist(be in scope) at the join node, and therefore
+ * we should not insert any phi functions. If we were to insert at a non-dominated
+ * node we would get false positives during mutability checking
+ */
+static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* variable, dynamic_array_t* worklist){
+	/**
+	 * To improve efficiency, we will grab the list of all blocks for the given
+	 * function that this variable was contained within and only scan those. Remember
+	 * that things like global variables are ineligible for SSA to begin with
+	 * due to how they are stored, so this is fine for us
+	 */
+	symtab_function_record_t* variable_function = variable->function_declared_in;
+	dynamic_array_t* function_blocks = &(variable_function->function_blocks);
+
+	/**
+	 * Extract what block this variable was declared in. Note that declared in
+	 * does not mean where it was initialized. It means the literal block 
+	 * where the variable itself was declared by the user
+	 */
+	basic_block_t* block_declared_in = variable->block_declared_in;
+
+	/**
+	 * Reset the "has_phi_function" tag on all of our blocks
+	 * for the next go around
+	 */
+	reset_status_for_phi_function_insertion(function_blocks);
+
+	/**
+	 * Queue up every block that we have on record as assigning this
+	 * given variable
+	 */
+	for(int32_t k = 0; k < function_blocks->current_index; k++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, k);
+
+		/**
+		 * Enqueue to our worklist if the block assigns this variable. Also flag
+		 * the visited tag on the block so that we don't end up reprocessing this
+		 */
+		if(does_block_assign_variable(block, variable) == TRUE){
+			dynamic_array_add(worklist, block);
+
+			//Visited acts as our "Ever on worklist" flag
+			block->visited = TRUE;
+		}
+	}
+
+	//So long as the worklist is not empty
+	while(dynamic_array_is_empty(worklist) == FALSE){
+		//O(1) removal delete from back
+		basic_block_t* node = dynamic_array_delete_from_back(worklist);
+
+		/**
+		 * For each block that assigns our variable, run through
+		 * every block in that block's dominance frontier(just barely
+		 * not dominated by that block).
+		 */
+		for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
+			basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
+
+			/**
+			 * If this already has a phi function for this run we skip it
+			 */
+			if(df_node->already_has_phi_func == TRUE){
+				continue;
+			}
+
+			/**
+			 * If the block that this variable was declared in does not dominate
+			 * the join node we're looking at, then the variable is not defined
+			 * at the join node and a phi function inserted here could lead
+			 * to false positives during mutability checking
+			 */
+			if(does_block_dominate_target(block_declared_in, df_node) == FALSE){
+				continue;
+			}
+
+			//Add the phi statement into the block	
+			instruction_t* phi_stmt = emit_phi_function(variable);
+			add_phi_statement(df_node, phi_stmt);
+
+			//Flag that this now already has a phi function
+			df_node->already_has_phi_func = TRUE;
+
+			/**
+			 * If the dominance frontier node has never been on the worklist before, we'll
+			 * need to add it to the worklist now and flag that it's been here
+			 * to avoid reprocessing
+			 */
+			if(df_node->visited == FALSE){
+				df_node->visited = TRUE;
+				dynamic_array_add(worklist, df_node);
+			}
+		}
+	}
+}
+
+
+/**
+ * Insert phi functions for all eligible variables in the symbol table. There
+ * are 2 separate classes of variables that we will consider in our calculation:
+ *
+ * 	1.) Mutable and non-user defined variables: these variables do not have any
+ * 		constraints on mutability so we will prune the phi function insertion
+ * 		by whether or not the variable is LIVE_IN at the start of the join
+ * 		node. See the full algorithm in the dedicated function
+ *
+ * 	2.) Non-mutable non-user defined: these variables do have constraints on
+ * 		mutability so we need to keep track of every place where the value
+ * 		could be overwritten. To do this, we do not prune SSA using live in
+ *		and insert phi functions at every join node that is dominated by
+ *		the declaration of the given variable
  */
 static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 	/**
@@ -568,96 +913,14 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 				}
 
 				/**
-				 * To improve efficiency, we will grab the list of all blocks for the given
-				 * function that this variable was contained within and only scan those. Remember
-				 * that things like global variables are ineligible for SSA to begin with
-				 * due to how they are stored, so this is fine for us
+				 * If it's mutable or not user defined(we made it up like a ternary var), we will
+				 * do the pruned insertion. Otherwise, we will do the non-pruned insertion at all
+				 * dominated join nodes
 				 */
-				symtab_function_record_t* variable_function = record->function_declared_in;
-				dynamic_array_t* function_blocks = &(variable_function->function_blocks);
-
-				/**
-				 * Since we use the "visited" tag to keep track of whether or not a block
-				 * was ever on the worklist, we'll need to reset this here
-				 */
-				reset_status_for_phi_function_insertion(function_blocks);
-
-				/**
-				 * Queue up every block that we have on record as assigning this
-				 * given variable
-				 */
-				for(int32_t k = 0; k < function_blocks->current_index; k++){
-					basic_block_t* block = dynamic_array_get_at(function_blocks, k);
-
-					/**
-					 * Enqueue to our worklist if the block assigns this variable. Also flag
-					 * the visited tag on the block so that we don't end up reprocessing this
-					 */
-					if(does_block_assign_variable(block, record) == TRUE){
-						dynamic_array_add(&worklist, block);
-
-						//Visited acts as our "Ever on worklist" flag
-						block->visited = TRUE;
-					}
-				}
-
-				//So long as the worklist is not empty
-				while(dynamic_array_is_empty(&worklist) == FALSE){
-					//O(1) removal delete from back
-					basic_block_t* node = dynamic_array_delete_from_back(&worklist);
-
-					/**
-					 * For each block that assigns our variable, run through
-					 * every block in that block's dominance frontier(just barely
-					 * not dominated by that block). If the block in the dominance
-					 * frontier either uses the variable, *or* the variable is
-					 * live_out at that block, we'll need to insert a phi function
-					 * join node
-					 */
-					for(int32_t l = 0; l < node->dominance_frontier.current_index; l++){
-						basic_block_t* df_node = dynamic_array_get_at(&(node->dominance_frontier), l);
-
-						//If this already has a phi function for this run we skip it
-						if(df_node->already_has_phi_func == TRUE){
-							continue;
-						}
-
-						/**
-						 * If the variable is not LIVE_IN at the given
-						 * block,  we do not need to know the value
-						 * at the start of the block. We only need to insert
-						 * phi functions where a variable is LIVE_IN because
-						 * a variable being LIVE_IN means that we need
-						 * it's definition at the start of the block
-						 */
-						if(does_variable_dynamic_array_contain_symtab_variable(&(df_node->live_in), record) == FALSE){
-							continue;
-						}
-
-						/**
-						 * If we make it here that means that we don't already have one, so we'll add it
-						 *
-						 * This only emits the skeleton of a phi function - variables will be added
-						 * later
-						 */
-						instruction_t* phi_stmt = emit_phi_function(record);
-
-						//Add the phi statement into the block	
-						add_phi_statement(df_node, phi_stmt);
-
-						//Flag that this already has a phi function 
-						df_node->already_has_phi_func = TRUE;
-
-						/**
-						 * If the dominance frontier node has never been on the worklist before, we'll
-						 * need to add it to the worklist now and flag that it's been here
-						 * to avoid reprocessing
-						 */
-						if(df_node->visited == FALSE){
-							df_node->visited = TRUE;
-							dynamic_array_add(&worklist, df_node);
-						}
-					}
+				if(record->type_defined_as->mutability == MUTABLE || record->is_user_defined == FALSE){
+					pruned_phi_function_insertion(record, &worklist);
+				} else {
+					non_pruned_phi_function_insertion(record, &worklist);
 				}
 
 				//Wipe the worklist now
@@ -738,7 +1001,12 @@ static void rename_block(basic_block_t* entry){
 	while(cursor != NULL){
 		switch(cursor->statement_type){
 			case THREE_ADDR_CODE_PHI_FUNC:
-				lhs_new_name(cursor->operands.oir.assignee);
+				/**
+				 * Phi functions are a special case because they overwrite
+				 * multiple definitions, not just one. We'll use a special
+				 * rule to account for this
+				 */
+				phi_function_lhs_new_name(cursor->operands.oir.assignee);
 				break;
 				
 			/**
@@ -894,6 +1162,38 @@ static inline void rename_all_variables(cfg_t* cfg){
 
 
 /**
+ * Once we have all SSA generation handled, we know the maximum amount of SSA generations
+ * for each variable. As such, we can now go through and initialize all of the initialization
+ * state maps by dynamically allocating arrays of the required size(number of ssa generations)
+ * for each one
+ */
+static inline void create_all_initialization_state_maps(variable_symtab_t* variables){
+	//For every single lexical scope
+	for(int32_t i = 0; i < variables->sheafs.current_index; i++){
+		symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(variables->sheafs), i);
+
+		//Traverse the entire record keyspace
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			symtab_variable_record_t* cursor = sheaf->records[j]; 
+
+			//Remember that records can be chained from hash collisions
+			while(cursor != NULL){
+				//If it's not SSA eligible then skip
+				if(is_symtab_variable_ssa_eligible(cursor) == FALSE || cursor->ssa_counter == 0){
+					cursor = cursor->next;
+					continue;
+				}
+
+				//Initialize the map to be all 0s(uninitialized) at first
+				cursor->initialization_state_map = calloc(cursor->ssa_counter, sizeof(variable_initialization_state_t));
+				cursor = cursor->next;
+			}
+		}
+	}
+}
+
+
+/**
  * This pass will do everything needed to convert the CFG into SSA(static single assignment) form.
  * As a reminder, static single assignment form is an IR form where every variable is assigned
  * only once
@@ -920,6 +1220,229 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
 	 * road
 	 */
 	rename_all_variables(cfg);
+
+	/**
+	 * Step 4: now that we've performed all variable renaming, we will initialize
+	 * the SSA generation to variable state maps inside of each symtab record
+	 * in preparation for definite assignment analysis
+	 */
+	create_all_initialization_state_maps(variables);
+}
+
+
+/**
+ * Get a variable's initialization state using the SSA gen to state mapping inside
+ * of the linked symtab variable
+ */
+static inline variable_initialization_state_t get_variable_initialization_state(three_addr_var_t* variable){
+	symtab_variable_record_t* linked_var = variable->linked_var;
+	return linked_var->initialization_state_map[variable->ssa_generation];
+}
+
+
+/**
+ * Set a variable's initialization state using the SSA gen to state mapping inside
+ * of the linked symtab variable
+ */
+static inline void set_variable_initialization_state(three_addr_var_t* variable, variable_initialization_state_t new_state){
+	symtab_variable_record_t* linked_var = variable->linked_var;
+	linked_var->initialization_state_map[variable->ssa_generation] = new_state;
+}
+
+
+/**
+ * Before we can perform the actual dataflow analysis, we need to go through and populate the initialization
+ * states for all SSA generations. We do this by flagging every single SSA generation that gets assigned
+ * to as "definitely initialized". This works because our algorithm is an "optimistic" algorithm, meaning
+ * that we assume that everything is initialized properly and need to be proven wrong by the dataflow
+ * analysis
+ */
+static inline void populate_all_initialization_states(symtab_function_record_t* function, dynamic_array_t* postorder_traversal){
+	/**
+	 * Function parameters are a unique case because we know that by the time we hit the function
+	 * entry they are initialized. This preparatory step will acknowledge that fact by populating
+	 * all function parameters of generation one with a state of "definitely initialized"
+	 */
+	for(int32_t i = 0; i < function->function_parameters.current_index; i++){
+		symtab_variable_record_t* parameter = dynamic_array_get_at(&(function->function_parameters), i);
+
+		/**
+		 * We know for a fact that the first generation of function parameters will *always*
+		 * be initialized so we need to populate that now
+		 */
+		parameter->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+	}
+
+	/**
+	 * Now we will run through every block and set *everything* with an SSA eligible
+	 * assignee to be initialized. We do this becuase our forward analysis is an
+	 * optimistic algorithm. In other words, we will go through and assume that 
+	 * all variables are properly initialized at first and then downgrade them
+	 * in the checker as needed
+	 */
+	for(int32_t i = 0; i < postorder_traversal->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(postorder_traversal, i);
+		instruction_t* cursor = block->leader_statement;
+
+		/**
+		 * For each instruction, if we have an SSA eligible assignee, then
+		 * we are going to assume that it's initialized. This is true also
+		 * for phi functions at this stage, though that may change when
+		 * we perform the dataflow analysis
+		 */
+		while(cursor != NULL){
+			three_addr_var_t* assignee = cursor->operands.oir.assignee;
+			if(is_variable_ssa_eligible(assignee) == TRUE){
+				set_variable_initialization_state(assignee, VARIABLE_STATE_DEFINITELY_INITIALIZED);
+			}
+
+			//Onto the next one
+			cursor = cursor->next_statement;
+		}
+	}
+}
+
+
+/**
+ * Update initialization states in the block by checking every phi function's
+ * parameters and performing our merge operation on them. If we find at least
+ * one parameter is uninitialized/maybe initialized, then the phi function assignee
+ * turns to maybe initialized. The only thing that can do this is a phi function, so
+ * we don't need to do any propogation for non-phi functions which is a nice optimization
+ * for us
+ */
+static inline u_int8_t update_initialization_states_in_block(basic_block_t* block){
+	/**
+	 * Has there been a change in *at least* one initialization status
+	 * in an assignee in the block? By default assume no
+	 */
+	u_int8_t changed = FALSE;
+
+	/**
+	 * Crawl over every phi function in the block. These
+	 * are the only instructions that can be updated at this
+	 * point. Remember that phi functions always occur at the
+	 * start of each block, so the instant we see an instruction
+	 * that is not one we can stop processing and leave
+	 */
+	instruction_t* cursor = block->leader_statement;
+	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		//Extract and save for later
+		three_addr_var_t* assignee = cursor->operands.oir.assignee;
+		variable_initialization_state_t current_init_state = get_variable_initialization_state(assignee);
+
+		//Assume that we're going to be definitely initialized for sure
+		variable_initialization_state_t new_init_state = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+
+		/**
+		 * This will act as a sort of "merge" for us where we'll scan the initialization states
+		 * of all the phi function parameters. If we see any one that is uninitialized or maybe
+		 * uninitialized, then the phi function's assignee is maybe uninitialized
+		 */
+		for(int32_t i = 0; i < cursor->parameters.current_index; i++){
+			three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), i);
+
+			/**
+			 * If we see at least one that is not definitely initialized, then this whole
+			 * thing goes to a state of maybe initialized
+			 */
+			if(get_variable_initialization_state(parameter) != VARIABLE_STATE_DEFINITELY_INITIALIZED){
+				new_init_state = VARIABLE_STATE_MAYBE_INITIALIZED;
+				break;
+			}
+		}
+
+		/**
+		 * Save the new variable initialization state and record if there
+		 * was a change in state
+		 */
+		if(new_init_state != current_init_state){
+			set_variable_initialization_state(assignee, new_init_state);
+			changed = TRUE;
+		}
+
+		//Bump up to the next one
+		cursor = cursor->next_statement;
+	}
+
+	return changed;
+}
+
+
+/**
+ * Perform dataflow analysis for a given function. The entire point of this helper
+ * is to make sure that every eligible variable has all of its SSA generations populated
+ * with correct initialization state information before we go and do mutability/definite
+ * assignment analysis on it
+ */
+static inline void perform_dataflow_analysis_for_function(basic_block_t* function_entry, dynamic_array_t* postorder_traversal){
+	/**
+	 * Get the post order traversal for this function. We will iterate over
+	 * it backwards to get the reverse post order traversal(level order)
+	 */
+	get_post_order_traversal(&(function_entry->function_defined_in->function_blocks), function_entry, postorder_traversal);
+
+	/**
+	 * Before we can perform the actual dataflow analysis, we need to go through and populate the initialization
+	 * states for all SSA generations. We do this by flagging every single SSA generation that gets assigned
+	 * to as "definitely initialized". This works because our algorithm is an "optimistic" algorithm, meaning
+	 * that we assume that everything is initialized properly and need to be proven wrong by the dataflow
+	 * analysis
+	 */
+	populate_all_initialization_states(function_entry->function_defined_in, postorder_traversal);
+
+	/**
+	 * While changed algorithm ensures that we allow all state changes to
+	 * fully propogate over the CFG. In practice this will always converge
+	 * because SSA is monotonic.
+	 */
+	u_int8_t changed;
+	do {
+		//Assume no change will happen at the start of each iteration
+		changed = FALSE;
+
+		/**
+		 * Run through everything in reverse postorder(just backwards over the
+		 * postorder array). We do this because dataflow is a forward flowing
+		 * operation so this converges faster
+		 */
+		for(int32_t i = postorder_traversal->current_index - 1; i >= 0; i--){
+			//Grab our block and let the helper update the phi functions in it
+			basic_block_t* block = dynamic_array_get_at(postorder_traversal, i);
+			u_int8_t block_changed = update_initialization_states_in_block(block);
+
+			//If at any point one block changes we need to recompute the whole thing
+			changed |= block_changed;
+		}
+	} while(changed == TRUE);
+}
+
+
+/**
+ * Perform our dataflow analysis to populate the intiailization state information
+ * for all eligible variables. This information will be used by the mutation and
+ * definite assignment checker later on to catch "use uninitialized" and "may be
+ * used uninitialized" errors, as well as mutability violations
+ */
+static inline void perform_dataflow_analysis(cfg_t* cfg){
+	//Allocate a reusable holder for the postorder traversal
+	dynamic_array_t postorder_traversal = dynamic_array_alloc();
+
+	/**
+	 * Run through all of the function entry blocks and invoke the per-function
+	 * dataflow helper. We will use the reusable postorder traversal dynamic
+	 * array and just clear it upon each new function
+	 */
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		perform_dataflow_analysis_for_function(function_entry, &postorder_traversal);
+
+		//This array will be reused - we just need to clear it out
+		clear_dynamic_array(&postorder_traversal);
+	}
+
+	//We can scrap this now that we're done
+	dynamic_array_dealloc(&postorder_traversal);
 }
 
 
@@ -928,8 +1451,18 @@ static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
  * blindly called by the instruction analyzer so we will guard against NULL variables
  * and variables that are ineligible for SSA in here. This function also handles
  * all of the error printing for variables that may not have been initialized
+ *
+ * We map initialization states to SSA inside of the symtab variable itself
+ * while we're doing it
+ *
+ * In other words
+ * x[ssa_gen = 0] = UNINITIALIZED
+ * x[ssa_gen = 1] = INITIALIZED
+ *
+ * We need to perform a lookup using the SSA generation inside of the symtab variable's
+ * hashmap to get the state that we're using it in
  */
-static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable, dynamic_array_t* may_not_have_been_initialized){
+static u_int8_t check_variable_for_definite_assignment(instruction_t* instruction, three_addr_var_t* variable){
 	/**
 	 * First guard - if the variable is NULL(common) or it's not 
 	 * SSA eligible(temp var, etc.) we can leave now. This is still
@@ -947,138 +1480,183 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 		return SUCCESS;
 	}
 
-	/**
-	 * Obvious case - generation of 0 means it's never
-	 * been initialized so this is a pure use before
-	 * initialization
-	 */
-	if(variable->ssa_generation == 0){
-		sprintf(error_info, "Variable %s is used before initialization. First defined here: ", variable->linked_var->var_name.string);
-		print_variable_name_to_buffer(error_info, variable->linked_var);
-		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
-		(*error_count)++;
-		return FAILURE;
+	//Extract the linked var for our use
+	symtab_variable_record_t* linked_var = variable->linked_var;
 
-	/**
-	 * Not so obvious case - it being in this array means that it comes from a phi function
-	 * that itself had a parameter of generation 0, meaning that it's not a guarantee that
-	 * this wasn't initialized but it may not have been, which is still an error
-	 */
-	} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, variable) == TRUE){
-		sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", variable->linked_var->var_name.string);
-		print_variable_name_to_buffer(error_info, variable->linked_var);
-		print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
-		(*error_count)++;
-		return FAILURE;
+	switch(get_variable_initialization_state(variable)){
+		/**
+		 * Obvious case - it's never been initialized 
+		 * so this is a pure use before initialization
+		 */
+		case VARIABLE_STATE_UNINITIALIZED:
+			sprintf(error_info, "Variable %s is used before initialization. First defined here: ", get_true_variable_name(linked_var));
+			print_variable_name_to_buffer(error_info, linked_var);
+			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+			(*error_count)++;
+			return FAILURE;
 
-	/**
-	 * If we made it here then this worked and the variable is clean
-	 */
-	} else {
-		return SUCCESS;
+		/**
+		 * Not so obvious case - there are some paths where this variable
+		 * is initialized and some where it is not. So, we will
+		 *
+		 */
+		case VARIABLE_STATE_MAYBE_INITIALIZED:
+			sprintf(error_info, "Variable %s may be used before initialization. First defined here: ", get_true_variable_name(linked_var));
+			print_variable_name_to_buffer(error_info, linked_var);
+			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+			(*error_count)++;
+			return FAILURE;
+
+		/**
+		 * It definitely was initialized so we should be good to go here
+		 */
+		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
+			return SUCCESS;
+
+		//Should never happen
+		default:
+			fprintf(stderr, "Fatal internal compiler error: variable found to be in an impossible initialization state\n");
+			exit(1);
 	}
 }
 
 
 /**
- * Does the given instruction comply with the definite assignment rules? There are two paths
- * that this check will take:
+ * Does the given instruction comply with the definite assignment rules? We will check 
+ * every single eligible variable for compliance. If one variable fails, the whole thing
+ * fails out
  * 
- * 1.) We are not a phi function - in this case just check every variable in the RHS to see if
- * 	  it's either completely uninitialized or may be uninitialized(see below). If any one of
- * 	  the variables fails then the whole things fails
- * 2.) We are a phi function - we must check every variable in the parameter list. If any
- * 	   one in the parameter list is an _0 variable *OR* is in our "may_not_have_been_initialized"
- * 	   list, then we will flag that LHS variable as potentially being uninitialized for future checks.
- * 	   Since we do this scan from top to bottom in the function using dominators this check will work
+ * NOTE: we assume that the caller will never pass a phi function. Phi functions should never
+ * be included in definite assignment analysis because they are not real from the programmer's
+ * perspective
  */
-static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction, dynamic_array_t* may_not_have_been_initialized){
+static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction){
 	//By default assume SUCCESS(1)
 	u_int8_t overall_result = SUCCESS;
 
 	/**
-	 * Regular non-phi function handling involves us checking every
-	 * single variable to see if we have any "_0" variables in use.
-	 * "_0" is our canary SSA value that represents an uninitialzed
-	 * variable. We will also need to make sure that each variable
-	 * is not a member of the "may_not_have_been_initialized" array.
-	 * This gets built up from phi functions who have values that may
-	 * have never been initialized
-	 *
-	 * We bitwise and the results together for this. One false in the chain
-	 * will make the whole thing 0(FAILURE)
+	 * We only check if we're not a phi function(phi functions have already
+	 * been handled by the initializer at this point). We will crawl
+	 * through every single variable in use. If at any point a variable
+	 * in use is not definitely initialized, we'll display the failure message
+	 * and record that this instruction violates definite assignment
 	 */
-	if(instruction->statement_type != THREE_ADDR_CODE_PHI_FUNC){
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1, may_not_have_been_initialized);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2, may_not_have_been_initialized);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1, may_not_have_been_initialized);
-		overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2, may_not_have_been_initialized);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
+	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
 
-		//Check all parameters as well
-		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
-			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
+	//Check all parameters as well
+	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
+		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
-			overall_result &= check_variable_for_definite_assignment(instruction, parameter, may_not_have_been_initialized);
-		}
-
-
-	/**
-	 * Phi-functions have special handling. If we have a phi
-	 * function that has at least one _0 variable in it, then the
-	 * LHS value may not have been initialized
-	 *
-	 * x_3 <- phi(x_2, x_1, x_0)
-	 * x_4 <- x_3 + 1
-	 *
-	 * Fail there, x_3 may not have been initialized. We will maintain
-	 * a list of variables that may be uninitialized that will be cross
-	 * referenced by all other checks. The value x_3 in this case would go
-	 * into there
-	 */
-	} else {
-		/**
-		 * Run through all of the parameters - all it takes is for one
-		 *
-		 * declare x:mut i32;
-		 *
-		 * if(<cond>){
-		 * 		x = 3;
-		 * } 
-		 *
-		 * ret x; <--- x may be used uninitialized here
-		 *
-		 */
-		for(int32_t i = 0; i < instruction->parameters.current_index; i++){
-			three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
-
-			/**
-			 * If we see a parameter with a generation of 0, that means that it's 
-			 * never been initialized. We will add the LHS to the "may_not_have_been_initialized"
-			 * list for later checks
-			 */
-			if(parameter->ssa_generation == 0){
-				dynamic_array_add(may_not_have_been_initialized, instruction->operands.oir.assignee);
-				overall_result = FAILURE;
-				
-				//We don't need to check any further for this
-				break;
-
-			/**
-			 * Just because it's not 0 doesn't mean we're safe. We must also check if this value
-			 * is inside of the "may not be initialized" list. If it is, then subsequently the
-			 * LHS of this instruction is also potentially uninitialized
-			 */
-			} else if(does_variable_dynamic_array_contain_variable(may_not_have_been_initialized, parameter) == TRUE){
-				dynamic_array_add(may_not_have_been_initialized, instruction->operands.oir.assignee);
-				overall_result = FAILURE;
-				
-				//We don't need to check any further for this
-				break;
-			}
-		}
+		overall_result &= check_variable_for_definite_assignment(instruction, parameter);
 	}
 
 	return overall_result;
+}
+
+
+/**
+ * For an instruction to comply with mutability constraints, the assignee must not be 
+ * overwriting an initialized or maybe initialized variable if it's immutable. Of course
+ * if it's mutable then we won't even bother checking. 
+ *
+ * The way that we do this revolves around the "overwritten generation". In the SSA renamer, 
+ * whenever we rename a variable on the LHS, we maintain a mapping of the new generation
+ * to the overwritten generation. Once we get here, we reference that mapping and are able
+ * to from there get the intialization state of the overwritten generation
+ *
+ * NOTE: we assume that the caller will never pass a phi function as a parameter
+ */
+static inline u_int8_t does_instruction_comply_with_mutability_constraints(instruction_t* instruction){
+	//Assignee is what we care to check for this
+	three_addr_var_t* assignee = instruction->operands.oir.assignee;
+
+	/**
+	 * First guard - if the variable is NULL(common) or it's not 
+	 * SSA eligible(temp var, etc.) we can leave now. This is still
+	 * a SUCCESS because there's nothing wrong with this
+	 */
+	if(assignee == NULL || is_variable_ssa_eligible(assignee) == FALSE){
+		return SUCCESS;
+	}
+
+	/**
+	 * The stack and instruction pointer are special cases that are exempt from this
+	 * kind of checking so leave if we see it
+	 */
+	if(assignee == stack_pointer_var || assignee == instruction_pointer_var){
+		return SUCCESS;
+	}
+
+	/**
+	 * If the assignee is mutable, then it can be assigned to all we want
+	 * so we always succeed here
+	 */
+	if(assignee->type->mutability == MUTABLE){
+		return SUCCESS;
+	}
+
+	/**
+	 * Once we get here, we'll need to get what this instruction overwrites. We do this
+	 * by indexing into the overwritten generation map using the ssa generation on the
+	 * three address variable. The result will either be a valid generation that we can
+	 * use to see if it was initialized or it's -1
+	 */
+	symtab_variable_record_t* linked_var = assignee->linked_var;
+	int32_t overwritten_generation = linked_var->ssa_overwritten_generation_map.internal_array[assignee->ssa_generation];
+
+	/**
+	 * This should actually never happen because Ollie uses
+	 * synthetic initialization values. However if it did
+	 * happen, this would count as an initialization so
+	 * we will take it
+	 */
+	if(overwritten_generation == OVERWRITES_NOTHING){
+		return SUCCESS;
+	}
+
+	/**
+	 * Otherwise, we'll need to lookup what the state of the overwritten
+	 * generation was. If it was definitely or maybe initialized, then
+	 * this is a mutation and therefore not allowed
+	 */
+	variable_initialization_state_t overwritten_init_state = linked_var->initialization_state_map[overwritten_generation];
+	switch(overwritten_init_state){
+		/**
+		 * Uninitialized - all good for us
+		 */
+		case VARIABLE_STATE_UNINITIALIZED:
+			return SUCCESS;
+
+		/**
+		 * This is a potential mutation - still a violation because being
+		 * immutable means that it can only ever be assigned once
+		 */
+		case VARIABLE_STATE_MAYBE_INITIALIZED:
+			sprintf(error_info, "Variable %s was declared with an immutable type but may be mutated. First defined here:", get_true_variable_name(linked_var));
+			print_variable_name_to_buffer(error_info, linked_var);
+			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+			(*error_count)++;
+			return FAILURE;
+
+		/**
+		 * This is a definite mutation - definite violation because being
+		 * immutable means that it can only ever be assigned once
+		 */
+		case VARIABLE_STATE_DEFINITELY_INITIALIZED:
+			sprintf(error_info, "Variable %s was declared with an immutable type but is mutated. First defined here:", get_true_variable_name(linked_var));
+			print_variable_name_to_buffer(error_info, linked_var);
+			print_static_analyzer_message(MESSAGE_TYPE_ERROR, error_info, instruction->line_number);
+			(*error_count)++;
+			return FAILURE;
+
+		//Should never happen but just in case
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unknown initialization type found on variable\n");
+			exit(1);
+	}
 }
 
 
@@ -1093,33 +1671,29 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
  *
  * NOTE: this function is recursive
  */
-static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* block, dynamic_array_t* may_not_have_been_initialized){
+static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_block_t* block){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
 
 	//Grab a leader statement out
 	instruction_t* cursor = block->leader_statement;
 
-	/**
-	 * Go through every single statement and analyze every
-	 * variable within. If any of the statements is using
-	 * a _0 version, that counts as a use-before-initialize
-	 * and it is an error. If we have a phi-function that
-	 * has a _0 parameter, that is "maybe" use before initialize
-	 * and it is still an error
-	 *
-	 * NOTE: we do *NOT* check anything to do with the so-called "rip_offset_var". This 
-	 * is not a variable in the true sense so it's not worth it to mess around with it
-	 */
+	//Run through all instructions in the block
 	while(cursor != NULL){
-		/**
-		 * Any one instruction failing definite assignment means that the whole
-		 * thing fails. We will process all instructions to get a full picture of the
-		 * errors though
-		 */
-		if(does_instruction_comply_with_definite_assignment(cursor, may_not_have_been_initialized) == FALSE){
-			result = FALSE;
+		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			cursor = cursor->next_statement;
+			continue;
 		}
+
+		/**
+		 * Perform both mutability and definite assignment analysis. They're
+		 * totally independent so the result of one doesn't impact the other. 
+		 * Just one failure here will cause the entire compilation to
+		 * fail but we will keep going for all blocks in the function
+		 * to get a comprehensive picture
+		 */
+		result &= does_instruction_comply_with_definite_assignment(cursor);
+		result &= does_instruction_comply_with_mutability_constraints(cursor);
 
 		cursor = cursor->next_statement;
 	}
@@ -1135,7 +1709,7 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 		 * If anything in this child fails, our overall result is failure. We will
 		 * keep going to scan everything though
 		 */
-		if(perform_definite_assignment_analysis_for_block(child, may_not_have_been_initialized) == FALSE){
+		if(perform_initialization_and_mutability_analysis_for_block(child) == FALSE){
 			result = FAILURE;
 		}
 	}
@@ -1145,22 +1719,14 @@ static u_int8_t perform_definite_assignment_analysis_for_block(basic_block_t* bl
 
 
 /**
- * Perform the Ollie analyzer's version of definite assignment analysis.
- *
- * We will scan all functions at once. If one function fails, we will still keep going to analyze
- * the rest of the program. However, one function failing does mean that the entire program fails
- * to compile in the end. All functions are scanned in dominator order meaning that we start
- * from the top and work our way down through the dominator children
+ * Run through all functions in the CFG and perform initialization and mutability
+ * analysis on each of them. We do not have a hard stop if we find one place where
+ * we fail and will scan the entire CFG to get all places where mutability or
+ * definitie initialization may be violated
  */
-static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
+static inline u_int8_t perform_definite_assignment_and_mutability_analysis(cfg_t* cfg){
 	//Assume success off the bat
 	u_int8_t result = SUCCESS;
-
-	/**
-	 * Keep an array of variables that may not have been initialized in each function to make
-	 * scanning easier and less intensive. We'll allocate once and just wipe every time
-	 */
-	dynamic_array_t may_not_have_been_initialized = dynamic_array_alloc();
 
 	//Run through all functions
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
@@ -1176,16 +1742,10 @@ static inline u_int8_t perform_definite_assignment_analysis(cfg_t* cfg){
 		 * Call into the recursive analyzer. If we have a failure, then the entire thing
 		 * goes into failure, but we will keep scanning to get all errors in at once
 		 */
-		if(perform_definite_assignment_analysis_for_block(function_entry, &may_not_have_been_initialized) == FAILURE){
+		if(perform_initialization_and_mutability_analysis_for_block(function_entry) == FAILURE){
 			result = FAILURE;
 		}
-
-		//Clear it now that we're done with this function
-		clear_dynamic_array(&may_not_have_been_initialized);
 	}
-
-	//Done with this so scrap it now
-	dynamic_array_dealloc(&may_not_have_been_initialized);
 
 	return result;
 }
@@ -1239,7 +1799,7 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				 * with this value. Therefore, this tells us that the variable was never mutated
 				 */
 				if(cursor->ssa_counter == 2){
-					sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", cursor->var_name.string);
+					sprintf(info, "Variable \"%s\" is declared as mutable but never mutated. Consider removing the \"mut\" keyword. First defined here:", get_true_variable_name(cursor));
 					print_variable_name_to_buffer(info, cursor);
 					print_static_analyzer_message(MESSAGE_TYPE_WARNING, info, cursor->line_number);
 					(*warning_count)++;
@@ -1312,10 +1872,12 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
  * performed herein are:
  * 	1.) Mangling static variable names
  * 	2.) Converting the CFG into SSA form
- * 	3.) Perform definite assignment analysis
+ * 	3.) Populate all initialization states in preparation for
+ * 		later analysis
+ * 	3.) Perform definite assignment analysis & mutation analysis
  * 		- This is a potential failure point
  * 	4.) Perform function call analysis
- * 	5.) Perform variable mutation analysis
+ * 	5.) Perform mutability checking for variables that we never mutated
  */
 cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
 	//By default assume success
@@ -1342,13 +1904,23 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
 
 	/**
-	 * 3.) perform definite assignment analysis on the entire
-	 * CFG. This process will verify that all variables are only
-	 * used after they are guaranteed to have been assigned
+	 * 3.) Populate the intialization states for all variables in
+	 * the CFG using a forward dataflow analysis for each and every
+	 * function. When done, all eligible variables will have thier
+	 * initialization maps fully populated
+	 */
+	perform_dataflow_analysis(cfg);
+
+	/**
+	 * 4.) Perform definite assignment and mutability analysis for the
+	 * entire CFG. Now that we have all of our initialization states
+	 * populated we will be able to detect use-before-intialized, maybe
+	 * use-before-intialize, mutate after initialize, and maybe mutate
+	 * after initialize error cases
 	 *
 	 * NOTE: this is a potential fail point for the CFG
 	 */
-	if(perform_definite_assignment_analysis(cfg) == FAILURE){
+	if(perform_definite_assignment_and_mutability_analysis(cfg) == FAILURE){
 		result = CFG_RESULT_FAILURE;
 	}
 

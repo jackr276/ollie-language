@@ -11,6 +11,7 @@
  *
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
@@ -632,26 +633,6 @@ static inline u_int8_t is_type_commutative_for_operation(generic_type_t* type, o
 		default:
 			return FALSE;
 	}
-}
-
-
-/**
- * Determine whether or not a variable is able to be assigned to
- *
- * A variable can only be assigned to if it is mutable. If the user
- * does something like:
- *
- * declare x:i32;
- * x = 5;
- *
- * This is inavlid, because you're violating the basic mutability constraint
- */
-static inline u_int8_t can_variable_be_assigned_to(symtab_variable_record_t* variable){
-	//Extract the type - it contains the mutability information
-	generic_type_t* type = variable->type_defined_as;
-
-	//Otherwise, let's see if the type allows us to be mutated 
-	return type->mutability == MUTABLE ? TRUE : FALSE;
 }
 
 
@@ -2924,15 +2905,17 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 /**
  * Perform all mutability checking/bookkeeping for an assignment expression
  *
+ * NOTE: in Ollie, mutability for a memory region refers to actually assigning
+ * over the region itself and writing to it. There is a blanket ban on writing
+ * to immutable memory regions. However, reassigning them is fine if they're
+ * being initialized for the first time
+ *
  * Cases that we cover:
  * 1.) Attempting to assign to an immutable "field variable" - think struct/union field
  * 2.) Attempting to assign to an immutable array area
  * 3.) Attempting to assign to a type regularly after it has been initialized
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
-	//Extract the 
-	symtab_variable_record_t* assignee = left_hand_expression_tree->variable;
-
 	/**
 	 * If we have a so-called "field variable", that means that this 
 	 * unary expression is a postfix access of some kind. This is important
@@ -2982,22 +2965,16 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		generic_ast_node_t* first_child = left_hand_expression_tree->first_child;
 		generic_ast_node_t* dereferenced = first_child->next_sibling;
 
-		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR
-			&& first_child->unary_operator == STAR){
-
-			//If this is immutable, we are trying to assign to an immutable value
+		/**
+		 * Mutability checking - we are never able to write to an immutable memory
+		 * region. There is no initialization tracking for this - it's just a blanket
+		 * ban
+		 */
+		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR && first_child->unary_operator == STAR){
 			if(dereferenced->inferred_type->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", dereferenced->inferred_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
-		}
-
-	} else {
-		//This is the case where we have a plain variable assignment
-		if(can_variable_be_assigned_to(assignee) == FALSE){
-			sprintf(info, "Variable \"%s\" is not mutable and cannot be assigned to outisde of an initial \"let\" statement. Use the \"mut\" keyword if you wish to mutate. First defined here:", assignee->var_name.string);
-			print_variable_name_to_buffer(info, assignee);
-			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
@@ -11222,6 +11199,12 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	//Push this nesting level onto the stack
 	push_nesting_level(&nesting_stack, NESTING_LOOP_STATEMENT);
 
+	/**
+	 * Important note: The parenthesized area of a for statement represents a new lexical scope
+	 * for variables. As such, we will initialize a new variable scope when we get here
+	 */
+	initialize_variable_scope(variable_symtab, current_function);
+
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
 	for_stmt_node->line_number = parser_line_num; 
@@ -11236,12 +11219,6 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 
 	//Push to the stack for later matching
 	push_token(&grouping_stack, lookahead);
-
-	/**
-	 * Important note: The parenthesized area of a for statement represents a new lexical scope
-	 * for variables. As such, we will initialize a new variable scope when we get here
-	 */
-	initialize_variable_scope(variable_symtab, current_function);
 	
 	//Let's see if we've got anything. Invoke the expression statement rule here
 	generic_ast_node_t* statement_chain = expression_statement(token_stream);
@@ -11380,9 +11357,6 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	//Push onto the grouping stack so we can check matching
 	push_token(&grouping_stack, lookahead);
 
-	//Now if we make it here, we're safe to create the actual node
-	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
-
 	//No matter what we need a new type scope 
 	initialize_type_scope(type_symtab);
 
@@ -11390,6 +11364,9 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	if(new_variable_scope_required == TRUE){
 		initialize_variable_scope(variable_symtab, current_function);
 	}
+
+	//Now if we make it here, we're safe to create the actual node
+	generic_ast_node_t* compound_stmt_node = ast_node_alloc(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
 
 	//Now we can keep going until we see a closing curly
 	//We'll seed the search
@@ -12215,7 +12192,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			 */
 			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
 				//Throw up the warning here
-				sprintf(info, "Type \"%s\" is immutable. If you declare variable \"%s\" with this type, you may never be able to initialize it",
+				sprintf(info, "Memory region type \"%s\" is immutable. If you declare variable \"%s\" with this type, you will never be able to write to it",
 								declared_var->type_defined_as->type_name.string,
 								declared_var->var_name.string);
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
@@ -12235,20 +12212,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		 * so we'll make a node now and sort through that later in the CFG
 		 */
 		default:
-			/**
-			 * Special warning here - if the user is declaring a variable that is immutable
-			 * immutable, they actually never initialize this variable. We should
-			 * throw a warning up for this
-			 */
-			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
-				//Throw up the warning here
-				sprintf(info, "Type \"%s\" is immutable. If you declare variable \"%s\" with this type, you may never be able to initialize it",
-								declared_var->type_defined_as->type_name.string,
-								declared_var->var_name.string);
-				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
-				num_warnings++;
-			}
-
 			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 			declaration_node->variable = declared_var;
 			declaration_node->inferred_type = declared_var->type_defined_as;

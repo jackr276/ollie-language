@@ -14,6 +14,7 @@
 #include "../utils/stack/lightstack.h"
 #include "../utils/dynamic_set/dynamic_set.h"
 #include "../utils/dynamic_array/dynamic_array.h"
+#include "../utils/dynamic_integer_array/dynamic_integer_array.h"
 #include "../utils/constants.h"
 #include "../utils/visibility.h"
 #include "../dependency_graph/dependency_graph.h"
@@ -38,6 +39,12 @@
 
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
+
+/**
+ * Flag that tells us that the previous generation is invalid
+ * for SSA overwrite checks
+ */
+#define OVERWRITES_NOTHING -1
 
 //A variable symtab
 typedef struct variable_symtab_t variable_symtab_t;
@@ -82,6 +89,18 @@ typedef struct label_symtab_t label_symtab_t;
 #define IS_ORIGINAL_FUNCTION_PARAMETER(parameter)\
 	((parameter->alias == NULL) ? TRUE : FALSE)
 //================================ Utility Macros ============================
+
+
+/**
+ * Track the initialization state of a variable
+ * during and after SSA generation for assignment
+ * analysis
+ */
+typedef enum {
+	VARIABLE_STATE_UNINITIALIZED,
+	VARIABLE_STATE_MAYBE_INITIALIZED,
+	VARIABLE_STATE_DEFINITELY_INITIALIZED
+} variable_initialization_state_t;
 
 
 /**
@@ -191,13 +210,40 @@ struct symtab_variable_record_t{
 	symtab_function_record_t* function_declared_in;
 	//What type is it?
 	generic_type_t* type_defined_as;
-	//We are able to alias variables as other variables. This is
-	//typically only used for function parameters in the presaving step
+	/**
+	 * We are able to alias variables as other variables. This is
+	 * typically only used for function parameters in the presaving step
+	 *
+	 * Since aliasing is a two-way street, we maintain both ends of
+	 * the link
+	 */
 	symtab_variable_record_t* alias;
+	symtab_variable_record_t* aliases;
 	//The associate region that this variable is stored in
 	stack_region_t* stack_region;
 	//What node was this variable defined in
 	dependency_graph_node_t* node_defined_in;
+	/**
+	 * What is the basic block that this record was declared in. This
+	 * will be NULL for global/static variables. If we have a function
+	 * parameter we will consider it defined inside of the entry block
+	 */
+	void* block_declared_in;
+	/**
+	 * Maintain a map of SSA generations
+	 * to initialization states
+	 *
+	 * NOTE: this will only be allocated after we've done SSA
+	 * and know how many generations there are
+	 */
+	variable_initialization_state_t* initialization_state_map;
+	/**
+	 * Maintain a map of current SSA generations(the index)
+	 * and what SSA generation it explicitly overwrote. This
+	 * will be used in mutability checking and will be built up 
+	 * inside of the SSA renamer
+	 */
+	dynamic_integer_array_t ssa_overwritten_generation_map;
 	//What is the ID of the lexical scope that this variable is in?
 	u_int32_t lexical_scope_id;
 	//The line number
@@ -226,6 +272,13 @@ struct symtab_variable_record_t{
 	 * This is what really matters to us in the register allocator
 	 */
 	u_int16_t class_relative_function_parameter_order;
+	/**
+	 * Is this variable user defined or not? Remember that we have special
+	 * SSA variables that we use just for the compiler internally. For variables
+	 * like those, we aren't going to bother with mutability or intiailization
+	 * checking
+	 */
+	u_int8_t is_user_defined;
 	//What type structure or language concept does this variable belong to?
 	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so
@@ -487,6 +540,13 @@ void finalize_type_scope(type_symtab_t* symtab);
 symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
 
 /**
+ * Get the true variable name - this goes around any aliasing
+ * to ensure that we are always grabbing the actual underlying
+ * variable name
+ */
+char* get_true_variable_name(symtab_variable_record_t* variable);
+
+/**
  * Create a global variable record
  */
 symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index, visibilty_type_t visibility);
@@ -714,9 +774,10 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
- * Run through and check for any unused vars, bad mut keywords, etc
+ * Print out the initialization state array for a variable. This is a debugging
+ * only function
  */
-void check_for_var_errors(variable_symtab_t* symtab, u_int32_t* num_warnings);
+void print_initialization_states_for_ssa_variable(symtab_variable_record_t* variable);
 
 /**
  * A printing function for development purposes

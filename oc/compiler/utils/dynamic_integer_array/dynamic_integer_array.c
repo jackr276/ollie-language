@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/types.h>
 #include "../constants.h"
 
@@ -136,6 +137,25 @@ void clear_dynamic_integer_array(dynamic_integer_array_t* array){
 
 	//Our current index is now 0
 	array->current_index = 0;
+}
+
+
+/**
+ * Resize a dynamic integer array to fit an index if needed. If not
+ * needed then we won't change anything
+ */
+void dynamic_integer_array_resize_to_fit_index_if_needed(dynamic_integer_array_t* array, int32_t index){
+	//If it's already greater then we're done
+	if(array->current_max_size > index){
+		return;
+	}
+
+	/**
+	 * Otherwise we're going to resize. We're just going to double
+	 * this like we would any other resize
+	 */
+	array->current_max_size = index * 2;
+	array->internal_array = realloc(array->internal_array, sizeof(int) * array->current_max_size);
 }
 
 

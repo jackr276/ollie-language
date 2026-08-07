@@ -320,7 +320,7 @@ dynamic_set_testd.o: $(TEST_SUITE_PATH)/dynamic_set_test.c
 priority_queue_test.o: $(TEST_SUITE_PATH)/priority_queue_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_LOCAL)/priority_queue_test.o
 
-priority_queue_testd.o: $(TEST_SUITE_PATH)/priority_queue_testd.c
+priority_queue_testd.o: $(TEST_SUITE_PATH)/priority_queue_test.c
 	$(CC) -g $(CFLAGS) $(TEST_SUITE_PATH)/priority_queue_test.c -o $(OUT_LOCAL)/priority_queue_testd.o
 
 dynamic_string_test.o: $(TEST_SUITE_PATH)/dynamic_string_test.c
@@ -353,11 +353,11 @@ parser_test.o: $(TEST_SUITE_PATH)/parser_test.c
 parser_testd.o: $(TEST_SUITE_PATH)/parser_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/parser_test.c -o $(OUT_LOCAL)/parser_testd.o
 
-priority_queue_test: priority_queue_test.o max_priority_queue.o min_priority_queue.o
-	$(CC) -o $(OUT_LOCAL)/priority_queue_test $(OUT_LOCAL)/priority_queue_test.o $(OUT_LOCAL)/max_priority_queue.o $(OUT_LOCAL)/min_priority_queue.o
+priority_queue_test: priority_queue_test.o max_priority_queue.o min_priority_queue.o heap_queue.o
+	$(CC) -o $(OUT_LOCAL)/priority_queue_test $(OUT_LOCAL)/priority_queue_test.o $(OUT_LOCAL)/heap_queue.o $(OUT_LOCAL)/max_priority_queue.o $(OUT_LOCAL)/min_priority_queue.o
 
-priority_queue_testd: priority_queue_testd.o max_priority_queued.o min_priority_queued.o
-	$(CC) -o $(OUT_LOCAL)/priority_queue_testd $(OUT_LOCAL)/priority_queue_testd.o $(OUT_LOCAL)/max_priority_queued.o $(OUT_LOCAL)/min_priority_queued.o
+priority_queue_testd: priority_queue_testd.o max_priority_queued.o min_priority_queued.o heap_queued.o
+	$(CC) -o $(OUT_LOCAL)/priority_queue_testd $(OUT_LOCAL)/priority_queue_testd.o $(OUT_LOCAL)/heap_queued.o $(OUT_LOCAL)/max_priority_queued.o $(OUT_LOCAL)/min_priority_queued.o
 
 data_dependency_graph.o : $(DATA_DEPENDENCY_GRAPH_PATH)/data_dependency_graph.c
 	$(CC) $(CFLAGS) $(DATA_DEPENDENCY_GRAPH_PATH)/data_dependency_graph.c -o $(OUT_LOCAL)/data_dependency_graph.o
@@ -889,8 +889,8 @@ stest-CI: symtab_test-CI
 preproc_test-CI: preprocessor_test-CI
 	find $(SINGLE_FILE_TEST_DIRECTORY) -maxdepth 1 -type f | sort | xargs -n 1 $(OUT_CI)/preprocessor_test -i -d -f
 
-priority_queue_test-CI: priority_queue_test-CI.o max_priority_queue-CI.o min_priority_queue-CI.o
-	$(CC) -o $(OUT_CI)/priority_queue_test $(OUT_CI)/priority_queue_test.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/min_priority_queue.o
+priority_queue_test-CI: priority_queue_test-CI.o max_priority_queue-CI.o min_priority_queue-CI.o heap_queue-CI.o
+	$(CC) -o $(OUT_CI)/priority_queue_test $(OUT_CI)/priority_queue_test.o $(OUT_CI)/max_priority_queue.o $(OUT_CI)/heap_queue.o $(OUT_CI)/min_priority_queue.o
 
 test_data_area-CI: stack_data_area_test-CI
 	$(OUT_CI)/stack_data_area_test -f ./oc/test_files/data_area_test_input.ol
