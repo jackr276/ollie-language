@@ -564,18 +564,30 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 }
 
 
-//TODO DOC ME
+/**
+ * Does the given block dominate the target? The way that we check is through
+ * the immediate dominator chain of the target block:
+ *
+ * 	target -IDOM-> block1 -IDOM-> block2 -IDOM-> block
+ *
+ * If we crawl our way up the immediate dominator chain starting at the target and
+ * eventually hit the block, then we know that this block does dominate the target
+ * block.
+ */
 static inline u_int8_t does_block_dominate_target(basic_block_t* block, basic_block_t* target){
 	basic_block_t* current = target;
 
+	//Keep going until we either find the block or run out of IDOMs
 	while(current != NULL){
 		if(current == block){
 			return TRUE;
 		}
 
+		//Crawl up the dominator chain
 		current = current->dominator_info.immediate_dominator;
 	}
 
+	//We could not find it in the IDOM chain, so it does not dominate the target
 	return FALSE;
 }
 
@@ -710,6 +722,7 @@ static inline void pruned_phi_function_insertion(symtab_variable_record_t* varia
 		}
 	}
 }
+
 
 /**
  * if(x0 == 0){
@@ -1884,7 +1897,11 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	perform_dataflow_analysis(cfg);
 
 	/**
-	 * 4.) Perform definite assignment and mutability analysi
+	 * 4.) Perform definite assignment and mutability analysis for the
+	 * entire CFG. Now that we have all of our initialization states
+	 * populated we will be able to detect use-before-intialized, maybe
+	 * use-before-intialize, mutate after initialize, and maybe mutate
+	 * after initialize error cases
 	 *
 	 * NOTE: this is a potential fail point for the CFG
 	 */
