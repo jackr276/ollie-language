@@ -138,8 +138,6 @@ struct generic_ast_node_t{
 			int32_t lower_bound;
 			int32_t upper_bound;
 		} switch_bounds;
-		//Did the compound statement require a new scope?
-		u_int8_t did_compound_stmt_need_new_scope;
 	} optional_storage;
 	//Holds the token for what kind of constant it is
 	ollie_token_t constant_type;

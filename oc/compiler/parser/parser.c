@@ -2979,10 +2979,12 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		generic_ast_node_t* first_child = left_hand_expression_tree->first_child;
 		generic_ast_node_t* dereferenced = first_child->next_sibling;
 
-		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR
-			&& first_child->unary_operator == STAR){
-
-			//If this is immutable, we are trying to assign to an immutable value
+		/**
+		 * Mutability checking - we are never able to write to an immutable memory
+		 * region. There is no initialization tracking for this - it's just a blanket
+		 * ban
+		 */
+		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR && first_child->unary_operator == STAR){
 			if(dereferenced->inferred_type->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", dereferenced->inferred_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
@@ -11380,9 +11382,6 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 	//Now if we make it here, we're safe to create the actual node
 	generic_ast_node_t* compound_stmt_node = ast_node_alloc_wrapper(AST_NODE_TYPE_COMPOUND_STMT, SIDE_TYPE_LEFT);
 
-	//Store this for later scope tracking
-	compound_stmt_node->optional_storage.did_compound_stmt_need_new_scope = new_variable_scope_required;
-
 	//Now we can keep going until we see a closing curly
 	//We'll seed the search
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -12207,7 +12206,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			 */
 			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
 				//Throw up the warning here
-				sprintf(info, "Type \"%s\" is immutable. If you declare variable \"%s\" with this type, you may never be able to initialize it",
+				sprintf(info, "Memory region type \"%s\" is immutable. If you declare variable \"%s\" with this type, you will never be able to write to it",
 								declared_var->type_defined_as->type_name.string,
 								declared_var->var_name.string);
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
@@ -12227,20 +12226,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		 * so we'll make a node now and sort through that later in the CFG
 		 */
 		default:
-			/**
-			 * Special warning here - if the user is declaring a variable that is immutable
-			 * immutable, they actually never initialize this variable. We should
-			 * throw a warning up for this
-			 */
-			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
-				//Throw up the warning here
-				sprintf(info, "Type \"%s\" is immutable. If you declare variable \"%s\" with this type, you may never be able to initialize it",
-								declared_var->type_defined_as->type_name.string,
-								declared_var->var_name.string);
-				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
-				num_warnings++;
-			}
-
 			declaration_node = ast_node_alloc_wrapper(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 			declaration_node->variable = declared_var;
 			declaration_node->inferred_type = declared_var->type_defined_as;
