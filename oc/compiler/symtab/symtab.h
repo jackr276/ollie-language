@@ -210,9 +210,15 @@ struct symtab_variable_record_t{
 	symtab_function_record_t* function_declared_in;
 	//What type is it?
 	generic_type_t* type_defined_as;
-	//We are able to alias variables as other variables. This is
-	//typically only used for function parameters in the presaving step
+	/**
+	 * We are able to alias variables as other variables. This is
+	 * typically only used for function parameters in the presaving step
+	 *
+	 * Since aliasing is a two-way street, we maintain both ends of
+	 * the link
+	 */
 	symtab_variable_record_t* alias;
+	symtab_variable_record_t* aliases;
 	//The associate region that this variable is stored in
 	stack_region_t* stack_region;
 	//What node was this variable defined in
@@ -532,6 +538,13 @@ void finalize_type_scope(type_symtab_t* symtab);
  * Create a record for the symbol table
  */
 symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
+
+/**
+ * Get the true variable name - this goes around any aliasing
+ * to ensure that we are always grabbing the actual underlying
+ * variable name
+ */
+char* get_true_variable_name(symtab_variable_record_t* variable);
 
 /**
  * Create a global variable record

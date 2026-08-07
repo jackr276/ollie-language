@@ -668,6 +668,20 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 
 
 /**
+ * Dealias the given variable record until we cannot dealias it anymore. Most of the time
+ * variable records are not aliased, this is just as insurance for the function parameter
+ * case where we do have it
+ */
+static inline symtab_variable_record_t* dealias_variable(symtab_variable_record_t* record){
+	while(record->alias != NULL){
+		record = record->alias;
+	}
+	
+
+}
+
+
+/**
  * Create a global variable record
  */
 symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index, visibilty_type_t visibility){
@@ -699,6 +713,16 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 	record->counter_stack.current_size = 0;
 
 	return record;
+}
+
+
+/**
+ * Get the true variable name - this goes around any aliasing
+ * to ensure that we are always grabbing the actual underlying
+ * variable name
+ */
+char* get_true_variable_name(symtab_variable_record_t* variable){
+
 }
 
 
@@ -857,6 +881,13 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 
 	//These are user defined in a way
 	record->is_user_defined = TRUE;
+
+	/**
+	 * Record that this record aliases the given variable so
+	 * that, in the future, if we need to drill down and get
+	 * it we will be able to
+	 */
+	record->aliases = aliases;
 
 	//Insert this into the variable symtab
 	insert_variable(variable_symtab, record);
