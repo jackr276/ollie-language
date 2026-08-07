@@ -218,11 +218,11 @@ struct symtab_variable_record_t{
 	//What node was this variable defined in
 	dependency_graph_node_t* node_defined_in;
 	/**
-	 * What is the basic block that this record was defined in. This
+	 * What is the basic block that this record was declared in. This
 	 * will be NULL for global/static variables. If we have a function
 	 * parameter we will consider it defined inside of the entry block
 	 */
-	void* block_defined_in;
+	void* block_declared_in;
 	/**
 	 * Maintain a map of SSA generations
 	 * to initialization states

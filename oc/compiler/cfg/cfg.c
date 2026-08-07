@@ -8100,6 +8100,9 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 		return a;
 	}
 
+	//What function are we in - will be important for updates
+	symtab_function_record_t* function_contained_in = a->function_defined_in;
+
 	/**
 	 * Merge entry and exit statements int
 	 */
@@ -8168,6 +8171,36 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	while(b_stmt != NULL){
 		b_stmt->block_contained_in = a;
 		b_stmt = b_stmt->next_statement;
+	}
+
+	/**
+	 * All variables maintain a "block declared in" tag that tells us
+	 * where the variable was literally declared by the user. This is
+	 * very important to us for mutability checking. Since block B is
+	 * now block A, any variables that were declared in B now becom
+	 * declared in A. We will crawl all sheafs related to this function
+	 * and update any "declared in" tags from B to a
+	 */
+	for(int32_t i = 0; i < variable_symtab->sheafs.current_index; i++){
+		symtab_variable_sheaf_t* sheaf = variable_symtab->sheafs.internal_array[i];
+
+		//Not in the function skip it
+		if(sheaf->function_contained_in != function_contained_in){
+			continue;
+		}
+
+		//TODO
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			symtab_variable_record_t* cursor = sheaf->records[j];
+			while(cursor != NULL){
+				if(cursor->is_user_defined == TRUE){
+					if(cursor->block_declared_in == b){
+						cursor->block_declared_in = a;
+					}
+				}
+			}
+
+		}
 	}
 	
 	//IMPORTANT--wipe b's statements out
