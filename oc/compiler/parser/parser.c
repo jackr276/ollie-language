@@ -2568,6 +2568,21 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 
 
 /**
+ *
+ * NOTE: the first token will always be the IDENT token that we pushed
+ * back to process this
+ */
+static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
+	//Refresh our lookahead token here
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	//TODO IMPLEMENT SEPARATE
+	return NULL;
+}
+
+
+
+/**
  * A primary expression is, in a way, the termination of our expression chain. However, it can be used 
  * to chain back up to an expression in general using () as an enclosure. Just like all rules, a primary expression
  * itself has a parent and will produce children. The reference to the primary expression itself is always returned
@@ -2595,10 +2610,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 	//Switch based on the token
 	switch(lookahead.tok){
 		/**
-		 * We've seen an ident, so we'll put it back and let
-		 * that rule handle it. This identifier will always be 
-		 * a variable. It must also be a variable that has been initialized.
-		 * We will check that it was initialized here
+		 * Handle an identifier. This could mean one of so many different things that
+		 * we have a separate rule to process all of it
 		 */
 		case IDENT:
 			//Get the second lookahead - we could be seeing a fully qualified name
@@ -2709,6 +2722,9 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 				return print_and_return_error(info, parser_line_num);
 
 			//Otherwise we're seeing a fully qualified function name for a function pointer
+			/**
+			 * TODO HERE - THIS COULD ALSO BE A VARIABLE LOOKUP
+			 */
 			} else {
 				//Our holder for the found function
 				symtab_function_record_t* found_function;
@@ -14668,6 +14684,13 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Initialize a new variable/type scope for the namespace
 	initialize_type_scope(type_symtab);
 	initialize_variable_scope(variable_symtab, NULL, current_namespace);
+
+	/**
+	 * Store that our related sheaf is the from the variable symtab's
+	 * current flag. This will be important when we do lookups for
+	 * global variables
+	 */
+	current_namespace->related_variable_sheaf = variable_symtab->current;
 
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);

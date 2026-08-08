@@ -386,6 +386,8 @@ struct function_namespace_t{
 	dynamic_string_t namespace_name;
 	//Link to the prior level
 	function_namespace_t* parent_namespace;
+	//What is the related variable sheaf for this?
+	symtab_variable_sheaf_t* related_variable_sheaf;
 	//All of the child namespaces that we have
 	dynamic_array_t child_namespaces;
 	//Hash table for the records
