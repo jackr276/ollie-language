@@ -14519,8 +14519,6 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
 static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 	//The lookahead token
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-	//We may need a secong lookahead here
-	lexitem_t lookahead2;
 
 	//Switch based on the token
 	switch(lookahead.tok){
@@ -14544,27 +14542,10 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 			return print_and_return_error("Type aliasing may not happen inside of a namespace", parser_line_num);
 
 		case DECLARE:
-			//Let's see if we're dealing with a function predeclaration
-			lookahead2 = get_next_token(token_stream, &parser_line_num);
-
-			//Go based on the second lookeahd
-			switch(lookahead2.tok){
-				//Any of these means that we have a function predeclaration
-				case FN:
-				case INLINE:
-				case PUB:
-					push_back_token(token_stream, &parser_line_num);
-
-					//We can just leverage the global declare statement for this
-					return global_declare_statement(token_stream);
-
-				//Means that we're trying to declare a global var
-				default:
-					return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
-			}
+			return global_declare_statement(token_stream);
 
 		case LET:
-			return print_and_return_error("Global variable declaration may not happen inside of a namespace", parser_line_num);
+			return global_let_statement(token_stream);
 
 		default:
 			sprintf(info, "Invalid/unknown expression type encountered in namespace. Saw \"%s\".", lexitem_to_string(&lookahead));
@@ -14582,8 +14563,6 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
  * to declare namespace1::namespace2{} separately, becuase namespace1 already exists
  *
  * NOTE: By the time we get here, we've already seen and consumed "namespace"
- *
- * TODO THIS IS A NEW VARIABLE SCOPE FOR GLOBAL VARS
  *
  * BNF Rule: <namespace-partition> ::= namespace <identifier>{::<identifier>}? { <namespace_member>+ }
  */
@@ -15030,6 +15009,8 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
  *
  * For example: the function namespace1::namespace2::my_fn() will
  * have its name transformed into namespace1.namespace2.my_fn
+ *
+ * TODO WE'LL NEED TO ADD VAR NAMES TO THIS TOO
  */
 static void mangle_all_function_names(function_symtab_t* symtab){
 	//We will ge concatenating using the dot
