@@ -358,6 +358,8 @@ struct symtab_variable_sheaf_t{
 	symtab_variable_record_t* records[VARIABLE_KEYSPACE];
 	//What function in this in(it can be NULL)
 	symtab_function_record_t* function_contained_in;
+	//What namespace is this in(it can be NULL)
+	function_namespace_t* namespace_contained_in;
 	//The lexical scope id
 	u_int32_t lexical_scope_id;
 };
@@ -517,7 +519,7 @@ module_symtab_t* module_symtab_alloc();
  * Initialize the variable symbol table scope. It is possible that the function
  * we are contained in would be NULL for the global variable scope
  */
-void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_contained_in);
+void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_contained_in, function_namespace_t* namespace_contained_in);
 
 /**
  * Initialize the type symbol table scope

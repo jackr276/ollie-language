@@ -194,9 +194,11 @@ module_symtab_t* module_symtab_alloc(){
 
 /**
  * Initialize the variable symbol table scope. It is possible that the function
- * we are contained in would be NULL for the global variable scope
-*/
-void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_defined_in){
+ * we are contained in would be NULL for the global variable scope. We also
+ * store the current namespace that the scope is in. Again it is completely
+ * possible for that to be NULL if we don't have any namespaces
+ */
+void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_contained_in, function_namespace_t* namespace_contained_in){
 	//Allocate the current sheaf
 	symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
 
@@ -207,7 +209,10 @@ void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record
 	current->lexical_scope_id = increment_and_get_variable_lexical_scope();
 
 	//What function are we in for this sheaf?
-	current->function_contained_in = function_defined_in;
+	current->function_contained_in = function_contained_in;
+
+	//Store the namespace that we're in
+	current->namespace_contained_in = namespace_contained_in;
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;

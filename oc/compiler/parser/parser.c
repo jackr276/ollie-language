@@ -10774,8 +10774,11 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Left curly brace expected after expression", parser_line_num);
 	}
 
-	//We will declare a new lexical scope here
-	initialize_variable_scope(variable_symtab, current_function);
+	/**
+	 * We will declare a new lexical scope here. Remember that the function symtab's current
+	 * pointer holds the current namespace
+	 */
+	initialize_variable_scope(variable_symtab, current_function, function_symtab->current);
 	initialize_type_scope(type_symtab);
 
 	//Push to stack for later matching
@@ -11203,7 +11206,7 @@ static generic_ast_node_t* for_statement(ollie_token_stream_t* token_stream){
 	 * Important note: The parenthesized area of a for statement represents a new lexical scope
 	 * for variables. As such, we will initialize a new variable scope when we get here
 	 */
-	initialize_variable_scope(variable_symtab, current_function);
+	initialize_variable_scope(variable_symtab, current_function, function_symtab->current);
 
 	//We've already seen the for keyword, so let's create the root level node
 	generic_ast_node_t* for_stmt_node = ast_node_alloc(AST_NODE_TYPE_FOR_STMT, SIDE_TYPE_LEFT);
@@ -11362,7 +11365,7 @@ static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream
 
 	//Variable scope is configurable based on a function param
 	if(new_variable_scope_required == TRUE){
-		initialize_variable_scope(variable_symtab, current_function);
+		initialize_variable_scope(variable_symtab, current_function, function_symtab->current);
 	}
 
 	//Now if we make it here, we're safe to create the actual node
@@ -14202,7 +14205,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
 	 */
-	initialize_variable_scope(variable_symtab, function_record);
+	initialize_variable_scope(variable_symtab, function_record, function_symtab->current);
 
 	/**
 	 * IMPORTANT: we need to hang onto this overarching function scope
@@ -14594,10 +14597,6 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Hang onto whatever the namespace was when we got here
 	function_namespace_t* old_parent = current_namespace;
 
-	//Initialize a new variable/type scope for the namespace
-	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab, NULL);
-
 	/**
 	 * Keep going after the first iteration so long as we keep seeing the ::
 	 */
@@ -14686,6 +14685,10 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 
 	//We're now safe to allocate this ast node
 	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
+
+	//Initialize a new variable/type scope for the namespace
+	initialize_type_scope(type_symtab);
+	initialize_variable_scope(variable_symtab, NULL, current_namespace);
 
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -15135,11 +15138,17 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Allocate the reusable namespace queue
 	namespace_bfs_queue = heap_queue_alloc();
 
-	//For the type and variable symtabs, their scope needs to be initialized before
-	//anything else happens
+	//
+	//
 	
-	//Initialize the variable scope. The function contained in is NULL for this one
-	initialize_variable_scope(variable_symtab, NULL);
+	/**
+	 * For the type and variable symtabs, their original scope needs to be initialized before
+	 * anything else happens
+	 * 
+	 * Initialize the variable scope. The function contained in is NULL for this one and the
+	 * namespace is whatever we have for the function symtab
+	 */
+	initialize_variable_scope(variable_symtab, NULL, function_symtab->current);
 	//Global variable scope here
 	initialize_type_scope(type_symtab);
 	//Functions only have one scope, need no initialization
