@@ -713,6 +713,13 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
 symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* namespace_to_search, char* name);
 
 /**
+ * Lookup a global variable that needs to be in the given namespace. This will
+ * not do the normal logic where we can crawl up to see if it's in a parent
+ * namespace
+ */
+symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* namespace_to_search, char* name);
+
+/**
  * Lookup a namespace inside of the symtab.
  */
 function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);

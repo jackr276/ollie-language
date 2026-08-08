@@ -1821,11 +1821,41 @@ symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* nam
 		if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
 			return record_cursor;
 		}
+
 		//Advance it if we didn't have the right name
 		record_cursor = record_cursor->next;
 	}
 
 	//When we make it down here, we found nothing so
+	return NULL;
+}
+
+
+/**
+ * Lookup a global variable that needs to be in the given namespace. This will
+ * not do the normal logic where we can crawl up to see if it's in a parent
+ * namespace
+ */
+symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* namespace_to_search, char* name){
+	//Get the variable hash
+	u_int64_t h = hash_variable(name);
+
+	//Extract the related sheaf and then get a cursor using the hash
+	symtab_variable_sheaf_t* sheaf_to_search = namespace_to_search->related_variable_sheaf;
+	symtab_variable_record_t* cursor = sheaf_to_search->records[h];
+
+	//So long as we haven't hit the end and don't have a match
+	while(cursor != NULL){
+		//If it's an exact match we're good
+		if(strncmp(cursor->var_name.string, name, cursor->var_name.current_length) == 0){
+			return cursor;
+		}
+
+		//Advance to the next record
+		cursor = cursor->next;
+	}
+
+	//If we made it down here then we found nothing
 	return NULL;
 }
 

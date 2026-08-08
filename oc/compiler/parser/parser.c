@@ -2572,6 +2572,9 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
  *
  * NOTE: the first token will always be the IDENT token that we pushed
  * back to process this
+ *
+ *
+ * TODO CLEAN THIS WHOLE THING UP
  */
 static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
 	/**
