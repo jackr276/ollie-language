@@ -14580,6 +14580,8 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
  *
  * NOTE: By the time we get here, we've already seen and consumed "namespace"
  *
+ * TODO THIS IS A NEW VARIABLE SCOPE FOR GLOBAL VARS
+ *
  * BNF Rule: <namespace-partition> ::= namespace <identifier>{::<identifier>}? { <namespace_member>+ }
  */
 static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
@@ -14693,8 +14695,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		generic_ast_node_t* member = namespace_member(stream);
 
 		//Hard fail out here
-		if(member != NULL 
-			&& member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		if(member != NULL && member->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid member discovered in namespace", parser_line_num);
 		}
 
