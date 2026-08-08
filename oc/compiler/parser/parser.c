@@ -14594,6 +14594,10 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Hang onto whatever the namespace was when we got here
 	function_namespace_t* old_parent = current_namespace;
 
+	//Initialize a new variable/type scope for the namespace
+	initialize_type_scope(type_symtab);
+	initialize_variable_scope(variable_symtab, NULL);
+
 	/**
 	 * Keep going after the first iteration so long as we keep seeing the ::
 	 */
@@ -14721,6 +14725,10 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 * becuase we don't know how many levels down we are, so just exiting will not work
 	 */
 	set_current_namespace(function_symtab, old_parent);
+
+	//Now that we're done finalize the two new scopes
+	finalize_type_scope(type_symtab);
+	finalize_variable_scope(variable_symtab);
 
 	return namespace_node;
 }
