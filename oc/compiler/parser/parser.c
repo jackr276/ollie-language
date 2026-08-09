@@ -2674,14 +2674,11 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		sprintf(info, "\"%s\" is neither a variable or function that currently exists", var_name);
 		return print_and_return_error(info, parser_line_num);
 
-	//Otherwise we're seeing a fully qualified function name for a function pointer
 	/**
-	 * TODO HERE - THIS COULD ALSO BE A VARIABLE LOOKUP
+	 * If we saw the scoped access operator, then we could be looking at a fully qualified
+	 * function name or variable name for either a function pointer or a global variable
 	 */
 	} else {
-		//Our holder for the found function
-		symtab_function_record_t* found_function;
-
 		//Lookup the first namespace in lookahead(we know it's an ident)
 		function_namespace_t* namespace_cursor = lookup_namespace(function_symtab, ident_token.lexeme.string);
 
@@ -2708,7 +2705,10 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//If we see :: we have another namespace to hit
+			/**
+			 * If we see another :: we are going for another round of scoped access. If we
+			 * don't see it, then we're done and we breakout to do the remaining processing
+			 */
 			if(lookahead2.tok == COLONCOLON){
 				//Lookup the next namespace
 				function_namespace_t* child_namespace = lookup_namespace_under_parent(namespace_cursor, ident_token.lexeme.string);
@@ -2724,50 +2724,54 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 				//Otherwise this now is the current namespace and we keep going
 				namespace_cursor = child_namespace;
 
-			//Otherwise this is our terminal case
+			//Terminal case - we saw nothing
 			} else {
-				//Push back whatever lookahead2 was
 				push_back_token(token_stream, &parser_line_num);
-
-				//We should be able to find the function now if we look it up
-				found_function = lookup_function_in_namespace(namespace_cursor, ident_token.lexeme.string);
-
-				//We didn't find it, bail out
-				if(found_function == NULL){
-					sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
-									ident_token.lexeme.string,
-									generate_fully_qualified_namespace_name(namespace_cursor).string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//Otherwise we have found it so we can break out of here
 				break;
 			}
 		}
 
 		/**
-		 * We now need to validate that we can actually access this function from the current
-		 * namespace. There is a helper that takes care of all of this, we just need to invoke it
+		 * Once we get here, we can either have a function or a global
+		 * variable. Functions are more common so we will look for 
+		 * that first
 		 */
-		if(validate_function_access(found_function) == FAILURE){
-			sprintf(info, "Invalid attempt to access function \"%s\"",
-					generate_fully_qualified_function_name(found_function).string);
+		symtab_function_record_t* found_function = lookup_function_in_namespace(namespace_cursor, ident_token.lexeme.string);
+		if(found_function != NULL){
+			/**
+			 * We now need to validate that we can actually access this function from the current
+			 * namespace. There is a helper that takes care of all of this, we just need to invoke it
+			 */
+			if(validate_function_access(found_function) == FAILURE){
+				sprintf(info, "Invalid attempt to access function \"%s\"",
+						generate_fully_qualified_function_name(found_function).string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * And now that we've determined that all of this is above board, we can finally
+			 * return our function constant node and be done
+			 */
+			generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
+
+			//Package up everything that we'll need
+			function_constant->is_assignable = FALSE;
+			function_constant->inferred_type = found_function->signature;
+			function_constant->constant_type = FUNC_CONST;
+			function_constant->func_record = found_function;
+			return function_constant;
+		}
+
+		//We didn't find it, bail out
+		if(found_function == NULL){
+			sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
+							ident_token.lexeme.string,
+							generate_fully_qualified_namespace_name(namespace_cursor).string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		/**
-		 * And now that we've determined that all of this is above board, we can finally
-		 * return our function constant node and be done
-		 */
-		generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
+		//Otherwise we have found it so we can break out of here
 
-		//Package up everything that we'll need
-		function_constant->is_assignable = FALSE;
-		function_constant->inferred_type = found_function->signature;
-		function_constant->constant_type = FUNC_CONST;
-		function_constant->func_record = found_function;
-
-		return function_constant;
 	}
 }
 
