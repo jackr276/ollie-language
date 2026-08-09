@@ -1219,6 +1219,38 @@ void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_
 
 
 /**
+ * Set the current lexical scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_lexical_scope(variable_symtab_t* symtab, symtab_variable_sheaf_t* new_lexical_scope){
+	//Just to be safe here
+	if(new_lexical_scope == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to enter a null lexical scope\n");
+		exit(1);
+	}
+
+	//This now is the current scope
+	symtab->current = new_lexical_scope;
+}
+
+
+/**
+ * Set the current type scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_type_scope(type_symtab_t* symtab, symtab_type_sheaf_t* new_type_scope){
+	//Just to be safe
+	if(new_type_scope == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to enter a null type scope\n");
+		exit(1);
+	}
+
+	//Set this as the current scope
+	symtab->current = new_type_scope;
+}
+
+
+/**
  * Dynamically allocate and create a type record
  *
  * The hash_type function automatically allows us to distinguish between

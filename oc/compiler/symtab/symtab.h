@@ -619,6 +619,18 @@ void exit_namespace(function_symtab_t* symtab);
 void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_current_namespace);
 
 /**
+ * Set the current lexical scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_lexical_scope(variable_symtab_t* symtab, symtab_variable_sheaf_t* new_lexical_scope);
+
+/**
+ * Set the current type scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_type_scope(type_symtab_t* symtab, symtab_type_sheaf_t* new_type_scope);
+
+/**
  * Create a type record for the symbol table
  */
 symtab_type_record_t* create_type_record(generic_type_t* type);

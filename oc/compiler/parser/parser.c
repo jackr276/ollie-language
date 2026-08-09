@@ -14655,6 +14655,10 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	//Hang onto whatever the namespace was when we got here
 	function_namespace_t* old_parent = current_namespace;
 
+	//Cache these for later
+	symtab_variable_sheaf_t* old_lexical_scope = variable_symtab->current;
+	symtab_type_sheaf_t* old_type_scope = type_symtab->current;
+
 	/**
 	 * Keep going after the first iteration so long as we keep seeing the ::
 	 */
@@ -14711,6 +14715,15 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		//Enter this new namespace
 		enter_namespace(function_symtab, current_namespace);
 
+		/**
+		 * All namespaces by definition have their own new variable scope
+		 * and type scope associated with them. As such once we've created
+		 * this namespace  we'll need to create a new scope and save the association
+		 */
+		initialize_variable_scope(variable_symtab, NULL, new_namepsace);
+		initialize_type_scope(type_symtab);
+		current_namespace->related_variable_sheaf = variable_symtab->current;
+
 		//Refresh the lookahead
 		lookahead = get_next_token(stream, &parser_line_num);
 
@@ -14743,17 +14756,6 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 
 	//We're now safe to allocate this ast node
 	generic_ast_node_t* namespace_node = ast_node_alloc(AST_NODE_TYPE_NAMESPACE_DECLARATION, SIDE_TYPE_LEFT);
-
-	//Initialize a new variable/type scope for the namespace
-	initialize_type_scope(type_symtab);
-	initialize_variable_scope(variable_symtab, NULL, current_namespace);
-
-	/**
-	 * Store that our related sheaf is the from the variable symtab's
-	 * current flag. This will be important when we do lookups for
-	 * global variables
-	 */
-	current_namespace->related_variable_sheaf = variable_symtab->current;
 
 	//Seed the lookahead for our search
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -14793,10 +14795,8 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 * becuase we don't know how many levels down we are, so just exiting will not work
 	 */
 	set_current_namespace(function_symtab, old_parent);
-
-	//Now that we're done finalize the two new scopes
-	finalize_type_scope(type_symtab);
-	finalize_variable_scope(variable_symtab);
+	set_current_lexical_scope(variable_symtab, old_lexical_scope);
+	set_current_type_scope(type_symtab, old_type_scope);
 
 	return namespace_node;
 }
