@@ -2646,18 +2646,14 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		/**
 		 * Otherwise we had a miss in the variable symtab. Let's now try and find this in the function
 		 * symtab and do the appropriate processing for that
+		 *
+		 * Since a function value is constant and never changes, we will classify this record as a constant
+		 * if we do find it. If we find nothing then we fail
 		 */
 		symtab_function_record_t* found_function = lookup_function(function_symtab, var_name);
-
-		/**
-		 * Since a function value is constant and never changes, we will classify this record as a constant
-		 * If it could be found, then we're all set
-		 */
 		if(found_function != NULL){
 			//Allocate the function constant node
 			generic_ast_node_t* function_constant = ast_node_alloc(AST_NODE_TYPE_CONSTANT, side);
-
-			function_constant->line_number = parser_line_num;
 
 			//This is a function pointer constant. 
 			function_constant->constant_type = FUNC_CONST;
@@ -2665,6 +2661,7 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 
 			function_constant->is_assignable = FALSE;
 			function_constant->inferred_type = found_function->signature;
+			function_constant->line_number = parser_line_num;
 
 			return function_constant;
 		}
@@ -2674,7 +2671,7 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 * this identifier has never been declared as a function, variable or constant.
 		 * We'll through an error if this happens
 		 */
-		sprintf(info, "Variable \"%s\" has not been declared", var_name);
+		sprintf(info, "\"%s\" is neither a variable or function that currently exists", var_name);
 		return print_and_return_error(info, parser_line_num);
 
 	//Otherwise we're seeing a fully qualified function name for a function pointer
