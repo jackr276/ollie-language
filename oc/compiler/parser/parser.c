@@ -2626,13 +2626,12 @@ static generic_ast_node_t* paramcount_statement(ollie_token_stream_t* token_stre
 
 
 /**
- * TODO DOC
+ * For an identifer, we can either have a plain identifier or we can have
+ * a chain of scoped access(::) operators that performs a namespace lookup
+ * for either an identifier or function pointer
  *
  * NOTE: the first token will always be the IDENT token that we pushed
  * back to process this
- *
- *
- * TODO CLEAN THIS WHOLE THING UP
  */
 static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream, side_type_t side){
 	/**
@@ -15096,6 +15095,9 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
  *
  * For example: the function namespace1::namespace2::my_fn() will
  * have its name transformed into namespace1.namespace2.my_fn
+ *
+ *
+ * TODO TRY REIMPLEMENTING - SEE IF THERES A BETTER WAY
  *
  * TODO WE'LL NEED TO ADD VAR NAMES TO THIS TOO
  */
