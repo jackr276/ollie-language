@@ -544,17 +544,24 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 
 
 /**
- * Mangle all of the function names so that we can guarantee
+ * Mangle all of the function and variables names so that we can guarantee
  * uniqueness in the final assembly when the time comes
+ *
+ * We will only mangle names of global variables/functions when they are not
+ * in the default namespace. The default namespace gets special privileges
  *
  * For example: the function namespace1::namespace2::my_fn() will
  * have its name transformed into namespace1.namespace2.my_fn
  */
-static void mangle_all_function_names(function_symtab_t* function_symtab){
+static void mangle_all_namespace_member_names(function_symtab_t* function_symtab){
 	//We'll need a holder for the old name
 	dynamic_string_t old_name = dynamic_string_alloc();
 
-	//Run through all function namespaces
+	/**
+	 * For each namespace:
+	 * 	1.) mangle all functions that are in the namespace
+	 * 	2.) mangle all global variables that are in the namespace
+	 */
 	for(int32_t i = 0; i < function_symtab->namespaces.current_index; i++){
 		function_namespace_t* namespace = dynamic_array_get_at(&(function_symtab->namespaces), i);
 
@@ -588,66 +595,18 @@ static void mangle_all_function_names(function_symtab_t* function_symtab){
 				function_record = function_record->next;
 			}
 		}
+
+		/**
+		 * Now let's run through the global var sheaf for this namespace
+		 */
+		symtab_variable_sheaf_t* global_var_sheaf = namespace->related_variable_sheaf;
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+
+		}
 	}
 
 	//This is useless now so we can scrap it
 	dynamic_string_dealloc(&old_name);
-}
-
-
-/**
- * We need to mangle all of the names for global variables to avoid
- * collisions in the data segment in the final compiled product. Luckily
- * all namespaces should be unique if we use their full name
- */
-static inline void mangle_all_global_variable_names(function_symtab_t* function_symtab, variable_symtab_t* variable_symtab, dynamic_array_t* global_variables){
-	//We concatenate with dots
-	const char* dot = ".";
-
-	//Run through all of our variables
-	for(int32_t i = 0; i < global_variables->current_index; i++){
-		//Get the global var and our actual underlying
-		global_variable_t* global_variable = dynamic_array_get_at(global_variables, i);
-		symtab_variable_record_t* underlying_var = global_variable->variable;
-
-		/**
-		 * Remember that static vars also count as global so we'll
-		 * skip those - they get mangled separately
-		 *
-		 *
-		 * TODO CAN WE COMBINE TO ONE CRAWL?
-		 */
-		if(underlying_var->membership != GLOBAL_VARIABLE){
-			continue;
-		}
-		
-		/**
-		 * First we need to scan through to get the actual lexical
-		 * scope(sheaf) that this is in. From there we can get the namespace
-		 */
-		symtab_variable_sheaf_t* lexical_scope = NULL;
-		for(int32_t j = 0; j < variable_symtab->sheafs.current_index; j++){
-			symtab_variable_sheaf_t* sheaf = dynamic_array_get_at(&(variable_symtab->sheafs), j);
-
-			//We've found it so get out
-			if(sheaf->lexical_scope_id == underlying_var->lexical_scope_id){
-				lexical_scope = sheaf;
-				break;
-			}
-		}
-
-		/**
-		 * Extract the namespace that we have. If it's the default namespace, we don't
-		 * need to mangle anything so we'll skip
-		 */
-		function_namespace_t* namespace_contained_in = lexical_scope->namespace_contained_in;
-		if(namespace_contained_in->is_default == TRUE){
-			continue;
-		}
-
-		printf("HERE\n\n\n");
-
-	}
 }
 
 
@@ -2063,8 +2022,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * we mangle is different for each one but the bottom line is every function
 	 * and variable is guaranteed to be unique in the data segment
 	 */
-	mangle_all_function_names(results->function_symtab);
-	mangle_all_global_variable_names(results->function_symtab, results->variable_symtab, &(cfg->global_variables));
+	mangle_all_namespace_member_names(results->function_symtab);
 	mangle_static_variable_names(&(cfg->global_variables));
 
 	/**

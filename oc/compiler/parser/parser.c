@@ -15117,9 +15117,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Allocate the reusable namespace queue
 	namespace_bfs_queue = heap_queue_alloc();
 
-	//
-	//
-	
 	/**
 	 * For the type and variable symtabs, their original scope needs to be initialized before
 	 * anything else happens
