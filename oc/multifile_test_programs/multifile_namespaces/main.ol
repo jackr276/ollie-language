@@ -12,5 +12,7 @@ $import "result_getter";
 pub fn main() -> i32 {
 	let input_arr:i32[10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
+	//We should end up with: -1 + 2 -3 + 4 - 5 + 6 - 7 + 8 - 9 + 10 = 5
+	OUNIT: [exit_status = 5]
 	ret @driver::get_result(input_arr);
 }
