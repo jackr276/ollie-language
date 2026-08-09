@@ -12770,6 +12770,15 @@ static void visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* namespac
 			case AST_NODE_TYPE_NAMESPACE_DECLARATION:
 				visit_namespace_declaration(cfg, namespace_child);
 				break;
+
+			case AST_NODE_TYPE_DECL_STMT:
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+
+			case AST_NODE_TYPE_LET_STMT:
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+				
 				
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
 			default:
