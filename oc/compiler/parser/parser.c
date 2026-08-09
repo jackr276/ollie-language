@@ -1892,12 +1892,12 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 
 	} else {
 		if(current_namespace->is_default == TRUE){
-			sprintf(info, "Private function \"%s\" is not accessible in the current namespace",
-							generate_fully_qualified_function_name(variable_record).string);
+			sprintf(info, "Private variable \"%s\" is not accessible in the current namespace",
+							generate_fully_qualified_variable_name(variable_record, namespace_contained_in).string);
 
 		} else {
-			sprintf(info, "Private function \"%s\" is not accessible in the current namespace \"%s\"",
-							generate_fully_qualified_function_name(variable_record).string,
+			sprintf(info, "Private variable \"%s\" is not accessible in the current namespace \"%s\"",
+							generate_fully_qualified_variable_name(variable_record, namespace_contained_in).string,
 							generate_fully_qualified_namespace_name(current_namespace).string);
 		}
 
@@ -2817,6 +2817,7 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 			function_constant->inferred_type = found_function->signature;
 			function_constant->constant_type = FUNC_CONST;
 			function_constant->func_record = found_function;
+			function_constant->line_number = parser_line_num;
 			return function_constant;
 		}
 
@@ -2826,7 +2827,28 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 */
 		symtab_variable_record_t* found_variable = lookup_variable_in_namespace(namespace_cursor, ident_token.lexeme.string);
 		if(found_variable != NULL){
+			/**
+			 * We now need to validate that we can actually access this variable from the
+			 * current namespace. We'll let the helper take care of all of the checking
+			 */
+			if(validate_variable_access(found_variable, namespace_cursor) == FALSE){
+				sprintf(info, "Invalid attempt to access variable \"%s\"",
+						generate_fully_qualified_variable_name(found_variable, namespace_cursor).string);
+				return print_and_return_error(info, parser_line_num);
+			}
 
+			/**
+			 * Now that we've determined that this is all good, we can allocate the
+			 * identifier node and give it back
+			 */
+			generic_ast_node_t* identifier = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side);
+
+			//Package up and return everything
+			identifier->is_assignable = TRUE;
+			identifier->inferred_type = found_variable->type_defined_as;
+			identifier->variable = found_variable;
+			identifier->line_number = parser_line_num;
+			return identifier;
 		}
 
 		/**

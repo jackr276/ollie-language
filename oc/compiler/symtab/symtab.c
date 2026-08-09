@@ -2712,6 +2712,59 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 
 
 /**
+ * Generate the fully qualified variable name for a given variable and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t* variable, function_namespace_t* var_namespace){
+	//If the function is in the default namespace there's nothing for us to do
+	if(var_namespace->is_default == TRUE){
+		return clone_dynamic_string(&(variable->var_name));
+	}
+
+	//Otherwise we'll need a fresh name here
+	dynamic_string_t qualified_name = dynamic_string_alloc();
+
+	//We're going to push everything up onto a stack in backwards order
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Grab a cursor for the namespace record
+	function_namespace_t* cursor = var_namespace;
+
+	//So long as we haven't hit the default
+	while(cursor->is_default == FALSE){
+		//Hold onto this pointer
+		function_namespace_t* temp = cursor;
+
+		//Go up the chain
+		cursor = cursor->parent_namespace;
+
+		//Put temp inside of the stack
+		push(&stack, temp);
+	}
+
+	//Now we'll go through the stack and generate our name that way
+	while(heap_stack_is_empty(&stack) == FALSE){
+		//Pop it off of the stack
+		function_namespace_t* record = pop(&stack);
+
+		//Concantenate this to our name
+		dynamic_string_concatenate(&qualified_name, record->namespace_name.string);
+
+		//We need a separator no matter what here
+		dynamic_string_concatenate(&qualified_name, "::");
+	}
+
+	//Destroy the stack
+	heap_stack_dealloc(&stack);
+
+	//Finally we can tack the variable name on
+	dynamic_string_concatenate(&qualified_name, variable->var_name.string);
+	
+	return qualified_name;
+}
+
+
+/**
  * Print the call graph's adjacency matrix/transitive closure out for debugging
  */
 void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab){

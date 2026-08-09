@@ -841,6 +841,12 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
 dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function);
 
 /**
+ * Generate the fully qualified variable name for a given variable and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t* variable, function_namespace_t* var_namespace);
+
+/**
  * Print the call graph's adjacency matrix out for debugging
  */
 void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab);
