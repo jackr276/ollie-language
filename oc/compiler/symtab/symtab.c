@@ -1462,8 +1462,8 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
 	//Grab the record(or lack of one) at the hash
 	symtab_variable_record_t* cursor = symtab->current->records[record->hash];
 
-	//Store the lexical scope it
-	record->lexical_scope_id =  symtab->current->lexical_scope_id;
+	//Store the lexical scope where it's in
+	record->lexical_scope_id = symtab->current->lexical_scope_id;
 
 	//No collision here, just store and get out
 	if(cursor == NULL){

@@ -244,7 +244,7 @@ struct symtab_variable_record_t{
 	 * inside of the SSA renamer
 	 */
 	dynamic_integer_array_t ssa_overwritten_generation_map;
-	//What is the ID of the lexical scope that this variable is in?
+	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
 	//The line number
 	u_int32_t line_number;
