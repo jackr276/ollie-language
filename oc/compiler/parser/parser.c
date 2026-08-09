@@ -15181,6 +15181,16 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 
 
 /**
+ * We need to mangle all of the names for global variables to avoid
+ * collisions in the data segment in the final compiled product. Luckily
+ * all namespaces should be unique if we use their full name
+ */
+static inline void mangle_all_variable_names(){
+
+}
+
+
+/**
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
