@@ -2585,7 +2585,11 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 	lexitem_t ident_token = get_next_token(token_stream, &parser_line_num);
 	lexitem_t lookahead2 = get_next_token(token_stream, &parser_line_num);
 
-	//If it's not the ::, then we have a regular variable name
+	/**
+	 * If we don't have any scoping operator(::) afterwards, we will
+	 * look for a variable or function. Variable comes first for
+	 * us when searching
+	 */
 	if(lookahead2.tok != COLONCOLON){
 		//Push it back
 		push_back_token(token_stream, &parser_line_num);
@@ -2597,20 +2601,19 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		symtab_variable_record_t* found_var = lookup_variable(variable_symtab, var_name);
 
 		/**
-		 * Let's look and see if we have a variable for use here. If we do, then
-		 * we're done with this exploration
+		 * If we find a variable, it could be a regular variable or it could be an
+		 * enum member. Enum members are really constants under the hood so we'll have
+		 * to package it up as a constant and go from there
 		 */
 		if(found_var != NULL){
-			//Most common case - not an enum
+			//Not an enum so it's an identifier
 			if(found_var->membership != ENUM_MEMBER){
-				//We know that this is valid, so we can allocate the identifier
 				generic_ast_node_t* ident_node = ast_node_alloc(AST_NODE_TYPE_IDENTIFIER, side);
 
 				//Fill out the info we need
 				ident_node->is_assignable = TRUE;
 				ident_node->variable = found_var;
 				ident_node->inferred_type = found_var->type_defined_as;
-
 				ident_node->line_number = parser_line_num;
 
 				return ident_node;
@@ -2622,34 +2625,19 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 				//We'll need the enum and inferred types stored
 				enum_member_node->optional_storage.enum_type = found_var->type_defined_as;
 				enum_member_node->inferred_type = found_var->type_defined_as->internal_values.enum_integer_type;
-
 				enum_member_node->line_number = parser_line_num;
 
 				//Constants may not be assigned
 				enum_member_node->is_assignable = FALSE;
-
-				//Store the constant value appropriately
-				switch(enum_member_node->inferred_type->type_size){
-					case 1:
-						enum_member_node->constant_type = BYTE_CONST;
-						enum_member_node->constant_value.signed_byte_value = found_var->enum_member_value;
-						break;
-
-					case 2:
-						enum_member_node->constant_type = SHORT_CONST;
-						enum_member_node->constant_value.signed_short_value = found_var->enum_member_value;
-						break;
-
-					case 4:
-						enum_member_node->constant_type = INT_CONST;
-						enum_member_node->constant_value.signed_int_value = found_var->enum_member_value;
-						break;
-
-					default:
-						enum_member_node->constant_type = LONG_CONST;
-						enum_member_node->constant_value.signed_long_value = found_var->enum_member_value;
-						break;
-				}
+				
+				/**
+				 * Instead of sorting through the constant sizes here, we can initialize the 
+				 * node as an integer constant and then just coerce down or up to whatever size
+				 * the inferred type is
+				 */
+				enum_member_node->constant_value.signed_int_value = found_var->enum_member_value;
+				enum_member_node->constant_type = INT_CONST;
+				coerce_constant(enum_member_node);
 
 				return enum_member_node;
 			}
