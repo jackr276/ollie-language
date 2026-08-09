@@ -444,6 +444,64 @@ static inline void rhs_new_name(three_addr_var_t* var){
 
 //========================================= General Utilities =============================================
 
+/**
+ * Generate the fully qualified namespace for a given namespace and return it inside of
+ * a freshly allocated dynamic string. This version is specifically for mangling so we
+ * will be using the "." separator instead of ::
+ *
+ * If we are trying to get the fully qualified name on the default namespace, a null dynamic string
+ * is returned
+ */
+dynamic_string_t generate_fully_qualified_namespace_name_for_mangling(function_namespace_t* namespace_record){
+	//Initially it's null
+	dynamic_string_t namespace_name = NULL_DYNAMIC_STRING;
+
+	//If this is the default then get out
+	if(namespace_record->is_default == TRUE){
+		return namespace_name;
+	}
+
+	//Fully allocate the namespace name
+	namespace_name = dynamic_string_alloc();
+
+	//We're going to push everything up onto a stack in backwards order
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Grab a cursor for the namespace record
+	function_namespace_t* cursor = namespace_record;
+
+	//So long as we haven't hit the default
+	while(cursor->is_default == FALSE){
+		//Hold onto this pointer
+		function_namespace_t* temp = cursor;
+
+		//Go up the chain
+		cursor = cursor->parent_namespace;
+
+		//Put temp inside of the stack
+		push(&stack, temp);
+	}
+
+	//Now we'll go through the stack and generate our name that way
+	while(heap_stack_is_empty(&stack) == FALSE){
+		//Pop it off of the stack
+		function_namespace_t* record = pop(&stack);
+
+		//Concantenate this to our name
+		dynamic_string_concatenate(&namespace_name, record->namespace_name.string);
+
+		//If we have more to go, add the separators
+		if(peek(&stack) != NULL){
+			dynamic_string_concatenate(&namespace_name, ".");
+		}
+	}
+
+	//Destroy the stack
+	heap_stack_dealloc(&stack);
+
+	return namespace_name;
+}
+
 
 /**
  * Since static variables also count for us as global variables, we need to
@@ -576,9 +634,23 @@ static void mangle_all_function_names(function_symtab_t* symtab){
  * collisions in the data segment in the final compiled product. Luckily
  * all namespaces should be unique if we use their full name
  */
-static inline void mangle_all_global_variable_names(variable_symtab_t* variable_symtab, dynamic_array_t* global_variables){
+static inline void mangle_all_global_variable_names(function_symtab_t* function_symtab, variable_symtab_t* variable_symtab, dynamic_array_t* global_variables){
 	//We concatenate with dots
 	const char* dot = ".";
+
+	for(int32_t i = 0; i < function_symtab->namespaces.current_index; i++){
+		function_namespace_t* namespace = dynamic_array_get_at(&(function_symtab->namespaces), i);
+
+		if(namespace->is_default == TRUE){
+			continue;
+		}
+
+		dynamic_string_t namespace_name = generate_fully_qualified_namespace_name(namespace);
+
+		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
+
+		}
+	}
 
 	//Run through all of our variables
 	for(int32_t i = 0; i < global_variables->current_index; i++){

@@ -2596,7 +2596,6 @@ void print_type_name(symtab_type_record_t* record){
 }
 
 
-
 /**
  * Generate the fully qualified namespace for a given namespace and return it inside of
  * a freshly allocated dynamic string
