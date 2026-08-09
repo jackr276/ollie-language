@@ -194,9 +194,11 @@ module_symtab_t* module_symtab_alloc(){
 
 /**
  * Initialize the variable symbol table scope. It is possible that the function
- * we are contained in would be NULL for the global variable scope
-*/
-void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_defined_in){
+ * we are contained in would be NULL for the global variable scope. We also
+ * store the current namespace that the scope is in. Again it is completely
+ * possible for that to be NULL if we don't have any namespaces
+ */
+void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_contained_in, function_namespace_t* namespace_contained_in){
 	//Allocate the current sheaf
 	symtab_variable_sheaf_t* current = (symtab_variable_sheaf_t*)calloc(1, sizeof(symtab_variable_sheaf_t));
 
@@ -207,7 +209,10 @@ void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record
 	current->lexical_scope_id = increment_and_get_variable_lexical_scope();
 
 	//What function are we in for this sheaf?
-	current->function_contained_in = function_defined_in;
+	current->function_contained_in = function_contained_in;
+
+	//Store the namespace that we're in
+	current->namespace_contained_in = namespace_contained_in;
 
 	//Now we'll link back to the previous one level
 	current->previous_level = symtab->current;
@@ -1214,6 +1219,38 @@ void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_
 
 
 /**
+ * Set the current lexical scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_lexical_scope(variable_symtab_t* symtab, symtab_variable_sheaf_t* new_lexical_scope){
+	//Just to be safe here
+	if(new_lexical_scope == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to enter a null lexical scope\n");
+		exit(1);
+	}
+
+	//This now is the current scope
+	symtab->current = new_lexical_scope;
+}
+
+
+/**
+ * Set the current type scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_type_scope(type_symtab_t* symtab, symtab_type_sheaf_t* new_type_scope){
+	//Just to be safe
+	if(new_type_scope == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to enter a null type scope\n");
+		exit(1);
+	}
+
+	//Set this as the current scope
+	symtab->current = new_type_scope;
+}
+
+
+/**
  * Dynamically allocate and create a type record
  *
  * The hash_type function automatically allows us to distinguish between
@@ -1457,8 +1494,8 @@ u_int8_t insert_variable(variable_symtab_t* symtab, symtab_variable_record_t* re
 	//Grab the record(or lack of one) at the hash
 	symtab_variable_record_t* cursor = symtab->current->records[record->hash];
 
-	//Store the lexical scope it
-	record->lexical_scope_id =  symtab->current->lexical_scope_id;
+	//Store the lexical scope where it's in
+	record->lexical_scope_id = symtab->current->lexical_scope_id;
 
 	//No collision here, just store and get out
 	if(cursor == NULL){
@@ -1816,11 +1853,41 @@ symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* nam
 		if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
 			return record_cursor;
 		}
+
 		//Advance it if we didn't have the right name
 		record_cursor = record_cursor->next;
 	}
 
 	//When we make it down here, we found nothing so
+	return NULL;
+}
+
+
+/**
+ * Lookup a global variable that needs to be in the given namespace. This will
+ * not do the normal logic where we can crawl up to see if it's in a parent
+ * namespace
+ */
+symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* namespace_to_search, char* name){
+	//Get the variable hash
+	u_int64_t h = hash_variable(name);
+
+	//Extract the related sheaf and then get a cursor using the hash
+	symtab_variable_sheaf_t* sheaf_to_search = namespace_to_search->related_variable_sheaf;
+	symtab_variable_record_t* cursor = sheaf_to_search->records[h];
+
+	//So long as we haven't hit the end and don't have a match
+	while(cursor != NULL){
+		//If it's an exact match we're good
+		if(strncmp(cursor->var_name.string, name, cursor->var_name.current_length) == 0){
+			return cursor;
+		}
+
+		//Advance to the next record
+		cursor = cursor->next;
+	}
+
+	//If we made it down here then we found nothing
 	return NULL;
 }
 
@@ -2561,7 +2628,6 @@ void print_type_name(symtab_type_record_t* record){
 }
 
 
-
 /**
  * Generate the fully qualified namespace for a given namespace and return it inside of
  * a freshly allocated dynamic string
@@ -2671,6 +2737,59 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 
 	//Finally we can tack the function name on
 	dynamic_string_concatenate(&qualified_name, function->func_name.string);
+	
+	return qualified_name;
+}
+
+
+/**
+ * Generate the fully qualified variable name for a given variable and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t* variable, function_namespace_t* var_namespace){
+	//If the function is in the default namespace there's nothing for us to do
+	if(var_namespace->is_default == TRUE){
+		return clone_dynamic_string(&(variable->var_name));
+	}
+
+	//Otherwise we'll need a fresh name here
+	dynamic_string_t qualified_name = dynamic_string_alloc();
+
+	//We're going to push everything up onto a stack in backwards order
+	heap_stack_t stack = heap_stack_alloc();
+
+	//Grab a cursor for the namespace record
+	function_namespace_t* cursor = var_namespace;
+
+	//So long as we haven't hit the default
+	while(cursor->is_default == FALSE){
+		//Hold onto this pointer
+		function_namespace_t* temp = cursor;
+
+		//Go up the chain
+		cursor = cursor->parent_namespace;
+
+		//Put temp inside of the stack
+		push(&stack, temp);
+	}
+
+	//Now we'll go through the stack and generate our name that way
+	while(heap_stack_is_empty(&stack) == FALSE){
+		//Pop it off of the stack
+		function_namespace_t* record = pop(&stack);
+
+		//Concantenate this to our name
+		dynamic_string_concatenate(&qualified_name, record->namespace_name.string);
+
+		//We need a separator no matter what here
+		dynamic_string_concatenate(&qualified_name, "::");
+	}
+
+	//Destroy the stack
+	heap_stack_dealloc(&stack);
+
+	//Finally we can tack the variable name on
+	dynamic_string_concatenate(&qualified_name, variable->var_name.string);
 	
 	return qualified_name;
 }

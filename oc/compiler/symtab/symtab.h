@@ -244,7 +244,7 @@ struct symtab_variable_record_t{
 	 * inside of the SSA renamer
 	 */
 	dynamic_integer_array_t ssa_overwritten_generation_map;
-	//What is the ID of the lexical scope that this variable is in?
+	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
 	//The line number
 	u_int32_t line_number;
@@ -358,6 +358,8 @@ struct symtab_variable_sheaf_t{
 	symtab_variable_record_t* records[VARIABLE_KEYSPACE];
 	//What function in this in(it can be NULL)
 	symtab_function_record_t* function_contained_in;
+	//What namespace is this in(it can be NULL)
+	function_namespace_t* namespace_contained_in;
 	//The lexical scope id
 	u_int32_t lexical_scope_id;
 };
@@ -384,6 +386,8 @@ struct function_namespace_t{
 	dynamic_string_t namespace_name;
 	//Link to the prior level
 	function_namespace_t* parent_namespace;
+	//What is the related variable sheaf for this?
+	symtab_variable_sheaf_t* related_variable_sheaf;
 	//All of the child namespaces that we have
 	dynamic_array_t child_namespaces;
 	//Hash table for the records
@@ -517,7 +521,7 @@ module_symtab_t* module_symtab_alloc();
  * Initialize the variable symbol table scope. It is possible that the function
  * we are contained in would be NULL for the global variable scope
  */
-void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_contained_in);
+void initialize_variable_scope(variable_symtab_t* symtab, symtab_function_record_t* function_contained_in, function_namespace_t* namespace_contained_in);
 
 /**
  * Initialize the type symbol table scope
@@ -615,6 +619,18 @@ void exit_namespace(function_symtab_t* symtab);
 void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_current_namespace);
 
 /**
+ * Set the current lexical scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_lexical_scope(variable_symtab_t* symtab, symtab_variable_sheaf_t* new_lexical_scope);
+
+/**
+ * Set the current type scope be a given record. This should be used when we need to jump
+ * multiple scopes at a time
+ */
+void set_current_type_scope(type_symtab_t* symtab, symtab_type_sheaf_t* new_type_scope);
+
+/**
  * Create a type record for the symbol table
  */
 symtab_type_record_t* create_type_record(generic_type_t* type);
@@ -707,6 +723,13 @@ symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name)
  * namespace
  */
 symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* namespace_to_search, char* name);
+
+/**
+ * Lookup a global variable that needs to be in the given namespace. This will
+ * not do the normal logic where we can crawl up to see if it's in a parent
+ * namespace
+ */
+symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* namespace_to_search, char* name);
 
 /**
  * Lookup a namespace inside of the symtab.
@@ -828,6 +851,12 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
  * a freshly allocated dynamic string
  */
 dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function);
+
+/**
+ * Generate the fully qualified variable name for a given variable and return it inside of
+ * a freshly allocated dynamic string
+ */
+dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t* variable, function_namespace_t* var_namespace);
 
 /**
  * Print the call graph's adjacency matrix out for debugging
