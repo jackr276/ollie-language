@@ -1851,6 +1851,64 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
 
 
 /**
+ * If we have been given a qualified name, we need to validate that we are actually
+ * able to access this variable from the current namespace that we're in
+ *
+ * Rules for variable access:
+ * 	1.) If the variable is public then every other check is irrelevant, anyone can see it -> SUCCESS
+ * 	2.) If the variable is in a predecessor namespace, then it can be accessed -> SUCCESS
+ * 	3.) Anything else is a failure
+ */
+static inline u_int8_t validate_variable_access(symtab_variable_record_t* variable_record, function_namespace_t* namespace_contained_in){
+	//If it's public, then there's nothing to worry about - anyone can see it
+	if(variable_record->visibility == VISIBILITY_TYPE_PUBLIC){
+		return SUCCESS;
+	}
+
+	/**
+	 * Once we get here we know that the variable is private. Now this all relies on how
+	 * the namespace structure. Bottom line -> is the namespace that was mentioned
+	 * either this current namespace *or* some other namespace that we have
+	 */
+
+	//Get quick access to the function's namespace and the current one
+	function_namespace_t* current_namespace = function_symtab->current;
+
+	/**
+	 * Easy performance enhancement - skip the whole BFS allocation
+	 * if they'er the same
+	 */
+	if(namespace_contained_in == current_namespace){
+		return SUCCESS;
+	}
+
+	/**
+	 * Is the current namespace a descendant of the function's namespace? If so then
+	 * we are able to access a private function(just think about how lexical scoping
+	 * works). Otherwise, we are invalid
+	 */
+	if(is_namespace_predecessor_of_given(namespace_contained_in, current_namespace) == TRUE){
+		return SUCCESS;
+
+	} else {
+		if(current_namespace->is_default == TRUE){
+			sprintf(info, "Private function \"%s\" is not accessible in the current namespace",
+							generate_fully_qualified_function_name(variable_record).string);
+
+		} else {
+			sprintf(info, "Private function \"%s\" is not accessible in the current namespace \"%s\"",
+							generate_fully_qualified_function_name(variable_record).string,
+							generate_fully_qualified_namespace_name(current_namespace).string);
+		}
+
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+}
+
+
+/**
  * A function call looks for a very specific kind of identifer followed by
  * parenthesis and the appropriate number of parameters for the function, each of
  * the appropriate type
@@ -2762,16 +2820,22 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 			return function_constant;
 		}
 
-		//We didn't find it, bail out
-		if(found_function == NULL){
-			sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
-							ident_token.lexeme.string,
-							generate_fully_qualified_namespace_name(namespace_cursor).string);
-			return print_and_return_error(info, parser_line_num);
+		/**
+		 * No function but maybe we have a variable. Let's lookup 
+		 * this as a variable in the namespace and see if we get a hit
+		 */
+		symtab_variable_record_t* found_variable = lookup_variable_in_namespace(namespace_cursor, ident_token.lexeme.string);
+		if(found_variable != NULL){
+
 		}
 
-		//Otherwise we have found it so we can break out of here
-
+		/**
+		 * If we make it here then neither worked so we have an error
+		 */
+		sprintf(info, "No function or visible global variable named \"%s\" exists under the namespace \"%s\"",
+						ident_token.lexeme.string,
+						generate_fully_qualified_namespace_name(namespace_cursor).string);
+		return print_and_return_error(info, parser_line_num);
 	}
 }
 
