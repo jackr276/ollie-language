@@ -550,82 +550,48 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
  * For example: the function namespace1::namespace2::my_fn() will
  * have its name transformed into namespace1.namespace2.my_fn
  */
-static void mangle_all_function_names(function_symtab_t* symtab){
-	//We will ge concatenating using the dot
-	const char dot = '.';
+static void mangle_all_function_names(function_symtab_t* function_symtab){
+	//We'll need a holder for the old name
+	dynamic_string_t old_name = dynamic_string_alloc();
 
-	//Allocate a temp buffer for us to use in the mangling - we will reuse it
-	dynamic_string_t temporary_buffer = dynamic_string_alloc();
+	//Run through all function namespaces
+	for(int32_t i = 0; i < function_symtab->namespaces.current_index; i++){
+		function_namespace_t* namespace = dynamic_array_get_at(&(function_symtab->namespaces), i);
 
-	//We will use a heap stack to store all of our namespaces
-	heap_stack_t namespace_stack = heap_stack_alloc();
-
-	//Run through all of the given namespaces
-	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
-		//Pointer for the current namespace
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), i);
-
-		//If it's the default namespace then there's nothing to mangle
-		if(current_namespace->is_default == TRUE){
+		//Default namespace - we do nothing for this
+		if(namespace->is_default == TRUE){
 			continue;
 		}
 
-		//Otherwise run through all of the functions
+		//Generate a fully qualified namespace name for us to use
+		dynamic_string_t namespace_name = generate_fully_qualified_namespace_name_for_mangling(namespace);
+
+		/**
+		 * Now run through every single function record in this
+		 * namespace and mangle all of their names individually
+		 */
 		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
-			//Grab it out
-			symtab_function_record_t* record_to_mangle = current_namespace->records[j];
+			symtab_function_record_t* function_record = namespace->records[j];
 
-			//Remember these are usually largely sparse so this is somewhat frequent
-			if(record_to_mangle == NULL){
-				continue;
+			//They can be chained so we have to do this
+			while(function_record != NULL){
+				//Clear the old name holder and store the function's name
+				clear_dynamic_string(&old_name);
+				dynamic_string_set(&old_name, function_record->func_name.string);
+
+				//We'll now set the name to be <namespace_chain>.<func_name>
+				dynamic_string_set(&(function_record->func_name), namespace_name.string);
+				dynamic_string_concatenate(&(function_record->func_name), ".");
+				dynamic_string_concatenate(&(function_record->func_name), old_name.string);
+
+				//Bump up to the next one
+				function_record = function_record->next;
 			}
-
-			//Wipe out the temp buffer
-			clear_dynamic_string(&temporary_buffer);
-
-			//Now once we get here we know that the record needs it
-			function_namespace_t* namespace_cursor = record_to_mangle->namespace_contained_in;
-
-			//So long as we don't see the default namespace
-			while(namespace_cursor->is_default == FALSE){
-				//Push it onto the stack
-				push(&namespace_stack, namespace_cursor);
-
-				//Advance up to the parent
-				namespace_cursor = namespace_cursor->parent_namespace;
-			}
-
-			/**
-			 * Now that we have everything loaded into the stack in backwards order, we will
-			 * unwind the stack to create the fully qualified namespace name
-			 */
-			while(heap_stack_is_empty(&namespace_stack) == FALSE){
-				//Get the record off the stack
-				namespace_cursor = pop(&namespace_stack);
-
-				//Concatenate the name
-				dynamic_string_concatenate(&temporary_buffer, namespace_cursor->namespace_name.string);
-
-				//Add the "." to the back
-				dynamic_string_add_char_to_back(&temporary_buffer, dot);
-			}
-
-			//And then once we finally come all the way here we add the function name
-			dynamic_string_concatenate(&temporary_buffer, record_to_mangle->func_name.string);
-
-			/**
-			 * And now we're full circle. We are going to wipe out the old function name and replace it
-			 * with this new function name
-			 */
-			dynamic_string_set(&(record_to_mangle->func_name), temporary_buffer.string);
 		}
 	}
 
-	//No longer need this
-	dynamic_string_dealloc(&temporary_buffer);
-
-	//Or the stack
-	heap_stack_dealloc(&namespace_stack);
+	//This is useless now so we can scrap it
+	dynamic_string_dealloc(&old_name);
 }
 
 
@@ -637,20 +603,6 @@ static void mangle_all_function_names(function_symtab_t* symtab){
 static inline void mangle_all_global_variable_names(function_symtab_t* function_symtab, variable_symtab_t* variable_symtab, dynamic_array_t* global_variables){
 	//We concatenate with dots
 	const char* dot = ".";
-
-	for(int32_t i = 0; i < function_symtab->namespaces.current_index; i++){
-		function_namespace_t* namespace = dynamic_array_get_at(&(function_symtab->namespaces), i);
-
-		if(namespace->is_default == TRUE){
-			continue;
-		}
-
-		dynamic_string_t namespace_name = generate_fully_qualified_namespace_name(namespace);
-
-		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
-
-		}
-	}
 
 	//Run through all of our variables
 	for(int32_t i = 0; i < global_variables->current_index; i++){
@@ -2112,7 +2064,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * and variable is guaranteed to be unique in the data segment
 	 */
 	mangle_all_function_names(results->function_symtab);
-	mangle_all_global_variable_names(results->variable_symtab, &(cfg->global_variables));
+	mangle_all_global_variable_names(results->function_symtab, results->variable_symtab, &(cfg->global_variables));
 	mangle_static_variable_names(&(cfg->global_variables));
 
 	/**
