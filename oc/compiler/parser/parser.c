@@ -15090,107 +15090,6 @@ static void flag_functions_that_require_initial_alignment(function_symtab_t* sym
 
 
 /**
- * Mangle all of the function names so that we can guarantee
- * uniqueness in the final assembly when the time comes
- *
- * For example: the function namespace1::namespace2::my_fn() will
- * have its name transformed into namespace1.namespace2.my_fn
- *
- *
- * TODO TRY REIMPLEMENTING - SEE IF THERES A BETTER WAY
- *
- * TODO WE'LL NEED TO ADD VAR NAMES TO THIS TOO
- */
-static void mangle_all_function_names(function_symtab_t* symtab){
-	//We will ge concatenating using the dot
-	const char dot = '.';
-
-	//Allocate a temp buffer for us to use in the mangling - we will reuse it
-	dynamic_string_t temporary_buffer = dynamic_string_alloc();
-
-	//We will use a heap stack to store all of our namespaces
-	heap_stack_t namespace_stack = heap_stack_alloc();
-
-	//Run through all of the given namespaces
-	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
-		//Pointer for the current namespace
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), i);
-
-		//If it's the default namespace then there's nothing to mangle
-		if(current_namespace->is_default == TRUE){
-			continue;
-		}
-
-		//Otherwise run through all of the functions
-		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
-			//Grab it out
-			symtab_function_record_t* record_to_mangle = current_namespace->records[j];
-
-			//Remember these are usually largely sparse so this is somewhat frequent
-			if(record_to_mangle == NULL){
-				continue;
-			}
-
-			//Wipe out the temp buffer
-			clear_dynamic_string(&temporary_buffer);
-
-			//Now once we get here we know that the record needs it
-			function_namespace_t* namespace_cursor = record_to_mangle->namespace_contained_in;
-
-			//So long as we don't see the default namespace
-			while(namespace_cursor->is_default == FALSE){
-				//Push it onto the stack
-				push(&namespace_stack, namespace_cursor);
-
-				//Advance up to the parent
-				namespace_cursor = namespace_cursor->parent_namespace;
-			}
-
-			/**
-			 * Now that we have everything loaded into the stack in backwards order, we will
-			 * unwind the stack to create the fully qualified namespace name
-			 */
-			while(heap_stack_is_empty(&namespace_stack) == FALSE){
-				//Get the record off the stack
-				namespace_cursor = pop(&namespace_stack);
-
-				//Concatenate the name
-				dynamic_string_concatenate(&temporary_buffer, namespace_cursor->namespace_name.string);
-
-				//Add the "." to the back
-				dynamic_string_add_char_to_back(&temporary_buffer, dot);
-			}
-
-			//And then once we finally come all the way here we add the function name
-			dynamic_string_concatenate(&temporary_buffer, record_to_mangle->func_name.string);
-
-			/**
-			 * And now we're full circle. We are going to wipe out the old function name and replace it
-			 * with this new function name
-			 */
-			dynamic_string_set(&(record_to_mangle->func_name), temporary_buffer.string);
-		}
-	}
-
-	//No longer need this
-	dynamic_string_dealloc(&temporary_buffer);
-
-	//Or the stack
-	heap_stack_dealloc(&namespace_stack);
-}
-
-
-/**
- * We need to mangle all of the names for global variables to avoid
- * collisions in the data segment in the final compiled product. Luckily
- * all namespaces should be unique if we use their full name
- */
-static inline void mangle_all_variable_names(){
-
-}
-
-
-/**
  * Entry point for our parser. Everything beyond this point will be called in a recursive-descent fashion through
  * static methods
 */
@@ -15293,13 +15192,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		 * closure
 		 */
 		flag_functions_that_require_initial_alignment(function_symtab);
-
-		/**
-		 * One final thing that we need to do. Functions inside of namespaces
-		 * must have their name "mangled" so that we guarantee uniqueness. Now that
-		 * we're done doing everything here we can go through and mangle all of the names
-		 */
-		mangle_all_function_names(function_symtab);
 	}
 
 	//Package up everything that we need

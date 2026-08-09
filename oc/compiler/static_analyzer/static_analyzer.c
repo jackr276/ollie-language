@@ -486,6 +486,102 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 
 
 /**
+ * Mangle all of the function names so that we can guarantee
+ * uniqueness in the final assembly when the time comes
+ *
+ * For example: the function namespace1::namespace2::my_fn() will
+ * have its name transformed into namespace1.namespace2.my_fn
+ */
+static void mangle_all_function_names(function_symtab_t* symtab){
+	//We will ge concatenating using the dot
+	const char dot = '.';
+
+	//Allocate a temp buffer for us to use in the mangling - we will reuse it
+	dynamic_string_t temporary_buffer = dynamic_string_alloc();
+
+	//We will use a heap stack to store all of our namespaces
+	heap_stack_t namespace_stack = heap_stack_alloc();
+
+	//Run through all of the given namespaces
+	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
+		//Pointer for the current namespace
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), i);
+
+		//If it's the default namespace then there's nothing to mangle
+		if(current_namespace->is_default == TRUE){
+			continue;
+		}
+
+		//Otherwise run through all of the functions
+		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
+			//Grab it out
+			symtab_function_record_t* record_to_mangle = current_namespace->records[j];
+
+			//Remember these are usually largely sparse so this is somewhat frequent
+			if(record_to_mangle == NULL){
+				continue;
+			}
+
+			//Wipe out the temp buffer
+			clear_dynamic_string(&temporary_buffer);
+
+			//Now once we get here we know that the record needs it
+			function_namespace_t* namespace_cursor = record_to_mangle->namespace_contained_in;
+
+			//So long as we don't see the default namespace
+			while(namespace_cursor->is_default == FALSE){
+				//Push it onto the stack
+				push(&namespace_stack, namespace_cursor);
+
+				//Advance up to the parent
+				namespace_cursor = namespace_cursor->parent_namespace;
+			}
+
+			/**
+			 * Now that we have everything loaded into the stack in backwards order, we will
+			 * unwind the stack to create the fully qualified namespace name
+			 */
+			while(heap_stack_is_empty(&namespace_stack) == FALSE){
+				//Get the record off the stack
+				namespace_cursor = pop(&namespace_stack);
+
+				//Concatenate the name
+				dynamic_string_concatenate(&temporary_buffer, namespace_cursor->namespace_name.string);
+
+				//Add the "." to the back
+				dynamic_string_add_char_to_back(&temporary_buffer, dot);
+			}
+
+			//And then once we finally come all the way here we add the function name
+			dynamic_string_concatenate(&temporary_buffer, record_to_mangle->func_name.string);
+
+			/**
+			 * And now we're full circle. We are going to wipe out the old function name and replace it
+			 * with this new function name
+			 */
+			dynamic_string_set(&(record_to_mangle->func_name), temporary_buffer.string);
+		}
+	}
+
+	//No longer need this
+	dynamic_string_dealloc(&temporary_buffer);
+
+	//Or the stack
+	heap_stack_dealloc(&namespace_stack);
+}
+
+
+/**
+ * We need to mangle all of the names for global variables to avoid
+ * collisions in the data segment in the final compiled product. Luckily
+ * all namespaces should be unique if we use their full name
+ */
+static inline void mangle_all_variable_names(){
+
+}
+
+
+/**
  * In order to perform definite assignment analysis, we will need to insert
  * initial "undef" assignments for every SSA eligible variable that exists
  * inside of each given function. This will become our "_0" value and we will
@@ -1870,7 +1966,7 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
 /**
  * Perform all static analysis on a given CFG. The functions
  * performed herein are:
- * 	1.) Mangling static variable names
+ * 	1.) Mangling variable/function names
  * 	2.) Converting the CFG into SSA form
  * 	3.) Populate all initialization states in preparation for
  * 		later analysis
@@ -1892,9 +1988,12 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	warning_count = num_warnings;
 
 	/**
-	 * 1.) Mangle all static variable names with a unique number identifier at the very end
-	 * to avoid name collisions
+	 * 1.) Mangle the names of functions, global variables, and static variables to
+	 * ensure that they are unique in the final generated assembly. The way that
+	 * we mangle is different for each one but the bottom line is every function
+	 * and variable is guaranteed to be unique in the data segment
 	 */
+	mangle_all_function_names(results->function_symtab);
 	mangle_static_variable_names(&(cfg->global_variables));
 
 	/**
