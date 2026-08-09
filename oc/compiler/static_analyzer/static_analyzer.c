@@ -597,10 +597,33 @@ static void mangle_all_namespace_member_names(function_symtab_t* function_symtab
 		}
 
 		/**
-		 * Now let's run through the global var sheaf for this namespace
+		 * Now let's run through the global var sheaf for this namespace. For each record,
+		 * if it's a global variable we will mangle the name with the namespace
 		 */
 		symtab_variable_sheaf_t* global_var_sheaf = namespace->related_variable_sheaf;
 		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			symtab_variable_record_t* variable_record = global_var_sheaf->records[j];
+
+			//They can be chained so we have to do this
+			while(variable_record != NULL){
+				//Just to be safe - we only do this to global vars
+				if(variable_record->membership != GLOBAL_VARIABLE){
+					variable_record = variable_record->next;
+					continue;
+				}
+
+				//Clear the old name buffer and cache our variable there
+				clear_dynamic_string(&old_name);
+				dynamic_string_set(&(old_name), variable_record->var_name.string);
+
+				//We'll now set the name to be <namespace_chain>.<var_name>
+				dynamic_string_set(&(variable_record->var_name), namespace_name.string);
+				dynamic_string_concatenate(&(variable_record->var_name), ".");
+				dynamic_string_concatenate(&(variable_record->var_name), old_name.string);
+
+				//Bump it up to the next one
+				variable_record = variable_record->next;
+			}
 
 		}
 	}
