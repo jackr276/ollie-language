@@ -280,9 +280,9 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 		//Push it up
 		b_stmt = b_stmt->next_statement;
 	}
-	
-	//We'll remove this from the list of created blocks
-	dynamic_array_delete(&(cfg->created_blocks), b);
+
+	//Remove this from the function blocks
+	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
 }
 
 
