@@ -137,7 +137,7 @@ static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
@@ -13783,11 +13783,9 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility){
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
-	//By default we are private
-	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
 	//Save this to add into the record later
@@ -15187,6 +15185,14 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		if(validate_inlined_functions_are_non_recursive(function_symtab) == FAILURE){
 			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
 		}
+
+		//TODO VERIFY THAT THIS PLACEMENT IS CORRECT
+		//
+		//TODO WE SHOULD HAVE A FLAG THAT TELLS WHETHER A FUNCTION CALLS AN INLINED FUNCTION OR NOT
+		//
+		//TODO WHAT IF WE HAVE MULTIPLE INLINES???
+		//
+		//TODO WHAT IF WE HAVE INLINED FUNCTIONS THAT CALL EACHOTHER???
 
 		/**
 		 * Flag functions that require initial alignments. This can *only* be done

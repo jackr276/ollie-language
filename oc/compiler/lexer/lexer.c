@@ -382,6 +382,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "params";
 		case PARAMCOUNT:
 			return "paramcount";
+		case INLINE:
+			return "inline";
 		case STATIC:
 			return "static";
 		case MACRO_PARAM:
