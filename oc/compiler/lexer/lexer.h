@@ -89,6 +89,11 @@ void destroy_token_stream(ollie_token_stream_t* stream);
 lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number);
 
 /**
+ * Peek the next token without actually grabbing it
+ */
+lexitem_t* peek_next_token(ollie_token_stream_t* stream);
+
+/**
  * Push a token back to the stream
  */
 void push_back_token(ollie_token_stream_t* stream, u_int32_t* parser_line_number);
