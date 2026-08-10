@@ -127,7 +127,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream);
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* compound_statement(ollie_token_stream_t* token_stream, u_int8_t new_variable_scope_required);
 static generic_ast_node_t* statement(ollie_token_stream_t* token_stream);
-static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility);
+static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global);
 static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, generic_ast_node_t* switch_stmt_node, dynamic_integer_array_t* switch_values);
 static generic_ast_node_t* default_statement(ollie_token_stream_t* token_stream);
@@ -9677,7 +9677,7 @@ static inline generic_ast_node_t* expression_statement_no_ending_semicolon(ollie
 				break;
 
 			case LET:
-				current_expression_node = let_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
+				current_expression_node = let_statement(token_stream, FALSE);
 				break;
 
 			//If we don't see declare or let, we push it back
@@ -9753,7 +9753,7 @@ static inline generic_ast_node_t* expression_statement(ollie_token_stream_t* tok
 				break;
 
 			case LET:
-				current_expression_node = let_statement(token_stream, FALSE, VISIBILITY_TYPE_PRIVATE);
+				current_expression_node = let_statement(token_stream, FALSE);
 				break;
 
 			//If we don't see declare or let, we push it back
@@ -12650,17 +12650,17 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {static}? <identifier> : <type-specifier> := <in_expression>
+ * BNF Rule: <let-statement> ::= let {pub | static}? <identifier> : <type-specifier> := <in_expression>
  */
-static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global, visibilty_type_t visibility){
-	//The line number
+static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
+	//Freeze the line number
 	u_int32_t current_line = parser_line_num;
-	//Lookahead token
-	lexitem_t lookahead;
-	//Is this variable static - almost always false
-	u_int8_t is_static = FALSE;
-	//What is our variable membership? By default we use the generic
-	variable_membership_t membership = NO_MEMBERSHIP;
+
+	//Only for global variables - visibility level 
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+
+	//We can guess at the membership off the bat
+	variable_membership_t membership = is_global == FALSE ? NO_MEMBERSHIP : GLOBAL_VARIABLE;
 
 	//Extract the token pointer for our index of declaration(-1 because we've already consume let)
 	u_int32_t token_index_of_declaration = token_stream->token_pointer - 1;
@@ -12669,32 +12669,46 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	generic_ast_node_t* let_stmt_node = ast_node_alloc(AST_NODE_TYPE_LET_STMT, SIDE_TYPE_LEFT);
 
 	//Grab the next token -- we could potentially see a storage class specifier
-	lookahead = get_next_token(token_stream, &parser_line_num);
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	/**
-	 * If we've seen the static declaration, we will simply
-	 * note it and move along.
+	 * We can see a "pub" keyword here if we have a global var, a "static"
+	 * keyword here if we have a non-global var, or just nothing
 	 */
-	if(lookahead.tok == STATIC){
-		//It is not possible to have a static global variable
-		if(is_global == TRUE){
-			return print_and_return_error("Global variables may not be declared as static", parser_line_num);
-		}
+	switch(lookahead.tok){
+		/**
+		 * We are declaring a static variable here. This is only allowed if it is
+		 * *not* a global variable
+		 */
+		case STATIC:
+			if(is_global == TRUE){
+				return print_and_return_error("Global variables may not be declared as static", parser_line_num);
+			}
+			
+			//Flag that this is a static variable
+			membership = STATIC_VARIABLE;
 
-		is_static = TRUE;
+			//Refresh the token for the next go around
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			break;
 
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
+		/**
+		 * We are declaring a public variable here. This is only allowed if it is
+		 * a global variable
+		 */
+		case PUB:
+			if(is_global == FALSE){
+				return print_and_return_error("Only global variables may be declared as public", parser_line_num);
+			}
 
-	/**
-	 * Update our membership. This will come into play during the initializer
-	 * validation
-	 */
-	if(is_global == TRUE){
-		membership = GLOBAL_VARIABLE;
-	} else if(is_static == TRUE){
-		membership = STATIC_VARIABLE;
+			//Refresh the token for the next go around
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			break;
+
+
+		//By default just do nothing
+		default:
+			break;
 	}
 
 	//If it's not an identifier, we fail
@@ -12817,21 +12831,22 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 */
 	symtab_variable_record_t* declared_var;
 
-	//Declare and set appropriately based on the membership
-	if(is_static == FALSE){
-		//Go based on it's global status
-		if(is_global == FALSE){
-			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
-		} else {
+	switch(membership){
+		case STATIC_VARIABLE:
+			declared_var = create_static_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
+			break;
+
+		case GLOBAL_VARIABLE:
 			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
-		}
-	} else {
-		declared_var = create_static_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration);
+			break;
+
+		default:	
+			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
+			break;
 	}
 
-	//Store the type
+	//Store the type & line number
 	declared_var->type_defined_as = type_spec;
-	//Save the line num
 	declared_var->line_number = current_line;
 
 	//Now that we're all good, we can add it into the symbol table
@@ -14553,24 +14568,14 @@ static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_
 
 /**
  * Handle a global declare statement. Note that be the time we arrive here, we've
- * already seen and consumed the DECLARE token
+ * already seen and consumed the LET token
  */
 static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
 	//What visibility type do we have. We are able to declare global vars as public
 	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 
-	//Lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Flag that it's pulic
-	if(lookahead.tok == PUB){
-		visibility = VISIBILITY_TYPE_PUBLIC;
-	} else {
-		push_back_token(token_stream, &parser_line_num);
-	}
-
 	//Onvoke the helper
-	generic_ast_node_t* let_node = let_statement(token_stream, TRUE, visibility);
+	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
 
 	//If it's an error send it up the chain
 	if(let_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -14578,7 +14583,7 @@ static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stre
 	}
 
 	//Now we're required to see a semicolon
-	lookahead = get_next_token(token_stream, &parser_line_num);
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//Fail out if bad
 	if(lookahead.tok != SEMICOLON){
