@@ -691,6 +691,16 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
 			basic_block_t* jumping_to_block = exit_statement->if_block;
 
 			/**
+			 * If these are the exact same block, then we need to 
+			 * skip ahead because doing any kind of reduction would
+			 * invalidate our CFG. This is already at the "fixed point"
+			 * where we can't go further
+			 */
+			if(jumping_to_block == current){
+				continue;
+			}
+
+			/**
 			 * If i is empty(of important instuctions) then
 			 * 	replace transfers to i with transfers to j
 			 */

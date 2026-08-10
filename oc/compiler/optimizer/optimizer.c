@@ -1778,6 +1778,15 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
 			/**
+			 * If the blocks are the exact same block we can't do anything else.
+			 * This is already at the fixed point. If we were to combine
+			 * we'd end up with some weird edge cases
+			 */
+			if(current == jumping_to_block){
+				continue;
+			}
+
+			/**
 			 * If i is empty then
 			 * 	replace transfers to i with transfers to j
 			 */
