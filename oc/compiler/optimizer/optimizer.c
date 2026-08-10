@@ -282,7 +282,8 @@ static void combine(basic_block_t* a, basic_block_t* b){
 	}
 
 	//Remove this from the function blocks
-	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
+	//TODO LOOK AT
+	//dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
 }
 
 

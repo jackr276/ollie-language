@@ -100,7 +100,8 @@ static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
 	}
 
 	//Delete b from the function blocks
-	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
+	//TODO LOOK AT
+	//dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
 
 	//Always return b's leader
 	return b->leader_statement;
@@ -828,8 +829,8 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 	dynamic_array_t* function_blocks = &(function_entry_block->function_defined_in->function_blocks);
 
 	//Run through every function block
-	for(int32_t j = 0; j < function_blocks->current_index; j++){
-		basic_block_t* function_block = dynamic_array_get_at(function_blocks, j);
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* function_block = dynamic_array_get_at(function_blocks, i);
 
 		/**
 		 * Wipe out the visited status and the direct successor. This
