@@ -67,9 +67,6 @@ struct cfg_t{
 	dynamic_array_t function_entry_blocks;
 	//Store the exit blocks as well. This makes RPO traversal much easier
 	dynamic_array_t function_exit_blocks;
-	//An array of all blocks that are 
-	//All created blocks
-	dynamic_array_t created_blocks;
 	//We also need to hold onto the stack pointer
 	three_addr_var_t* stack_pointer;
 	//We also need to hold onto the instruction pointer

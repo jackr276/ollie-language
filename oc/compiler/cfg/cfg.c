@@ -571,9 +571,6 @@ static inline u_int8_t does_type_require_copy_assignment(generic_type_t* type){
  * bookkeeping
  */
 static inline void delete_block(basic_block_t* block){
-	//Remove it from the overall structure
-	dynamic_array_delete(&(cfg->created_blocks), block);
-
 	//And delete it from this function's blocks too
 	dynamic_array_delete(current_function_blocks, block);
 }
@@ -936,9 +933,6 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
 
-	//Add this into the dynamic array
-	dynamic_array_add(&(cfg->created_blocks), created);
-
 	//Add it into the function's block array
 	dynamic_array_add(current_function_blocks, created);
 
@@ -973,9 +967,6 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 	 * match jump statements to labels
 	 */
 	label->block = created;
-
-	//Add this into the dynamic array
-	dynamic_array_add(&(cfg->created_blocks), created);
 
 	//Add it into the function's block array
 	dynamic_array_add(current_function_blocks, created);
