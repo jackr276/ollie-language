@@ -40,7 +40,7 @@ static heap_queue_t bfs_queue;
  *
  * After this happens, B no longer exists
  */
-static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
+static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
 	//What if a was never even assigned?
 	if(a->exit_statement == NULL){
 		a->leader_statement = b->leader_statement;
@@ -99,8 +99,8 @@ static instruction_t* combine_blocks(cfg_t* cfg, basic_block_t* a, basic_block_t
 		b_stmt = b_stmt->next_statement;
 	}
 
-	//Block b no longer exists
-	dynamic_array_delete(&(cfg->created_blocks), b);
+	//Delete b from the function blocks
+	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
 
 	//Always return b's leader
 	return b->leader_statement;
@@ -643,7 +643,7 @@ static void copy_block(basic_block_t* destination, basic_block_t* source){
  * 				remove j as a successor to i
  * 				copy the ret from j to it's predecessor i
  */
-static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder){
+static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
 	u_int8_t changed = FALSE;
 
@@ -726,7 +726,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
 					delete_successor(current, jumping_to_block);
 
 					//Combine the two
-					combine_blocks(cfg, current, jumping_to_block);
+					combine_blocks(current, jumping_to_block);
 
 					//Counts as a change 
 					changed = TRUE;
@@ -789,7 +789,7 @@ static u_int8_t branch_reduce_postprocess(cfg_t* cfg, dynamic_array_t* postorder
  * 	 compute Postorder of CFG
  * 	 branch_reduce_postprocess()
  */
-static void condense(cfg_t* cfg, dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+static void condense(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
 	//Have we seen change(modification) at all?
 	u_int8_t changed;
 
@@ -808,7 +808,7 @@ static void condense(cfg_t* cfg, dynamic_array_t* function_blocks, basic_block_t
 		get_post_order_traversal(function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
-		changed = branch_reduce_postprocess(cfg, &postorder);
+		changed = branch_reduce_postprocess(&postorder);
 		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
@@ -943,7 +943,7 @@ void postprocess(cfg_t* cfg){
 		/**
 		 * PASS 2: perform a modified branch reduction to condense the code
 		*/
-		condense(cfg, function_blocks, function_entry_block);
+		condense(function_blocks, function_entry_block);
 
 		/**
 		 * PASS 3: final reordering
