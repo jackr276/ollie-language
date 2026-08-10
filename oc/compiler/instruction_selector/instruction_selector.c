@@ -648,7 +648,22 @@ static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type
 static void order_blocks(cfg_t* cfg){
 	//Run through every function and wipe the visited status and direct successor
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		reset_function_visited_status(dynamic_array_get_at(&(cfg->function_entry_blocks), i), TRUE);
+		//Get the entry block and the related function blocks
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		dynamic_array_t* function_blocks = &(function_entry->function_defined_in->function_blocks);
+
+		//Run through every function block
+		for(int32_t j = 0; j < function_blocks->current_index; j++){
+			basic_block_t* function_block = dynamic_array_get_at(function_blocks, j);
+
+			/**
+			 * Wipe out the visited status and the direct successor. This
+			 * orderer will be doing the direct successor setting itself
+			 * so we need a fresh start
+			 */
+			function_block->visited = FALSE;
+			function_block->direct_successor = NULL;
+		}
 	}
 	
 	/**
@@ -6928,7 +6943,7 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
  * every single one. We assume that the caller knows what they are doing, and
  * that the blocks inside of the array are really the correct blocks
  */
-static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
@@ -7544,7 +7559,7 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 	 * First thing we'll do is reset the visited status of the CFG. This just ensures
 	 * that we won't have any issues with the CFG in terms of traversal
 	 */
-	reset_visit_status_for_function(function_blocks);
+	reset_visited_status_for_function(function_blocks);
 
 	/**
 	 * Reset the marks for all of our blocks

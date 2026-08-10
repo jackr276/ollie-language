@@ -824,8 +824,21 @@ static void condense(dynamic_array_t* function_blocks, basic_block_t* function_e
  * changed
  */
 static void reorder_blocks(basic_block_t* function_entry_block){
-	//We'll first wipe the visited status on this CFG
-	reset_function_visited_status(function_entry_block, TRUE);
+	//Get the function blocks out first
+	dynamic_array_t* function_blocks = &(function_entry_block->function_defined_in->function_blocks);
+
+	//Run through every function block
+	for(int32_t j = 0; j < function_blocks->current_index; j++){
+		basic_block_t* function_block = dynamic_array_get_at(function_blocks, j);
+
+		/**
+		 * Wipe out the visited status and the direct successor. This
+		 * orderer will be doing the direct successor setting itself
+		 * so we need a fresh start
+		 */
+		function_block->visited = FALSE;
+		function_block->direct_successor = NULL;
+	}
 
 	//Clear out our reusable queue
 	heap_queue_clear(&bfs_queue);
