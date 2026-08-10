@@ -12250,7 +12250,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
 		}
 	} else {
-		declared_var = create_static_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration);
+		declared_var = create_static_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
 	}
 
 	//Store the type--make sure that we strip any aliasing off of it first
@@ -12701,6 +12701,9 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 				return print_and_return_error("Only global variables may be declared as public", parser_line_num);
 			}
 
+			//Flag that we're public
+			visibility = VISIBILITY_TYPE_PUBLIC;
+
 			//Refresh the token for the next go around
 			lookahead = get_next_token(token_stream, &parser_line_num);
 			break;
@@ -12826,20 +12829,16 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	/**
 	 * Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
-	 * now create the variable record for this function
-	 * Initialize the record
+	 * now create the variable record for this function based on the membership type
 	 */
 	symtab_variable_record_t* declared_var;
-
 	switch(membership){
 		case STATIC_VARIABLE:
 			declared_var = create_static_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
 			break;
-
 		case GLOBAL_VARIABLE:
 			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
 			break;
-
 		default:	
 			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
 			break;
@@ -12852,9 +12851,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
-	//Add the reference into the root node
+	//Store the reference and line number
 	let_stmt_node->variable = declared_var;
-	//Store the line number
 	let_stmt_node->line_number = current_line;
 
 	//In special cases, we'll store this variable in the "node" section
@@ -12869,8 +12867,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		default:
 			break;
 	}
-
-	//Once we get here, the ident nodes and type specifiers are useless
 
 	//Give back the let statement node here
 	return let_stmt_node;
@@ -14571,10 +14567,7 @@ static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_
  * already seen and consumed the LET token
  */
 static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
-	//What visibility type do we have. We are able to declare global vars as public
-	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
-
-	//Onvoke the helper
+	//Invoke the helper
 	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
 
 	//If it's an error send it up the chain

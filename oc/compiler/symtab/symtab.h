@@ -558,7 +558,7 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a ternary variable record

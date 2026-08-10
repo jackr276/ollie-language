@@ -743,7 +743,7 @@ char* get_true_variable_name(symtab_variable_record_t* variable){
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index){
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_variable_record_t* record = calloc(1, sizeof(symtab_variable_record_t));
 
@@ -771,6 +771,9 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, 
 
 	//These are user defined
 	record->is_user_defined = TRUE;
+
+	//Store the function that we were declared in
+	record->function_declared_in = function_declared_in;
 
 	//For eventual SSA generation
 	record->counter_stack.stack = NULL;
