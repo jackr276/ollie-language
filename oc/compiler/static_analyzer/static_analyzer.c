@@ -1295,16 +1295,18 @@ static void rename_block(basic_block_t* entry){
  * Rename all of the variables in the CFG
  */
 static inline void rename_all_variables(cfg_t* cfg){
-	//Before we do this - let's reset the entire CFG(all created blocks)
-	reset_visited_status_for_function(&(cfg->created_blocks));
-
 	/**
 	 * We will call the rename block function on the first block
 	 * for each of our functions. The rename block function is 
 	 * recursive, so that should in theory take care of everything for us
 	 */
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		rename_block(dynamic_array_get_at(&(cfg->function_entry_blocks), i));
+		//Extract the function entry and reset the visited status for the whole function
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		reset_visited_status_for_function(&(function_entry->function_defined_in->function_blocks));
+
+		//Call into this recursive helper with the start as the seed
+		rename_block(function_entry);
 	}
 }
 

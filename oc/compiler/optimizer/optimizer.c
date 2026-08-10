@@ -214,7 +214,7 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 /**
  * Combine two blocks into one
  */
-static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
+static void combine(basic_block_t* a, basic_block_t* b){
 	//If b is null, we just return a. This in reality should never happen
 	if(b == NULL){
 		return;
@@ -280,9 +280,9 @@ static void combine(cfg_t* cfg, basic_block_t* a, basic_block_t* b){
 		//Push it up
 		b_stmt = b_stmt->next_statement;
 	}
-	
-	//We'll remove this from the list of created blocks
-	dynamic_array_delete(&(cfg->created_blocks), b);
+
+	//Remove this from the function blocks
+	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
 }
 
 
@@ -1727,7 +1727,7 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
  * 			if j has only one predecessor then
  * 				merge i and j
  */
-static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
+static u_int8_t branch_reduce(dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
 	u_int8_t changed = FALSE;
 
@@ -1777,6 +1777,16 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 			basic_block_t* jumping_to_block = current->exit_statement->if_block;
 
 			/**
+			 * If the blocks are the exact same block we can't do anything else.
+			 * This is already at the fixed point. If we were to combine
+			 * we'd end up with some weird edge cases. This will occur
+			 * if we have some kind of infinite loop
+			 */
+			if(current == jumping_to_block){
+				continue;
+			}
+
+			/**
 			 * If i is empty then
 			 * 	replace transfers to i with transfers to j
 			 */
@@ -1806,7 +1816,7 @@ static u_int8_t branch_reduce(cfg_t* cfg, dynamic_array_t* postorder){
 				delete_successor(current, jumping_to_block);
 
 				//Combine the two
-				combine(cfg, current, jumping_to_block);
+				combine(current, jumping_to_block);
 
 				//Counts as a change 
 				changed = TRUE;
@@ -2632,7 +2642,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
  * 		if j is empty and ends in a conditional branch then
  * 			overwrite i's jump with a copy of j's branch
  */
-static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, basic_block_t* function_entry_block){
+static inline void clean(dynamic_array_t* current_function_blocks, basic_block_t* function_entry_block){
 	//Have we seen a change?
 	u_int8_t changed;
 
@@ -2652,7 +2662,7 @@ static inline void clean(cfg_t* cfg, dynamic_array_t* current_function_blocks, b
 		get_post_order_traversal(current_function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
-		changed = branch_reduce(cfg, &postorder);
+		changed = branch_reduce(&postorder);
 
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
@@ -2933,7 +2943,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 		 * that has been made useless by sweep()
 		 */
-		clean(cfg, current_function_blocks, function_entry_block);
+		clean(current_function_blocks, function_entry_block);
 
 		/**
 		 * PASS 6: Delete all unreachable blocks

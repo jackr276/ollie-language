@@ -571,9 +571,6 @@ static inline u_int8_t does_type_require_copy_assignment(generic_type_t* type){
  * bookkeeping
  */
 static inline void delete_block(basic_block_t* block){
-	//Remove it from the overall structure
-	dynamic_array_delete(&(cfg->created_blocks), block);
-
 	//And delete it from this function's blocks too
 	dynamic_array_delete(current_function_blocks, block);
 }
@@ -936,9 +933,6 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	//Let's add in what function this block came from
 	created->function_defined_in = current_function;
 
-	//Add this into the dynamic array
-	dynamic_array_add(&(cfg->created_blocks), created);
-
 	//Add it into the function's block array
 	dynamic_array_add(current_function_blocks, created);
 
@@ -973,9 +967,6 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 	 * match jump statements to labels
 	 */
 	label->block = created;
-
-	//Add this into the dynamic array
-	dynamic_array_add(&(cfg->created_blocks), created);
 
 	//Add it into the function's block array
 	dynamic_array_add(current_function_blocks, created);
@@ -7748,24 +7739,40 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 
 /**
+ * Run through an entire array of function blocks and reset the status for
+ * every single one. We assume that the caller knows what they are doing, and
+ * that the blocks inside of the array are really the correct blocks
+ */
+static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+	}
+}
+
+
+/**
  * Print out the whole program in order. Done using an iterative
  * bfs
  */
 static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t print_df){
-	//First, we'll reset every single block here
-	reset_visited_status(cfg, FALSE);
-
-	//For holding our blocks
-	basic_block_t* block;
-
-	//Now we'll print out each and every function inside of the function_entry_blocks
-	//array. Each function will be printed using the BFS strategy
+	/**
+	 * Now we'll print out each and every function inside of the function_entry_blocks
+	 * array. Each function will be printed using the BFS strategy
+	 */
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Clear the traversal queue
 		heap_queue_clear(&traversal_queue);
 
 		//Grab this out for convenience
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+
+		//Let the helper reset hte visited status for every single function block
+		reset_visited_status_for_function(&(function_entry_block->function_defined_in->function_blocks));
 
 		//We'll want to see what the both stacks look like
 		print_passed_parameter_stack_data_area(&(function_entry_block->function_defined_in->stack_passed_parameters));
@@ -7777,7 +7784,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 		//So long as the queue isn't empty
 		while(queue_is_empty(&traversal_queue) == FALSE){
 			//Pop off of the queue
-			block = dequeue(&traversal_queue);
+			basic_block_t* block = dequeue(&traversal_queue);
 
 			//If this wasn't visited, we'll print
 			if(block->visited == FALSE){
@@ -7881,21 +7888,15 @@ void basic_block_dealloc(basic_block_t* block){
 
 /**
  * Memory management code that allows us to deallocate the entire CFG
+ *
+ * NOTE: in reality this is never even used, we don't care to deallocate the CFG
  */
 void dealloc_cfg(cfg_t* cfg){
-	//Run through all of the blocks here and delete them
-	for(int32_t i = 0; i < cfg->created_blocks.current_index; i++){
-		//Use this to deallocate
-		basic_block_dealloc(dynamic_array_get_at(&(cfg->created_blocks), i));
-	}
-
 	//Destroy all variables
 	deallocate_all_vars();
 	//Destroy all constants
 	deallocate_all_consts();
 
-	//Destroy the dynamic arrays too
-	dynamic_array_dealloc(&(cfg->created_blocks));
 	dynamic_array_dealloc(&(cfg->function_entry_blocks));
 
 	if(cfg->local_f32_constants.internal_array != NULL){
@@ -12859,57 +12860,6 @@ void print_all_cfg_blocks(cfg_t* cfg){
 
 
 /**
- * Reset the visited status of the CFG
- */
-void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor){
-	//For each block in the CFG
-	for(int32_t _ = 0; _ < cfg->created_blocks.current_index; _++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(&(cfg->created_blocks), _);
-
-		//Set it's visited status to 0
-		block->visited = FALSE;
-
-		//If we want to reset this, we'll null it out
-		if(reset_direct_successor == TRUE){
-			block->direct_successor = NULL;
-		}
-	}
-}
-
-
-/**
- * Reset the visited status inside a particular function in the CFG
- */
-void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t reset_direct_successor){
-	//Starts with our function entry
-	basic_block_t* current = function_entry_block;
-
-	//Run through every single block
-	while(current != NULL){
-		//This happens regardless
-		current->visited = FALSE;
-
-		//If this is the case then just push it up
-		if(reset_direct_successor == FALSE){
-			//Push it up
-			current = current->direct_successor;
-		
-		//Otherwise it's slighly more complex
-		} else {
-			//Hold onto it
-			basic_block_t* temp = current->direct_successor;
-
-			//Null it out
-			current->direct_successor = NULL;
-
-			//Push on
-			current = temp;
-		}
-	}
-}
-
-/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
@@ -12951,7 +12901,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	cfg->type_symtab = type_symtab;
 
 	//Create the dynamic arrays that we need
-	cfg->created_blocks = dynamic_array_alloc();
 	cfg->function_entry_blocks = dynamic_array_alloc();
 	cfg->function_exit_blocks = dynamic_array_alloc();
 	cfg->global_variables = dynamic_array_alloc();

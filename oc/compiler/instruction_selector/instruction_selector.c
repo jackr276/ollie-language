@@ -646,8 +646,25 @@ static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type
  * after .L15 so that in a later stage, we can eliminate that jump.
  */
 static void order_blocks(cfg_t* cfg){
-	//We'll first wipe the visited status on this CFG
-	reset_visited_status(cfg, TRUE);
+	//Run through every function and wipe the visited status and direct successor
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Get the entry block and the related function blocks
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		dynamic_array_t* function_blocks = &(function_entry->function_defined_in->function_blocks);
+
+		//Run through every function block
+		for(int32_t j = 0; j < function_blocks->current_index; j++){
+			basic_block_t* function_block = dynamic_array_get_at(function_blocks, j);
+
+			/**
+			 * Wipe out the visited status and the direct successor. This
+			 * orderer will be doing the direct successor setting itself
+			 * so we need a fresh start
+			 */
+			function_block->visited = FALSE;
+			function_block->direct_successor = NULL;
+		}
+	}
 	
 	/**
 	 * We will perform a breadth first search and use the "direct successor" area
@@ -660,12 +677,11 @@ static void order_blocks(cfg_t* cfg){
 	heap_queue_t queue = heap_queue_alloc();
 
 	//For each function
-	for(u_int16_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
+	for(int32_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
 		//Grab the function block out
 		basic_block_t* func_block = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
 
-		//These get reset for every function because each function has its own
-		//separate ordering
+		//These get reset for every function because each function has its own separate ordering
 		basic_block_t* previous = NULL;
 
 		//This function start block is the begging of our BFS	
@@ -678,12 +694,13 @@ static void order_blocks(cfg_t* cfg){
 
 			//If previous is NULL, this is the first block
 			if(previous == NULL){
-				//Keep track of what previous is
 				previous = current;
 
-			//We need to handle the rare case where we reach two of the same blocks(maybe the block points
-			//to itself) but neither have been visited. We make sure that, in this event, we do not set the
-			//block to be it's own direct successor
+			/**
+			 * We need to handle the rare case where we reach two of the same blocks(maybe the block points
+			 * to itself) but neither have been visited. We make sure that, in this event, we do not set the
+			 * block to be it's own direct successor
+			 */
 			} else if(previous != current && current->visited == FALSE){
 				//We'll add this in as a direct successor
 				previous->direct_successor = current;
@@ -706,9 +723,11 @@ static void order_blocks(cfg_t* cfg){
 			}
 
 			//Now we'll go through each of the successors in this node
-			for(u_int16_t idx = 0; idx < current->successors.current_index; idx++){
-				//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
-				//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
+			for(int32_t idx = 0; idx < current->successors.current_index; idx++){
+				/**
+				 * Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
+				 * want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
+				 */
 
 				//Grab the successor
 				basic_block_t* successor = dynamic_array_get_at(&(current->successors), idx);
@@ -6924,7 +6943,7 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
  * every single one. We assume that the caller knows what they are doing, and
  * that the blocks inside of the array are really the correct blocks
  */
-static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
+static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
 	//Run through all of the blocks
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the current block
@@ -7540,7 +7559,7 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 	 * First thing we'll do is reset the visited status of the CFG. This just ensures
 	 * that we won't have any issues with the CFG in terms of traversal
 	 */
-	reset_visit_status_for_function(function_blocks);
+	reset_visited_status_for_function(function_blocks);
 
 	/**
 	 * Reset the marks for all of our blocks

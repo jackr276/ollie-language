@@ -67,9 +67,6 @@ struct cfg_t{
 	dynamic_array_t function_entry_blocks;
 	//Store the exit blocks as well. This makes RPO traversal much easier
 	dynamic_array_t function_exit_blocks;
-	//An array of all blocks that are 
-	//All created blocks
-	dynamic_array_t created_blocks;
 	//We also need to hold onto the stack pointer
 	three_addr_var_t* stack_pointer;
 	//We also need to hold onto the instruction pointer
@@ -271,16 +268,6 @@ void print_all_cfg_blocks(cfg_t* cfg);
  * Print a block our for reading
 */
 void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df);
-
-/**
- * Reset the visited status of the CFG
- */
-void reset_visited_status(cfg_t* cfg, u_int8_t reset_direct_successor);
-
-/**
- * Reset the visited status inside a particular function in the CFG
- */
-void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t reset_direct_successor);
 
 /**
  * Deallocate a block
