@@ -137,7 +137,7 @@ static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility);
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
@@ -12143,14 +12143,15 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		 * handle it
 		 */
 		case INLINE:
+		case PUB:
 		case FN:
 			//If this is now global, then we cannot do this
 			if(is_global == FALSE){
 				return print_and_return_error("Function predeclarations must occur in global scope", parser_line_num);
 			}
 
+			//Push back and let the helper parse it
 			push_back_token(token_stream, &parser_line_num);
-			//Let this rule handle it
 			return function_predeclaration(token_stream, visibility);
 
 		/**
@@ -13771,31 +13772,34 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * promise that a function of this signature will exist at 
  * some point
  *
- * <function_predeclaration> ::= declare {pub}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
+ * <function_predeclaration> ::= declare {pub}? {inline}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
+ *
+ * Some valid examples are:
+ * 		pub inline fn
+ * 		pub fn
+ * 		inline fn
+ *
+ * All should enter this rule
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
-static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream, visibilty_type_t visibility){
+static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
 	//Is this an inline function? Also assume no by default
 	u_int8_t is_inlined = FALSE;
+	//By default we are private
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
 	//Save this to add into the record later
 	u_int32_t token_index_of_definition = token_stream->token_pointer;
 
-	//Lookahead token
+	//Get the first token in the stream
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//We could see either fn or inline here
 	switch(lookahead.tok){
-		//Explicit inline request. Note that inlining functions and functions being public are mutually exclusive. You cannot have
-		//one or the other
+		//Inline request for a function
 		case INLINE:
-			//This is invalid so we fail out
-			if(visibility == VISIBILITY_TYPE_PUBLIC){
-				return print_and_return_error("Public functions may not be inlined", parser_line_num);
-			}
-
 			//This is being inlined
 			is_inlined = TRUE;
 
@@ -13806,16 +13810,17 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			switch(lookahead.tok){
 				//This is good, break out
 				case FN:
-					break;
-
 				case PUB:
-					return print_and_return_error("Inlined functions may not be made public", parser_line_num);
+					break;
 
 				default:
 					return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
 			}
 
 			break;
+
+		case PUB:
+		
 
 		//Nothing more to do here, just leave
 		case FN:
