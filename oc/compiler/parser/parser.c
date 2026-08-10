@@ -12761,8 +12761,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Check that it isn't some duplicated variable name. We will only check in the
-	//local scope for this one
+	//Check that it isn't some duplicated variable name. We will only check in the local scope for this one
 	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
@@ -13829,6 +13828,9 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//Save this to add into the record later
 	u_int32_t token_index_of_definition = token_stream->token_pointer;
 
+	//TODO VISIBILITY
+
+
 	//Get the first token in the stream
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -13906,6 +13908,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Check for duplicated functions
+	//
+	//TODO THIS DOESN'T LOOK RIGHT?????
 	if(do_duplicate_functions_exist(function_name.string) == TRUE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
@@ -13927,7 +13931,10 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
+	//
+	//
+	//TODO WRONG JUST ADDED TO MAKE IT GO THROUGH
+	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, VISIBILITY_TYPE_PUBLIC, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14118,6 +14125,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Cache the token index of definition that we're dealing with
 	u_int32_t token_index_of_definition = token_stream->token_pointer;
 
+
+	//TODO PARSING IS WRONG NOW THAT INLINE FUNCTIONS CAN BE PUBLIC
+	//
+	//
+	//
+	//
+
 	//Grab the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -14224,6 +14238,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Grab a reference for convenience
 	dynamic_string_t function_name = lookahead.lexeme;
 
+
+	//TODO WE SHOULD HAVE MORE CHECKS
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
 	symtab_function_record_t* function_record = lookup_function_in_namespace(function_symtab->current, function_name.string);
 
@@ -14274,6 +14290,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			//It is the main function
 			is_main_function = TRUE;
 		}
+
+		//TODO CLEANUP
 
 	//If we get here, we know that we're defining a predeclared function
 	} else {
@@ -14558,7 +14576,7 @@ static inline generic_ast_node_t* global_declare_statement(ollie_token_stream_t*
 	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE);
 
 	//If it's an error send it up the chain
-	if(declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(declaration_node != NULL && declaration_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return declaration_node;
 	}
 
