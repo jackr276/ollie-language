@@ -12268,33 +12268,31 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 	
 	/**
 	 * Now that we've made it down here, we know that we have valid syntax and no duplicates. We can
-	 * now create the variable record for this function
+	 * now create the variable record based on the membership
 	 */
 	symtab_variable_record_t* declared_var;
-
-	//Based on the type we'll create appropriately
-	if(is_static == FALSE){
-		//Go based on it's global status
-		if(is_global == FALSE){
-			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
-		} else {
+	switch(membership){
+		case STATIC_VARIABLE:
+			declared_var = create_static_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
+			break;
+		case GLOBAL_VARIABLE:
 			declared_var = create_global_variable_record(&name, current_dependency_node, parser_line_num, token_index_of_declaration, visibility);
-		}
-	} else {
-		declared_var = create_static_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
+			break;
+		default:
+			declared_var = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_index_of_declaration);
+			break;
 	}
 
-	//Store the type--make sure that we strip any aliasing off of it first
+	//Store the raw type and line number
 	declared_var->type_defined_as = dealias_type(type_spec);
-	//The line_number
-	declared_var->line_number = parser_line_num;
+	declared_var->line_number = current_line_number;
+
 	//Now that we're all good, we can add it into the symbol table
 	insert_variable(variable_symtab, declared_var);
 
 	//Based on what type we have, we may or may not even need a declaration here
 	generic_ast_node_t* declaration_node;
 	switch(declared_var->type_defined_as->type_class){
-		//These all require a stack allocation, so a node is required
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_UNION:
 			/**
@@ -12311,6 +12309,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			}
 
 			//Fall through
+	
 		case TYPE_CLASS_STRUCT:
 			declaration_node = ast_node_alloc(AST_NODE_TYPE_DECL_STMT, SIDE_TYPE_LEFT);
 			declaration_node->variable = declared_var;
@@ -12328,7 +12327,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			declaration_node->variable = declared_var;
 			declaration_node->inferred_type = declared_var->type_defined_as;
 			declaration_node->line_number = parser_line_num;
-
 			break;
 	}
 
