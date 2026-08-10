@@ -270,11 +270,6 @@ void print_all_cfg_blocks(cfg_t* cfg);
 void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df);
 
 /**
- * Reset the visited status inside a particular function in the CFG
- */
-void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t reset_direct_successor);
-
-/**
  * Deallocate a block
  */
 void basic_block_dealloc(basic_block_t* block);

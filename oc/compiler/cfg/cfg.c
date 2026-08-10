@@ -12860,37 +12860,6 @@ void print_all_cfg_blocks(cfg_t* cfg){
 
 
 /**
- * Reset the visited status inside a particular function in the CFG
- */
-void reset_function_visited_status(basic_block_t* function_entry_block, u_int8_t reset_direct_successor){
-	//Starts with our function entry
-	basic_block_t* current = function_entry_block;
-
-	//Run through every single block
-	while(current != NULL){
-		//This happens regardless
-		current->visited = FALSE;
-
-		//If this is the case then just push it up
-		if(reset_direct_successor == FALSE){
-			//Push it up
-			current = current->direct_successor;
-		
-		//Otherwise it's slighly more complex
-		} else {
-			//Hold onto it
-			basic_block_t* temp = current->direct_successor;
-
-			//Null it out
-			current->direct_successor = NULL;
-
-			//Push on
-			current = temp;
-		}
-	}
-}
-
-/**
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
