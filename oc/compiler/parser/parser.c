@@ -12122,6 +12122,12 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
  * BNF Rule: <declare-statement> ::= declare {<function_predeclaration> | {static}? <identifier> : <type-specifier>}
  */
 static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
+	//Extra lookahead pointer for the pub fn case
+	lexitem_t* lookahead2;
+
+	//For global variable visibility - by default private
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+
 	//Freeze the line number
 	u_int32_t current_line_number = parser_line_num;
 
@@ -12158,8 +12164,27 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		 * declaration, we'll have to peek ahead further to see for sure
 		 */
 		case PUB:
-			//TODO
+			//Peek one token ahead
+			lookahead2 = peek_next_token(token_stream);
 
+			//If we have FN or PUB, we will invoke the function rule
+			if(lookahead2->tok == FN || lookahead2->tok == PUB){
+				//Verify that we are in a global scope
+				if(is_global == FALSE){
+					return print_and_return_error("Function predeclarations must occur in global scope", parser_line_num);
+				}
+
+				//Push back the original token and invoke the helper
+				push_back_token(token_stream, &parser_line_num);
+				return function_predeclaration(token_stream);
+			}
+
+			//Otherwise we're just doing a public global var
+			visibility = VISIBILITY_TYPE_PUBLIC;
+
+			//Refresh for the next go around
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			break;
 
 		/**
 		 * If we see the static keyword, then we know that
@@ -12172,11 +12197,11 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 				return print_and_return_error("Global variables may not be declared as static", parser_line_num);
 			}
 
-			is_static = TRUE;
+			//Flag that this is static
+			membership = STATIC_VARIABLE;
 
 			//Refresh the token
 			lookahead = get_next_token(token_stream, &parser_line_num);
-
 			break;
 	
 		//By default just leave
@@ -12205,8 +12230,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Check that it isn't some duplicated variable name. We will only check in the
-	//local scope for this one
+	//Check that it isn't some duplicated variable name. We will only check in the local scope for this one
 	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
 
 	//Fail out here
@@ -14531,8 +14555,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
  * Handle a global declare statement. Note that be the time we arrive here, we've
  * already seen and consumed the DECLARE token
  */
-static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_stream){
-	//Onvoke the helper
+static inline generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_stream){
+	//Invoke the helper
 	generic_ast_node_t* declaration_node = declare_statement(token_stream, TRUE);
 
 	//If it's an error send it up the chain
@@ -14557,7 +14581,7 @@ static generic_ast_node_t* global_declare_statement(ollie_token_stream_t* token_
  * Handle a global declare statement. Note that be the time we arrive here, we've
  * already seen and consumed the LET token
  */
-static generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
+static inline generic_ast_node_t* global_let_statement(ollie_token_stream_t* token_stream){
 	//Invoke the helper
 	generic_ast_node_t* let_node = let_statement(token_stream, TRUE);
 
@@ -14597,10 +14621,8 @@ static generic_ast_node_t* namespace_member(ollie_token_stream_t* token_stream){
 		case PUB:
 		case INLINE:
 		case FN:
-			//Put the token back, we'll let the rule handle it
-			push_back_token(token_stream, &parser_line_num);
-
 			//We'll just let the function definition rule handle this
+			push_back_token(token_stream, &parser_line_num);
 			return function_definition(token_stream);
 
 		case NAMESPACE:
