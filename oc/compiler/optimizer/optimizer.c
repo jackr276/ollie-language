@@ -282,8 +282,7 @@ static void combine(basic_block_t* a, basic_block_t* b){
 	}
 
 	//Remove this from the function blocks
-	//TODO LOOK AT
-	//dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
+	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
 }
 
 
@@ -1780,7 +1779,8 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
 			/**
 			 * If the blocks are the exact same block we can't do anything else.
 			 * This is already at the fixed point. If we were to combine
-			 * we'd end up with some weird edge cases
+			 * we'd end up with some weird edge cases. This will occur
+			 * if we have some kind of infinite loop
 			 */
 			if(current == jumping_to_block){
 				continue;

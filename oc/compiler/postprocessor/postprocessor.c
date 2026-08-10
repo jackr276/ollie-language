@@ -100,8 +100,7 @@ static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
 	}
 
 	//Delete b from the function blocks
-	//TODO LOOK AT
-	//dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
+	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
 
 	//Always return b's leader
 	return b->leader_statement;
@@ -694,7 +693,8 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
 			 * If these are the exact same block, then we need to 
 			 * skip ahead because doing any kind of reduction would
 			 * invalidate our CFG. This is already at the "fixed point"
-			 * where we can't go further
+			 * where we can't go further. This will occur if we have
+			 * some kind of infinite loop
 			 */
 			if(jumping_to_block == current){
 				continue;
