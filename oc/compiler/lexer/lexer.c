@@ -382,6 +382,8 @@ char* lexitem_to_string(lexitem_t* lexitem){
 			return "params";
 		case PARAMCOUNT:
 			return "paramcount";
+		case INLINE:
+			return "inline";
 		case STATIC:
 			return "static";
 		case MACRO_PARAM:
@@ -653,6 +655,26 @@ lexitem_t get_next_token(ollie_token_stream_t* stream, u_int32_t* parser_line_nu
 		return returned_item;
 
 	//This should never happen in normal operation
+	} else {
+		fprintf(stdout, "Fatal internal compiler error. Attempt to read past the token stream endpoint\n");
+		exit(1);
+	}
+}
+
+
+/**
+ * Peek the next token without actually grabbing it
+ */
+lexitem_t* peek_next_token(ollie_token_stream_t* stream){
+	//Get the current token index
+	int32_t token_index = stream->token_pointer;
+
+	//Safe to read
+	if(token_index < stream->token_stream.current_index){
+		//Returns a pointer - NOT a copy
+		return &(stream->token_stream.internal_array[token_index]);
+
+	//Should never happen but just to be safe
 	} else {
 		fprintf(stdout, "Fatal internal compiler error. Attempt to read past the token stream endpoint\n");
 		exit(1);

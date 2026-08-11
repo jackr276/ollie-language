@@ -21,7 +21,7 @@
 #include <sys/types.h>
 
 //The atomically increasing live range id
-u_int32_t live_range_id = 0;
+static u_int32_t live_range_id = 0;
 
 /**
  * Cache all of our register parameters for passing. Recall that floating registers have 8 parameter

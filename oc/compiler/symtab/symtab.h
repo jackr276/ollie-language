@@ -188,6 +188,11 @@ struct symtab_function_record_t{
 	 * 	not require alignment like this
 	 */
 	u_int8_t requires_initial_alignment;
+	/**
+	 * Does this ever call an inlined function? This is just to speed up or
+	 * inlining process later on
+	 */
+	u_int8_t calls_inlined_function;
 	//Are we public or private
 	visibilty_type_t visibility;
 };
@@ -558,7 +563,7 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 /**
  * Create a static variable record. These variables are really global vars
  */
-symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
+symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, symtab_function_record_t* function_declared_in, dependency_graph_node_t* node_defined_in, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a ternary variable record
