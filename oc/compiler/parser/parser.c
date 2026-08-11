@@ -13811,30 +13811,29 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  *
  * <function_predeclaration> ::= declare {pub}? {inline}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
- * Some valid examples are:
- * 		pub inline fn
- * 		pub fn
- * 		inline fn
- *
- * All should enter this rule
- *
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
-	//Is this an inline function? Also assume no by default
+	//Is this an inline function? Assume no by default
 	u_int8_t is_inlined = FALSE;
 	//Does this funtion raise errors? We know based on the ! after the fn keyword
 	u_int8_t raises_errors = FALSE;
+	//What is the visibility? By default it's private
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;	
 	//Save this to add into the record later
 	u_int32_t token_index_of_definition = token_stream->token_pointer;
-
-	//TODO VISIBILITY
-
 
 	//Get the first token in the stream
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//We could see either fn or inline here
+	/**
+	 * When we start parsing we have quite a few combos to account for.Some
+	 * valid examples are:
+	 * 		pub inline fn
+	 * 		pub fn
+	 * 		inline fn
+	 * 		fn
+	 */
 	switch(lookahead.tok){
 		//Inline request for a function
 		case INLINE:
@@ -13844,21 +13843,27 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			//Refresh the lookahead token
 			lookahead = get_next_token(token_stream, &parser_line_num);
 
-			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
-			switch(lookahead.tok){
-				//This is good, break out
-				case FN:
-				case PUB:
-					break;
-
-				default:
-					return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			//If we don't see the FN then we're done
+			if(lookahead.tok != FN){
+				return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
 			}
 
 			break;
 
+		//Request to make a fucntion public
 		case PUB:
-		
+			//Flag that we are public
+			visibility = VISIBILITY_TYPE_PUBLIC;
+
+			//Refresh the lookahaed token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			switch(lookahead.tok){
+
+				default:
+					return print_and_return_error("Expected \"fn\" or \"inline\" after \"pub\" in function declaration", parser_line_num);
+			}
+
+			break;
 
 		//Nothing more to do here, just leave
 		case FN:
