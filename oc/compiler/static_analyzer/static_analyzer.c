@@ -1997,7 +1997,6 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
 }
 
 
-
 /**
  * Perform all static analysis on a given CFG. The functions
  * performed herein are:
