@@ -14969,12 +14969,22 @@ static generic_ast_node_t* program(dynamic_array_t* build_order){
  * program itself *unless* a special flag is passed in that is explicitly
  * saying that a linker will be used later on. In the absence of this flag
  * we need to check that all functions have been defined
- *
- * TODO MAKE THE FLAG
  */
-static inline u_int8_t validate_all_functions_are_defined(function_symtab_t* symtab){
+static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* options, function_symtab_t* symtab){
 	//Assume it's good to start
 	u_int8_t result = SUCCESS;
+
+	/**
+	 * If we are not requesting a full compilation(i.e. doing someting
+	 * like compiling to an object file) *and* we are not in a "no output"
+	 * aka CI run scenario, we don't need to check this. If the user
+	 * is compiling to an object file, we are assuming that they may be
+	 * doing some external linking. If they're doing external linking, calling
+	 * out to undefined functions is not something that we could check here.
+	 */
+	if(options->output_type == OUTPUT_TYPE_OBJECT_FILE){
+		return result;
+	}
 
 	//Run through all namespaces
 	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
@@ -15247,7 +15257,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		 * If we have functions that are predeclared but not defined, that's
 		 * a hard fail 
 		 */
-		if(validate_all_functions_are_defined(function_symtab) == FALSE){
+		if(validate_all_functions_are_defined(options, function_symtab) == FALSE){
 			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
 		}
 
