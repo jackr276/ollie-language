@@ -5,8 +5,6 @@
 */
 #include <stdlib.h>
 #include <sys/types.h>
-#include <unistd.h>
-#include <getopt.h>
 #include <stdio.h>
 #include <time.h>
 #include "ast/ast.h"
@@ -22,14 +20,11 @@
 #include "optimizer/optimizer.h"
 #include "utils/compiler_output_type.h"
 #include "utils/constants.h"
-#include "utils/error_management.h"
+#include "utils/option_parser/option_parser.h"
 
 //The number of errors and warnings
 u_int32_t num_errors = 0;
 u_int32_t num_warnings = 0;
-
-//Objectfile opt for getopt_long
-#define objectfile_opt 5
 
 
 /**
@@ -410,9 +405,11 @@ static u_int8_t compile(compiler_options_t* options){
  *  in the #dependencies block
 */
 int main(int argc, char** argv){
-	//Let the helper run through and store all of our options. This will
-	//also error out if any options are bad
-	compiler_options_t* options = parse_and_store_options(argc, argv);
+	/**
+	 * Let the helper run through and store all of our options. This will
+	 * also error out if any options are bad
+	 */
+	compiler_options_t* options = parse_and_store_options(argc, argv, &num_warnings, &num_errors);
 
 	//Invoke the compiler
 	return compile(options);

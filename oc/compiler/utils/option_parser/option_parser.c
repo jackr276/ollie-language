@@ -4,14 +4,16 @@
  * file of the same name
  */
 
-
-#ifndef OPTION_PARSER_H
-#define OPTION_PARSER_H
-
 #include <stdio.h>
+#include <unistd.h>
+#include <getopt.h>
 #include <stdlib.h>
+#include <sys/types.h>
 #include "option_parser.h"
+#include "../constants.h"
 
+//Objectfile opt for getopt_long
+#define objectfile_opt 5
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -52,7 +54,7 @@ static void print_help(){
  * We'll use this helper function to process the compiler flags and return a structure that
  * tells us what we need to do throughout the compiler
  */
-compiler_options_t* parse_and_store_options(int argc, char** argv){
+compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* num_warnings, u_int32_t* num_errors){
 	//Allocate it
 	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
 
@@ -69,10 +71,8 @@ compiler_options_t* parse_and_store_options(int argc, char** argv){
 		{0,0,0,0}
 	};
 	
-	//For storing our opt
-	int opt;
-
 	//Run through all of our options
+	int32_t opt;
 	while((opt = getopt_long(argc, argv, "rima@tdhsf:o:?", long_opts, NULL)) != -1){
 		//Switch based on opt
 		switch(opt){
@@ -81,30 +81,37 @@ compiler_options_t* parse_and_store_options(int argc, char** argv){
 				printf("Invalid option: %c\n", optopt);
 				print_help();
 				exit(0);
+
 			//After we print help we exit
 			case 'h':
 				print_help();
 				exit(0);
+
 			//Time execution for performance test
 			case 't':
 				options->time_execution = TRUE;
 				break;
+
 			//Test run flag means that we have no output
 			case '@':
 				options->output_type = OUTPUT_TYPE_NO_OUTPUT;
 				break;
+
 			//Flag that this is a test run
 			case 'r':
 				options->print_post_allocation = TRUE;
 				break;
+
 			//Store the input file name
 			case 'f':
 				options->file_name = optarg;
 				break;
+
 			//Turn on debug printing
 			case 'd':
 				options->enable_debug_printing = TRUE;
 				break;
+
 			//Output to assembly only
 			case 'a':
 				//Input validation based on past state
@@ -121,18 +128,22 @@ compiler_options_t* parse_and_store_options(int argc, char** argv){
 				}
 
 				break;
+
 			//Specify that we want a summary to be shown
 			case 's':
 				options->show_summary = TRUE;
 				break;
+
 			//Specify that we want to print intermediate representations
 			case 'i':
 				options->print_irs = TRUE;
 				break;
+
 			//Specify that we want to have timing that is specific by module
 			case 'm':
 				options->module_specific_timing = TRUE;
 				break;
+
 			//Specify that we want to specifically output to an objectfile *only*
 			case objectfile_opt:
 				//Input validation based on past state
@@ -202,6 +213,3 @@ compiler_options_t* parse_and_store_options(int argc, char** argv){
 	//Give back the options we got in the structure
 	return options;
 }
-
-
-#endif /* OPTION_PARSER_H */
