@@ -7,6 +7,7 @@
 #include "../utils/constants.h"
 #include "../preprocessor/preprocessor.h"
 #include "../build_system/build_system.h"
+#include "../utils/option_parser/option_parser.h"
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -22,72 +23,16 @@ static inline void print_console_message(error_message_type_t message_type, char
 	fprintf(stdout, "\n[LINE %d | COMPILER %s]: %s\n", line_num, type[message_type], info);
 }
 
-/**
- * We'll use this helper function to process the compiler flags and return a structure that
- * tells us what we need to do throughout the compiler
- */
-static compiler_options_t* parse_and_store_options(int argc, char** argv){
-	//Allocate it
-	compiler_options_t* options = calloc(1, sizeof(compiler_options_t));
-	
-	//For storing our opt
-	int opt;
-
-	//Run through all of our options
-	while((opt = getopt(argc, argv, "iatdhsf:o:?")) != -1){
-		//Switch based on opt
-		switch(opt){
-			//Invalid option
-			case '?':
-				printf("Invalid option: %c\n", optopt);
-				exit(0);
-			//Specify that we want to print intermediate representations
-			case 'i':
-				options->print_irs = TRUE;
-				break;
-			//After we print help we exit
-			case 'h':
-				exit(0);
-			//Time execution for performance test
-			case 't':
-				options->time_execution = TRUE;
-				break;
-			//Store the input file name
-			case 'f':
-				options->file_name = optarg;
-				break;
-			//Turn on debug printing
-			case 'd':
-				options->enable_debug_printing = TRUE;
-				break;
-			//Specify that we want a summary to be shown
-			case 's':
-				options->show_summary = TRUE;
-				break;
-			//Specific output file
-			case 'o':
-				options->output_file = optarg;
-				break;
-		}
-	}
-
-	//This is an error, so we'll fail out here
-	if(options->file_name == NULL){
-		printf("[COMPILER ERROR]: No input file name provided. Use -f <filename> to specify a .ol source file\n");
-		exit(1);
-	}
-
-	//Give back the options we got in the structure
-	return options;
-}
-
 
 /**
  * Very simple test runner program
  */
 int main(int argc, char** argv){
+	u_int32_t num_warnings = 0;
+	u_int32_t num_errors = 0;
+
 	//Grab the options
-	compiler_options_t* options = parse_and_store_options(argc, argv);
+	compiler_options_t* options = parse_and_store_options(argc, argv, &num_warnings, &num_errors);
 
 	//Run the build system to generate one big token stream with all dependencies
 	build_system_results_t build_results = construct_build_order(options, FALSE);

@@ -22,16 +22,12 @@
 #include "utils/constants.h"
 #include "utils/option_parser/option_parser.h"
 
-//The number of errors and warnings
-u_int32_t num_errors = 0;
-u_int32_t num_warnings = 0;
-
 
 /**
  * Print a final summary for the ollie compiler. This could show success or
  * failure, based on what the caller wants
  */
-static void print_summary(compiler_options_t* options, module_times_t* times, u_int32_t lines_processed, u_int8_t success){
+static void print_summary(compiler_options_t* options, module_times_t* times, u_int32_t lines_processed, u_int32_t num_warnings, u_int32_t num_errors, u_int8_t success){
 	//For holding our message
 	char info[2000];
 
@@ -72,7 +68,7 @@ static void print_summary(compiler_options_t* options, module_times_t* times, u_
  * in oc requires the passing of data between one module and another. This function
  * manages that for us
  */
-static u_int8_t compile(compiler_options_t* options){
+static u_int8_t compile(compiler_options_t* options, u_int32_t num_warnings, u_int32_t num_errors){
 	//Declare our times and set all to 0
 	module_times_t times = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -121,7 +117,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, &times, 0, FALSE);
+			print_summary(options, &times, 0, num_warnings, num_errors, FALSE);
 		}
 
 		/**
@@ -164,7 +160,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, &times, 0, FALSE);
+			print_summary(options, &times, 0, num_warnings, num_errors, FALSE);
 		}
 
 		/**
@@ -204,7 +200,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, &times, results->lines_processed, FALSE);
+			print_summary(options, &times, results->lines_processed, num_warnings, num_errors, FALSE);
 		}
 
 		/**
@@ -243,7 +239,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 		//Print summary with a failure here
 		if(options->show_summary == TRUE){
-			print_summary(options, &times, results->lines_processed, FALSE);
+			print_summary(options, &times, results->lines_processed, num_warnings, num_errors, FALSE);
 		}
 
 		/**
@@ -369,7 +365,7 @@ static u_int8_t compile(compiler_options_t* options){
 
 	//Show the summary if we need to
 	if(options->show_summary == TRUE){
-		print_summary(options, &times, results->lines_processed, TRUE);
+		print_summary(options, &times, results->lines_processed, num_warnings, num_errors, TRUE);
 	}
 
 	/**
@@ -405,6 +401,9 @@ static u_int8_t compile(compiler_options_t* options){
  *  in the #dependencies block
 */
 int main(int argc, char** argv){
+	u_int32_t num_errors = 0;
+	u_int32_t num_warnings = 0;
+
 	/**
 	 * Let the helper run through and store all of our options. This will
 	 * also error out if any options are bad
@@ -412,5 +411,5 @@ int main(int argc, char** argv){
 	compiler_options_t* options = parse_and_store_options(argc, argv, &num_warnings, &num_errors);
 
 	//Invoke the compiler
-	return compile(options);
+	return compile(options, num_warnings, num_errors);
 }

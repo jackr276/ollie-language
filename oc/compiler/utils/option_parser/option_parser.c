@@ -170,6 +170,7 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 	//This is an error, so we'll fail out here
 	if(options->file_name == NULL){
 		printf("[COMPILER ERROR]: No input file name provided. Use -f <filename> to specify a .ol source file\n");
+		(*num_errors)++;
 		exit(1);
 	}
 
@@ -183,7 +184,7 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 
 				//Warn the user
 				print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.o\" will be used");
-				num_warnings++;
+				(*num_warnings)++;
 
 				break;
 
@@ -192,7 +193,7 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 
 				//Warn the user
 				print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.s\" will be used");
-				num_warnings++;
+				(*num_warnings)++;
 
 				break;
 
@@ -201,7 +202,7 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 
 				//Warn the user
 				print_compiler_message(MESSAGE_TYPE_WARNING, "No ouput file was given, \"a.out\" will be used");
-				num_warnings++;
+				(*num_warnings)++;
 
 				break;
 
