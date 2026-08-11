@@ -13858,6 +13858,22 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			//Refresh the lookahaed token
 			lookahead = get_next_token(token_stream, &parser_line_num);
 			switch(lookahead.tok){
+				//We have an inlined public function
+				case INLINE:
+					//Flag that we are inlined
+					is_inlined = TRUE;
+
+					//We now need to see the FN token
+					lookahead = get_next_token(token_stream, &parser_line_num);
+					if(lookahead.tok != FN){
+						return print_and_return_error("Expected \"fn\" after \"pub inline\" in function declaration", parser_line_num);
+					}
+					
+					break;
+
+				//Regular public function we just leave
+				case FN:
+					break;
 
 				default:
 					return print_and_return_error("Expected \"fn\" or \"inline\" after \"pub\" in function declaration", parser_line_num);
@@ -13912,13 +13928,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Check for duplicated functions
-	//
-	//TODO THIS DOESN'T LOOK RIGHT?????
-	if(do_duplicate_functions_exist(function_name.string) == TRUE){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
 	//Now duplicated variables
 	if(do_duplicate_variables_exist(function_name.string) == TRUE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
@@ -13936,10 +13945,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	//
-	//
-	//TODO WRONG JUST ADDED TO MAKE IT GO THROUGH
-	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, VISIBILITY_TYPE_PUBLIC, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
+	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -13953,7 +13959,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	push_token(&grouping_stack, lookahead);
 
 	//Now we can begin processing our parameters
-	//Grab the next token
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
 	//We must check some edge cases here
