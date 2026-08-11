@@ -14965,6 +14965,46 @@ static generic_ast_node_t* program(dynamic_array_t* build_order){
 
 
 /**
+ * In Ollie, we require that all functions be defined inside of the compiled
+ * program itself *unless* a special flag is passed in that is explicitly
+ * saying that a linker will be used later on. In the absence of this flag
+ * we need to check that all functions have been defined
+ *
+ * TODO MAKE THE FLAG
+ */
+static inline u_int8_t validate_all_functions_are_defined(function_symtab_t* symtab){
+	//Assume it's good to start
+	u_int8_t result = SUCCESS;
+
+	//Run through all namespaces
+	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
+		function_namespace_t* ns = dynamic_array_get_at(&(symtab->namespaces), i);
+
+		//For all key slots in the namespace
+		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
+			//Get the record and start drilling
+			symtab_function_record_t* record = ns->records[j];
+			while(record != NULL){
+				if(record->defined == FALSE){
+					sprintf(info, "Function \"%s\" was predeclared but never defined. First declared here:", record->func_name.string);
+					print_function_name_to_buffer(info, record);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, record->line_number);
+					num_errors++;
+
+					//Whole thing is failing now
+					result = FAILURE;
+				}
+
+				record = record->next;
+			}
+		}
+	}
+
+	return result;
+}
+
+
+/**
  * In Ollie, we do not allow the user to inline functions that are *directly or indirectly* recursive.
  * We only look for this after the entire file has been parsed, so now that it has, we will
  * check every function to make sure it adheres to this rule
@@ -15195,14 +15235,21 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	 */
 	errors_raised_by_current_function = dynamic_set_alloc();
 
-	//Global entry/run point, will give us a tree with
-	//the root being here
+	//Global entry/run point, will give us a tree with the root being here
 	prog = program(build_order);
 
 	//We'll only perform these tests if we want debug printing enabled
 	if(prog->ast_node_type != AST_NODE_TYPE_ERR_NODE){
 		//Finalize the function symtab
 		finalize_function_symtab(function_symtab);
+
+		/**
+		 * If we have functions that are predeclared but not defined, that's
+		 * a hard fail 
+		 */
+		if(validate_all_functions_are_defined(function_symtab) == FALSE){
+			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
+		}
 
 		/**
 		 * Validate that we have no recursive & inlined functions. If this fails, 
@@ -15218,7 +15265,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		//
 		//TODO WHAT IF WE HAVE MULTIPLE INLINES???
 		//
-		//TODO WHAT IF WE HAVE INLINED FUNCTIONS THAT CALL EACHOTHER???
 
 		/**
 		 * Flag functions that require initial alignments. This can *only* be done

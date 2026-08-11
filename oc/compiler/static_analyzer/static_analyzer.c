@@ -1980,29 +1980,10 @@ static void perform_function_usage_analysis(function_symtab_t* symtab){
 
 			while(record != NULL){
 				/**
-				 * Warn case 1: we have a function that was declared
-				 * but never defined and never called
+				 * If a function is defined but never called, we'll warn about it
 				 */
-				if(record->called == FALSE && record->defined == FALSE){
-					sprintf(error_info, "Function \"%s\" is never defined and never called. First defined here:", record->func_name.string);
-					print_function_name_to_buffer(error_info, record);
-					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
-					(*warning_count)++;
-
-				/**
-				 * If a function is defined but never called that's another kind of warning
-				 */
-				} else if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
+				if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
 					sprintf(error_info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
-					print_function_name_to_buffer(error_info, record);
-					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
-					(*warning_count)++;
-
-				/**
-				 * If a function is called but never defined that's another kind of issue 
-				 */
-				} else if(record->called == TRUE && record->defined == FALSE){
-					sprintf(error_info, "Function \"%s\" is called but never explicitly defined. If you are using Ollie in the standard way this will cause a runtime error. First declared here:", record->func_name.string);
 					print_function_name_to_buffer(error_info, record);
 					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
 					(*warning_count)++;
