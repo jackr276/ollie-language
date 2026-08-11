@@ -15140,7 +15140,7 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
  * We will use a while change algorithm to do this to ensure that we fully propogate out
  * the entire list
  */
-static void flag_functions_that_require_initial_alignment(function_symtab_t* symtab){
+static inline void flag_functions_that_require_initial_alignment(function_symtab_t* symtab){
 	/**
 	 * Run through all of the records in the function keyspace
 	 */
@@ -15266,13 +15266,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 		if(validate_inlined_functions_are_non_recursive(function_symtab) == FAILURE){
 			prog->ast_node_type = AST_NODE_TYPE_ERR_NODE;
 		}
-
-		//TODO VERIFY THAT THIS PLACEMENT IS CORRECT
-		//
-		//TODO WE SHOULD HAVE A FLAG THAT TELLS WHETHER A FUNCTION CALLS AN INLINED FUNCTION OR NOT
-		//
-		//TODO WHAT IF WE HAVE MULTIPLE INLINES???
-		//
 
 		/**
 		 * Flag functions that require initial alignments. This can *only* be done
