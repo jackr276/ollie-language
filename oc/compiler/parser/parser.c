@@ -14975,14 +14975,12 @@ static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* op
 	u_int8_t result = SUCCESS;
 
 	/**
-	 * If we are not requesting a full compilation(i.e. doing someting
-	 * like compiling to an object file) *and* we are not in a "no output"
-	 * aka CI run scenario, we don't need to check this. If the user
-	 * is compiling to an object file, we are assuming that they may be
-	 * doing some external linking. If they're doing external linking, calling
-	 * out to undefined functions is not something that we could check here.
+	 * If the user has specifically passed in the special flag that allows
+	 * undefined functions to be called so long as they are declared, we will
+	 * not bother checking at all here. This is done at the user's risk and
+	 * will cause a linker failure if they're trying to do a full compilation
 	 */
-	if(options->output_type == OUTPUT_TYPE_OBJECT_FILE){
+	if(options->allow_undefined_functions == TRUE){
 		return result;
 	}
 

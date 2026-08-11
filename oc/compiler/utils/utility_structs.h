@@ -43,6 +43,8 @@ struct compiler_options_t {
 	u_int8_t print_irs;
 	//What kind of output have we been told to generate
 	compiler_output_type_t output_type;
+	//Allow undefined functions to pass through
+	u_int8_t allow_undefined_functions;
 };
 
 

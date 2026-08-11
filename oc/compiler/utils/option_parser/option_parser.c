@@ -12,8 +12,9 @@
 #include "option_parser.h"
 #include "../constants.h"
 
-//Objectfile opt for getopt_long
+//Custom opts for getopt
 #define objectfile_opt 5
+#define undef_allowed_opt 6
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -37,6 +38,7 @@ static void print_help(){
 	printf("\n######################################## Optional Fields #########################################\n");
 	printf("-o <filename>: Specificy the output file. If none is given, a.out will be used\n");
 	printf("--to-object-file: Compile the entire thing to an object(.o) file. If you do not know what this is then you shoud not be using it\n");
+	printf("--allow-undefined-functions: Do not require functions to be defined to be called so long as they are predeclared\n");
 	printf("-s: Show a summary at the end of compilation\n");
 	printf("-a: Generate an assembly code file with a .s extension. Note that this will stop the actual assembler from running\n");
 	printf("-d: Show all debug information printed. This includes compiler warnings, info statements\n");
@@ -67,10 +69,11 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 	 */
 	const struct option long_opts[] = {
 		{"to-object-file", no_argument, NULL, objectfile_opt},
+		{"allow-undefined-functions", no_argument, NULL, undef_allowed_opt},
 		//Null terminator
 		{0,0,0,0}
 	};
-	
+
 	//Run through all of our options
 	int32_t opt;
 	while((opt = getopt_long(argc, argv, "rima@tdhsf:o:?", long_opts, NULL)) != -1){
@@ -160,6 +163,15 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 				}
 
 				break;
+
+			/**
+			 * Specify that we are going to allow calls undefined functions
+			 * so long as they have been forward declared
+			 */
+			case undef_allowed_opt:
+				options->allow_undefined_functions = TRUE;
+				break;
+
 			//Specific output file
 			case 'o':
 				options->output_file = optarg;
