@@ -14248,8 +14248,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	//Grab a reference for convenience
 	dynamic_string_t function_name = lookahead.lexeme;
 
-
-	//TODO WE SHOULD HAVE MORE CHECKS
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
 	symtab_function_record_t* function_record = lookup_function_in_namespace(function_symtab->current, function_name.string);
 
