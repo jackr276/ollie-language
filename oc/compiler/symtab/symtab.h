@@ -188,6 +188,11 @@ struct symtab_function_record_t{
 	 * 	not require alignment like this
 	 */
 	u_int8_t requires_initial_alignment;
+	/**
+	 * Does this ever call an inlined function? This is just to speed up or
+	 * inlining process later on
+	 */
+	u_int8_t calls_inlined_function;
 	//Are we public or private
 	visibilty_type_t visibility;
 };

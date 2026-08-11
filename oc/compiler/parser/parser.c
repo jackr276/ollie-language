@@ -2100,6 +2100,11 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//We'll now note that this was indeed called
 		function_record->called = TRUE;
 
+		//If we are calling an inlined function, flag it for the eventual inlining step
+		if(function_signature->is_inlined == TRUE){
+			current_function->calls_inlined_function = TRUE;
+		}
+
 	//The only way to get here is if the function pointer wasn't NULL
 	} else {
 		//Strip the type away here
@@ -14289,23 +14294,19 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			is_main_function = TRUE;
 		}
 
-		//TODO CLEANUP
-
 	//If we get here, we know that we're defining a predeclared function
 	} else {
-		//Flag this
 		defining_predeclared_function = TRUE;
-		//Set this as well
 		current_function = function_record;
 		current_function_signature = function_record->signature->internal_types.function_type;
 
 		//Let's now check - if the is_public's don't match here, we can fail already
-		if(function_record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PUBLIC && visibility == VISIBILITY_TYPE_PRIVATE){
+		if(current_function_signature->visibility == VISIBILITY_TYPE_PUBLIC && visibility == VISIBILITY_TYPE_PRIVATE){
 			sprintf(info, "Function \"%s\" was predeclared as public, but defined as private", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
 		//Other case, still a failure
-		} else if(function_record->signature->internal_types.function_type->visibility == VISIBILITY_TYPE_PRIVATE && visibility == VISIBILITY_TYPE_PUBLIC){
+		} else if(current_function_signature->visibility == VISIBILITY_TYPE_PRIVATE && visibility == VISIBILITY_TYPE_PUBLIC){
 			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -14320,11 +14321,11 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		}
 
 		//Check the matching case for raises errors
-		if(function_record->signature->internal_types.function_type->raises_errors == TRUE && raises_errors == FALSE){
+		if(current_function_signature->raises_errors == TRUE && raises_errors == FALSE){
 			sprintf(info, "Function \"%s\" was predeclared as raising errors. Please add the ! signifier to the declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 
-		} else if(function_record->signature->internal_types.function_type->raises_errors == FALSE && raises_errors == TRUE){
+		} else if(current_function_signature->raises_errors == FALSE && raises_errors == TRUE){
 			sprintf(info, "Function \"%s\" was not predeclared as not raising errors. Please add the ! signifier to the forward declaration", function_record->func_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
