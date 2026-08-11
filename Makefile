@@ -12,6 +12,7 @@ ASSEMBLER_PATH = ./oc/compiler/assembler
 SYMTAB_PATH = ./oc/compiler/symtab
 STATIC_ANALYZER_PATH = ./oc/compiler/static_analyzer
 PARSER_PATH = ./oc/compiler/parser
+OPTION_PARSER_PATH = ./oc/compiler/utils/option_parser
 TYPE_SYSTEM_PATH = ./oc/compiler/type_system
 DEPENDENCY_GRAPH_PATH = ./oc/compiler/dependency_graph
 DATA_DEPENDENCY_GRAPH_PATH = ./oc/compiler/data_dependency_graph
@@ -298,6 +299,12 @@ parser.o: $(PARSER_PATH)/parser.c
 
 parserd.o: $(PARSER_PATH)/parser.c
 	$(CC) -g $(CFLAGS) $(PARSER_PATH)/parser.c -o $(OUT_LOCAL)/parserd.o
+
+option_parser.o: $(OPTION_PARSER_PATH)/option_parser.c
+	$(CC) $(CFLAGS) $(OPTION_PARSER_PATH)/option_parser.c -o $(OUT_LOCAL)/option_parser.o
+
+option_parserd.o: $(OPTION_PARSER_PATH)/option_parser.c
+	$(CC) -g $(CFLAGS) $(OPTION_PARSER_PATH)/option_parser.c -o $(OUT_LOCAL)/option_parserd.o
 
 symtab_test.o: $(TEST_SUITE_PATH)/symtab_test.c
 	$(CC) $(CFLAGS) $(TEST_SUITE_PATH)/symtab_test.c -o $(OUT_LOCAL)/symtab_test.o
@@ -783,6 +790,12 @@ parser-CI.o: $(PARSER_PATH)/parser.c
 
 parser-CId.o: $(PARSER_PATH)/parser.c
 	$(CC) $(CFLAGS) -g $(PARSER_PATH)/parser.c -o $(OUT_CI)/parserd.o
+
+option_parser-CI.o: $(OPTION_PARSER_PATH)/option_parser.c
+	$(CC) $(CFLAGS) $(OPTION_PARSER_PATH)/option_parser.c -o $(OUT_CI)/option_parser.o
+
+option_parser-CId.o: $(OPTION_PARSER_PATH)/option_parser.c
+	$(CC) -g $(CFLAGS) $(OPTION_PARSER_PATH)/option_parser.c -o $(OUT_CI)/option_parserd.o
 
 compiler-CI.o: ./oc/compiler/compiler.c 
 	$(CC) $(CFLAGS) ./oc/compiler/compiler.c -o $(OUT_CI)/compiler.o
