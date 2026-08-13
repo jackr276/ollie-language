@@ -12823,6 +12823,11 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 }
 
 
+static inline void perform_all_function_inlining(cfg_t* cfg){
+
+}
+
+
 /**
  * Using the given front end results package, convert the AST that was passed to us
  * into a CFG and perform all necessary postprocessing actions.
@@ -12840,6 +12845,8 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 * inlining or any dominance relations
 	 */
 	visit_prog_node(cfg, results->root);
+
+	perform_all_function_inlining(cfg);
 
 	/**
 	 * Now that we're done with the actual conversion, we can perform
