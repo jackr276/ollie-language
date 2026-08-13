@@ -12823,8 +12823,38 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 }
 
 
-static inline void perform_all_function_inlining(cfg_t* cfg){
+static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_call_graph_matrix, dynamic_integer_array_t* inlining_order, u_int32_t function_count){
 
+}
+
+
+/**
+ * In order to inline our functions, we need an order with which
+ * to inline. We need this because we may have an inlined function that
+ * inlines another function and so on. Instead of doing a fixed point
+ * computation(inlining until there are no more inline calls in a loop), we
+ * will instead perform a reverse topological sort on the inline call graph. This
+ * will tell us what we need to inline first. In short, *inline a function only
+ * after it's inlined callees have been processed*
+ */
+static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* function_symtab){
+	//We know that the number of functions will not change by now
+	u_int32_t number_of_functions = function_symtab->current_function_id;
+
+	/**
+	 * We'll need a one dimensional array to hold the inlining order. We'll also
+	 * need the inline call graph to get the order
+	 */
+	dynamic_integer_array_t inlining_order = dynamic_integer_array_alloc_initial_size(number_of_functions);
+	u_int8_t* inline_call_graph = function_symtab->inline_call_graph_matrix;
+
+	//First let the helper do the reverse topological sort to get our order
+	reverse_topological_sort_inline_call_graph(inline_call_graph, &inlining_order, number_of_functions);
+
+
+
+	//Don't need this anymore
+	dynamic_integer_array_dealloc(&inlining_order);
 }
 
 
