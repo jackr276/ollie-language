@@ -12831,30 +12831,31 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
  *
  * Reverse topological sort algorithm:
  * 	sorted_result = []
+ * 	processed = []
  * 	
  * 	while sorted_result.size < num_functions:
- * 		found_successor = false
+ * 		found_fn_to_add = false
  *
  * 		for i = 0, i < num_functions:
- * 			if(removed[i] == true):
+ * 			if(processed[i] == true):
  * 				continue
  *
- * 			has_unremoved_successor = false
+ * 			has_unprocessed_callee = false
  *
  * 			for j = 0, j < num_functions:
  * 				if(A[i][j] == true && removed[j] == false): <---- if i calls j
- * 					has_unremoved_successor = true
+ * 					has_unprocessed_callee = true
  * 					break
  *
- * 			if has_unremoved_successor == false:
+ * 			if has_unprocessed_callee == false:
  * 				add i to the result
  * 				removed[i] = true <--- do not reprocess
- * 				found_successor = true
+ * 				found_fn_to_add = true
  *
- * 		if found_successor == false:
+ * 		if found_fn_to_add == false:
  * 			error out for a cycle(should be impossible with our check)
  */
-static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_call_graph_matrix, dynamic_integer_array_t* reverse_topological_sort, u_int32_t function_count){
+static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_call_graph_matrix, dynamic_integer_array_t* reverse_topological_sort, int32_t function_count){
 	/**
 	 * Maintain a list of values that we've already added to the topological
 	 * sort list. Initially wipe it out to all be FALSE(0)
