@@ -2894,21 +2894,6 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 
 
 /**
- * Determine whether or not a function is directly recursive using the function
- * symtab's adjacency matrix
- */
-u_int8_t is_function_directly_recursive(function_symtab_t* symtab, symtab_function_record_t* record){
-	//Extract for our uses
-	u_int32_t function_id = record->function_id;
-	u_int32_t num_functions = symtab->current_function_id;
-
-	//Extract the value contained at adjacency_matrix[func_id][func_id]
-	return symtab->call_graph_matrix[function_id * num_functions + function_id];
-
-}
-
-
-/**
  * Determine whether or not a function is recursive(direct or indirect) using the function
  * symtab's transitive closure 
  */
@@ -2970,8 +2955,15 @@ void finalize_function_symtab(function_symtab_t* symtab){
 	/**
 	 * Now that we have all of the possible functions added in, we need to create the
 	 * overall adjacency matrix for all of these functions
+	 *
+	 * We will also maintain a separate call graph that exclusively deals with inlined functions.
+	 * We know that, by our definition, this graph must be acyclic. This graph will be reverse
+	 * topologically sorted to get the inline order when we do perform inlining
 	 */
 	symtab->call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
+	symtab->inline_call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
+
+	//TODO
 
 	/**
 	 * To populate the adjacency matrix, we'll need to run through literally ever function namespace 

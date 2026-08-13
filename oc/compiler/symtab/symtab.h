@@ -458,6 +458,8 @@ struct function_symtab_t{
 	u_int8_t* call_graph_matrix;
 	//The transitive closure for the call graph
 	u_int8_t* call_graph_transitive_closure;
+	//The call graph matrix specifically for inline functions
+	u_int8_t* inline_call_graph_matrix;
 	//The current function id
 	u_int32_t current_function_id;
 };
@@ -686,12 +688,6 @@ u_int8_t insert_module(module_symtab_t* symtab, symtab_module_record_t* record);
  * Insert a label into the symtab
  */
 u_int8_t insert_label(label_symtab_t* label, symtab_label_record_t* label_record);
-
-/**
- * Determine whether or not a function is directly recursive using the function
- * symtab's adjacency matrix
- */
-u_int8_t is_function_directly_recursive(function_symtab_t* symtab, symtab_function_record_t* record);
 
 /**
  * Determine whether or not a function is recursive(direct or indirect) using the function
