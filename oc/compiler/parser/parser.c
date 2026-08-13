@@ -2994,10 +2994,9 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  * to immutable memory regions. However, reassigning them is fine if they're
  * being initialized for the first time
  *
- * Cases that we cover:
+ * Cases that we cover in this check:
  * 1.) Attempting to assign to an immutable "field variable" - think struct/union field
  * 2.) Attempting to assign to an immutable array area
- * 3.) Attempting to assign to a type regularly after it has been initialized
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
 	/**

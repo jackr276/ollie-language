@@ -12823,6 +12823,38 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 }
 
 
+/**
+ * A reverse topological sort will visit the leaves of the graph first. This graph is a DAG,
+ * and by this point in the process there's no reason why we'd have a cycle. If we find a 
+ * cycle the compiler hard fails. If there are no inlined functions, a random order is returned
+ * because there are no edge constraints on the graph
+ *
+ * Algorithm TODO ONLY PROPOSED
+ * 	
+ * 	sorted_result = []
+ * 	
+ * 	while sorted_result.size < num_inlined_functions:
+ * 		found_successor = false
+ *
+ * 		for i = 0, i < num_functions:
+ * 			if(removed[i] == true):
+ * 				continue
+ *
+ * 			has_unremoved_successor = false
+ *
+ * 			for j = 0, j < num_functions:
+ * 				if(A[i][j] == true && remove[j] == false): <---- if i calls j
+ * 					has_unremoved_successor = true
+ * 					break
+ *
+ * 			if has_unremoved_successor == false:
+ * 				add i to the result
+ * 				removed[i] = true <--- do not reprocess
+ * 				found_successor = true
+ *
+ * 		if found_successor == false:
+ * 			error out for a cycle(should be impossible with our check)
+ */
 static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_call_graph_matrix, dynamic_integer_array_t* inlining_order, u_int32_t function_count){
 
 }
