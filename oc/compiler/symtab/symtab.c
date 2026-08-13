@@ -2871,6 +2871,23 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 	}
 
 	fprintf(fl, "============= Adjacency Matrix ==============\n");
+
+	fprintf(fl, "============= Inline Matrix =================\n");
+
+	for(int32_t i = 0; i < function_count; i++){
+		//Print out the row(caller) number
+		fprintf(fl, "[%2d]: ", i);
+
+		//Now all of the columns(callees)
+		for(int32_t j = 0; j  < function_count; j++){
+			fprintf(fl, "%d ", function_symtab->inline_call_graph_matrix[i * function_count + j]);
+		}
+
+		fprintf(fl, "\n");
+	}
+
+	fprintf(fl, "============= Inline Matrix =================\n");
+
 	fprintf(fl, "============= Transitive Closure ==============\n");
 
 	//Run through each row
