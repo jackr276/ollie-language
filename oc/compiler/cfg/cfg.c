@@ -12829,11 +12829,10 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
  * cycle the compiler hard fails. If there are no inlined functions, a random order is returned
  * because there are no edge constraints on the graph
  *
- * Algorithm TODO ONLY PROPOSED
- * 	
+ * Reverse topological sort algorithm:
  * 	sorted_result = []
  * 	
- * 	while sorted_result.size < num_inlined_functions:
+ * 	while sorted_result.size < num_functions:
  * 		found_successor = false
  *
  * 		for i = 0, i < num_functions:
@@ -12855,8 +12854,52 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
  * 		if found_successor == false:
  * 			error out for a cycle(should be impossible with our check)
  */
-static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_call_graph_matrix, dynamic_integer_array_t* inlining_order, u_int32_t function_count){
+static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_call_graph_matrix, dynamic_integer_array_t* reverse_topological_sort, u_int32_t function_count){
+	/**
+	 * Maintain a list of values that we've already added to the topological
+	 * sort list. Initially wipe it out to all be FALSE(0)
+	 */
+	u_int8_t already_sorted[function_count];
+	memset(already_sorted, 0, sizeof(u_int8_t) * function_count);
 
+	/**
+	 * So long as we still have functions to add to the sort order
+	 */
+	while(reverse_topological_sort->current_index < function_count){
+		/**
+		 * Every time that a new iteration runs we should be finding
+		 * at least one unprocessed successor if it's yet to converge.
+		 * If we go through an iteration where we don't find one, that
+		 * means that we have a cycle and this entire thing is invalid
+		 *
+		 * In theory this should never happen by this point but we are
+		 * taking the precaution
+		 */
+		u_int8_t found_unprocessed_successor = FALSE;
+
+		//For all functions in the call graph
+		for(int32_t i = 0; i < function_count; i++){
+			/**
+			 * We've already sorted it - avoid reprocessing
+			 * with this check to ensure that we always converge
+			 */
+			if(already_sorted[i] == TRUE){
+				continue;
+			}
+
+
+		}
+
+		/**
+		 * If we did not find at least one unprocessed successor
+		 * to add here, then we have a cycle and this entire CFG
+		 * is invalid
+		 */
+		if(found_unprocessed_successor == FALSE){
+			fprintf(stderr, "Fatal internal compiler error: Cycle detected inside of reverse topological sort on the inlined function call graph\n");
+			exit(1);
+		}
+	}
 }
 
 
@@ -12878,7 +12921,6 @@ static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* 
 		return;
 	}
 
-	printf("HERE\n");
 	//We know that the number of functions will not change by now
 	u_int32_t number_of_functions = function_symtab->current_function_id;
 
