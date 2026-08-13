@@ -2908,6 +2908,79 @@ u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record
 
 
 /**
+ * Construct the call graph adjacency matrices. This includes the regular adjacency
+ * matrix and the specialized inline adjacency matrix. We are able to compute them
+ * both in one go
+ */
+static inline void construct_call_graph_adjacency_matrices(function_symtab_t* symtab){
+	//Extract the number of functions
+	u_int32_t number_of_functions = symtab->current_function_id;
+
+	/**
+	 * Now that we have all of the possible functions added in, we need to create the
+	 * overall adjacency matrix for all of these functions
+	 *
+	 * We will also maintain a separate call graph that exclusively deals with inlined functions.
+	 * We know that, by our definition, this graph must be acyclic. This graph will be reverse
+	 * topologically sorted to get the inline order when we do perform inlining
+	 */
+	symtab->call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
+	symtab->inline_call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
+
+	/**
+	 * To populate the adjacency matrix, we'll need to run through literally ever function namespace 
+	 */
+	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
+		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
+
+		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+			//Totally possible for this to happen
+			if(current_namespace->records[i] == NULL){
+				continue;
+			}
+
+			/**
+			 * Otherwise, we actually have a space that is populated so we need to
+			 * populate here. Remember, every record is a linked list so we need
+			 * to explore all of the nodes
+			 */
+			symtab_function_record_t* cursor = current_namespace->records[i];
+
+			//So long as the cursor is not NULL
+			while(cursor != NULL){
+				//Grab the cursor's unique function ID
+				u_int32_t cursor_id = cursor->function_id;
+
+				//Run through all of the functions that this function itself calls
+				for(int32_t j = 0; j < cursor->called_functions.current_index; j++){
+					//Extract the called function and it's internal function type
+					symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
+					function_type_t* called_function_type = called_function->signature->internal_types.function_type;
+
+					//Now let's get his ID
+					u_int32_t called_function_id = called_function->function_id;
+
+					//Insert this call into the adjacency matrix
+					symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
+
+					/**
+					 * If this called function is an inline function, we'll need to note
+					 * this done inside of the inlined fucntion call graph as well
+					 */
+					if(called_function_type->is_inlined == TRUE){
+						symtab->inline_call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
+					}
+				}
+
+				//Bump it up to the next one
+				cursor = cursor->next;
+			}
+		}
+	}
+}
+
+
+/**
  * Compute the transitive closure of the call graph. This is done using Floyd-Warshall.
  *
  * NOTE: this graph is *not* acyclic. It is totally possible(and often common) for call
@@ -2949,64 +3022,8 @@ static inline void compute_call_graph_transitive_closure(function_symtab_t* symt
  * the adjacency matrix for the call graph
  */
 void finalize_function_symtab(function_symtab_t* symtab){
-	//Extract the number of functions
-	u_int32_t number_of_functions = symtab->current_function_id;
-
-	/**
-	 * Now that we have all of the possible functions added in, we need to create the
-	 * overall adjacency matrix for all of these functions
-	 *
-	 * We will also maintain a separate call graph that exclusively deals with inlined functions.
-	 * We know that, by our definition, this graph must be acyclic. This graph will be reverse
-	 * topologically sorted to get the inline order when we do perform inlining
-	 */
-	symtab->call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
-	symtab->inline_call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
-
-	//TODO
-
-	/**
-	 * To populate the adjacency matrix, we'll need to run through literally ever function namespace 
-	 */
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
-
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			//Totally possible for this to happen
-			if(current_namespace->records[i] == NULL){
-				continue;
-			}
-
-			/**
-			 * Otherwise, we actually have a space that is populated so we need to
-			 * populate here. Remember, every record is a linked list so we need
-			 * to explore all of the nodes
-			 */
-			symtab_function_record_t* cursor = current_namespace->records[i];
-
-			//So long as the cursor is not NULL
-			while(cursor != NULL){
-				//Grab the cursor's unique function ID
-				u_int32_t cursor_id = cursor->function_id;
-
-				//Run through all of the functions that this function
-				//itself calls
-				for(int32_t j = 0; j < cursor->called_functions.current_index; j++){
-					//Extract it
-					symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
-
-					//Now let's get his ID
-					u_int32_t called_function_id = called_function->function_id;
-
-					//Insert this call into the adjacency matrix
-					symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
-				}
-
-				//Bump it up to the next one
-				cursor = cursor->next;
-			}
-		}
-	}
+	//Construct the regular and inline adjacency matrices
+	construct_call_graph_adjacency_matrices(symtab);
 
 	//Now that we have the regular call graph created, we will create the transitive closure
 	compute_call_graph_transitive_closure(symtab);
