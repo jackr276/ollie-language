@@ -1354,10 +1354,20 @@ symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t lin
  * RETURNS 0 if no collision, 1 if collision
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record){
-	//Assign this a unique identifier. Once we've assigned the unique ID, bump the
-	//overall function ID for the next go around
+	/**
+	 * Assign this a unique identifier. Once we've assigned the unique ID, bump the
+	 * overall function ID for the next go around
+	 */
 	record->function_id = symtab->current_function_id;
 	(symtab->current_function_id)++;
+
+	/**
+	 * If this is an inlined function, we need to bump the inlined function count
+	 * inside of the parent symtab struct
+	 */
+	if(record->signature->internal_types.function_type->is_inlined == TRUE){
+		(symtab->inlined_function_count)++;
+	}
 
 	//Grab the current namespace
 	function_namespace_t* current = symtab->current;

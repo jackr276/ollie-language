@@ -462,6 +462,12 @@ struct function_symtab_t{
 	u_int8_t* inline_call_graph_matrix;
 	//The current function id
 	u_int32_t current_function_id;
+	/**
+	 * How many inlined functions do we have? This will determine
+	 * whether we do all of the extra work in scanning the symtab
+	 * to perform inlining
+	 */
+	u_int32_t inlined_function_count;
 };
 
 

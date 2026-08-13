@@ -12870,6 +12870,15 @@ static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_c
  * after it's inlined callees have been processed*
  */
 static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* function_symtab){
+	/**
+	 * We have no inlined functions in this program so we don't
+	 * need to do anything. We can exit early in this case
+	 */
+	if(function_symtab->inlined_function_count == 0){
+		return;
+	}
+
+	printf("HERE\n");
 	//We know that the number of functions will not change by now
 	u_int32_t number_of_functions = function_symtab->current_function_id;
 
@@ -12882,7 +12891,6 @@ static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* 
 
 	//First let the helper do the reverse topological sort to get our order
 	reverse_topological_sort_inline_call_graph(inline_call_graph, &inlining_order, number_of_functions);
-
 
 
 	//Don't need this anymore
@@ -12908,25 +12916,11 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 */
 	visit_prog_node(cfg, results->root);
 
-	perform_all_function_inlining(cfg);
-
 	/**
-	 * Now that we're done with the actual conversion, we can perform
-	 * all function inlining
+	 * Invoke the helper to perform all function inlining if there are inlined
+	 * functions at all
 	 */
-	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the entry block and its function
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-		symtab_function_record_t* function = function_entry->function_defined_in;
-
-		/**
-		 * If this function calls inlined functions, we will
-		 * perform the inlining now
-		 */
-		if(function->calls_inlined_function == TRUE){
-
-		}
-	}
+	perform_all_function_inlining(cfg, results->function_symtab);
 
 	/**
 	 * Once we know that all function inlining has been completed, we are now able
