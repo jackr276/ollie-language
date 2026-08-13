@@ -74,8 +74,6 @@ static nesting_stack_t nesting_stack;
 static dynamic_array_t* current_function_blocks;
 //Also keep a list of all custom jumps in the function
 static dynamic_array_t current_function_user_defined_jump_statements;
-//The current stack offset for any given function
-static u_int64_t stack_offset = 0;
 
 //Keep track of the current dependency that we are on
 static dependency_graph_node_t* current_dependency_node = NULL;
@@ -7809,6 +7807,23 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 
 /**
+ * For DEBUGGING purposes - we will print all of the blocks in the control
+ * flow graph. This is meant to be invoked by the programmer, and as such is exposed
+ * via the header file
+ */
+void print_all_cfg_blocks(cfg_t* cfg){
+	//We will emit the DF
+	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
+
+	//Print all global variables after the blocks
+	print_all_global_variables(stdout, &(cfg->global_variables));
+
+	//Now print all of the local constants
+	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+}
+
+
+/**
  * Deallocate a basic block
 */
 void basic_block_dealloc(basic_block_t* block){
@@ -11577,8 +11592,6 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	current_function = func_record;
 	//Store the pointer to this function's array of blocks too. This will be used by every basic_block_alloc() call
 	current_function_blocks = &(func_record->function_blocks);
-	//We also need to zero out the current stack offset value
-	stack_offset = 0;
 	//Set this to NULL initially - we will only allocate if we need it
 	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_user_defined_jump_statements);
 	//The starting block
@@ -11642,21 +11655,23 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 			add_successor(compound_statement_exit_block, function_exit_block);
 		}
 	
-	//Otherwise, we have an empty function definition. If this is the case, then the only
-	//predecessor to the exit block is the entry block
+	/**
+	 * Otherwise, we have an empty function definition. If this is the case, then the only
+	 * predecessor to the exit block is the entry block
+	 */
 	} else {
 		add_successor(function_starting_block, function_exit_block);
 	}
+
+	//Add the start and end blocks to their respective arrays
+	dynamic_array_add(&(cfg->function_entry_blocks), function_starting_block);
+	dynamic_array_add(&(cfg->function_exit_blocks), function_exit_block);
 
 	//Determine and insert any needed ret statements
 	determine_and_insert_return_statements(function_exit_block);
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
 	finalize_all_user_defined_jump_statements(&current_function_user_defined_jump_statements);
-
-	//Add the start and end blocks to their respective arrays
-	dynamic_array_add(&(cfg->function_entry_blocks), function_starting_block);
-	dynamic_array_add(&(cfg->function_exit_blocks), function_exit_block);
 
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
@@ -12843,19 +12858,19 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 
 
 /**
- * For DEBUGGING purposes - we will print all of the blocks in the control
- * flow graph. This is meant to be invoked by the programmer, and as such is exposed
- * via the header file
+ * Using the given front end results package, convert the AST that was passed to us
+ * into a CFG and perform all necessary postprocessing actions.
+ *
+ * Postprocessing actions include:
+ * 	1.) Inlining functions
+ * 	2.) Pruning unreachable blocsk
+ * 	3.) Calculating use/def sets
+ * 	4.) Calculating LIVE-IN/LIVE-OUT sets
+ * 	5.) Calculating all needed dominance relations
  */
-void print_all_cfg_blocks(cfg_t* cfg){
-	//We will emit the DF
-	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
+static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* results){
+	visit_prog_node(cfg, results->root);
 
-	//Print all global variables after the blocks
-	print_all_global_variables(stdout, &(cfg->global_variables));
-
-	//Now print all of the local constants
-	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 
@@ -12926,12 +12941,11 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	cfg->instruction_pointer = instruction_pointer_var;
 
 	/**
-	 * Call into the visiter at the very top level using
-	 * the root of the CFG. It should in theory be
-	 * impossible for this to fail as we know that
-	 * the program is well-formed if it gets here
+	 * Call the top level converter that will do
+	 * all of the conversion and postprocessing
+	 * for us
 	 */
-	visit_prog_node(cfg, results->root);
+	convert_ast_to_cfg(cfg, results);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
