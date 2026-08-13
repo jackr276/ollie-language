@@ -116,6 +116,9 @@ function_symtab_t* function_symtab_alloc(){
 	//Now the namespaces array
 	symtab->namespaces = dynamic_array_alloc();
 
+	//Allocate our id to function map
+	symtab->id_to_function_mapping = dynamic_array_alloc();
+
 	//Now let's create the very first sheaf
 	function_namespace_t* default_namespace = calloc(1, sizeof(function_namespace_t));
 
@@ -1360,6 +1363,13 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 	 */
 	record->function_id = symtab->current_function_id;
 	(symtab->current_function_id)++;
+
+	/**
+	 * We maintain a one-to-one mapping of index as function ID to function record
+	 * pointer. This allows for quick lookups when we have to use the adjacency
+	 * matrix to determine things
+	 */
+	dynamic_array_set_at(&(symtab->id_to_function_mapping), record, record->function_id);
 
 	/**
 	 * If this is an inlined function, we need to bump the inlined function count
@@ -3116,8 +3126,14 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 	//Deallocate the namespace array
 	dynamic_array_dealloc(&(symtab->namespaces));
 
+	//Deallocate the id to function map
+	dynamic_array_dealloc(&(symtab->id_to_function_mapping));
+
 	//Free the adjacency matrix
 	free(symtab->call_graph_matrix);
+
+	//And the inlined function matrix
+	free(symtab->inline_call_graph_matrix);
 
 	//Free the entire symtab at the very end
 	free(symtab);

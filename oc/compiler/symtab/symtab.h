@@ -452,6 +452,8 @@ struct module_symtab_t {
 struct function_symtab_t{
 	//All of our namespaces
 	dynamic_array_t namespaces;
+	//Mapping of IDs to functions
+	dynamic_array_t id_to_function_mapping;
 	//The current sheaf
 	function_namespace_t* current;
 	//The adjacency matrix for the call graph
