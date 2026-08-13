@@ -11676,29 +11676,6 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
 
-	/**
-	 * Once we are fully complete, we will go through and search for any/all useless
-	 * statements to delete
-	 */
-	delete_all_unreachable_blocks(current_function_blocks);
-
-	/**
-	 * Let's now use the helper to compute all of the USE/DEF sets for each
-	 * block in the function
-	 */
-	compute_use_and_def_sets_for_function(current_function_blocks);
-
-	/**
-	 * Let the graph module compute all dominance relations for the given function. It is essential
-	 * that this be done *before* we do anything with liveness/SSA
-	 */
-	calculate_all_control_flow_relations_for_function(function_starting_block, function_exit_block, current_function_blocks);
-
-	/**
-	 * Finally, we will calculate the liveness sets for this function
-	 */
-	calculate_liveness_sets(current_function_blocks, function_exit_block);
-
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
 
@@ -12815,27 +12792,16 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//A prog node can decay into a function definition, a let statement or otherwise
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
 
-	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
-		//Switch based on the class of cursor that we have here
 		switch(ast_cursor->ast_node_type){
-			/**
-			 * We've seen a function defintion. In this case we'll
-			 * let the helper deal with it
-			 */
 			case AST_NODE_TYPE_FUNC_DEF:
 				visit_function_definition(cfg, ast_cursor);
 				break;
 
-			/**
-			 * We know that by nature of these variables being here that they
-			 * are global variables
-			 */
 			case AST_NODE_TYPE_LET_STMT:
 				visit_global_let_statement(ast_cursor);
 				break;
 		
-			//Finally, we could see a declaration
 			case AST_NODE_TYPE_DECL_STMT:
 				visit_global_declare_statement(ast_cursor);
 				break;
@@ -12863,14 +12829,58 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
  *
  * Postprocessing actions include:
  * 	1.) Inlining functions
- * 	2.) Pruning unreachable blocsk
+ * 	2.) Deleting all unreachable blocks
  * 	3.) Calculating use/def sets
  * 	4.) Calculating LIVE-IN/LIVE-OUT sets
  * 	5.) Calculating all needed dominance relations
  */
 static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* results){
+	/**
+	 * First convert the entire thing into a raw CFG. This does not handle any
+	 * inlining or any dominance relations
+	 */
 	visit_prog_node(cfg, results->root);
 
+	/**
+	 * Now that we're done with the actual conversion, we can perform
+	 * all function inlining
+	 */
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Extract the entry block and its function
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		symtab_function_record_t* function = function_entry->function_defined_in;
+
+		/**
+		 * If this function calls inlined functions, we will
+		 * perform the inlining now
+		 */
+		if(function->calls_inlined_function == TRUE){
+
+		}
+	}
+
+	/**
+	 * Once we are fully complete, we will go through and search for any/all useless
+	 * statements to delete
+	 */
+	delete_all_unreachable_blocks(current_function_blocks);
+
+	/**
+	 * Let's now use the helper to compute all of the USE/DEF sets for each
+	 * block in the function
+	 */
+	compute_use_and_def_sets_for_function(current_function_blocks);
+
+	/**
+	 * Let the graph module compute all dominance relations for the given function. It is essential
+	 * that this be done *before* we do anything with liveness/SSA
+	 */
+	calculate_all_control_flow_relations_for_function(function_starting_block, function_exit_block, current_function_blocks);
+
+	/**
+	 * Finally, we will calculate the liveness sets for this function
+	 */
+	calculate_liveness_sets(current_function_blocks, function_exit_block);
 }
 
 
