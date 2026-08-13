@@ -12842,7 +12842,7 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
  * 			has_unremoved_successor = false
  *
  * 			for j = 0, j < num_functions:
- * 				if(A[i][j] == true && remove[j] == false): <---- if i calls j
+ * 				if(A[i][j] == true && removed[j] == false): <---- if i calls j
  * 					has_unremoved_successor = true
  * 					break
  *
@@ -12868,14 +12868,14 @@ static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_c
 	while(reverse_topological_sort->current_index < function_count){
 		/**
 		 * Every time that a new iteration runs we should be finding
-		 * at least one unprocessed successor if it's yet to converge.
+		 * at least one unprocessed function to add if it's yet to converge.
 		 * If we go through an iteration where we don't find one, that
 		 * means that we have a cycle and this entire thing is invalid
 		 *
 		 * In theory this should never happen by this point but we are
 		 * taking the precaution
 		 */
-		u_int8_t found_unprocessed_successor = FALSE;
+		u_int8_t found_fn_to_add = FALSE;
 
 		//For all functions in the call graph
 		for(int32_t i = 0; i < function_count; i++){
@@ -12887,15 +12887,39 @@ static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_c
 				continue;
 			}
 
+			/**
+			 * Now run through all of the functions again. We are looking
+			 * to see if we have at least one unprocessed callee of the function
+			 * with ID "i". Remember A[i][j] = TRUE means that i calls j 
+			 */
+			u_int8_t has_unprocessed_callee = FALSE;
+			for(int32_t j = 0; j < function_count; j++){
+				if(already_sorted[j] == FALSE && inline_call_graph_matrix[i * function_count + j] == TRUE){
+					has_unprocessed_callee = TRUE;
+					break;
+				}
+			}
 
+			/**
+			 * We have no unprocessed callees, meaning that
+			 * this is either a leaf in the DAG *or* all of
+			 * its callees are already in front of it in the
+			 * sort, so we are good to add
+			 */
+			if(has_unprocessed_callee == FALSE){
+				dynamic_integer_array_add(reverse_topological_sort, i);
+				already_sorted[i] = TRUE;
+				//Flag that we foudn something to add
+				found_fn_to_add = TRUE;
+			}
 		}
 
 		/**
-		 * If we did not find at least one unprocessed successor
-		 * to add here, then we have a cycle and this entire CFG
+		 * If we did not find at least one unprocessed function
+		 * to add here this iteration, then we have a cycle and this entire CFG
 		 * is invalid
 		 */
-		if(found_unprocessed_successor == FALSE){
+		if(found_fn_to_add == FALSE){
 			fprintf(stderr, "Fatal internal compiler error: Cycle detected inside of reverse topological sort on the inlined function call graph\n");
 			exit(1);
 		}
