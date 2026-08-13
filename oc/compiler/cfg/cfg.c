@@ -12860,27 +12860,39 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	}
 
 	/**
-	 * Once we are fully complete, we will go through and search for any/all useless
-	 * statements to delete
+	 * Once we know that all function inlining has been completed, we are now able
+	 * to go through all functions(regardless of inlining status) and do the 
+	 * needed postprocessing
 	 */
-	delete_all_unreachable_blocks(current_function_blocks);
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Get the entry block, exit block and actual function
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
+		symtab_function_record_t* function = function_entry->function_defined_in;
 
-	/**
-	 * Let's now use the helper to compute all of the USE/DEF sets for each
-	 * block in the function
-	 */
-	compute_use_and_def_sets_for_function(current_function_blocks);
+		/**
+		 * Once we are fully complete, we will go through and search for any/all useless
+		 * statements to delete
+		 */
+		delete_all_unreachable_blocks(&(function->function_blocks));
 
-	/**
-	 * Let the graph module compute all dominance relations for the given function. It is essential
-	 * that this be done *before* we do anything with liveness/SSA
-	 */
-	calculate_all_control_flow_relations_for_function(function_starting_block, function_exit_block, current_function_blocks);
+		/**
+		 * Let's now use the helper to compute all of the USE/DEF sets for each
+		 * block in the function
+		 */
+		compute_use_and_def_sets_for_function(&(function->function_blocks));
 
-	/**
-	 * Finally, we will calculate the liveness sets for this function
-	 */
-	calculate_liveness_sets(current_function_blocks, function_exit_block);
+		/**
+		 * Let the graph module compute all dominance relations for the given function. It is essential
+		 * that this be done *before* we do anything with liveness/SSA
+		 */
+		calculate_all_control_flow_relations_for_function(function_entry, function_exit, &(function->function_blocks));
+
+		/**
+		 * Finally, we will calculate the liveness sets for this function
+		 */
+		calculate_liveness_sets(&(function->function_blocks), function_exit);
+	}
 }
 
 
