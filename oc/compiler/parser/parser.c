@@ -1014,8 +1014,7 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
 			constant_node->inferred_type = immut_char;
 			break;
 
-		//For True & False, they are internally treated the exact same as 
-		//unsigned 8 bit integers
+		//For True & False, they are internally treated the exact same as unsigned 8 bit integers internally
 		case TRUE_CONST:
 			constant_node->constant_type = BYTE_CONST_FORCE_U;
 			constant_node->constant_value.unsigned_byte_value = TRUE;
@@ -5745,8 +5744,7 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 		 * If we are multiplying *and* the type is commutative, we will 
 		 * perform reordering here if need be
 		 */
-		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE
-			&& temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		if(is_type_commutative_for_operation(return_type, op.tok) == TRUE && temp_holder->ast_node_type == AST_NODE_TYPE_CONSTANT){
 			//We'll now swap these two nodes so that the constant is on the right
 			add_child_node(sub_tree_root, right_child);
 			add_child_node(sub_tree_root, temp_holder);

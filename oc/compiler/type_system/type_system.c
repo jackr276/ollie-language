@@ -2000,21 +2000,49 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 			break;
 
 		/**
-		 * Relational expressions are valid for floats, integers,
-		 * enumerated types and pointers. They are invalid for
-		 * void types
-		 *
-		 * Addition is also valid for floats, integers, enumerated
-		 * types and pointers
+		 * Non-equality comparison types are valid for all basic
+		 * types besides VOID and booleans, as well as enums and pointers
 		 */
 		case L_THAN:
 		case L_THAN_OR_EQ:
 		case G_THAN:
 		case G_THAN_OR_EQ:
+			switch(type->type_class){
+				/**
+				 * All basic types except for void and bool
+				 */
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
+						return FALSE;
+					}
+
+					return TRUE;
+
+				//Enum types work
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+					
+				//Pointers work
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+
+				//Anything else doesn't
+				default:
+					return FALSE;
+			}
+
+			break;
+
+		/**
+		 * Equality comparison types are valid for all basic
+		 * types besides void, as well as enums and pointers
+		 */
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
 			switch(type->type_class){
-				//Basic types(minus void) work
+				/**
+				 * All basic types except for void
+				 */
 				case TYPE_CLASS_BASIC:
 					if(type->basic_type_token == VOID){
 						return FALSE;
