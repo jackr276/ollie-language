@@ -12969,6 +12969,19 @@ static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* fu
 
 
 /**
+ * Inline all of the eligible calls within a function. This involves a full crawl
+ * of the three address code and a lot of manipulation of the overall structure of
+ * the function itself
+ */
+static inline void inline_eligible_calls_in_function(symtab_function_record_t* function){
+	//Extract the entry block and all of our blocks
+	basic_block_t* function_entry_block = function->function_entry_block;
+	dynamic_array_t* function_blocks = &(function->function_blocks);
+
+}
+
+
+/**
  * In order to inline our functions, we need an order with which
  * to inline. We need this because we may have an inlined function that
  * inlines another function and so on. Instead of doing a fixed point
@@ -12997,6 +13010,24 @@ static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* 
 	 */
 	get_function_inlining_order(cfg, function_symtab, &inlining_order);
 
+	/**
+	 * Now that we have the order in which we need to inline, we can go through
+	 * the order and do the actual inlining. Remember that if a function itself
+	 * does not call any inline functions we skip it, there will always be a few
+	 * in this ordering that fall into that camp as they're the leaves of the graph
+	 */
+	for(int32_t i = 0; i < inlining_order.current_index; i++){
+		int32_t current_id = dynamic_integer_array_get_at(&inlining_order, i);
+		symtab_function_record_t* current_function = get_function_by_id(function_symtab, current_id);
+
+		//As mentioned above this will happen - just skip it
+		if(current_function->calls_inlined_function == FALSE){
+			continue;
+		}
+
+		//Otherwise let the helper do all the inlining
+		inline_eligible_calls_in_function(current_function);
+	}
 
 	//Don't need this anymore
 	dynamic_integer_array_dealloc(&inlining_order);
