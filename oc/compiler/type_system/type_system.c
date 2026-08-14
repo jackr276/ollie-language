@@ -1766,6 +1766,11 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 /**
  * Is the given unary operation valid for the type that was specificed?
+ *
+ * TODO
+ * THIS IS VERY SLOPPY - can be rewritten to have much tighter logic which would
+ * be an improvement
+ * TODO
  */
 u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t unary_op){
 	//Just to be safe, we'll dealias is
