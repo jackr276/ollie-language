@@ -12975,6 +12975,102 @@ static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* fu
 	print_function_inlining_order(inlining_order, function_symtab);
 }
 
+/**
+ * Remove a statement from a block. This is more like a soft deletion, we are
+ * not actually deleting the statement, just moving it from once place to another
+ */
+void remove_statement(instruction_t* stmt){
+	//Grab the block out
+	basic_block_t* block = stmt->block_contained_in;
+
+	//We are losing a statement here
+	block->number_of_instructions--;
+
+	//If it's the leader statement, we'll just update the references
+	if(block->leader_statement == stmt){
+		//Special case - it's the only statement. We'll just delete it here
+		if(block->leader_statement->next_statement == NULL){
+			//Just remove it entirely
+			block->leader_statement = NULL;
+			block->exit_statement = NULL;
+		//Otherwise it is the leader, but we have more
+		} else {
+			//Update the reference
+			block->leader_statement = stmt->next_statement;
+			//Set this to NULL
+			block->leader_statement->previous_statement = NULL;
+		}
+
+	//What if it's the exit statement?
+	} else if(block->exit_statement == stmt){
+		instruction_t* previous = stmt->previous_statement;
+		//Nothing at the end
+		previous->next_statement = NULL;
+
+		//This now is the exit statement
+		block->exit_statement = previous;
+		
+	//Otherwise, we have one in the middle
+	} else {
+		//Regular middle deletion here
+		instruction_t* previous = stmt->previous_statement;
+		instruction_t* next = stmt->next_statement;
+		previous->next_statement = next;
+		next->previous_statement = previous;
+	}
+
+	//This statement is listless(for now)
+	stmt->previous_statement = NULL;
+	stmt->next_statement = NULL;
+	stmt->block_contained_in = NULL;
+}
+
+
+
+/**
+ * Split a block, taking all statements beginning at start(inclusive) until
+ * the end and putting them into the new block
+ *
+ * .L1
+ *   A
+ *   B
+ *   C <----- split start
+ *   D
+ *   E
+ *
+ *  .L1
+ *   A
+ *   B
+ *   
+ *  .L2
+ *   C
+ *   D
+ *   E
+ *
+ * NOTE: this rule does *no* successor management or branch insertion
+ *
+ * TODO NOT DONE NEED TO DO SUCCESSOR MANAGEMENT
+ */
+static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start){
+	//Grab a cursor to the start statement
+	instruction_t* cursor = bisect_start;
+
+	//So long as this is not NULL
+	while(cursor != NULL){
+		//What we'll actually use
+		instruction_t* holder = cursor;
+
+		//Push this one up
+		cursor = cursor->next_statement;
+
+		//Remove the holder from the original block
+		remove_statement(holder);
+
+		//Add it to the new block
+		add_statement(new, holder);
+	}
+}
+
 
 /**
  * Inline a function call inside of the given block. To achieve this, we have
@@ -12984,12 +13080,18 @@ static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* fu
  * may be inlined 100s of times throughout the process
  */
 static void inline_function_call(symtab_function_record_t* function_contained_in, dynamic_array_t* function_blocks, basic_block_t* block_inlined_in, instruction_t* call_to_inline){
+	//VERY IMPORTANT - set the current function blocks to be this function's
+	current_function_blocks = function_blocks;
+
 	/**
 	 * Step 1: bisect the block where the inline takes place to have a place
 	 * to put our function. We need to take care about successors and predecessors
 	 * when we do this
 	 */
 
+
+	//Now that we're done undo the function blocks
+	current_function_blocks = NULL;
 }
 
 
