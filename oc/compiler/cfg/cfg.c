@@ -15,6 +15,7 @@
 #include "cfg.h"
 #include <assert.h>
 #include <limits.h>
+#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13114,8 +13115,25 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 	new_block->successors = clone_dynamic_array((&source_block->successors));
 	clear_dynamic_array(&(source_block->successors));
 
+	/**
+	 * Step 3: for the successors that we just cloned, we need to replace all
+	 * references to the source block in their predecessor set with references
+	 * to the new successor
+	 */
+	for(int32_t i = 0; i < new_block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(new_block->successors), i);
 
-
+		for(int32_t j= 0; j < successor->predecessors.current_index; j++){
+			/**
+			 * If this successor's predecessor is the old block, we need to 
+			 * make it the new block. Once we find it we can also break out
+			 */
+			if(successor->predecessors.internal_array[j] == source_block){
+				successor->predecessors.internal_array[j] = new_block;
+				break;
+			}
+		}
+	}
 }
 
 
@@ -13132,12 +13150,20 @@ static void inline_function_call(symtab_function_record_t* function_contained_in
 	current_function = function_contained_in;
 
 	/**
-	 * Step 1: bisect the block where the inline takes place to have a place
-	 * to put our function. We need to take care about successors and predecessors
-	 * when we do this
+	 * We'll need a fresh block that comes after our inlining takes place
 	 */
 	basic_block_t* after_inline_block = basic_block_alloc_no_estimate();
 	after_inline_block->estimated_execution_frequency = block_inlined_in->estimated_execution_frequency;
+
+	/**
+	 * Step 1: split the original block around the inlined call instruction. When we're done
+	 * the call instruction will still be in the original block, but everything after it will
+	 * be in the new block
+	 */
+	split_block_around_instruction(block_inlined_in, after_inline_block, call_to_inline);
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 
 	//Now that we're done undo the function & block pointers
 	current_function_blocks = NULL;
