@@ -1936,9 +1936,10 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 				return FALSE;
 			}
 
-			//Any kind of basic type except for floats works
+			//Any kind of basic type except for floats/bool/void works
 			switch(type->basic_type_token){
 				case VOID:
+				case BOOL:
 				case F32:
 				case F64:
 					return FALSE;
@@ -1950,6 +1951,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 
 		/**
 		 * The multiplication and division operators are valid for enums and all basic types with the exception of void
+		 * and booleans
 		 */
 		case STAR:
 		case F_SLASH:
@@ -1966,8 +1968,8 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 			//Deconstruct this
 			basic_type = type->basic_type_token;
 
-			//Let's now just make sure that it is not a void type
-			if(basic_type == VOID){
+			//Let's now just make sure that it is not a void or bool type
+			if(basic_type == VOID || basic_type == BOOL){
 				return FALSE;
 			}
 
@@ -2076,7 +2078,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		case PLUS:
 			switch(type->type_class){
 				case TYPE_CLASS_BASIC:
-					if(type->basic_type_token == VOID){
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
 						return FALSE;
 					}
 
