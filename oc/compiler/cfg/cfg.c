@@ -13055,34 +13055,42 @@ static void remove_statement(instruction_t* stmt){
 
 
 /**
- * Split a block, taking all statements beginning at start(inclusive) until
- * the end and putting them into the new block
+ * Split a block, taking all statements beginning at start(exclusive) until
+ * the end and putting them into the new block. We will also be updating all
+ * of the successors as well. When we are done, the starting block will not
+ * have any successors and the new block will inherit its successors
  *
+ * Start:
  * .L1
+ * 	Pred:{.L0}
+ * 	Succ:{.L3, .L4}
  *   A
  *   B
  *   C <----- split start
  *   D
  *   E
  *
+ * Final result:
  *  .L1
+ *   Pred:{.L0}
+ *   Succ: {} <-- left empty on purpose
  *   A
  *   B
+ *   C
  *   
  *  .L2
- *   C
+ *   Pred:{} <-- left empty on purpose
+ *   Succ:{.L3, .L4}
  *   D
  *   E
- *
- * NOTE: this rule does *no* successor management or branch insertion
- *
- * TODO NOT DONE NEED TO DO SUCCESSOR MANAGEMENT
  */
-static inline void bisect_block(basic_block_t* source, basic_block_t* new, instruction_t* bisect_start){
-	//Grab a cursor to the start statement
-	instruction_t* cursor = bisect_start;
-
-	//So long as this is not NULL
+static inline void split_block_around_instruction(basic_block_t* source_block, basic_block_t* new_block, instruction_t* split_start){
+	/**
+	 * Step 1: perform the actual instruction movement. Starting
+	 * at the first instruction after the given split start, move the
+	 * statement from one block to the other
+	 */
+	instruction_t* cursor = split_start->next_statement;
 	while(cursor != NULL){
 		//What we'll actually use
 		instruction_t* holder = cursor;
@@ -13094,8 +13102,20 @@ static inline void bisect_block(basic_block_t* source, basic_block_t* new, instr
 		remove_statement(holder);
 
 		//Add it to the new block
-		add_statement(new, holder);
+		add_statement(new_block, holder);
 	}
+
+	/**
+	 * Step 2: all successors of the original source block will now
+	 * be successors of the new block instead. We can do a straight clone
+	 * to achieve this. After we clone, wipe out the source block's successors
+	 * because it now has none
+	 */
+	new_block->successors = clone_dynamic_array((&source_block->successors));
+	clear_dynamic_array(&(source_block->successors));
+
+
+
 }
 
 
