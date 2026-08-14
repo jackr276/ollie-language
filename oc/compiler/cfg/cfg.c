@@ -975,6 +975,20 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 
 
 /**
+ * Print the function inlining order. This is just a debugging helper
+ */
+static void print_function_inlining_order(dynamic_integer_array_t* inlining_order, function_symtab_t* symtab){
+	//TODO DEBUG PRINTING ONLY
+	for(int32_t i = 0; i < inlining_order->current_index; i++){
+		u_int32_t id = dynamic_integer_array_get_at(inlining_order, i);
+
+	}
+
+
+}
+
+
+/**
  * Print a block our for reading
 */
 void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
@@ -12929,6 +12943,22 @@ static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_c
 
 
 /**
+ * Use a reverse topological sort to get the function inlining order
+ */
+static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* function_symtab, dynamic_integer_array_t* inlining_order){
+	//We know that the number of functions will not change by now
+	u_int32_t number_of_functions = function_symtab->current_function_id;
+
+	//EXtract this from the function symtab itself
+	u_int8_t* inline_call_graph = function_symtab->inline_call_graph_matrix;
+
+	//First let the helper do the reverse topological sort to get our order
+	reverse_topological_sort_inline_call_graph(inline_call_graph, inlining_order, number_of_functions);
+
+}
+
+
+/**
  * In order to inline our functions, we need an order with which
  * to inline. We need this because we may have an inlined function that
  * inlines another function and so on. Instead of doing a fixed point
@@ -12946,18 +12976,16 @@ static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* 
 		return;
 	}
 
-	//We know that the number of functions will not change by now
-	u_int32_t number_of_functions = function_symtab->current_function_id;
-
 	/**
 	 * We'll need a one dimensional array to hold the inlining order. We'll also
 	 * need the inline call graph to get the order
 	 */
-	dynamic_integer_array_t inlining_order = dynamic_integer_array_alloc_initial_size(number_of_functions);
-	u_int8_t* inline_call_graph = function_symtab->inline_call_graph_matrix;
+	dynamic_integer_array_t inlining_order = dynamic_integer_array_alloc();
 
-	//First let the helper do the reverse topological sort to get our order
-	reverse_topological_sort_inline_call_graph(inline_call_graph, &inlining_order, number_of_functions);
+	/**
+	 * First we'll go an get the actual order in which we need to inline things
+	 */
+	get_function_inlining_order(cfg, function_symtab, &inlining_order);
 
 
 	//Don't need this anymore
