@@ -7512,6 +7512,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			//Now we can emit the direct call statement
 			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
 
+			/**
+			 * If we have a direct call that is inlined we will flag
+			 * this call instruction as being inlined
+			 */
+			if(signature->is_inlined == TRUE){
+				function_call_statement->is_inlined_call = TRUE;
+			}
+
 			break;
 
 		//This should be unreachable but just to be sure
@@ -12978,6 +12986,26 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	basic_block_t* function_entry_block = function->function_entry_block;
 	dynamic_array_t* function_blocks = &(function->function_blocks);
 
+	/**
+	 * Crawl over every single function block and determine if they
+	 * contain a function call that needs to be inlined. We maintain
+	 * a special "is inline call" to enable this. Note that only direct
+	 * calls can be inlined
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		//Crawl through this whole block to see if we have anything to inline
+		basic_block_t* candidate_block = dynamic_array_get_at(function_blocks, i);
+
+		instruction_t* cursor = candidate_block->leader_statement;
+		while(cursor != NULL){
+			//Only consider direct calls for this
+			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
+				inline_function_call(candidate_block, cursor);
+			}
+
+			cursor = cursor->next_statement;
+		}
+	}
 }
 
 
