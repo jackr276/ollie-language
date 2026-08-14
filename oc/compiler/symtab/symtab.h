@@ -806,6 +806,11 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
 
 /**
+ * Use the ID to function mapping to lookup a function for a given ID
+ */
+symtab_function_record_t* get_function_by_id(function_symtab_t* symtab, u_int32_t id);
+
+/**
  * Print out the initialization state array for a variable. This is a debugging
  * only function
  */
