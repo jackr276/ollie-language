@@ -977,14 +977,22 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 /**
  * Print the function inlining order. This is just a debugging helper
  */
-static void print_function_inlining_order(dynamic_integer_array_t* inlining_order, function_symtab_t* symtab){
-	//TODO DEBUG PRINTING ONLY
-	for(int32_t i = 0; i < inlining_order->current_index; i++){
-		u_int32_t id = dynamic_integer_array_get_at(inlining_order, i);
+static inline void print_function_inlining_order(dynamic_integer_array_t* inlining_order, function_symtab_t* symtab){
+	fprintf(stdout, "\nFunction inlining order: [");
 
+	for(int32_t i = 0; i < inlining_order->current_index; i++){
+		//Get the ID and use it to do a lookup
+		int32_t id = dynamic_integer_array_get_at(inlining_order, i);
+		symtab_function_record_t* associated_function = get_function_by_id(symtab, id);
+
+		fprintf(stdout, "%s", associated_function->func_name.string);
+
+		if(i != inlining_order->current_index - 1){
+			fprintf(stdout, ", ");
+		}
 	}
 
-
+	fprintf(stdout, "]\n");
 }
 
 
@@ -12955,6 +12963,8 @@ static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* fu
 	//First let the helper do the reverse topological sort to get our order
 	reverse_topological_sort_inline_call_graph(inline_call_graph, inlining_order, number_of_functions);
 
+	//For debugging only - TODO delete when done
+	print_function_inlining_order(inlining_order, function_symtab);
 }
 
 

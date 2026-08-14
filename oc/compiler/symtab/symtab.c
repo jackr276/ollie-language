@@ -1890,7 +1890,7 @@ symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* nam
  * Use the ID to function mapping to lookup a function for a given ID. This will return
  * NULL if the function cannot be found
  */
-symtab_function_record_t* get_function_by_id(function_symtab_t* symtab, u_int32_t id){
+symtab_function_record_t* get_function_by_id(function_symtab_t* symtab, int32_t id){
 	/**
 	 * Just to be sure we aren't looking for something crazy
 	 */
