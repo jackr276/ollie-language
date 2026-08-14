@@ -13195,7 +13195,7 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 			//Only consider direct calls for this
 			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
 				//TODO TURN ME ON
-				//inline_function_call(function, function_blocks, candidate_block, cursor);
+				inline_function_call(function, function_blocks, candidate_block, cursor);
 			}
 
 			cursor = cursor->next_statement;
