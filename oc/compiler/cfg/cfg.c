@@ -907,6 +907,32 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 
 
 /**
+ * Create a basic block without estimating. This is usually
+ * done when we're creating a block outside of the normal
+ * processes like for example during function inlining
+ */
+static basic_block_t* basic_block_alloc_no_estimate(){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = increment_and_get();
+
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add it into the function's block array
+	dynamic_array_add(current_function_blocks, created);
+
+	//Give it back
+	return created;
+}
+
+
+/**
  * Create a basic block explicitly using the estimate
  * that comes from the nesting stack that we maintain.
  * 
@@ -12975,11 +13001,12 @@ static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* fu
 	print_function_inlining_order(inlining_order, function_symtab);
 }
 
+
 /**
  * Remove a statement from a block. This is more like a soft deletion, we are
  * not actually deleting the statement, just moving it from once place to another
  */
-void remove_statement(instruction_t* stmt){
+static void remove_statement(instruction_t* stmt){
 	//Grab the block out
 	basic_block_t* block = stmt->block_contained_in;
 
@@ -12993,6 +13020,7 @@ void remove_statement(instruction_t* stmt){
 			//Just remove it entirely
 			block->leader_statement = NULL;
 			block->exit_statement = NULL;
+
 		//Otherwise it is the leader, but we have more
 		} else {
 			//Update the reference
@@ -13026,7 +13054,6 @@ void remove_statement(instruction_t* stmt){
 }
 
 
-
 /**
  * Split a block, taking all statements beginning at start(inclusive) until
  * the end and putting them into the new block
@@ -13051,7 +13078,7 @@ void remove_statement(instruction_t* stmt){
  *
  * TODO NOT DONE NEED TO DO SUCCESSOR MANAGEMENT
  */
-static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start){
+static inline void bisect_block(basic_block_t* source, basic_block_t* new, instruction_t* bisect_start){
 	//Grab a cursor to the start statement
 	instruction_t* cursor = bisect_start;
 
@@ -13080,18 +13107,21 @@ static inline void bisect_block(basic_block_t* new, instruction_t* bisect_start)
  * may be inlined 100s of times throughout the process
  */
 static void inline_function_call(symtab_function_record_t* function_contained_in, dynamic_array_t* function_blocks, basic_block_t* block_inlined_in, instruction_t* call_to_inline){
-	//VERY IMPORTANT - set the current function blocks to be this function's
+	//VERY IMPORTANT - set the current function & blocks to be this function's
 	current_function_blocks = function_blocks;
+	current_function = function_contained_in;
 
 	/**
 	 * Step 1: bisect the block where the inline takes place to have a place
 	 * to put our function. We need to take care about successors and predecessors
 	 * when we do this
 	 */
+	basic_block_t* after_inline_block = basic_block_alloc_no_estimate();
+	after_inline_block->estimated_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
-
-	//Now that we're done undo the function blocks
+	//Now that we're done undo the function & block pointers
 	current_function_blocks = NULL;
+	current_function = NULL;
 }
 
 
@@ -13118,7 +13148,8 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 		while(cursor != NULL){
 			//Only consider direct calls for this
 			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
-				inline_function_call(function, function_blocks, candidate_block, cursor);
+				//TODO TURN ME ON
+				//inline_function_call(function, function_blocks, candidate_block, cursor);
 			}
 
 			cursor = cursor->next_statement;
