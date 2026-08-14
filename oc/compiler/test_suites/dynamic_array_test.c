@@ -161,20 +161,21 @@ void test_dynamic_integer_array(){
 
 	printf("\n================= TESTING SETTING =================\n");
 
-	//TODO FIX THIS TEST WITH ASSERTS
-
 	//Allocate with a tiny initial size and see if we can resize correctly
 	array = dynamic_integer_array_alloc_initial_size(3);
 
 	//Set them with even/odd values
 	for(int32_t i = 1000; i >= 0; i--){
-		dynamic_integer_array_set_at(&array, i % 2, i);
+		dynamic_integer_array_set_at(&array, i, i);
 	}
 
 	printf("[");
 
-	for(int32_t i = 0; i < 1000; i++){
+	for(int32_t i = 0; i < 1001; i++){
 		int32_t value = dynamic_integer_array_get_at(&array, i);
+
+		//This should be the exact same as the index
+		assert(value == i);
 
 		printf("%d", value);
 

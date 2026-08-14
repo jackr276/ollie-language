@@ -178,19 +178,24 @@ int32_t dynamic_integer_array_get_at(dynamic_integer_array_t* array, int32_t ind
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
  * will be in effect here
+ *
+ * NOTE: we will NOT modify the so-called "current-index" that is used for setting. If the user
+ * mixes these two together, they are responsible for the consequences
  */
 void dynamic_integer_array_set_at(dynamic_integer_array_t* array, int32_t value, int32_t index){
-	//This is not allowed
+	/**
+	 * Dynamic resize is in effect for integer arrays
+	 */
 	if(array->current_max_size <= index){
-		printf("ERROR: Attempting to set index %d in an array of size %d\n", index, array->current_max_size);
-		exit(1);
+		//Double the index just to be safe
+		array->current_max_size = index * 2;
+
+		//Reallocate the internal buffer
+		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
 	}
 
 	//Now that we've taken care of all that, we'll perform the setting
 	array->internal_array[index] = value;
-
-	//NOTE: we will NOT modify the so-called "current-index" that is used for setting. If the user
-	//mixes these two together, they are responsible for the consequences
 }
 
 
