@@ -13162,6 +13162,16 @@ static void inline_function_call(symtab_function_record_t* function_contained_in
 	 */
 	split_block_around_instruction(block_inlined_in, after_inline_block, call_to_inline);
 
+	/**
+	 * TODO
+	 *
+	 * We need to create a way to deep clone everything in a function. This means
+	 * literally every symtab variable has to be cloned completely, as well
+	 * as the stack data area(later), the temp variables all need to be fresh, and every
+	 * symtab variable is going to need to be mangled(messed up in some way to keep the
+	 * association)
+	 */
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 
@@ -13185,6 +13195,12 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	 * contain a function call that needs to be inlined. We maintain
 	 * a special "is inline call" to enable this. Note that only direct
 	 * calls can be inlined
+	 *
+	 *
+	 * TODO THIS IS WRONG BECAUSE THE FUNCTION BLOCKS WILL CHANGE AS WE INLINE
+	 *
+	 * We need to make a list of what to inline in the function and then iterate
+	 * that list. This strategy will *NOT* work
 	 */
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Crawl through this whole block to see if we have anything to inline
@@ -13194,7 +13210,6 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 		while(cursor != NULL){
 			//Only consider direct calls for this
 			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
-				//TODO TURN ME ON
 				inline_function_call(function, function_blocks, candidate_block, cursor);
 			}
 
