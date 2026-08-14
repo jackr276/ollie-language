@@ -12977,13 +12977,29 @@ static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* fu
 
 
 /**
+ * Inline a function call inside of the given block. To achieve this, we have
+ * to split the block where inlined call happens into two pieces and shove the
+ * inlined function right in the middle of it. We are going to have to make sure
+ * that the inlined function is a 100% new copy of the original one, as one function
+ * may be inlined 100s of times throughout the process
+ */
+static void inline_function_call(symtab_function_record_t* function_contained_in, dynamic_array_t* function_blocks, basic_block_t* block_inlined_in, instruction_t* call_to_inline){
+	/**
+	 * Step 1: bisect the block where the inline takes place to have a place
+	 * to put our function. We need to take care about successors and predecessors
+	 * when we do this
+	 */
+
+}
+
+
+/**
  * Inline all of the eligible calls within a function. This involves a full crawl
  * of the three address code and a lot of manipulation of the overall structure of
  * the function itself
  */
 static inline void inline_eligible_calls_in_function(symtab_function_record_t* function){
-	//Extract the entry block and all of our blocks
-	basic_block_t* function_entry_block = function->function_entry_block;
+	//Grab out all of the function blocks for this given function
 	dynamic_array_t* function_blocks = &(function->function_blocks);
 
 	/**
@@ -13000,7 +13016,7 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 		while(cursor != NULL){
 			//Only consider direct calls for this
 			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
-				inline_function_call(candidate_block, cursor);
+				inline_function_call(function, function_blocks, candidate_block, cursor);
 			}
 
 			cursor = cursor->next_statement;
