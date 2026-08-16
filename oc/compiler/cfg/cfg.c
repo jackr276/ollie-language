@@ -13150,36 +13150,6 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 
 
 /**
- * TODO HOW ARE WE GOING TO HANDLE PRED/SUCC REFS???
- */
-static inline basic_block_t* clone_block(basic_block_t* block_to_clone){
-	//Create a new block and *do not* estimate
-	basic_block_t* new_block = basic_block_alloc_no_estimate();
-
-	/**
-	 * We are just going to take the estimated frequency from here - we may update this
-	 * in the future
-	 */
-	new_block->estimated_execution_frequency = block_to_clone->estimated_execution_frequency;
-
-	/**
-	 * Copy over the block type only if it's not a function exit or entry. We don't want to have the function
-	 * exit or entry tags coming over because some algorithms rely on those and if they're stamped on here, that
-	 * would mess us up down the line
-	 */
-	if(block_to_clone->block_type != BLOCK_TYPE_FUNC_ENTRY && block_to_clone->block_type != BLOCK_TYPE_FUNC_EXIT){
-		new_block->block_type = block_to_clone->block_type;
-	}
-
-
-
-	//Give back the reference to the new block
-	return new_block;
-}
-
-
-
-/**
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
@@ -13187,11 +13157,7 @@ static inline basic_block_t* clone_block(basic_block_t* block_to_clone){
  * TODO WE SHOULD CREATE ALL THE NEW BLOCKS FIRST AND THEN FILL IN THE INSTRUCTIONS. This will allow us to
  * build up the block mapping before we do stuff like branching, jumping, pred/succ management, etc
  */
-static dynamic_array_t clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
-	//Fresh array for our new function blocks
-	//TODO DO WE NEED THIS???
-	dynamic_array_t new_function_blocks = dynamic_array_alloc();
-
+static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
 	/**
 	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
 	 * be added to the function that we're inlining into's blocks because we've set the global
@@ -13200,16 +13166,49 @@ static dynamic_array_t clone_entire_function_for_inlining(symtab_function_record
 	 * We need to create all of the blocks first before we even try to deal with the instructions
 	 * in them because a lot of instructions(branch, jmp) and successor/predecessor management rely
 	 * on us knowing what the actual new block IDs are going to be
+	 *
+	 * All of the new blocks will have a one-to-one mapping with the block that they've been
+	 * cloned from. This is done to make our job of successor/predecessor management easier
 	 */
 	for(int32_t i = 0; i < function_to_clone->function_blocks.current_index; i++){
-		basic_block_t* block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
+		basic_block_t* reference_block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
+
+		/**
+		 * Allocate the new block but do *NOT* estimate the execution frequency. We will inherit
+		 * this from the reference
+		 *
+		 *
+		 * TODO SO MUCH TO ACCOUNT FOR HERE - jump table, etc. etc. etc just have a basic working
+		 * version for now
+		 */
+		basic_block_t* new_block = basic_block_alloc_no_estimate();
+		new_block->estimated_execution_frequency = reference_block->estimated_execution_frequency;
+
+		//IMPORTANT - create the mapping association here
+		reference_block->mapping_info.maps_to = new_block;
+
+		/**
+		 * Based on the block type we will either flag the entry and exit
+		 * block or copy it over. One thing that we should never do is flag
+		 * any of these new blocks as function entry or exit blocks as it would
+		 * mess up the dominator analysis later on
+		 */
+		switch(reference_block->block_type){
+			case BLOCK_TYPE_FUNC_ENTRY:
+				*function_entry = reference_block;
+				break;
+			case BLOCK_TYPE_FUNC_EXIT:
+				*function_exit = reference_block;
+				break;
+			//It's not a unique type so copy it over
+			default:
+				new_block->block_type = reference_block->block_type;
+				break;
+		}
 
 
 
 	}
-
-	//TODO DO WE NEED THIS??
-	return new_function_blocks;
 }
 
 
@@ -13243,10 +13242,10 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 * function that we are inlining. While we're at it, we'll save the function entry
 	 * and function exit blocks from the copy 
 	 */
-	basic_block_t* inlined_function_entry;
-	basic_block_t* inlined_function_exit;
+	basic_block_t* inlined_function_entry = NULL;
+	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	dynamic_array_t cloned_function_blocks = clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit);
+	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit);
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
