@@ -1,4 +1,9 @@
 /**
+ * Author: Jack Robbins
+ * This file defines the Ollie IR's instruction struct. Ollie instructions start their life as "three address code statements"
+ * and will eventually be selected into x86 assembly instructions. The Ollie instruction struct carries the information
+ * to support both of these variations. Instructions are packaged into blocks, which are packaged into functions, which
+ * are the building blocks of the Ollie language
  */
 
 #ifndef OLLIE_INSTRUCTION_H

@@ -1,6 +1,6 @@
 /**
  * Author: Jack Robbins
- * The visibility header centralizes ways of determining whether a function/varialbe
+ * The visibility header centralizes ways of determining whether a function/variable
  * is public or private
 */
 

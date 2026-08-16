@@ -1,4 +1,6 @@
 /**
+ * Author: Jack Robbins
+ * This file defines the Ollie IR's global variable type struct
  */
 
 #ifndef GLOBAL_VARIABLE_H

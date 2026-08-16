@@ -1,5 +1,8 @@
 /**
-*/
+ * Author: Jack Robbins
+ * This file defines the Ollie IR's constant type. This constant is used in both the starting
+ * three address code IR statements and in the final x86 assembly statements
+ */
 
 #ifndef THREE_ADDR_CONSTANT_H
 #define THREE_ADDR_CONSTANT_H

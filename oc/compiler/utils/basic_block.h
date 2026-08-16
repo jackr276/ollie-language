@@ -43,9 +43,6 @@ typedef enum{
  * by the "leader" and "exit" references for quick access
 */
 struct basic_block_t{
-	//There are consecutive statements(declare, define, let, assign, alias)
-	//in a node. These statements are a linked list
-	//Keep a reference to the "leader"(head) and "exit"(tail) statements
 	instruction_t* leader_statement;
 	instruction_t* exit_statement;
 	//Predecessor nodes

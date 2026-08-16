@@ -1,4 +1,8 @@
-
+/**
+ * Author: Jack Robbins
+ * This file defines the Ollie IR's three address variable concept. Variables eventually become memory
+ * regions or register values in the final compiled program
+ */
 
 #ifndef THREE_ADDR_VARIABLE_H
 #define THREE_ADDR_VARIABLE_H
