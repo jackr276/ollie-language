@@ -8,8 +8,7 @@
 #ifndef STACK_MANAGEMENT_STRUCTS_H
 #define STACK_MANAGEMENT_STRUCTS_H
 
-//By default we only have 5 here. The region array will dynamically resize
-//if need be
+//By default we only have 5 here. The region array will dynamically resize if need be
 #define DEFAULT_STACK_REGION_SIZE 5
 
 #include <sys/types.h>
