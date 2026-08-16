@@ -77,6 +77,46 @@ variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map
 
 
 /**
+ * Perform the dynamic resize for the variable map if we determine that it's needed
+ */
+static inline void dynamically_resize_if_needed(variable_map_t* variable_map){
+	if(variable_map->current_index == variable_map->max_index){
+		//Always double it to be safe
+		variable_map->max_index *= 2;
+
+		//Reallocate to a larger buffer
+		variable_map->mappings = realloc(variable_map->mappings, sizeof(variable_mapping_t) * variable_map->max_index);
+	}
+
+}
+
+
+/**
+ * Create a new mapping for a temporary variable that goes from the source to the destination
+ *
+ * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
+ * that is on you
+ */
+void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, u_int32_t dest_temp_var_id){
+	//Perform the resize if need be
+	dynamically_resize_if_needed(variable_map);
+
+	//Grab a reference just to make this neater
+	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+
+	//This is a temp mapping
+	mapping->mapping_type = MAPPING_TYPE_TEMP;
+
+	//Store the source and dest
+	mapping->source.temporary_id = source_temp_var_id;
+	mapping->destination.temporary_id = dest_temp_var_id;
+
+	//Bump this up for the next go around
+	(variable_map->current_index)++;
+}
+
+
+/**
  * Deallocate a given variable map
  */
 void variable_map_dealloc(variable_map_t* map){

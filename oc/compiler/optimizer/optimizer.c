@@ -1394,9 +1394,21 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  */
 static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, variable_map_t* variable_map){
 	/**
-	 * If we're able to just find the mapping immeida
+	 * If we're able to just find the mapping then we'll clone our given variable and slap
+	 * a new ID onto it. If not then we'll have to make a new association for future runs
 	 */
 	variable_mapping_t* found_mapping = get_mapping_for_temporary_variable(variable_map, variable->temp_var_number);
+	if(found_mapping != NULL){
+		three_addr_var_t* clone = emit_var_copy(variable);
+		//Update the number to be the clone's
+		clone->temp_var_number = found_mapping->destination.temporary_id;
+		return clone;
+	
+	} else {
+		//Create a new temp ID for the new one
+		u_int32_t clone_temp_var_number = increment_and_get_temp_id();
+
+	}
 
 
 	printf("HERE\n\n\n\n\n\n\n");
