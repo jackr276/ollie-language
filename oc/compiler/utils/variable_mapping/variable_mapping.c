@@ -111,6 +111,9 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.temporary_id = dest_temp_var_id;
 
+	//The mapping ID is the index where it exists
+	mapping->mapping_id = variable_map->current_index;
+
 	//Bump this up for the next go around
 	(variable_map->current_index)++;
 }
@@ -135,6 +138,9 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	//Store the source and dest
 	mapping->source.symtab_variable = source_variable;
 	mapping->destination.symtab_variable = destination_variable;
+
+	//The mapping ID is the index where it exists
+	mapping->mapping_id = variable_map->current_index;
 
 	//Bump this up for the next go around
 	(variable_map->current_index)++;

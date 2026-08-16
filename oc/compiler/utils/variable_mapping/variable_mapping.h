@@ -44,6 +44,11 @@ struct variable_mapping_t {
 
 	//Are we mapping temp-to-temp or symtab-to-symtab
 	variable_mapping_type_t mapping_type;
+
+	/**
+	 * Unique, atomically increasing mapping ID
+	 */
+	int32_t mapping_id;
 };
 
 
