@@ -7,6 +7,7 @@
 #ifndef CFG_H
 #define CFG_H
 #include <sys/types.h>
+#include "../utils/basic_block.h"
 #include "../ast/ast.h"
 #include "../parser/parser.h"
 #include "../utils/stack/heapstack.h"

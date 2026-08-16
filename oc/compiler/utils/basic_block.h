@@ -134,6 +134,4 @@ struct basic_block_t{
 	u_int8_t already_has_phi_func;
 };
 
-
-
 #endif /* BASIC_BLOCK_H */
