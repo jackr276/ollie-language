@@ -13,6 +13,8 @@
 
 //Individual variable mappings
 typedef struct variable_mapping_t variable_mapping_t;
+//The overall map itself
+typedef struct variable_map_t variable_map_t;
 
 /**
  * What kind of variables are we mapping? We can
@@ -44,5 +46,28 @@ struct variable_mapping_t {
 	variable_mapping_type_t mapping_type;
 };
 
+
+/**
+ * The overall map holds a dynamically resizing
+ * array of mappings that are stored as a contiguous
+ * memory chunk(not pointers)
+ */
+struct variable_map_t {
+	variable_mapping_t* mappings;
+	int32_t current_index;
+	int32_t max_index;
+};
+
+
+/**
+ * Allocate a variable map with the default size
+ */
+variable_map_t variable_map_alloc();
+
+
+/**
+ * Deallocate a given variable map
+ */
+void variable_map_dealloc(variable_map_t* map);
 
 #endif /* VARIABLE_MAPPING_H */

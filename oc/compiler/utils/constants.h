@@ -76,6 +76,9 @@
 //The default is 20 -- this can always be reupped
 #define DYNAMIC_ARRAY_DEFAULT_SIZE 20 
 
+//The default variable mapping size
+#define VARIABLE_MAPPING_DEFAULT_SIZE 20
+
 //Default length of the string is 60 characters
 #define DEFAULT_DYNAMIC_STRING_LENGTH 60
 

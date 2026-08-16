@@ -7,6 +7,7 @@
 #include "optimizer.h"
 #include "../utils/constants.h"
 #include "../graph_analyzer/graph_analyzer.h"
+#include "../utils/variable_mapping/variable_mapping.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
