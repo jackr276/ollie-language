@@ -1811,10 +1811,10 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 					return FALSE;
 			}
 
-		//We can only dereference arrays and pointers. Note that
-		//it is *not* possible to dereference a reference - this is done automatically
+		/**
+		 * We can only dereference arrays and pointers
+		 */
 		case STAR:
-			//Only 2 kinds of valid types here
 			switch(type->type_class){
 				case TYPE_CLASS_ARRAY:
 				case TYPE_CLASS_POINTER:
@@ -1823,30 +1823,40 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 					return FALSE;
 			}
 
-		//We can take the address of anything besides a void type
+		/**
+		 * Most types can have their address taken. The exceptions would be
+		 * error types
+		 */
 		case SINGLE_AND:
-			//This is our only invalid case
+			if(type->type_class == TYPE_CLASS_ERROR){
+				return FALSE;
+			}
+
+			//Can't take the address of void
 			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
 				return FALSE;
 			}
 
-			//Otherwise it's fine
 			return TRUE;
 
-		//We can only negate basic types that are not void
+		/**
+		 * We can negate basic types and enumerations
+		 */
 		case MINUS:
-			//This is an instant failure
-			if(type->type_class != TYPE_CLASS_BASIC){
-				return FALSE;
-			}
+			switch(type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
 
-			//This is the only other way we'd fail
-			if(type->basic_type_token == VOID){
-				return FALSE;
-			}
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
+						return FALSE;
+					}
 
-			//Otherwise we get true
-			return TRUE;
+					return TRUE;
+
+				default:
+					return FALSE;
+			}
 
 		//We can negate pointers, enums and basic types that are not void
 		case EXCLAMATION:
@@ -1887,8 +1897,9 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 			//Otherwise we are in the clear
 			return TRUE;
 
-		//We really shouldn't get here
+		//Hard error if we ever get to the invalid unary token case
 		default:
+			fprintf(stderr, "Fatal internal compiler error: Unrecognized unary expression token of %s", operator_token_to_string(unary_op));
 			return FALSE;
 	}
 }
