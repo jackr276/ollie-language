@@ -79,6 +79,8 @@ variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map
  */
 void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, u_int32_t dest_temp_var_id);
 
+//TODO FOR SYMTAB VARS
+
 /**
  * Allocate a variable map with the default size
  */

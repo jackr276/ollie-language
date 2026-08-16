@@ -1399,50 +1399,25 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, varia
 	 */
 	variable_mapping_t* found_mapping = get_mapping_for_temporary_variable(variable_map, variable->temp_var_number);
 	if(found_mapping != NULL){
-		three_addr_var_t* clone = emit_var_copy(variable);
+		//Emit a complete copy
+		three_addr_var_t* replacement_var = emit_var_copy(variable);
+
 		//Update the number to be the clone's
-		clone->temp_var_number = found_mapping->destination.temporary_id;
-		return clone;
+		replacement_var->temp_var_number = found_mapping->destination.temporary_id;
+		return replacement_var;
 	
 	} else {
 		//Create a new temp ID for the new one
 		u_int32_t clone_temp_var_number = increment_and_get_temp_id();
 
+		//Now we need to create a mapping for future runs
+		create_mapping_for_temporary_variable(variable_map, variable->temp_var_number, clone_temp_var_number);
+
+		//Create an exact copy, update the number, and then get out
+		three_addr_var_t* replacement_var = emit_var_copy(variable);
+		replacement_var->temp_var_number = clone_temp_var_number;
+		return replacement_var;
 	}
-
-
-	printf("HERE\n\n\n\n\n\n\n");
-	//Run through the entire array
-	for(u_int32_t i = 0; i < *mapping_array_current_index; i++){
-		//If this happens, then we've found what we're supposed to map our temp var to
-		if(variable->temp_var_number == mapping[i].source_temp_var_id){
-			//Return a duplicate of this replacement
-			return emit_var_copy(mapping[i].replacement_var);
-		}
-	}
-
-	//Dynamically reup this if we need to
-	if(*mapping_array_current_index == *mapping_max_size){
-		*mapping_max_size *= 2;
-		mapping = realloc(mapping, sizeof(temporary_variable_mapping_t) * *mapping_max_size);
-	}
-
-	//If we make it down here, then we need to do an entirely new mapping
-	mapping[*mapping_array_current_index].source_temp_var_id = variable->temp_var_number;
-
-	//We will still emit a duplicate here
-	three_addr_var_t* replacement_var = emit_var_copy(variable);
-	//Update the ID to be something new
-	replacement_var->temp_var_number = increment_and_get_temp_id();
-
-	//This is the replacement var
-	mapping[*mapping_array_current_index].replacement_var = replacement_var;
-
-	//Bump this up
-	(*mapping_array_current_index)++;
-
-	//And give back the replacement
-	return replacement_var;
 }
 
 
@@ -1609,8 +1584,8 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 		cursor = cursor->next_statement;
 	}
 
-	//Release this when done
-	free(mapping);
+	//Destroy the variable map now that we're done with it
+	variable_map_dealloc(&variable_map);
 
 	//Update the successors for the current block to include the new branch
 	add_successor(target, if_block);
