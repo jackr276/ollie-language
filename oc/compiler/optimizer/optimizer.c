@@ -1386,8 +1386,9 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
 
 
 /**
- *
- * TODO DOC
+ * Clone a temporary variable by using the variable mapping utility. If a mapping already exists
+ * we will emit a clone of the old variable with the new temporary ID slapped on it. Otherwise, we
+ * will create a new mapping for this variable and future runs with it
  *
  * NOTE: we assume that we will only ever be receiving temporary variables for this. If the caller
  * passes in a non-temporary variable this will not work
