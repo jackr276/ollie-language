@@ -13145,6 +13145,9 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
  * may be inlined 100s of times throughout the process
  */
 static void inline_function_call(instruction_t* call_to_inline){
+	//Get the block where this function call is currently
+	basic_block_t* block_inlined_in = call_to_inline->block_contained_in;
+	
 	/**
 	 * We'll need a fresh block that comes after our inlining takes place
 	 */
@@ -13249,8 +13252,12 @@ static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* 
 	/**
 	 * We'll need a one dimensional array to hold the inlining order. We'll also
 	 * need the inline call graph to get the order
+	 *
+	 * We'll also maintain a reusable list of calls to inline in each function. Since
+	 * it's reusable we'll need to allocate it now
 	 */
 	dynamic_integer_array_t inlining_order = dynamic_integer_array_alloc();
+	dynamic_array_t calls_to_inline = dynamic_array_alloc();
 
 	/**
 	 * First we'll go an get the actual order in which we need to inline things
@@ -13273,11 +13280,12 @@ static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* 
 		}
 
 		//Otherwise let the helper do all the inlining
-		inline_eligible_calls_in_function(current_function);
+		inline_eligible_calls_in_function(current_function, &calls_to_inline);
 	}
 
-	//Don't need this anymore
+	//Don't need these anymore
 	dynamic_integer_array_dealloc(&inlining_order);
+	dynamic_array_dealloc(&calls_to_inline);
 }
 
 
