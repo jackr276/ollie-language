@@ -8,4 +8,41 @@
 #ifndef VARIABLE_MAPPING_H
 #define VARIABLE_MAPPING_H
 
+#include <sys/types.h>
+#include "../../symtab/symtab.h"
+
+//Individual variable mappings
+typedef struct variable_mapping_t variable_mapping_t;
+
+/**
+ * What kind of variables are we mapping? We can
+ * have temp-to-temp or symtab-to-symtab
+ */
+typedef enum {
+	MAPPING_TYPE_TEMP,
+	MAPPING_TYPE_SYMTAB,
+} variable_mapping_type_t;
+
+
+/**
+ * The variable mapping itself consists of unions of either
+ * temp var ID's or symtab variables. We will decide which one 
+ * to draw from based entirely on the mapping type
+ */
+struct variable_mapping_t {
+	union {
+		u_int32_t temporary_id;
+		symtab_variable_record_t* symtab_variable;
+	} source;
+
+	union {
+		u_int32_t temporary_id;
+		symtab_variable_record_t* symtab_variable;
+	} destination;
+
+	//Are we mapping temp-to-temp or symtab-to-symtab
+	variable_mapping_type_t mapping_type;
+};
+
+
 #endif /* VARIABLE_MAPPING_H */
