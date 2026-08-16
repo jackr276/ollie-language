@@ -25,6 +25,9 @@ static cfg_t* cfg_reference;
  * property dictates that temp variables are single use only, 
  * so when we are copying things, we'll need to account for
  * that with this mapping
+ *
+ * TODO THIS IS INCORRECT AND WILL NOT WORK BECAUSE OF THE REPLACEMENT
+ * VARIABLE TYPE
  */
 typedef struct temporary_variable_mapping_t{
 	//The temp var id of the source variable
@@ -1403,6 +1406,7 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * mapping of a temp var number to a new cloned temp var
  */
 static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, temporary_variable_mapping_t* mapping, u_int32_t* mapping_array_current_index, u_int32_t* mapping_max_size){
+	printf("HERE\n\n\n\n\n\n\n");
 	//Run through the entire array
 	for(u_int32_t i = 0; i < *mapping_array_current_index; i++){
 		//If this happens, then we've found what we're supposed to map our temp var to

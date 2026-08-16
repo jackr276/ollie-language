@@ -15,7 +15,6 @@
 #include "cfg.h"
 #include <assert.h>
 #include <limits.h>
-#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13189,7 +13188,6 @@ static void inline_function_call(instruction_t* call_to_inline){
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
-
 }
 
 
