@@ -1858,44 +1858,53 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 					return FALSE;
 			}
 
-		//We can negate pointers, enums and basic types that are not void
+		/**
+		 * We can take the logical not of basically anything. Arrays, structs
+		 * and unions are all addresses which are just 64 bit integers so they're valid
+		 */
 		case EXCLAMATION:
-			//Basic sanitation here, you can't negate these types
 			switch(type->type_class){
 				case TYPE_CLASS_ARRAY:
 				case TYPE_CLASS_STRUCT:
 				case TYPE_CLASS_POINTER:
 				case TYPE_CLASS_UNION:
-					return FALSE;
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID){
+						return FALSE;
+					}
+
+					return TRUE;
+
 				default:
-					break;
+					return FALSE;
 			}
 
-			//Our other invalid case
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
-			}
-
-			//Otherwise if we make it here, we know it's fine
-			return TRUE;
-
-		//Bitwise not expressions are only valid for integers
+		/**
+		 * Bitwise not is only valid for straight integers
+		 */
 		case B_NOT:
-			//If it's not basic, we're out of here
-			if(type->type_class != TYPE_CLASS_BASIC){
-				return FALSE;
-			}
+			switch(type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
 
-			//Now that we know what it is, we'll see if it's a float or void
-			ollie_token_t type_tok = type->basic_type_token;
-			
-			//If it's float or void, we're done
-			if(type_tok == VOID){
-				return FALSE;
-			}
+				case TYPE_CLASS_BASIC:
+					switch(type->basic_type_token){
+						case F32:
+						case F64:
+						case F128:
+						case BOOL:
+						case VOID:
+							return FALSE;
+						default:
+							return TRUE;
+					}
 
-			//Otherwise we are in the clear
-			return TRUE;
+				default:
+					return FALSE;
+			}
 
 		//Hard error if we ever get to the invalid unary token case
 		default:
