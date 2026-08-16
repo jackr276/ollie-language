@@ -1766,52 +1766,49 @@ generic_type_t* determine_compatability_and_coerce(void* symtab, generic_type_t*
 
 /**
  * Is the given unary operation valid for the type that was specificed?
- *
- * TODO
- * THIS IS VERY SLOPPY - can be rewritten to have much tighter logic which would
- * be an improvement
- * TODO
  */
 u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t unary_op){
 	//Just to be safe, we'll dealias is
 	type = dealias_type(type);
 
-	//Function signatures are never valid for any unary operation
-	if(type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
-		return FALSE;
-	}
-
-	//Some special rules based on the type class
+	/**
+	 * Some types are just always invalid for a unary
+	 * expression. We'll gate those out now
+	 */
 	switch (type->type_class) {
-		//Always invalid
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ELABORATIVE:
+		case TYPE_CLASS_ERROR:
 			return FALSE;
-		//By default nothing happens
 		default:
 			break;
 	}
 
-	//Go based on what token we're given
+	/**
+	 * Now we'll go based on the unary operator and check
+	 * validity for each of the several kinds that we have
+	 */
 	switch (unary_op) {
-		//This will pull double duty for pre/post increment operators
+		/**
+		 * Pre-increment is only valid for basic types
+		 * and pointers. It is not valid for booleans
+		 * or void types
+		 */
 		case PLUSPLUS:
 		case MINUSMINUS:
 			switch(type->type_class){
-				case TYPE_CLASS_ARRAY:
-				case TYPE_CLASS_STRUCT:
-				case TYPE_CLASS_ALIAS:
-				case TYPE_CLASS_FUNCTION_SIGNATURE:
-				case TYPE_CLASS_UNION:
-					return FALSE;
 				case TYPE_CLASS_BASIC:
-					if(type->basic_type_token == VOID){
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
 						return FALSE;
 					}
-					
+
+					return TRUE;
+
+				case TYPE_CLASS_POINTER:
 					return TRUE;
 
 				default:
-					return TRUE;
+					return FALSE;
 			}
 
 		//We can only dereference arrays and pointers. Note that
