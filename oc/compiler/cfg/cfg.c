@@ -13138,15 +13138,58 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 
 
 /**
+ * TODO HOW ARE WE GOING TO HANDLE PRED/SUCC REFS???
+ */
+static inline basic_block_t* clone_block(basic_block_t* block_to_clone){
+	//Create a new block and *do not* estimate
+	basic_block_t* new_block = basic_block_alloc_no_estimate();
+
+	/**
+	 * We are just going to take the estimated frequency from here - we may update this
+	 * in the future
+	 */
+	new_block->estimated_execution_frequency = block_to_clone->estimated_execution_frequency;
+
+	/**
+	 * Copy over the block type only if it's not a function exit or entry. We don't want to have the function
+	 * exit or entry tags coming over because some algorithms rely on those and if they're stamped on here, that
+	 * would mess us up down the line
+	 */
+	if(block_to_clone->block_type != BLOCK_TYPE_FUNC_ENTRY && block_to_clone->block_type != BLOCK_TYPE_FUNC_EXIT){
+		new_block->block_type = block_to_clone->block_type;
+	}
+
+
+
+	//Give back the reference to the new block
+	return new_block;
+}
+
+
+
+/**
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
  */
 static dynamic_array_t clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
 	//Fresh array for our new function blocks
+	//TODO DO WE NEED THIS???
 	dynamic_array_t new_function_blocks = dynamic_array_alloc();
 
+	/**
+	 * Run through and clone every single block individually. The new blocks will automatically
+	 * be added to the function that we're inlining into's blocks because we've set the global
+	 * references properly
+	 */
+	for(int32_t i = 0; i < function_to_clone->function_blocks.current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
 
+
+
+	}
+
+	//TODO DO WE NEED THIS??
 	return new_function_blocks;
 }
 
