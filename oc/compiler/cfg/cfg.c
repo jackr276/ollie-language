@@ -122,6 +122,18 @@ typedef struct{
 } cfg_result_package_t;
 
 
+/**
+ * For function inlining - when we clone the blocks, we're
+ * going to have an idea of which block maps to what when
+ * we update the predecessor and successor lists as well
+ * as any branch instructions
+ */
+typedef struct {
+	basic_block_t* original_block;
+	basic_block_t* copied_block;
+} block_mapping_t;
+
+
 //Enum for branch conditional types
 typedef enum {
 	BRANCH_CONDITIONAL_UNKNOWN,
@@ -13171,6 +13183,9 @@ static inline basic_block_t* clone_block(basic_block_t* block_to_clone){
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
+ *
+ * TODO WE SHOULD CREATE ALL THE NEW BLOCKS FIRST AND THEN FILL IN THE INSTRUCTIONS. This will allow us to
+ * build up the block mapping before we do stuff like branching, jumping, pred/succ management, etc
  */
 static dynamic_array_t clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
 	//Fresh array for our new function blocks
@@ -13178,9 +13193,13 @@ static dynamic_array_t clone_entire_function_for_inlining(symtab_function_record
 	dynamic_array_t new_function_blocks = dynamic_array_alloc();
 
 	/**
-	 * Run through and clone every single block individually. The new blocks will automatically
+	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
 	 * be added to the function that we're inlining into's blocks because we've set the global
 	 * references properly
+	 *
+	 * We need to create all of the blocks first before we even try to deal with the instructions
+	 * in them because a lot of instructions(branch, jmp) and successor/predecessor management rely
+	 * on us knowing what the actual new block IDs are going to be
 	 */
 	for(int32_t i = 0; i < function_to_clone->function_blocks.current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
@@ -13228,17 +13247,6 @@ static void inline_function_call(instruction_t* call_to_inline){
 	basic_block_t* inlined_function_exit;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
 	dynamic_array_t cloned_function_blocks = clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit);
-
-	/**
-	 * TODO
-	 *
-	 * Essentially every inlined call site needs to be 100% distinct both in memory
-	 * and ID wise. Nothing can share - not even temp vars - in memory or in actual
-	 * practice. We're going to have to find a unique way to clone all of the symtab 
-	 * variables as well via some kind of mangling and a unique ID(remember that the
-	 * same function can be inlined multiple times in the same function so it has
-	 * to be absolutely unique)
-	 */
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
