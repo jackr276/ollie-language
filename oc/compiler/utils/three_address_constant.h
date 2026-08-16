@@ -5,7 +5,11 @@
 #define THREE_ADDR_CONSTANT_H
 
 #include "../type_system/type_system.h"
+#include "three_address_variable.h"
 #include "stack_management_structs.h"
+
+//A struct that holds our three address constants
+typedef struct three_addr_const_t three_addr_const_t;
 
 /**
  * A three address constant always holds the value of the constant

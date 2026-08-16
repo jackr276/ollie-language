@@ -5,19 +5,33 @@
 #define OLLIE_INSTRUCTION_H
 
 #include <sys/types.h>
+#include "token.h"
 #include "dynamic_array/dynamic_array.h"
 #include "dynamic_string/dynamic_string.h"
 #include "ollie_intermediary_representation.h"
 #include "x86_assembly_instruction.h"
 #include "x86_genpurpose_registers.h"
 #include "x86_sse_registers.h"
-
+#include "three_address_variable.h"
+#include "three_address_constant.h"
 
 /**
  * An overall structure for an instruction. Instructions start their life
  * as three address code statements, and eventually become assembly instructions
  */
 typedef struct instruction_t instruction_t;
+
+/**
+ * Are we forcing something to be signed or unsigned
+ * regardless of the assignee type? This is mainly used
+ * for shift operations but I can see it potentially
+ * being useful elsewhere so we'll build this out
+ */
+typedef enum {
+	FORCED_SIGNEDNESS_DONT_CARE=0, //Default case
+	FORCED_UNSIGNED,
+	FORCED_SIGNED
+} forced_signedness_type_t;
 
 /**
  * A generic struct that encapsulates most of our instructions

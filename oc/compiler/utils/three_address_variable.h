@@ -3,6 +3,86 @@
 #ifndef THREE_ADDR_VARIABLE_H
 #define THREE_ADDR_VARIABLE_H
 
+#include <sys/types.h>
+#include "../type_system/type_system.h"
+#include "../local_constant/local_constant.h"
+#include "x86_genpurpose_registers.h"
+#include "x86_sse_registers.h"
+#include "../symtab/symtab.h"
+
+//A struct that holds our three address variables
+typedef struct three_addr_var_t three_addr_var_t;
+//A struct that stores all of our live ranges
+typedef struct live_range_t live_range_t;
+
+
+/**
+ * What type of variable is this? Variables
+ * can be temporary, stack variables, or normal
+ * vars
+ */
+typedef enum {
+	VARIABLE_TYPE_TEMP,
+	VARIABLE_TYPE_NON_TEMP,
+	VARIABLE_TYPE_MEMORY_ADDRESS,
+	//Specialized memory address for a stack passed parameter
+	VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS,
+	VARIABLE_TYPE_LOCAL_CONSTANT,
+	VARIABLE_TYPE_FUNCTION_ADDRESS, //For rip-relative function pointer loads
+	//A return-by-copy address variable designed for functions where we return structs/unions
+	VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS,
+} variable_type_t;
+
+/**
+ * What kind of live range is this? Live ranges can either
+ * be part of the normal general purpose class of variables
+ * or the SSE(floating point usually) class of variables
+ */
+typedef enum {
+	LIVE_RANGE_CLASS_GEN_PURPOSE,
+	LIVE_RANGE_CLASS_SSE
+} live_range_class_t;
+
+
+/**
+ * For our live ranges, we'll really only need the name and
+ * the variables
+ */
+struct live_range_t {
+	//Hold all the variables that it has
+	dynamic_array_t variables;
+	//And we'll hold an adjacency list for interference
+	dynamic_array_t neighbors;
+	//Hold the stack region as well
+	stack_region_t* stack_region;
+	//What function does this come from?
+	symtab_function_record_t* function_defined_in;
+	//Store the id of the live range
+	u_int32_t live_range_id;
+	//Store the heuristic spill cost
+	u_int32_t spill_cost;
+	//Store the assignment count - used for stack pointer fixing
+	u_int32_t assignment_count;
+	//Store the use count as well
+	u_int32_t use_count;
+	//The degree of this live range
+	u_int16_t degree;
+	//The interference graph index of it
+	u_int16_t interference_graph_index;
+	//What is the function parameter order here?
+	u_int16_t class_relative_function_parameter_order;
+	//Was this live range spilled?
+	u_int8_t was_spilled;
+	//What class of live range is this?
+	live_range_class_t live_range_class;
+	//What register is this live range in?
+	union {
+		general_purpose_register_t gen_purpose;
+		sse_register_t sse_reg;
+	} reg;
+};
+
+
 /**
  * A three address var may be a temp variable or it may be
  * linked to a non-temp variable. It keeps a generation counter

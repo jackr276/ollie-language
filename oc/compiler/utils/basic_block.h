@@ -11,8 +11,7 @@
 
 #include "./dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
-#include "../symtab/symtab.h"
-#include "../instruction/instruction.h"
+#include "ollie_instruction.h"
 
 //Basic blocks in our CFG
 typedef struct basic_block_t basic_block_t;
