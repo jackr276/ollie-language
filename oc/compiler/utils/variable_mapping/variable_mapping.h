@@ -66,6 +66,12 @@ struct variable_map_t {
 variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id);
 
 /**
+ * Crawl the variable map looking specifically for a symtab variable mapping
+ * that has the given source symtab variable. We return NULL if none is found
+ */
+variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable);
+
+/**
  * Allocate a variable map with the default size
  */
 variable_map_t variable_map_alloc();

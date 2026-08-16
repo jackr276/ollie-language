@@ -1388,8 +1388,17 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
 /**
  *
  * TODO DOC
+ *
+ * NOTE: we assume that we will only ever be receiving temporary variables for this. If the caller
+ * passes in a non-temporary variable this will not work
  */
 static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, variable_map_t* variable_map){
+	/**
+	 * If we're able to just find the mapping immeida
+	 */
+	variable_mapping_t* found_mapping = get_mapping_for_temporary_variable(variable_map, variable->temp_var_number);
+
+
 	printf("HERE\n\n\n\n\n\n\n");
 	//Run through the entire array
 	for(u_int32_t i = 0; i < *mapping_array_current_index; i++){

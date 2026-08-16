@@ -29,7 +29,7 @@ variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_
 	for(int32_t i = 0; i < variable_map->current_index; i++){
 		/**
 		 * We only care to look for temp var mappings here - if it's not
-		 * that then leave
+		 * that then skip
 		 */
 		if(variable_map->mappings[i].mapping_type != MAPPING_TYPE_TEMP){
 			continue;
@@ -45,6 +45,34 @@ variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_
 
 	//If we made it here then we found nothing so bail out
 	return NULL;
+}
+
+
+/**
+ * Crawl the variable map looking specifically for a symtab variable mapping
+ * that has the given source symtab variable. We return NULL if none is found
+ */
+variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
+	for(int32_t i = 0; i < variable_map->current_index; i++){
+		/**
+		 * We only care to look for symtab mappings here - if it's not
+		 * that then skip
+		 */
+		if(variable_map->mappings[i].mapping_type != MAPPING_TYPE_SYMTAB){
+			continue;
+		}
+
+		/**
+		 * We have a hit - return the address of this mapping to avoid copying
+		 */
+		if(variable_map->mappings[i].source.symtab_variable == source_variable){
+			return &(variable_map->mappings[i]);
+		}
+	}
+
+	//If we made it here then we found nothing so bail out
+	return NULL;
+
 }
 
 
