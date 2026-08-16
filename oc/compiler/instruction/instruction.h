@@ -27,18 +27,6 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-
-/**
- * This enumeration will be used when we are determining what kind
- * of ollie switch we have inside of the parser exclusively
- */
-typedef enum {
-	OLLIE_SWITCH_TYPE_UNDECIDED,
-	OLLIE_SWITCH_TYPE_OLLIE_STYLE,
-	OLLIE_SWITCH_TYPE_C_STYLE
-} ollie_switch_type_t;
-
-
 /**
  * For variable printing, where we're printing
  * matters. The user must specify if it's

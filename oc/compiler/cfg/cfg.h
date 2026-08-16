@@ -17,10 +17,6 @@
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
-//A memory tracking structure for freeing
-typedef struct cfg_node_holder_t cfg_node_holder_t;
-//A memory tracking structure for freeing
-typedef struct cfg_statement_holder_t cfg_statement_holder_t;
 
 //Are we emitting the dominance frontier or not?
 typedef enum{
