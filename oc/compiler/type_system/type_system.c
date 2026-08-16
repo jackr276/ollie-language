@@ -1924,15 +1924,17 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 	//Deconstructed basic type(since we'll be using it so much)
 	ollie_token_t basic_type;
 
-	//Let's first check if we have any in a
-	//series of types that never make sense for any unary operation
+	/**
+	 * Let's first check if we have any in a series of types that
+	 * never make sense for any unary operation
+	 */
 	switch (type->type_class) {
 		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ELABORATIVE:
+		case TYPE_CLASS_ERROR:
 			return FALSE;
-
-		//Otherwise we'll just bail out of here
 		default:
 			break;
 	}
@@ -2125,9 +2127,9 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 			}
 
 		default:
-			return FALSE;
+			fprintf(stderr, "Fatal internal compiler error: invalid binary operator %s found", operator_token_to_string(binary_op));
+			exit(1);
 	}
-
 }
 
 
