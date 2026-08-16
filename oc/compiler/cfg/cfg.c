@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <threads.h>
 #include "../utils/queue/heap_queue.h"
 #include "../static_analyzer/static_analyzer.h"
 #include "../jump_table/jump_table.h"
@@ -13138,6 +13139,21 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 
 
 /**
+ * Take a function that we want to inline and perform a 100% clone of it. This means that literally
+ * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
+ * of it
+ */
+static dynamic_array_t clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
+	//Fresh array for our new function blocks
+	dynamic_array_t new_function_blocks = dynamic_array_alloc();
+
+
+	return new_function_blocks;
+}
+
+
+
+/**
  * Inline a function call inside of the given block. To achieve this, we have
  * to split the block where inlined call happens into two pieces and shove the
  * inlined function right in the middle of it. We are going to have to make sure
@@ -13162,14 +13178,14 @@ static void inline_function_call(instruction_t* call_to_inline){
 	split_block_around_instruction(block_inlined_in, after_inline_block, call_to_inline);
 
 	/**
-	 * TODO
-	 *
-	 * We need to create a way to deep clone everything in a function. This means
-	 * literally every symtab variable has to be cloned completely, as well
-	 * as the stack data area(later), the temp variables all need to be fresh, and every
-	 * symtab variable is going to need to be mangled(messed up in some way to keep the
-	 * association)
+	 * Now that we have our split we need to get a complete, 100% unique clone of the
+	 * function that we are inlining. While we're at it, we'll save the function entry
+	 * and function exit blocks from the copy 
 	 */
+	basic_block_t* inlined_function_entry;
+	basic_block_t* inlined_function_exit;
+	symtab_function_record_t* inlined_function = call_to_inline->called_function;
+	dynamic_array_t cloned_function_blocks = clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit);
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
