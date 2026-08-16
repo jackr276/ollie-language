@@ -13144,11 +13144,7 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
  * that the inlined function is a 100% new copy of the original one, as one function
  * may be inlined 100s of times throughout the process
  */
-static void inline_function_call(symtab_function_record_t* function_contained_in, dynamic_array_t* function_blocks, basic_block_t* block_inlined_in, instruction_t* call_to_inline){
-	//VERY IMPORTANT - set the current function & blocks to be this function's
-	current_function_blocks = function_blocks;
-	current_function = function_contained_in;
-
+static void inline_function_call(instruction_t* call_to_inline){
 	/**
 	 * We'll need a fresh block that comes after our inlining takes place
 	 */
@@ -13175,9 +13171,6 @@ static void inline_function_call(symtab_function_record_t* function_contained_in
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 
-	//Now that we're done undo the function & block pointers
-	current_function_blocks = NULL;
-	current_function = NULL;
 }
 
 
@@ -13186,36 +13179,52 @@ static void inline_function_call(symtab_function_record_t* function_contained_in
  * of the three address code and a lot of manipulation of the overall structure of
  * the function itself
  */
-static inline void inline_eligible_calls_in_function(symtab_function_record_t* function){
-	//Grab out all of the function blocks for this given function
-	dynamic_array_t* function_blocks = &(function->function_blocks);
+static inline void inline_eligible_calls_in_function(symtab_function_record_t* function, dynamic_array_t* calls_to_inline){
+	//VERY IMPORTANT - set the current function & blocks to be this function's
+	current_function_blocks = &(function->function_blocks);
+	current_function = function;
 
 	/**
-	 * Crawl over every single function block and determine if they
-	 * contain a function call that needs to be inlined. We maintain
-	 * a special "is inline call" to enable this. Note that only direct
-	 * calls can be inlined
-	 *
-	 *
-	 * TODO THIS IS WRONG BECAUSE THE FUNCTION BLOCKS WILL CHANGE AS WE INLINE
-	 *
-	 * We need to make a list of what to inline in the function and then iterate
-	 * that list. This strategy will *NOT* work
+	 * The calls_to_inline is reusable for memory efficiency - we need to wipe
+	 * it now to remove whatever was left from prior calls
 	 */
-	for(int32_t i = 0; i < function_blocks->current_index; i++){
+	clear_dynamic_array(calls_to_inline);
+
+	/**
+	 * Crawl over every single function block and determine what calls
+	 * need to be inlined. We maintain a special instruction flag that will
+	 * help us do this
+	 */
+	for(int32_t i = 0; i < current_function_blocks->current_index; i++){
 		//Crawl through this whole block to see if we have anything to inline
-		basic_block_t* candidate_block = dynamic_array_get_at(function_blocks, i);
+		basic_block_t* candidate_block = dynamic_array_get_at(current_function_blocks, i);
 
 		instruction_t* cursor = candidate_block->leader_statement;
 		while(cursor != NULL){
-			//Only consider direct calls for this
+			/**
+			 * If we find a call that should be inlined we'll add it onto
+			 * our list
+			 */
 			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
-				inline_function_call(function, function_blocks, candidate_block, cursor);
+				dynamic_array_add(calls_to_inline, cursor);
 			}
 
 			cursor = cursor->next_statement;
 		}
 	}
+
+	/**
+	 * Now that we've accumulated all of the calls that we need to inline, we
+	 * can go through and actually do the inlining
+	 */
+	for(int32_t i = 0; i < calls_to_inline->current_index; i++){
+		instruction_t* call_to_inline = dynamic_array_get_at(calls_to_inline, i);
+		inline_function_call(call_to_inline);
+	}
+
+	//Now that we're done undo the function & block pointers
+	current_function_blocks = NULL;
+	current_function = NULL;
 }
 
 
