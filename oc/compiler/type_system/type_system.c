@@ -1771,122 +1771,144 @@ u_int8_t is_unary_operation_valid_for_type(generic_type_t* type, ollie_token_t u
 	//Just to be safe, we'll dealias is
 	type = dealias_type(type);
 
-	//Function signatures are never valid for any unary operation
-	if(type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
-		return FALSE;
-	}
-
-	//Some special rules based on the type class
+	/**
+	 * Some types are just always invalid for a unary
+	 * expression. We'll gate those out now
+	 */
 	switch (type->type_class) {
-		//Always invalid
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ELABORATIVE:
+		case TYPE_CLASS_ERROR:
 			return FALSE;
-		//By default nothing happens
 		default:
 			break;
 	}
 
-	//Go based on what token we're given
+	/**
+	 * Now we'll go based on the unary operator and check
+	 * validity for each of the several kinds that we have
+	 */
 	switch (unary_op) {
-		//This will pull double duty for pre/post increment operators
+		/**
+		 * Pre-increment is only valid for basic types
+		 * and pointers. It is not valid for booleans
+		 * or void types
+		 */
 		case PLUSPLUS:
 		case MINUSMINUS:
 			switch(type->type_class){
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
+						return FALSE;
+					}
+
+					return TRUE;
+
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+
+				default:
+					return FALSE;
+			}
+
+		/**
+		 * We can only dereference arrays and pointers
+		 */
+		case STAR:
+			switch(type->type_class){
+				case TYPE_CLASS_ARRAY:
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+				default:
+					return FALSE;
+			}
+
+		/**
+		 * Most types can have their address taken. The exceptions would be
+		 * error types
+		 */
+		case SINGLE_AND:
+			if(type->type_class == TYPE_CLASS_ERROR){
+				return FALSE;
+			}
+
+			//Can't take the address of void
+			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
+				return FALSE;
+			}
+
+			return TRUE;
+
+		/**
+		 * We can negate basic types and enumerations
+		 */
+		case MINUS:
+			switch(type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
+						return FALSE;
+					}
+
+					return TRUE;
+
+				default:
+					return FALSE;
+			}
+
+		/**
+		 * We can take the logical not of basically anything. Arrays, structs
+		 * and unions are all addresses which are just 64 bit integers so they're valid
+		 */
+		case EXCLAMATION:
+			switch(type->type_class){
 				case TYPE_CLASS_ARRAY:
 				case TYPE_CLASS_STRUCT:
-				case TYPE_CLASS_ALIAS:
-				case TYPE_CLASS_FUNCTION_SIGNATURE:
+				case TYPE_CLASS_POINTER:
 				case TYPE_CLASS_UNION:
-					return FALSE;
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+
 				case TYPE_CLASS_BASIC:
 					if(type->basic_type_token == VOID){
 						return FALSE;
 					}
-					
+
 					return TRUE;
 
-				default:
-					return TRUE;
-			}
-
-		//We can only dereference arrays and pointers. Note that
-		//it is *not* possible to dereference a reference - this is done automatically
-		case STAR:
-			//Only 2 kinds of valid types here
-			switch(type->type_class){
-				case TYPE_CLASS_ARRAY:
-				case TYPE_CLASS_POINTER:
-					return TRUE;
 				default:
 					return FALSE;
 			}
 
-		//We can take the address of anything besides a void type
-		case SINGLE_AND:
-			//This is our only invalid case
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
-			}
-
-			//Otherwise it's fine
-			return TRUE;
-
-		//We can only negate basic types that are not void
-		case MINUS:
-			//This is an instant failure
-			if(type->type_class != TYPE_CLASS_BASIC){
-				return FALSE;
-			}
-
-			//This is the only other way we'd fail
-			if(type->basic_type_token == VOID){
-				return FALSE;
-			}
-
-			//Otherwise we get true
-			return TRUE;
-
-		//We can negate pointers, enums and basic types that are not void
-		case EXCLAMATION:
-			//Basic sanitation here, you can't negate these types
-			switch(type->type_class){
-				case TYPE_CLASS_ARRAY:
-				case TYPE_CLASS_STRUCT:
-				case TYPE_CLASS_POINTER:
-				case TYPE_CLASS_UNION:
-					return FALSE;
-				default:
-					break;
-			}
-
-			//Our other invalid case
-			if(type->type_class == TYPE_CLASS_BASIC && type->basic_type_token == VOID){
-				return FALSE;
-			}
-
-			//Otherwise if we make it here, we know it's fine
-			return TRUE;
-
-		//Bitwise not expressions are only valid for integers
+		/**
+		 * Bitwise not is only valid for straight integers
+		 */
 		case B_NOT:
-			//If it's not basic, we're out of here
-			if(type->type_class != TYPE_CLASS_BASIC){
-				return FALSE;
+			switch(type->type_class){
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+
+				case TYPE_CLASS_BASIC:
+					switch(type->basic_type_token){
+						case F32:
+						case F64:
+						case F128:
+						case BOOL:
+						case VOID:
+							return FALSE;
+						default:
+							return TRUE;
+					}
+
+				default:
+					return FALSE;
 			}
 
-			//Now that we know what it is, we'll see if it's a float or void
-			ollie_token_t type_tok = type->basic_type_token;
-			
-			//If it's float or void, we're done
-			if(type_tok == VOID){
-				return FALSE;
-			}
-
-			//Otherwise we are in the clear
-			return TRUE;
-
-		//We really shouldn't get here
+		//Hard error if we ever get to the invalid unary token case
 		default:
+			fprintf(stderr, "Fatal internal compiler error: Unrecognized unary expression token of %s", operator_token_to_string(unary_op));
 			return FALSE;
 	}
 }
@@ -1902,15 +1924,17 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 	//Deconstructed basic type(since we'll be using it so much)
 	ollie_token_t basic_type;
 
-	//Let's first check if we have any in a
-	//series of types that never make sense for any unary operation
+	/**
+	 * Let's first check if we have any in a series of types that
+	 * never make sense for any unary operation
+	 */
 	switch (type->type_class) {
 		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
+		case TYPE_CLASS_ELABORATIVE:
+		case TYPE_CLASS_ERROR:
 			return FALSE;
-
-		//Otherwise we'll just bail out of here
 		default:
 			break;
 	}
@@ -1936,9 +1960,10 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 				return FALSE;
 			}
 
-			//Any kind of basic type except for floats works
+			//Any kind of basic type except for floats/bool/void works
 			switch(type->basic_type_token){
 				case VOID:
+				case BOOL:
 				case F32:
 				case F64:
 					return FALSE;
@@ -1950,6 +1975,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 
 		/**
 		 * The multiplication and division operators are valid for enums and all basic types with the exception of void
+		 * and booleans
 		 */
 		case STAR:
 		case F_SLASH:
@@ -1966,8 +1992,8 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 			//Deconstruct this
 			basic_type = type->basic_type_token;
 
-			//Let's now just make sure that it is not a void type
-			if(basic_type == VOID){
+			//Let's now just make sure that it is not a void or bool type
+			if(basic_type == VOID || basic_type == BOOL){
 				return FALSE;
 			}
 
@@ -2000,21 +2026,49 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 			break;
 
 		/**
-		 * Relational expressions are valid for floats, integers,
-		 * enumerated types and pointers. They are invalid for
-		 * void types
-		 *
-		 * Addition is also valid for floats, integers, enumerated
-		 * types and pointers
+		 * Non-equality comparison types are valid for all basic
+		 * types besides VOID and booleans, as well as enums and pointers
 		 */
 		case L_THAN:
 		case L_THAN_OR_EQ:
 		case G_THAN:
 		case G_THAN_OR_EQ:
+			switch(type->type_class){
+				/**
+				 * All basic types except for void and bool
+				 */
+				case TYPE_CLASS_BASIC:
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
+						return FALSE;
+					}
+
+					return TRUE;
+
+				//Enum types work
+				case TYPE_CLASS_ENUMERATED:
+					return TRUE;
+					
+				//Pointers work
+				case TYPE_CLASS_POINTER:
+					return TRUE;
+
+				//Anything else doesn't
+				default:
+					return FALSE;
+			}
+
+			break;
+
+		/**
+		 * Equality comparison types are valid for all basic
+		 * types besides void, as well as enums and pointers
+		 */
 		case NOT_EQUALS:
 		case DOUBLE_EQUALS:
 			switch(type->type_class){
-				//Basic types(minus void) work
+				/**
+				 * All basic types except for void
+				 */
 				case TYPE_CLASS_BASIC:
 					if(type->basic_type_token == VOID){
 						return FALSE;
@@ -2048,7 +2102,7 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 		case PLUS:
 			switch(type->type_class){
 				case TYPE_CLASS_BASIC:
-					if(type->basic_type_token == VOID){
+					if(type->basic_type_token == VOID || type->basic_type_token == BOOL){
 						return FALSE;
 					}
 
@@ -2073,9 +2127,9 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 			}
 
 		default:
-			return FALSE;
+			fprintf(stderr, "Fatal internal compiler error: invalid binary operator %s found", operator_token_to_string(binary_op));
+			exit(1);
 	}
-
 }
 
 

@@ -7,7 +7,7 @@
 pub fn logical_not_to_float_int(x:i32) -> f32 {
 	let y:f32 = 3.3;
 
-	ret y + !x;
+	ret y + <f32>!x;
 }
 
 
@@ -17,7 +17,7 @@ pub fn logical_not_to_float(f:i32) -> f32 {
 }
 
 
-//Dummy
 pub fn main() -> i32 {
-	ret 0;
+	OUNIT:[exit_status = 4]
+	ret @logical_not_to_float_int(0);
 }
