@@ -13186,6 +13186,17 @@ static void inline_function_call(instruction_t* call_to_inline){
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
 	dynamic_array_t cloned_function_blocks = clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit);
 
+	/**
+	 * TODO
+	 *
+	 * Essentially every inlined call site needs to be 100% distinct both in memory
+	 * and ID wise. Nothing can share - not even temp vars - in memory or in actual
+	 * practice. We're going to have to find a unique way to clone all of the symtab 
+	 * variables as well via some kind of mangling and a unique ID(remember that the
+	 * same function can be inlined multiple times in the same function so it has
+	 * to be absolutely unique)
+	 */
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
