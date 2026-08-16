@@ -79,7 +79,13 @@ variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map
  */
 void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, u_int32_t dest_temp_var_id);
 
-//TODO FOR SYMTAB VARS
+/**
+ * Create a new mapping for a symtab variable that goes from the source to the destination
+ *
+ * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
+ * that is on you
+ */
+void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable);
 
 /**
  * Allocate a variable map with the default size

@@ -117,6 +117,31 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
 
 
 /**
+ * Create a new mapping for a symtab variable that goes from the source to the destination
+ *
+ * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
+ * that is on you
+ */
+void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable){
+	//Perform the resize if needed
+	dynamically_resize_if_needed(variable_map);
+
+	//Grab a reference to the region to make this easier
+	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+
+	//This is a symtab mapping
+	mapping->mapping_type = MAPPING_TYPE_SYMTAB;
+
+	//Store the source and dest
+	mapping->source.symtab_variable = source_variable;
+	mapping->destination.symtab_variable = destination_variable;
+
+	//Bump this up for the next go around
+	(variable_map->current_index)++;
+}
+
+
+/**
  * Deallocate a given variable map
  */
 void variable_map_dealloc(variable_map_t* map){
