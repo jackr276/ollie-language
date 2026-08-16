@@ -60,6 +60,12 @@ struct variable_map_t {
 
 
 /**
+ * Crawl the variable map looking specifically for a temporary variable mapping
+ * that has the given source variable ID. We return NULL if none is found
+ */
+variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id);
+
+/**
  * Allocate a variable map with the default size
  */
 variable_map_t variable_map_alloc();

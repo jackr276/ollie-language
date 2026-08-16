@@ -22,6 +22,33 @@ variable_map_t variable_map_alloc(){
 
 
 /**
+ * Crawl the variable map looking specifically for a temporary variable mapping
+ * that has the given source variable ID. We return NULL if none is found
+ */
+variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id){
+	for(int32_t i = 0; i < variable_map->current_index; i++){
+		/**
+		 * We only care to look for temp var mappings here - if it's not
+		 * that then leave
+		 */
+		if(variable_map->mappings[i].mapping_type != MAPPING_TYPE_TEMP){
+			continue;
+		}
+
+		/**
+		 * We have a hit - return the address of this mapping to avoid copying
+		 */
+		if(variable_map->mappings[i].source.temporary_id == source_temp_var_id){
+			return &(variable_map->mappings[i]);
+		}
+	}
+
+	//If we made it here then we found nothing so bail out
+	return NULL;
+}
+
+
+/**
  * Deallocate a given variable map
  */
 void variable_map_dealloc(variable_map_t* map){
