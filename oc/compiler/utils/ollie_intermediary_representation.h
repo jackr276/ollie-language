@@ -1,10 +1,8 @@
 /**
  * Author: Jack Robbins
- * This header defines the types an OIR statement
- * can take
+ * This header defines the types an OIR statement can take
 */
 
-//Include guards
 #ifndef OLLIE_INTERMEDIARY_REPRESENTATION_H
 #define OLLIE_INTERMEDIARY_REPRESENTATION_H
 
