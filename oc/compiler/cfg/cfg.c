@@ -13160,15 +13160,43 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 	variable_mapping_t* mapping = NULL;
 
 	switch(source_variable->variable_type){
+		/**
+		 * For temporary variables we maintain a mapping from temp var id to temp
+		 * var id and will use that when we emit our new one
+		 */
 		case VARIABLE_TYPE_TEMP:
 			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->temp_var_number);
 
+			/**
+			 * If we found it we can just create a new variable with the new temporary
+			 * variable number. Otherwise, we'll have to make a new temp var number, 
+			 * save the association in the mapping, and then do the cloning
+			 */
+			u_int32_t temp_var_number;
 			if(mapping != NULL){
+				temp_var_number = mapping->source.temporary_id;
 
 			} else {
-
+				/**
+				 * Create a new one and add the mapping for next time
+				 */
+				temp_var_number = increment_and_get_temp_id();
+				create_mapping_for_temporary_variable(variable_map, source_variable->temp_var_number, temp_var_number);
 			}
 
+			/**
+			 * Whatever happened from there, we'll need to emit a new variable
+			 * copy and replace the temp ID with our new one
+			 */
+			new_variable = emit_var_copy(source_variable);
+			new_variable->temp_var_number = temp_var_number;
+			break;
+
+		/**
+		 * For non temporary variables we maintain a mapping from source symtab variable
+		 * to destination symtab variable. We will need to use some tricks to get the 
+		 * symtab variables unique for each run
+		 */
 		case VARIABLE_TYPE_NON_TEMP:
 			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
 
@@ -13225,14 +13253,19 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 
 	switch(source_instruction->instruction_type){
 		case THREE_ADDR_CODE_RET_STMT:
+			//TODO
 
 		case THREE_ADDR_CODE_RAISE_STMT:
+			//TODO
 
 		case THREE_ADDR_CODE_BRANCH_STMT:
+			//TODO
 	
 		case THREE_ADDR_CODE_JUMP_STMT:
+			//TODO
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+			//TODO
 
 		/**
 		 * Default case is we just copy over everything that's important, including
