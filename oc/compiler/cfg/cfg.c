@@ -13153,9 +13153,6 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
- *
- * TODO WE SHOULD CREATE ALL THE NEW BLOCKS FIRST AND THEN FILL IN THE INSTRUCTIONS. This will allow us to
- * build up the block mapping before we do stuff like branching, jumping, pred/succ management, etc
  */
 static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
 	/**
@@ -13200,14 +13197,26 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 			case BLOCK_TYPE_FUNC_EXIT:
 				*function_exit = reference_block;
 				break;
-			//It's not a unique type so copy it over
+			//It's not a type that's reserved so copy it over
 			default:
 				new_block->block_type = reference_block->block_type;
 				break;
 		}
+	}
+
+	/**
+	 * Step 2: Now that we've gone through and created all of the new blocks, we need to
+	 * go through and populate them using our block cloning. There are some caveats, like
+	 * "ret" and "raise" statements will now just be jumps to the function exit block, and
+	 * we'll need to adjust branch statements, so on and so forht
+	 */
+	for(int32_t i = 0; i < function_to_clone->function_blocks.current_index; i++){
+		//Get the reference block and the new block
+		basic_block_t* reference_block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
+		basic_block_t* new_block = reference_block->mapping_info.maps_to;
 
 
-
+		//PRED/SUCC cloning TODO
 	}
 }
 
