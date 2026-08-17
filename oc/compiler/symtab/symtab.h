@@ -155,6 +155,10 @@ struct symtab_function_record_t{
 	dependency_graph_node_t* dependency_graph_node;
 	//Maintain a reference to the entry block
 	void* function_entry_block;
+	/**
+	 * Store the top level scope for this function
+	 */
+	symtab_variable_sheaf_t* top_level_scope;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers

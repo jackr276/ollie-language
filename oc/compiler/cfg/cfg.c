@@ -13426,6 +13426,9 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 			//Get an exact copy and add it to our new block
 			instruction_t* cloned_instruction = clone_instruction(cursor, &variable_map);
 			add_statement(new_block, cloned_instruction);
+
+			//Onto the next one
+			cursor = cursor->next_statement;
 		}
 
 		/**
@@ -13502,8 +13505,7 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	 * IMPORTANT - for any/all new variables that we create, we'll need them to be in the right
 	 * lexical scope. We'll set the lexical scope now to be inside of the caller function
 	 */
-	symtab_variable_sheaf_t* old_lexical_scope = variable_symtab->current;
-	set_current_lexical_scope(variable_symtab, function->namespace_contained_in->related_variable_sheaf);
+	set_current_lexical_scope(variable_symtab, function->top_level_scope);
 
 	/**
 	 * The calls_to_inline is reusable for memory efficiency - we need to wipe
@@ -13544,10 +13546,8 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	}
 
 	/**
-	 * Now that we're done undo the function & block pointers
-	 * and the lexical scope
+	 * Now that we're done undo the function & block array pointers
 	 */
-	set_current_lexical_scope(variable_symtab, old_lexical_scope);
 	current_function_blocks = NULL;
 	current_function = NULL;
 }

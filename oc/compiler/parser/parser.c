@@ -14338,8 +14338,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * We'll need to initialize a new variable scope here. This variable scope is designed
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
+	 *
+	 * We will consider this to be the "top level" scope for our function. The function
+	 * record will store a reference to this. In the future if we go to inline, we will
+	 * use this variable scope for all new variable creation
 	 */
 	initialize_variable_scope(variable_symtab, function_record, function_symtab->current);
+	function_record->top_level_scope = variable_symtab->current;
 
 	/**
 	 * IMPORTANT: we need to hang onto this overarching function scope
