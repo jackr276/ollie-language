@@ -13174,7 +13174,7 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			 */
 			u_int32_t temp_var_number;
 			if(mapping != NULL){
-				temp_var_number = mapping->source.temporary_id;
+				temp_var_number = mapping->destination.temporary_id;
 
 			} else {
 				/**
@@ -13200,12 +13200,35 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		case VARIABLE_TYPE_NON_TEMP:
 			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
 
+			/**
+			 * If we found it we can just create a new variable from this linked one. If not,
+			 * then we'll need to create an entirely new symtab variable while guaranteeing that
+			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+			 * in the same function
+			 */
+			symtab_variable_record_t* linked_var;
 			if(mapping != NULL){
+				linked_var = mapping->destination.symtab_variable;
 
 			} else {
-
+				/**
+				 * Create a branch new variable using the temp var subsystem. Names are irrelevant because
+				 * we have the mapping so this should work just fine. Once we do this we will also create
+				 * the associated mapping
+				 */
+				linked_var = create_ssa_compatible_temp_var(current_function, source_variable->linked_var->type_defined_as, variable_symtab, increment_and_get_temp_id());
+				create_mapping_for_symtab_variable(variable_map, source_variable->linked_var, linked_var);
 			}
 
+			/**
+			 * Regardless of how we got here, we'll need to emit the variable clone and
+			 * assign the new linked variable over
+			 */
+			new_variable = emit_var_copy(source_variable);
+			new_variable->linked_var = linked_var;
+			break;
+
+		//TODO STUFF LIKE MEMORY REGIONS, ETC ETC ETC
 		default:
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(1);
@@ -13410,7 +13433,6 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	//Now that we're done destroy the variable map
 	variable_map_dealloc(&variable_map);
 }
-
 
 
 /**
