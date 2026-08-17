@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <threads.h>
+#include "../utils/variable_mapping/variable_mapping.h"
 #include "../utils/queue/heap_queue.h"
 #include "../static_analyzer/static_analyzer.h"
 #include "../jump_table/jump_table.h"
@@ -13149,15 +13150,37 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 }
 
 
+static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, variable_map_t* variable_map){
+	//TODO NOT DONE
+
+}
+
+
 /**
  * Clone the given instruction into a brand new one. This cloning also
  * involves doing all of our variable replacement logic with the variable
  * mapping, amongst other things
+ *
+ *
+ * NOTE: this is a manual clone and we will not use any memcpy() for this. This
+ * is done so as new instruction fields are added we don't just blindly copy
+ * over everything, the author will have to come in here and update it
  */
-static instruction_t* clone_instruction(instruction_t* source_instruction){
+static instruction_t* clone_instruction(instruction_t* source_instruction, variable_map_t* variable_map){
+	//Fresh instruction allocation
+	instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
 
+	switch(source_instruction->instruction_type){
 
-	return NULL;
+		/**
+		 * Default case is we just copy over everything that's important, inlcuding
+		 * doing all of the variable cloning
+		 */
+		default:
+			//TODO
+	}
+
+	return new_instruction;
 }
 
 
