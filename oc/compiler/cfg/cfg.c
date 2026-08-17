@@ -13553,6 +13553,38 @@ static void inline_function_call(instruction_t* call_to_inline){
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
 	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable);
 
+	/**
+	 * We no longer need this statement at all so remove it. It still
+	 * exists in memory for us to reference
+	 */
+	remove_statement(call_to_inline);
+
+	/**
+	 * Step 3: once we have cloned the entire function, we should in theory have a populated
+	 * inline function entry and exit block that we can use. The way that the actual inline 
+	 * works is by having the "block_inlined_in" jump to the inline function entry, and the
+	 * inline function exit jump to the "after_inline_block". We'll also need to manage
+	 * the returned/raised variables(see below)
+	 */
+	emit_jump(block_inlined_in, inlined_function_entry);
+	emit_jump(inlined_function_exit, after_inline_block);
+
+	/**
+	 * If we do have something that we return, we'll need
+	 * to assign the returned variable over to what the function
+	 * call returned
+	 */
+	if(inlined_function_signature->returns_void == FALSE){
+
+	}
+
+	/**
+	 * Same deal if we had errors that we raise
+	 */
+	if(inlined_function_signature->raises_errors == TRUE){
+
+	}
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
