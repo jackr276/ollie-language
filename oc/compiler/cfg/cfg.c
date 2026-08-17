@@ -13000,7 +13000,7 @@ static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_c
 /**
  * Use a reverse topological sort to get the function inlining order
  */
-static inline void get_function_inlining_order(cfg_t* cfg, function_symtab_t* function_symtab, dynamic_integer_array_t* inlining_order){
+static inline void get_function_inlining_order(function_symtab_t* function_symtab, dynamic_integer_array_t* inlining_order){
 	//We know that the number of functions will not change by now
 	u_int32_t number_of_functions = function_symtab->current_function_id;
 
@@ -13150,6 +13150,18 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 
 
 /**
+ * Clone the given instruction into a brand new one. This cloning also
+ * involves doing all of our variable replacement logic with the variable
+ * mapping, amongst other things
+ */
+static instruction_t* clone_instruction(instruction_t* source_instruction){
+
+
+	return NULL;
+}
+
+
+/**
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
@@ -13215,6 +13227,18 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		basic_block_t* reference_block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
 		basic_block_t* new_block = reference_block->mapping_info.maps_to;
 
+		/**
+		 * Run through every instruction, clone it and add it into the new block
+		 * in order. This is where all of our substitution mapping is going to
+		 * come into play
+		 */
+		instruction_t* cursor = reference_block->leader_statement;
+		while(cursor != NULL){
+			//Get an exact copy
+			instruction_t* cloned_instruction = clone_instruction(cursor);
+
+			//TODO ADD IT IN
+		}
 
 		/**
 		 * Every successor in the reference block corresponds to a new cloned block.
@@ -13359,7 +13383,7 @@ static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* 
 	/**
 	 * First we'll go an get the actual order in which we need to inline things
 	 */
-	get_function_inlining_order(cfg, function_symtab, &inlining_order);
+	get_function_inlining_order(function_symtab, &inlining_order);
 
 	/**
 	 * Now that we have the order in which we need to inline, we can go through
