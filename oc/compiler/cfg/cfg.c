@@ -13171,6 +13171,15 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 	instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
 
 	switch(source_instruction->instruction_type){
+		case THREE_ADDR_CODE_RET_STMT:
+
+		case THREE_ADDR_CODE_RAISE_STMT:
+
+		case THREE_ADDR_CODE_BRANCH_STMT:
+	
+		case THREE_ADDR_CODE_JUMP_STMT:
+
+		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 
 		/**
 		 * Default case is we just copy over everything that's important, inlcuding
@@ -13178,6 +13187,7 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 		 */
 		default:
 			//TODO
+			break;
 	}
 
 	return new_instruction;
@@ -13190,6 +13200,9 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
  * of it
  */
 static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
+	//Initialize a branch new variable mapping for our uses
+	variable_map_t variable_map = variable_map_alloc();
+
 	/**
 	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
 	 * be added to the function that we're inlining into's blocks because we've set the global
@@ -13258,7 +13271,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		instruction_t* cursor = reference_block->leader_statement;
 		while(cursor != NULL){
 			//Get an exact copy
-			instruction_t* cloned_instruction = clone_instruction(cursor);
+			instruction_t* cloned_instruction = clone_instruction(cursor, &variable_map);
 
 			//TODO ADD IT IN
 		}
@@ -13278,6 +13291,9 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 			add_successor(new_block, new_successor);
 		}
 	}
+
+	//Now that we're done destroy the variable map
+	variable_map_dealloc(&variable_map);
 }
 
 
@@ -13332,6 +13348,13 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	current_function = function;
 
 	/**
+	 * IMPORTANT - for any/all new variables that we create, we'll need them to be in the right
+	 * lexical scope. We'll set the lexical scope now to be inside of the caller function
+	 */
+	symtab_variable_sheaf_t* old_lexical_scope = variable_symtab->current;
+	set_current_lexical_scope(variable_symtab, function->namespace_contained_in->related_variable_sheaf);
+
+	/**
 	 * The calls_to_inline is reusable for memory efficiency - we need to wipe
 	 * it now to remove whatever was left from prior calls
 	 */
@@ -13369,7 +13392,11 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 		inline_function_call(call_to_inline);
 	}
 
-	//Now that we're done undo the function & block pointers
+	/**
+	 * Now that we're done undo the function & block pointers
+	 * and the lexical scope
+	 */
+	set_current_lexical_scope(variable_symtab, old_lexical_scope);
 	current_function_blocks = NULL;
 	current_function = NULL;
 }
