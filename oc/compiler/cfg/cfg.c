@@ -13269,7 +13269,6 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * involves doing all of our variable replacement logic with the variable
  * mapping, amongst other things
  *
- *
  * NOTE: this is a manual clone and we will not use any memcpy() for this. This
  * is done so as new instruction fields are added we don't just blindly copy
  * over everything, the author will have to come in here and update it
@@ -13351,8 +13350,14 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
+ *
+ *
+ * As part of this cloning, we have two parameters that take in a simulated return and raise variable if appropriate.
+ * These variables are necessary for us to simulate the process of returning/raising without actually using the "ret"
+ * instruction because that won't work when we inline
  */
-static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit){
+static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit,
+											symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable){
 	//Initialize a branch new variable mapping for our uses
 	variable_map_t variable_map = variable_map_alloc();
 
@@ -13435,8 +13440,6 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		 * Every successor in the reference block corresponds to a new cloned block.
 		 * We need to add all of these cloned blocks as successors to this new
 		 * block
-		 *
-		 * TODO DONT KNOW IF WE NEED PREDS
 		 */
 		for(int32_t i = 0; i < reference_block->successors.current_index; i++){
 			basic_block_t* old_successor = dynamic_array_get_at(&(reference_block->successors), i);
@@ -13460,6 +13463,9 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
  * may be inlined 100s of times throughout the process
  */
 static void inline_function_call(instruction_t* call_to_inline){
+	//Extract the signature of the function that we're calling
+	function_type_t* inlined_function_signature = call_to_inline->called_function->signature->internal_types.function_type;
+
 	//Get the block where this function call is currently
 	basic_block_t* block_inlined_in = call_to_inline->block_contained_in;
 	
@@ -13468,6 +13474,27 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 */
 	basic_block_t* after_inline_block = basic_block_alloc_no_estimate();
 	after_inline_block->estimated_execution_frequency = block_inlined_in->estimated_execution_frequency;
+
+	/**
+	 * Step 0: we need to set up a synthetic return variable and a synthetic error return variable
+	 * if we have them. This will simulate the way that regular function calls return/raise errors
+	 */
+	symtab_variable_record_t* symtab_return_variable = NULL;
+	symtab_variable_record_t* symtab_raise_variable = NULL;
+
+	/**
+	 * If we do not return void we need a simulated return variable
+	 */
+	if(inlined_function_signature->returns_void == FALSE){
+		symtab_return_variable = create_ssa_compatible_temp_var(current_function, inlined_function_signature->return_type, variable_symtab, increment_and_get_temp_id());
+	}
+
+	/**
+	 * If we raise any errors we need a simulated error raising variable
+	 */
+	if(inlined_function_signature->raises_errors == TRUE){
+		symtab_raise_variable = create_ssa_compatible_temp_var(current_function, u64, variable_symtab, increment_and_get_temp_id());
+	}
 
 	/**
 	 * Step 1: split the original block around the inlined call instruction. When we're done
@@ -13484,7 +13511,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit);
+	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable);
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
