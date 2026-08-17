@@ -13150,9 +13150,41 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 }
 
 
-static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, variable_map_t* variable_map){
-	//TODO NOT DONE
+/**
+ * Clone a variable(temporary or not) using the variable map strategy where every
+ * source variable maps to a branch new variable in the inlined function
+ */
+static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
+	//Our new variable that we'll be handing back
+	three_addr_var_t* new_variable = NULL;
+	variable_mapping_t* mapping = NULL;
 
+	switch(source_variable->variable_type){
+		case VARIABLE_TYPE_TEMP:
+			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->temp_var_number);
+
+			if(mapping != NULL){
+
+			} else {
+
+			}
+
+		case VARIABLE_TYPE_NON_TEMP:
+			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
+
+			if(mapping != NULL){
+
+			} else {
+
+			}
+
+		default:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+	}
+
+	//Give back the new one
+	return new_variable;
 }
 
 
@@ -13215,6 +13247,7 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
 			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
 			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
 			 * Then clone all of the constants - there's no mapping for this we just do a complete
@@ -13224,7 +13257,19 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
 			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
 
-			//TODO
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->op = source_instruction->op;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->branch_type = source_instruction->branch_type;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+			new_instruction->inverse_branch = source_instruction->inverse_branch;
+			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
 			break;
 	}
 
@@ -13308,10 +13353,9 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		 */
 		instruction_t* cursor = reference_block->leader_statement;
 		while(cursor != NULL){
-			//Get an exact copy
+			//Get an exact copy and add it to our new block
 			instruction_t* cloned_instruction = clone_instruction(cursor, &variable_map);
-
-			//TODO ADD IT IN
+			add_statement(new_block, cloned_instruction);
 		}
 
 		/**
