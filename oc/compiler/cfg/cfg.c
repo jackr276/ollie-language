@@ -6630,9 +6630,6 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	 */
 	conditional_result->sets_cc = TRUE;
 
-	//Mark this as the oprand1 so that we can track in the optimizer
-	branch_instruction->operands.oir.operand1 = conditional_result;
-
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
 
@@ -13155,6 +13152,13 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
  * source variable maps to a branch new variable in the inlined function
  */
 static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
+	/**
+	 * This is a completely valid and frequent case. In this case, just leave
+	 */
+	if(source_variable == NULL){
+		return NULL;
+	}
+
 	//Our new variable that we'll be handing back
 	three_addr_var_t* new_variable = NULL;
 	variable_mapping_t* mapping = NULL;
@@ -13274,6 +13278,25 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 	//Fresh instruction allocation
 	instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
 
+	/**
+	 * Clone over all of the instruction types, addressing modes, etc.
+	 * that are needed in the new instruction. Leave behind all old block
+	 * and function references
+	 */
+	new_instruction->statement_type = source_instruction->statement_type;
+	new_instruction->op = source_instruction->op;
+	new_instruction->addressing_mode = source_instruction->addressing_mode;
+	new_instruction->branch_type = source_instruction->branch_type;
+	new_instruction->memory_access_type = source_instruction->memory_access_type;
+	new_instruction->line_number = source_instruction->line_number;
+	new_instruction->inverse_branch = source_instruction->inverse_branch;
+	new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+
+	/**
+	 * Now certain instruction types may require special treatment due to blocks,
+	 * special variables like returned variables, etc. We'll account for this
+	 * now that the common code has been done
+	 */
 	switch(source_instruction->instruction_type){
 		case THREE_ADDR_CODE_RET_STMT:
 			//TODO
@@ -13281,7 +13304,13 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 		case THREE_ADDR_CODE_RAISE_STMT:
 			//TODO
 
+		/**
+		 * For branch statements, we need to take care to replace
+		 * the block references with what they really go to
+		 */
 		case THREE_ADDR_CODE_BRANCH_STMT:
+			
+
 			//TODO
 	
 		case THREE_ADDR_CODE_JUMP_STMT:
@@ -13291,8 +13320,7 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 			//TODO
 
 		/**
-		 * Default case is we just copy over everything that's important, including
-		 * doing all of the variable cloning
+		 * By default we need to clone every single variable that 
 		 */
 		default:
 			/**
@@ -13312,20 +13340,6 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
 			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
 			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
-
-			/**
-			 * Clone over all of the instruction types, addressing modes, etc.
-			 * that are needed in the new instruction. Leave behind all old block
-			 * and function references
-			 */
-			new_instruction->statement_type = source_instruction->statement_type;
-			new_instruction->op = source_instruction->op;
-			new_instruction->addressing_mode = source_instruction->addressing_mode;
-			new_instruction->branch_type = source_instruction->branch_type;
-			new_instruction->memory_access_type = source_instruction->memory_access_type;
-			new_instruction->line_number = source_instruction->line_number;
-			new_instruction->inverse_branch = source_instruction->inverse_branch;
-			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
 			break;
 	}
 
