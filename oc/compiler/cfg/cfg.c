@@ -13319,9 +13319,20 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			return;
 		}
 	
-		case THREE_ADDR_CODE_ASM_INLINE_STMT:
-			//TODO
-			
+
+		/**
+		 * For an asm inline statement we need to copy over all of the inlined
+		 * assembly which is as easy as just cloning the dynamic string
+		 */
+		case THREE_ADDR_CODE_ASM_INLINE_STMT: {
+			instruction_t* asm_inline_statement = calloc(1, sizeof(instruction_t));
+			asm_inline_statement->statement_type = THREE_ADDR_CODE_ASM_INLINE_STMT;
+
+			//Clone over the assembly and we should be good
+			asm_inline_statement->optional_storage.inlined_assembly = clone_dynamic_string(&(source_instruction->optional_storage.inlined_assembly));
+			add_statement(cloning_into_block, asm_inline_statement);
+			return;
+		}
 
 		/**
 		 * For branch statements, we need to take care to replace
@@ -13332,10 +13343,18 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 			//TODO
 	
-		case THREE_ADDR_CODE_JUMP_STMT:
-			//TODO
+		/**
+		 * For a jump statement we need to use the block's "maps_to" reference
+		 * to create an equivalent substitution in the inlined function
+		 */
+		case THREE_ADDR_CODE_JUMP_STMT: {
+			basic_block_t* source_jumping_to_block = source_instruction->if_block;
+			emit_jump(cloning_into_block, source_jumping_to_block->mapping_info.maps_to);
+			return;
+		}
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+			//TODO JUMP TABLE STUFF
 			//TODO
 		//
 		case THREE_ADDR_CODE_FUNC_CALL:
@@ -13683,7 +13702,7 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
  * will tell us what we need to inline first. In short, *inline a function only
  * after it's inlined callees have been processed*
  */
-static inline void perform_all_function_inlining(cfg_t* cfg, function_symtab_t* function_symtab){
+static inline void perform_all_function_inlining(function_symtab_t* function_symtab){
 	/**
 	 * We have no inlined functions in this program so we don't
 	 * need to do anything. We can exit early in this case
@@ -13754,7 +13773,7 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 * Invoke the helper to perform all function inlining if there are inlined
 	 * functions at all
 	 */
-	perform_all_function_inlining(cfg, results->function_symtab);
+	perform_all_function_inlining(results->function_symtab);
 
 	/**
 	 * Once we know that all function inlining has been completed, we are now able
