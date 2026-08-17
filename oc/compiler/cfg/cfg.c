@@ -13273,35 +13273,42 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * is done so as new instruction fields are added we don't just blindly copy
  * over everything, the author will have to come in here and update it
  */
-static instruction_t* clone_instruction(instruction_t* source_instruction, variable_map_t* variable_map){
-	//Fresh instruction allocation
-	instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
-
-	/**
-	 * Clone over all of the instruction types, addressing modes, etc.
-	 * that are needed in the new instruction. Leave behind all old block
-	 * and function references
-	 */
-	new_instruction->statement_type = source_instruction->statement_type;
-	new_instruction->op = source_instruction->op;
-	new_instruction->addressing_mode = source_instruction->addressing_mode;
-	new_instruction->branch_type = source_instruction->branch_type;
-	new_instruction->memory_access_type = source_instruction->memory_access_type;
-	new_instruction->line_number = source_instruction->line_number;
-	new_instruction->inverse_branch = source_instruction->inverse_branch;
-	new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
-
+static inline void clone_instruction_into_block(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map,
+											   symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
+												basic_block_t* inlined_exit_block){
 	/**
 	 * Now certain instruction types may require special treatment due to blocks,
 	 * special variables like returned variables, etc. We'll account for this
 	 * now that the common code has been done
 	 */
 	switch(source_instruction->instruction_type){
-		case THREE_ADDR_CODE_RET_STMT:
-			//TODO
+		/**
+		 * For a return statement, we have to simulate a return by assigning
+		 * to a synthetic return variable and then jumping to the exit
+		 * block. There's no way for us to actually use the "ret" keyword
+		 */
+		case THREE_ADDR_CODE_RET_STMT: {
+			/**
+			 * If we have something to clone, we'll emit the assignment now
+			 */
+			if(source_instruction->operands.oir.operand1 != NULL){
+				instruction_t* simulated_return_assignment = emit_assignment_instruction(emit_var(return_variable),
+																		clone_variable(source_instruction->operands.oir.operand1, variable_map),
+																		source_instruction->line_number);
+				add_statement(cloning_into_block, simulated_return_assignment);
+			}
+		
+			//To actually simulate we will jump from this block to the exit block
+			emit_jump(cloning_into_block, inlined_exit_block);
+			return;
+		}
 
 		case THREE_ADDR_CODE_RAISE_STMT:
 			//TODO
+	
+		case THREE_ADDR_CODE_ASM_INLINE_STMT:
+			//TODO
+			
 
 		/**
 		 * For branch statements, we need to take care to replace
@@ -13321,7 +13328,9 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 		/**
 		 * By default we need to clone every single variable that 
 		 */
-		default:
+		default: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
 			/**
 			 * First clone every single variable using our mapping strategy
 			 */
@@ -13339,10 +13348,26 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
 			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
 			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
-			break;
-	}
 
-	return new_instruction;
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->op = source_instruction->op;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->branch_type = source_instruction->branch_type;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+			new_instruction->inverse_branch = source_instruction->inverse_branch;
+			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+
+			//Add this new instruction into the new block
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
+	}
 }
 
 
@@ -13428,9 +13453,8 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		 */
 		instruction_t* cursor = reference_block->leader_statement;
 		while(cursor != NULL){
-			//Get an exact copy and add it to our new block
-			instruction_t* cloned_instruction = clone_instruction(cursor, &variable_map);
-			add_statement(new_block, cloned_instruction);
+			//Clone this instruction into the new block
+			clone_instruction_into_block(new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
 
 			//Onto the next one
 			cursor = cursor->next_statement;
@@ -13477,7 +13501,9 @@ static void inline_function_call(instruction_t* call_to_inline){
 
 	/**
 	 * Step 0: we need to set up a synthetic return variable and a synthetic error return variable
-	 * if we have them. This will simulate the way that regular function calls return/raise errors
+	 * if we have them. This will simulate the way that regular function calls return/raise errors. 
+	 * In an inlined function, instead of using the "ret" keyword, we will just jump to the simulated
+	 * exit block
 	 */
 	symtab_variable_record_t* symtab_return_variable = NULL;
 	symtab_variable_record_t* symtab_raise_variable = NULL;
