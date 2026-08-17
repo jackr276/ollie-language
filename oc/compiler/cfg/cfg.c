@@ -13280,7 +13280,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 	 * special variables like returned variables, etc. We'll account for this
 	 * now that the common code has been done
 	 */
-	switch(source_instruction->instruction_type){
+	switch(source_instruction->statement_type){
 		/**
 		 * For a return statement, we have to simulate a return by assigning
 		 * to a synthetic return variable and then jumping to the exit
@@ -13451,10 +13451,10 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		 */
 		switch(reference_block->block_type){
 			case BLOCK_TYPE_FUNC_ENTRY:
-				*function_entry = reference_block;
+				*function_entry = new_block;
 				break;
 			case BLOCK_TYPE_FUNC_EXIT:
-				*function_exit = reference_block;
+				*function_exit = new_block;
 				break;
 			//It's not a type that's reserved so copy it over
 			default:
@@ -13520,6 +13520,12 @@ static void inline_function_call(instruction_t* call_to_inline){
 
 	//Get the block where this function call is currently
 	basic_block_t* block_inlined_in = call_to_inline->block_contained_in;
+
+	//TODO haven't gotten here yet
+	if(call_to_inline->called_function->function_parameters.current_index != 0){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
 	
 	/**
 	 * We'll need a fresh block that comes after our inlining takes place
@@ -13574,16 +13580,6 @@ static void inline_function_call(instruction_t* call_to_inline){
 	remove_statement(call_to_inline);
 
 	/**
-	 * Step 3: once we have cloned the entire function, we should in theory have a populated
-	 * inline function entry and exit block that we can use. The way that the actual inline 
-	 * works is by having the "block_inlined_in" jump to the inline function entry, and the
-	 * inline function exit jump to the "after_inline_block". We'll also need to manage
-	 * the returned/raised variables(see below)
-	 */
-	emit_jump(block_inlined_in, inlined_function_entry);
-	emit_jump(inlined_function_exit, after_inline_block);
-
-	/**
 	 * If we do have something that we return, we'll need
 	 * to assign the returned variable over to what the function
 	 * call returned
@@ -13600,6 +13596,17 @@ static void inline_function_call(instruction_t* call_to_inline){
 		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
 		add_statement(inlined_function_exit, raised_variable_assignment);
 	}
+
+	/**
+	 * Step 4: once we have cloned the entire function, we should in theory have a populated
+	 * inline function entry and exit block that we can use. The way that the actual inline 
+	 * works is by having the "block_inlined_in" jump to the inline function entry, and the
+	 * inline function exit jump to the "after_inline_block". We'll also need to manage
+	 * the returned/raised variables(see below)
+	 */
+	emit_jump(block_inlined_in, inlined_function_entry);
+	emit_jump(inlined_function_exit, after_inline_block);
+
 
 	//TODO ANYTHING ELSE THAT NEEDS TO BE DONE
 }
