@@ -13157,6 +13157,27 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, varia
 
 
 /**
+ * Clone a constant. This will create separate memory so we maintain
+ * complete separation
+ */
+static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
+}
+
+
+/**
  * Clone the given instruction into a brand new one. This cloning also
  * involves doing all of our variable replacement logic with the variable
  * mapping, amongst other things
@@ -13182,10 +13203,27 @@ static instruction_t* clone_instruction(instruction_t* source_instruction, varia
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 
 		/**
-		 * Default case is we just copy over everything that's important, inlcuding
+		 * Default case is we just copy over everything that's important, including
 		 * doing all of the variable cloning
 		 */
 		default:
+			/**
+			 * First clone every single variable using our mapping strategy
+			 */
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+
+			/**
+			 * Then clone all of the constants - there's no mapping for this we just do a complete
+			 * memory copy for all of them
+			 */
+			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
+			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
+			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+
 			//TODO
 			break;
 	}
@@ -13323,7 +13361,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	split_block_around_instruction(block_inlined_in, after_inline_block, call_to_inline);
 
 	/**
-	 * Now that we have our split we need to get a complete, 100% unique clone of the
+	 * Step 2: Now that we have our split we need to get a complete, 100% unique clone of the
 	 * function that we are inlining. While we're at it, we'll save the function entry
 	 * and function exit blocks from the copy 
 	 */
