@@ -13303,8 +13303,22 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			return;
 		}
 
-		case THREE_ADDR_CODE_RAISE_STMT:
-			//TODO
+		/**
+		 * A raise statement is essentially a return statement that always takes
+		 * in a constant. We will do the same thing where we simulate returning
+		 * by assignment and then jumping to the exit
+		 */
+		case THREE_ADDR_CODE_RAISE_STMT: {
+			//Raise always has an assignee unlike return
+			instruction_t* simulated_raise_assignment = emit_assignment_instruction(emit_var(raise_variable),
+																	clone_variable(source_instruction->operands.oir.operand1, variable_map),
+																	source_instruction->line_number);
+			add_statement(cloning_into_block, simulated_raise_assignment);
+			
+			//To actually simulate we will jump from this block to the exit block
+			emit_jump(cloning_into_block, inlined_exit_block);
+			return;
+		}
 	
 		case THREE_ADDR_CODE_ASM_INLINE_STMT:
 			//TODO
