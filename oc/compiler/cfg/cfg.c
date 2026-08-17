@@ -20,7 +20,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include <threads.h>
 #include "../utils/variable_mapping/variable_mapping.h"
 #include "../utils/queue/heap_queue.h"
 #include "../static_analyzer/static_analyzer.h"
@@ -13338,6 +13337,12 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			//TODO
+		//
+		case THREE_ADDR_CODE_FUNC_CALL:
+			//TODO
+
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			//TODO
 
 		/**
 		 * By default we need to clone every single variable that 
@@ -13376,6 +13381,15 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_instruction->line_number = source_instruction->line_number;
 			new_instruction->inverse_branch = source_instruction->inverse_branch;
 			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+
+			/**
+			 * Copy over all of the optional storage fields in one big
+			 * memory copy
+			 *
+			 *
+			 * TODO NEEDS A REVIEW
+			 */
+			memcpy(&(new_instruction->optional_storage), &(source_instruction->optional_storage), sizeof(new_instruction->optional_storage));
 
 			//Add this new instruction into the new block
 			add_statement(cloning_into_block, new_instruction);
@@ -13575,18 +13589,19 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 * call returned
 	 */
 	if(inlined_function_signature->returns_void == FALSE){
-
+		instruction_t* returned_variable_assignment = emit_assignment_instruction(call_to_inline->operands.oir.assignee, emit_var(symtab_return_variable), call_to_inline->line_number);
+		add_statement(inlined_function_exit, returned_variable_assignment);
 	}
 
 	/**
 	 * Same deal if we had errors that we raise
 	 */
 	if(inlined_function_signature->raises_errors == TRUE){
-
+		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
+		add_statement(inlined_function_exit, raised_variable_assignment);
 	}
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//TODO ANYTHING ELSE THAT NEEDS TO BE DONE
 }
 
 
