@@ -13216,7 +13216,20 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		basic_block_t* new_block = reference_block->mapping_info.maps_to;
 
 
-		//PRED/SUCC cloning TODO
+		/**
+		 * Every successor in the reference block corresponds to a new cloned block.
+		 * We need to add all of these cloned blocks as successors to this new
+		 * block
+		 *
+		 * TODO DONT KNOW IF WE NEED PREDS
+		 */
+		for(int32_t i = 0; i < reference_block->successors.current_index; i++){
+			basic_block_t* old_successor = dynamic_array_get_at(&(reference_block->successors), i);
+
+			//Get the new cloned block that it maps to and add that as a successor
+			basic_block_t* new_successor = old_successor->mapping_info.maps_to;
+			add_successor(new_block, new_successor);
+		}
 	}
 }
 
