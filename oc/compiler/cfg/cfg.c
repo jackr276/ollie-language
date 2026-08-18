@@ -13375,11 +13375,38 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			return;
 		}
 
-		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
-			printf("TODO JUMP TABLE NOT IMPLEMENTED\n");
-			exit(1);
-			//TODO JUMP TABLE STUFF
-			//TODO
+		/**
+		 * Indirect jump statements always come with an associated jump table. In order for
+		 * this to work, we can't just clone the statement itself, we'll also need to create
+		 * an equivalent jump table for this block
+		 */
+		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
+			/**
+			 * First we'll need to copy over the entire jump table into the new block
+			 * that we're cloning into
+			 */
+			basic_block_t* cloning_from_block = source_instruction->block_contained_in;
+			cloning_into_block->jump_table = clone_jump_table(cloning_from_block->jump_table);
+
+			//Make a fresh jump statement
+			instruction_t* new_jump = calloc(1, sizeof(instruction_t));
+
+			//We need to copy/clone over all of this info
+			new_jump->statement_type = source_instruction->statement_type;
+			new_jump->addressing_mode = source_instruction->addressing_mode;
+			new_jump->line_number = source_instruction->line_number;
+
+			//Jump table reference
+			new_jump->if_block = cloning_into_block->jump_table; 
+
+			//Indirect jump statements have address operands and a multiplier
+			new_jump->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_jump->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+			new_jump->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
+			new_jump->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+			return;
+		}
 	
 		/**
 		 * For a function call/indirect call we need to account for the parameter
@@ -13388,7 +13415,12 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 */
 		case THREE_ADDR_CODE_FUNC_CALL:
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			printf("TODO FUNCION CALL NOT IMPLEMENTED\n");
+			exit(1);
 			//TODO
+
+
+		//TODO PROBABLY NEED TO MAKE ALL MEMORY STUFF CUSTOM
 
 		/**
 		 * By default we need to clone every single variable that 
