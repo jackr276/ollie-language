@@ -13405,6 +13405,8 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 			new_jump->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
 			new_jump->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+
+			add_statement(cloning_into_block, new_jump);
 			return;
 		}
 	

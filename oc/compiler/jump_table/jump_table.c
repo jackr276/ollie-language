@@ -54,34 +54,39 @@ jump_table_t* jump_table_alloc(int32_t size){
  */
 jump_table_t* clone_jump_table(jump_table_t* target){
 	//Heap allocate the jump table
-	jump_table_t* table = calloc(1, sizeof(jump_table_t));
+	jump_table_t* new_table = calloc(1, sizeof(jump_table_t));
 
 	//Get it a fresh ID
-	table->jump_table_id = increment_and_get_id();
+	new_table->jump_table_id = increment_and_get_id();
 	
 	//Copy over the size
-	table->num_nodes = target->num_nodes;
+	new_table->num_nodes = target->num_nodes;
 
 	//Allocate the actual jump table
-	table->nodes = dynamic_array_alloc_initial_size(table->num_nodes);
+	new_table->nodes = dynamic_array_alloc_initial_size(new_table->num_nodes);
 
 	/**
 	 * Now we will run through the target jump table in order and populate
 	 * the new one using each block's "maps_to" field
 	 */
-	for(int32_t i = 0; i < target->nodes.current_index; i++){
+	for(int32_t i = 0; i < new_table->num_nodes; i++){
 		//Extract the target block
 		basic_block_t* target_block = dynamic_array_get_at(&(target->nodes), i);
 
 		//Populate the new jump table with the equivalent "maps_to" block
-		dynamic_array_add(&(table->nodes), target_block->mapping_info.maps_to);
+		dynamic_array_add(&(new_table->nodes), target_block->mapping_info.maps_to);
 	}
 
-	//Finally populate the default block as well with its equivalent maps_to block
+	/**
+	 * Finally populate the default block. It is possible for this
+	 * to be NULL so we'll need to account for that
+	 */
 	basic_block_t* old_default_block = target->default_block;
-	table->default_block = old_default_block->mapping_info.maps_to;
+	if(old_default_block != NULL){
+		new_table->default_block = old_default_block->mapping_info.maps_to;
+	}
 	
-	return table;
+	return new_table;
 }
 
 
