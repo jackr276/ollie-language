@@ -13006,9 +13006,6 @@ static inline void get_function_inlining_order(function_symtab_t* function_symta
 
 	//First let the helper do the reverse topological sort to get our order
 	reverse_topological_sort_inline_call_graph(inline_call_graph, inlining_order, number_of_functions);
-
-	//For debugging only - TODO delete when done
-	print_function_inlining_order(inlining_order, function_symtab);
 }
 
 
@@ -13149,6 +13146,8 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 /**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
+ *
+ * TODO NEED TO ACCOUNT FOR STATIC AND GLOBAL VARS HERE
  */
 static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
 	/**
@@ -13231,9 +13230,10 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			new_variable->linked_var = linked_var;
 			break;
 
+
 		//TODO STUFF LIKE MEMORY REGIONS, ETC ETC ETC
 		default:
-			printf("TODO NOT IMPLEMENTED\n");
+			printf("TODO NOT IMPLEMENTED FOR %s\n", variable_type_to_string(source_variable->variable_type));
 			exit(1);
 	}
 
@@ -13354,12 +13354,17 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		}
 
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+			printf("TODO JUMP TABLE NOT IMPLEMENTED\n");
+			exit(1);
 			//TODO JUMP TABLE STUFF
 			//TODO
-		//
+	
+		/**
+		 * For a function call/indirect call we need to account for the parameter
+		 * setup as we call into it and the potential that we have
+		 * a stack data area inside of this function call
+		 */
 		case THREE_ADDR_CODE_FUNC_CALL:
-			//TODO
-
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 			//TODO
 
