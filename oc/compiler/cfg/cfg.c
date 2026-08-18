@@ -13144,6 +13144,17 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 
 
 /**
+ * There are some variables that do not need to be cloned because
+ * they are shared across a global state. Global and static variables
+ * are the only two as of writing this that are excluded
+ */
+static inline u_int8_t is_variable_excluded_from_cloning(symtab_variable_record_t* variable){
+	variable_membership_t membership = variable->membership;
+	return ((membership == GLOBAL_VARIABLE) || (membership == STATIC_VARIABLE)) ? TRUE : FALSE;
+}
+
+
+/**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
  *
@@ -13200,6 +13211,15 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * symtab variables unique for each run
 		 */
 		case VARIABLE_TYPE_NON_TEMP:
+			/**
+			 * There are notable cases where variables are excluded from cloning entirely.
+			 * These variables would all be true variables tied to symtab variables. If this
+			 * is the case, then we just emit a copy and leave
+			 */
+			if(is_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+				return emit_var_copy(source_variable);
+			}
+
 			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
 
 			/**
