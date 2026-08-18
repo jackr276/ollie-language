@@ -13250,6 +13250,12 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			new_variable->linked_var = linked_var;
 			break;
 
+		/**
+		 * Function addresses should never be cloned because they're not local
+		 * to a function itself
+		 */
+		case VARIABLE_TYPE_FUNCTION_ADDRESS:
+
 
 		//TODO STUFF LIKE MEMORY REGIONS, ETC ETC ETC
 		default:
