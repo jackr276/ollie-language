@@ -39,6 +39,13 @@ struct jump_table_t {
 jump_table_t* jump_table_alloc(int32_t size);
 
 /**
+ * Completely clone a jump table using the "maps_to" entries inside
+ * of the basic block struct. This is intended to be used only for
+ * function inlining
+ */
+jump_table_t* clone_jump_table(jump_table_t* target);
+
+/**
  * Insert an entry into the jump table. This will be used
  * for adding values from case statements in
  */

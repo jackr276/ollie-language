@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <sys/types.h>
-#include "../cfg/cfg.h"
+#include "../utils/basic_block.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
@@ -20,7 +20,7 @@ static int32_t current_jump_block_id = 0;
 /**
  * Increment and get the ID for the jump table
  */
-static int32_t increment_and_get_id(){
+static inline int32_t increment_and_get_id(){
 	current_jump_block_id++;
 	return current_jump_block_id;
 }
@@ -43,6 +43,44 @@ jump_table_t* jump_table_alloc(int32_t size){
 	table->nodes = dynamic_array_alloc_initial_size(size);
 
 	//And return a copy of this stack data
+	return table;
+}
+
+
+/**
+ * Completely clone a jump table using the "maps_to" entries inside
+ * of the basic block struct. This is intended to be used only for
+ * function inlining
+ */
+jump_table_t* clone_jump_table(jump_table_t* target){
+	//Heap allocate the jump table
+	jump_table_t* table = calloc(1, sizeof(jump_table_t));
+
+	//Get it a fresh ID
+	table->jump_table_id = increment_and_get_id();
+	
+	//Copy over the size
+	table->num_nodes = target->num_nodes;
+
+	//Allocate the actual jump table
+	table->nodes = dynamic_array_alloc_initial_size(table->num_nodes);
+
+	/**
+	 * Now we will run through the target jump table in order and populate
+	 * the new one using each block's "maps_to" field
+	 */
+	for(int32_t i = 0; i < target->nodes.current_index; i++){
+		//Extract the target block
+		basic_block_t* target_block = dynamic_array_get_at(&(target->nodes), i);
+
+		//Populate the new jump table with the equivalent "maps_to" block
+		dynamic_array_add(&(table->nodes), target_block->mapping_info.maps_to);
+	}
+
+	//Finally populate the default block as well with its equivalent maps_to block
+	basic_block_t* old_default_block = target->default_block;
+	table->default_block = old_default_block->mapping_info.maps_to;
+	
 	return table;
 }
 
