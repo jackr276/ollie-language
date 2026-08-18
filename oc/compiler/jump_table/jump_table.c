@@ -77,15 +77,6 @@ jump_table_t* clone_jump_table(jump_table_t* target){
 		dynamic_array_add(&(new_table->nodes), target_block->mapping_info.maps_to);
 	}
 
-	/**
-	 * Finally populate the default block. It is possible for this
-	 * to be NULL so we'll need to account for that
-	 */
-	basic_block_t* old_default_block = target->default_block;
-	if(old_default_block != NULL){
-		new_table->default_block = old_default_block->mapping_info.maps_to;
-	}
-	
 	return new_table;
 }
 

@@ -24,8 +24,6 @@ typedef struct jump_table_t jump_table_t;
 struct jump_table_t {
 	//The list of all nodes. This is internally a dynamic array
 	dynamic_array_t nodes;
-	//The default block
-	void* default_block;
 	//The number of nodes
 	int32_t num_nodes;
 	//The ID of the jump table. Jump tables get IDs just like blocks, although
