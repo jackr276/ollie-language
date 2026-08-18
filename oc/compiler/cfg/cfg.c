@@ -13485,21 +13485,26 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	}
 
 	/**
-	 * Run through all of our parameters and get them assigned over to their
+	 * Step 2: Run through all of our parameters and get them assigned over to their
 	 * actual symtab variables in the inlined function. This step bridges the
 	 * gap between what we see when we call a function and what we have here
+	 *
+	 * TODO THIS IS ONLY THE BASIC CASE
 	 */
 	for(int32_t i = 0; i < parameters->current_index; i++){
 		//Extract the parameter
 		three_addr_var_t* passed_parameter = dynamic_array_get_at(parameters, i);
 
 		//Get the actual symtab variable that it maps to
-		symtab_variable_record_t* maps_to = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
-		
+		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
+
+		//Emit a copy assignment from the given parameter over to this variable
+		instruction_t* parameter_assignment = emit_assignment_instruction(clone_variable(emit_var_no_alias(parameter_variable), &variable_map), passed_parameter, function_to_clone->line_number);
+		add_statement(*function_entry, parameter_assignment);
 	}
 
 	/**
-	 * Step 2: Now that we've gone through and created all of the new blocks, we need to
+	 * Step 3: Now that we've gone through and created all of the new blocks, we need to
 	 * go through and populate them using our block cloning. There are some caveats, like
 	 * "ret" and "raise" statements will now just be jumps to the function exit block, and
 	 * we'll need to adjust branch statements, so on and so forht
