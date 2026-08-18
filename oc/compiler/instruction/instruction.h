@@ -172,6 +172,17 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 three_addr_var_t* emit_var(symtab_variable_record_t* var);
 
 /**
+ * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
+ * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
+ * that they share is the overall variable that they're linked back to, which stores their type information,
+ * etc.
+ *
+ * This version of emit var specifically will never use the "alias" field. It's designed specifically
+ * for special cases in function inlining and is *not* meant for general use
+ */
+three_addr_var_t* emit_var_no_alias(symtab_variable_record_t* var);
+
+/**
  * Create and return a three address var from an existing variable. These special
  * "memory address vars" will represent the memory address of the variable in question
 */

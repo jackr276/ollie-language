@@ -888,12 +888,54 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Add into here for memory management
 	dynamic_array_add(&emitted_vars, emitted_var);
 
-	//If we have an aliased variable(almost exclusively function
-	//parameters), we will instead emit the alias of that variable instead
-	//of the variable itself
+	/**
+	 * If we have an aliased variable(almost exclusively function
+	 * parameters), we will instead emit the alias of that variable instead
+	 * of the variable itself
+	 */
 	if(var->alias != NULL){
 		var = var->alias;
 	}
+
+	//This is not temporary
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+	//We always store the type as the type with which this variable was defined in the CFG
+	emitted_var->type = var->type_defined_as;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Store the associate stack region(this is usually null)
+	emitted_var->associated_memory_region.stack_region = var->stack_region;
+
+	//The membership is also copied
+	emitted_var->membership = var->membership;
+
+	//Copy these over
+	emitted_var->class_relative_parameter_order = var->class_relative_function_parameter_order;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
+ * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
+ * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
+ * that they share is the overall variable that they're linked back to, which stores their type information,
+ * etc.
+ *
+ * This version of emit var specifically will never use the "alias" field. It's designed specifically
+ * for special cases in function inlining and is *not* meant for general use
+ */
+three_addr_var_t* emit_var_no_alias(symtab_variable_record_t* var){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//Add into here for memory management
+	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//This is not temporary
 	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
