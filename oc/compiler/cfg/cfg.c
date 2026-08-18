@@ -13148,7 +13148,7 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
  * they are shared across a global state. Global and static variables
  * are the only two as of writing this that are excluded
  */
-static inline u_int8_t is_variable_excluded_from_cloning(symtab_variable_record_t* variable){
+static inline u_int8_t is_symtab_variable_excluded_from_cloning(symtab_variable_record_t* variable){
 	variable_membership_t membership = variable->membership;
 	return ((membership == GLOBAL_VARIABLE) || (membership == STATIC_VARIABLE)) ? TRUE : FALSE;
 }
@@ -13166,6 +13166,14 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 	 */
 	if(source_variable == NULL){
 		return NULL;
+	}
+
+	/**
+	 * Instruction pointer and stack pointer are universal across all functions so they should
+	 * never be cloned
+	 */
+	if(source_variable == instruction_pointer_var || source_variable == stack_pointer_variable){
+		return instruction_pointer_var;
 	}
 
 	//Our new variable that we'll be handing back
@@ -13216,7 +13224,7 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			 * These variables would all be true variables tied to symtab variables. If this
 			 * is the case, then we just emit a copy and leave
 			 */
-			if(is_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+			if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
 				return emit_var_copy(source_variable);
 			}
 
@@ -13252,10 +13260,12 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 
 		/**
 		 * Function addresses should never be cloned because they're not local
-		 * to a function itself
+		 * to a function itself. Instead of cloning we will just emit a copy
+		 * to keep physical separation
 		 */
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
-
+			new_variable = emit_var_copy(source_variable);
+			break;
 
 		//TODO STUFF LIKE MEMORY REGIONS, ETC ETC ETC
 		default:
@@ -13464,6 +13474,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
 			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
 			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
 			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
@@ -13986,6 +13997,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
