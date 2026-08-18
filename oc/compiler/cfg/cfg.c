@@ -13338,10 +13338,32 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * For branch statements, we need to take care to replace
 		 * the block references with what they really go to
 		 */
-		case THREE_ADDR_CODE_BRANCH_STMT:
+		case THREE_ADDR_CODE_BRANCH_STMT: {
+			//Allocate fresh
+			instruction_t* branch_stmt = calloc(1, sizeof(instruction_t));
 			
+			//Copy over everything that we'll need
+			branch_stmt->statement_type = source_instruction->statement_type;
+			branch_stmt->op = source_instruction->op;
+			branch_stmt->branch_type = source_instruction->branch_type;
+			branch_stmt->line_number = source_instruction->line_number;
+			branch_stmt->inverse_branch = source_instruction->inverse_branch;
 
-			//TODO
+			//Branch statements *need* to have the "relies_on" field populated properly
+			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Populate the if and else block with what they directly map to
+			 */
+			basic_block_t* old_if_block = source_instruction->if_block;
+			basic_block_t* old_else_block = source_instruction->else_block;
+			branch_stmt->if_block = old_if_block->mapping_info.maps_to;
+			branch_stmt->else_block = old_else_block->mapping_info.maps_to;
+
+			//Add it into the block and we should be good
+			add_statement(cloning_into_block, branch_stmt);
+			return;
+		}
 	
 		/**
 		 * For a jump statement we need to use the block's "maps_to" reference
