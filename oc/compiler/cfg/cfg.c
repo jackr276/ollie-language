@@ -7545,16 +7545,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				function_assignee = emit_temp_var(signature->return_type);
 			}
 
-			//Now we can emit the direct call statement
-			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
-
 			/**
+			 * Now we can emit the direct call statement
 			 * If we have a direct call that is inlined we will flag
 			 * this call instruction as being inlined
 			 */
-			if(signature->is_inlined == TRUE){
-				function_call_statement->is_inlined_call = TRUE;
-			}
+			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
+			function_call_statement->is_inlined_call = signature->is_inlined;
 
 			break;
 
@@ -7638,8 +7635,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	//So long as this isn't NULL
-	while(param_cursor != NULL 
-		&& param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
+	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 		/**
 		 * For everything that is not an elaborative param statement, we'll
 		 * handle it internally to this function
@@ -13157,8 +13153,6 @@ static inline u_int8_t is_symtab_variable_excluded_from_cloning(symtab_variable_
 /**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
- *
- * TODO NEED TO ACCOUNT FOR STATIC AND GLOBAL VARS HERE
  */
 static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
 	/**
@@ -13258,6 +13252,22 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			new_variable->linked_var = linked_var;
 			break;
 
+		/**
+		 *
+		 * TODO DOC ME
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+			/**
+			 * For static and global variables, we do not need to worry about cloning memory
+			 * regions because the memory region is just in the data segment itself. Instead of
+			 * doing that we'll just emit a straight copy
+			 */
+			if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+				return emit_var_copy(source_variable);
+			}
+
+			printf("TODO REGULAR MEMORY ADDRESSES ARE NOT IMPLEMENTED\n");
+			exit(1);
 		/**
 		 * Function addresses should never be cloned because they're not local
 		 * to a function itself. Instead of cloning we will just emit a copy
@@ -13997,8 +14007,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
-
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
