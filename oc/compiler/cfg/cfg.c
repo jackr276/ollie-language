@@ -13427,9 +13427,11 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
  * As part of this cloning, we have two parameters that take in a simulated return and raise variable if appropriate.
  * These variables are necessary for us to simulate the process of returning/raising without actually using the "ret"
  * instruction because that won't work when we inline
+ *
+ * We also pass in a list of all of our parameters from the given function call so that we can manage them
  */
 static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit,
-											symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable){
+											symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable, dynamic_array_t* parameters){
 	//Initialize a branch new variable mapping for our uses
 	variable_map_t variable_map = variable_map_alloc();
 
@@ -13480,6 +13482,20 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 				new_block->block_type = reference_block->block_type;
 				break;
 		}
+	}
+
+	/**
+	 * Run through all of our parameters and get them assigned over to their
+	 * actual symtab variables in the inlined function. This step bridges the
+	 * gap between what we see when we call a function and what we have here
+	 */
+	for(int32_t i = 0; i < parameters->current_index; i++){
+		//Extract the parameter
+		three_addr_var_t* passed_parameter = dynamic_array_get_at(parameters, i);
+
+		//Get the actual symtab variable that it maps to
+		symtab_variable_record_t* maps_to = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
+		
 	}
 
 	/**
@@ -13540,12 +13556,6 @@ static void inline_function_call(instruction_t* call_to_inline){
 	//Get the block where this function call is currently
 	basic_block_t* block_inlined_in = call_to_inline->block_contained_in;
 
-	//TODO haven't gotten here yet
-	if(call_to_inline->called_function->function_parameters.current_index != 0){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
-	}
-	
 	/**
 	 * We'll need a fresh block that comes after our inlining takes place
 	 */
@@ -13590,7 +13600,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable);
+	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameters));
 
 	/**
 	 * We no longer need this statement at all so remove it. It still
