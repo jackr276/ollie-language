@@ -2994,11 +2994,21 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  * being initialized for the first time
  *
  * Cases that we cover:
- * 1.) Attempting to assign to an immutable "field variable" - think struct/union field
- * 2.) Attempting to assign to an immutable array area
- * 3.) Attempting to assign to a type regularly after it has been initialized
+ * 1.)
+ * 2.) Attempting to assign to an immutable "field variable" - think struct/union field
+ * 3.) Attempting to assign to an immutable array area
+ * 4.) Attempting to assign to a type regularly after it has been initialized
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
+	/**
+	 *
+	 */
+	if(left_hand_expression_tree->variable != NULL){
+		//TODO
+
+	}
+
+
 	/**
 	 * If we have a so-called "field variable", that means that this 
 	 * unary expression is a postfix access of some kind. This is important
@@ -3197,15 +3207,12 @@ loop_end:
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
-	//Sanitize based on the types here. Arrays and references specifically
-	//cannot be assigned in a traditional sense
-	switch(left_hand_unary->inferred_type->type_class){
-		case TYPE_CLASS_ARRAY:
-			return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
-
-		//If we don't have the 2 above, then we have no issue
-		default:
-			break;
+	/**
+	 * Sanitize based on the types here. Arrays and references specifically
+	 * cannot be assigned in a traditional sense
+	 */
+	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY){
+		return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
 	}
 
 	//Otherwise it worked, so we'll add it in as the left child
