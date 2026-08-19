@@ -2994,21 +2994,41 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  * being initialized for the first time
  *
  * Cases that we cover:
- * 1.) Attempting to assign to an immutable "field variable" - think struct/union field
- * 2.) Attempting to assign to an immutable array area
- * 3.) Attempting to assign to a type regularly after it has been initialized
+ * 1.) Attempting to assign to an immutable static or global variable
+ * 2.) Attempting to assign to an immutable "field variable" - think struct/union field
+ * 3.) Attempting to assign to an immutable array area
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
+	/**
+	 * Easy case to handle first: If we have a variable and it's static or global, we will perform our
+	 * regular mutability checking now. We do this here becuase our SSA analysis does not work on these
+	 * variables since they're stored in the data segment and it's not possible to do initialization
+	 * or mutation tracking on them
+	 */
+	if(left_hand_expression_tree->variable != NULL){
+		symtab_variable_record_t* variable = left_hand_expression_tree->variable;
+
+		//Only care for global or static here
+		if(variable->membership == GLOBAL_VARIABLE || variable->membership == STATIC_VARIABLE){
+			if(variable->type_defined_as->mutability == NOT_MUTABLE){
+				sprintf(info, "Attempt to mutate an immutable static or global variable. First defined here: ");
+				print_variable_name_to_buffer(info, variable);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+	}
+
 	/**
 	 * If we have a so-called "field variable", that means that this 
 	 * unary expression is a postfix access of some kind. This is important
 	 * because we'll need to check the type's mutability, not the assignee's
 	 */
 	if(left_hand_expression_tree->optional_storage.field_variable != NULL){
-		//If this is immutable, we fail. We are not checking for anything like
-		//initialization here, that is not possible to track
+		/**
+		 * If this is immutable, we fail. We are not checking for anything like
+		 * initialization here, that is not possible to track
+		 */
 		if(left_hand_expression_tree->optional_storage.field_variable->type_defined_as->mutability == NOT_MUTABLE){
-			//Fail out appropriately
 			sprintf(info, "Field \"%s\" is not mutable. Fields must be declared as mutable to be assigned to.",
 		   				left_hand_expression_tree->optional_storage.field_variable->var_name.string);
 			return print_and_return_error(info, parser_line_num);
@@ -3197,15 +3217,12 @@ loop_end:
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
-	//Sanitize based on the types here. Arrays and references specifically
-	//cannot be assigned in a traditional sense
-	switch(left_hand_unary->inferred_type->type_class){
-		case TYPE_CLASS_ARRAY:
-			return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
-
-		//If we don't have the 2 above, then we have no issue
-		default:
-			break;
+	/**
+	 * Sanitize based on the types here. Arrays and references specifically
+	 * cannot be assigned in a traditional sense
+	 */
+	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY){
+		return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
 	}
 
 	//Otherwise it worked, so we'll add it in as the left child
