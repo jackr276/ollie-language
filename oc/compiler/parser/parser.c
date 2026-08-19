@@ -3011,7 +3011,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		//Only care for global or static here
 		if(variable->membership == GLOBAL_VARIABLE || variable->membership == STATIC_VARIABLE){
 			if(variable->type_defined_as->mutability == NOT_MUTABLE){
-				sprintf(info, "Attempt to mutate immutable static or global variable. First defined here: ");
+				sprintf(info, "Attempt to mutate an immutable static or global variable. First defined here: ");
 				print_variable_name_to_buffer(info, variable);
 				return print_and_return_error(info, parser_line_num);
 			}
