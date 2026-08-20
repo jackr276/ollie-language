@@ -1333,26 +1333,6 @@ void delete_statement(instruction_t* stmt){
 		previous->next_statement = next;
 		next->previous_statement = previous;
 	}
-
-	/**
-	 * Now we need to do all maintenance when it comes to used variables for these statements. All variables
-	 * in here that were used now have one less "use" instance, and we'll need to update accordingly
-	 */
-	if(stmt->operands.oir.operand1 != NULL){
-		stmt->operands.oir.operand1->use_count--;
-	}
-
-	if(stmt->operands.oir.operand2 != NULL){
-		stmt->operands.oir.operand2->use_count--;
-	}
-
-	if(stmt->operands.oir.address_operand1 != NULL){
-		stmt->operands.oir.address_operand1->use_count--;
-	}
-
-	if(stmt->operands.oir.address_operand2 != NULL){
-		stmt->operands.oir.address_operand2->use_count--;
-	}
 }
 
 
@@ -1402,9 +1382,6 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 	if(variable == instruction_pointer_var || variable == stack_pointer_variable){
 		return;
 	}
-
-	//Update the USE count regardless
-	variable->use_count++;
 
 	/**
 	 * If we have variables that are temporary or "memory addresses", then

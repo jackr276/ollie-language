@@ -1979,11 +1979,8 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 					 */
 					case DOUBLE_AND:
 					case DOUBLE_OR:
-						//This is not a test not zero
+						//Change the type and wipe out op2 completely
 						conditional->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
-
-						//We can remove op2
-						conditional->operands.oir.operand2->use_count--;
 						conditional->operands.oir.operand2 = NULL;
 
 						//Even though there was a little that we could do, we still can't know anything
