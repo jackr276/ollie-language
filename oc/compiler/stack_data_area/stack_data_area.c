@@ -444,25 +444,30 @@ void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_pa
 
 
 /**
- * Clone a given stack region into a separate memory-distinct one. Under the hood
- * this really just calls into create_stack_region_for_type() and passes along
- * the type in the given. The important part comes into play when we link the two
- * regions together. This is how we know which new stack region to use when we're
- * variable cloning
- */
-static inline stack_region_t* clone_stack_region(stack_region_t* given){
-
-}
-
-
-/**
  * Clone one stack data area into another prexisting one. We assume that the given stack
  * data area has already been allocated. We will do this by cloning all of the regions
  * from the given data area into the other and adding them onto the top of the given
  * data area
  */
 void clone_stack_data_area_into_given(stack_data_area_t* cloning_into, stack_data_area_t* given){
+	/**
+	 * Basic idea is just to run through all of the regions and add them
+	 * into the cloning into region
+	 */
+	for(int32_t i = 0; i < given->stack_regions.current_index; i++){
+		stack_region_t* region_to_clone = dynamic_array_get_at(&(given->stack_regions), i);
 
+		/**
+		 * Create and add the stack region for the given type into the cloning_into region.
+		 * Then create the one-way association between what we just made and the cloned region
+		 * that it corresponds to
+		 */
+		stack_region_t* clone = create_stack_region_for_type(cloning_into, region_to_clone->type);
+		region_to_clone->maps_to = clone;
+	}
+
+	//Once we're done doing that we'll rework the alignment for our stack data area
+	align_stack_data_area(cloning_into);
 }
 
 

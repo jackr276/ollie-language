@@ -70,6 +70,12 @@ struct stack_region_t {
 	generic_type_t* type;
 	//What variable are we pointing to? This is
 	void* variable_referenced;
+	/**
+	 * What does this stack region map to? This is used for variable
+	 * cloning when we do function inlining only, and prevents us
+	 * from needed to maintain a map like we have to do for variables
+	 */
+	stack_region_t* maps_to;
 	//used for array addresses
 	//The unique ID for this region
 	u_int32_t stack_region_id;
