@@ -69,10 +69,10 @@ struct stack_region_t {
 	//What type are we storing?
 	generic_type_t* type;
 	/**
-	 * What region are we referencing? This is exclusively used
-	 * inside of the register allocator
+	 * This is used only for live range spilling. It would not be used
+	 * anywhere else in the system
 	 */
-	void* variable_referenced;
+	void* live_range_referenced;
 	/**
 	 * What does this stack region map to? This is used for variable
 	 * cloning when we do function inlining only, and prevents us

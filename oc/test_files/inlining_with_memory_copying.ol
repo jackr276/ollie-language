@@ -32,7 +32,8 @@ inline fn copy_over(x:i32, y:i64, z:f64, c:char) -> i32{
 
 
 pub fn main() -> i32 {
-	//Should return 11 + 5 + 88
+	//Should return 11 + 5 + 88 = 104
+	OUNIT: [exit_status = 104]
 	ret @copy_over(11, 88, 5.55, 'a');
 }
 
