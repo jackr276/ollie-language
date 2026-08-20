@@ -13519,11 +13519,31 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			//TODO
 
 
-		//TODO PROBABLY NEED TO MAKE ALL MEMORY STUFF CUSTOM
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			printf("TODO MEMORY COPY NOT IMPLEMENTED");
-			exit(1);
+		/**
+		 * Memory coyp statements touch memory so we'll
+		 * need to clone over the memory read/write type
+		 * and the byte amount that we need to copy
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:{
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
 
+			//Copy all of the basic instruction info over as well
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			//We only need these two variables
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+
+			//We need to know how much copying must be done
+			new_instruction->optional_storage.byte_amount_to_copy = source_instruction->optional_storage.byte_amount_to_copy;
+
+			//Add it in and get out
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
 
 		/**
 		 * Load and store statements touch memory so we'll need
@@ -13564,6 +13584,10 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 			//We specifically need this type
 			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+
+			//Add it in and get out
+			add_statement(cloning_into_block, new_instruction);
+			return;
 		}
 
 		/**
