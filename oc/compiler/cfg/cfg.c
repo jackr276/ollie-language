@@ -13268,6 +13268,7 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 
 			printf("TODO REGULAR MEMORY ADDRESSES ARE NOT IMPLEMENTED\n");
 			exit(1);
+	
 		/**
 		 * Function addresses should never be cloned because they're not local
 		 * to a function itself. Instead of cloning we will just emit a copy
@@ -13469,6 +13470,51 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 
 		//TODO PROBABLY NEED TO MAKE ALL MEMORY STUFF CUSTOM
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			printf("TODO MEMORY COPY NOT IMPLEMENTED");
+			exit(1);
+
+
+		/**
+		 * Load and store statements touch memory so we'll need
+		 * to clone over the memory read/write type specifically
+		 */
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			/**
+			 * First clone every single variable using our mapping strategy
+			 */
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Then clone all of the constants - there's no mapping for this we just do a complete
+			 * memory copy for all of them
+			 */
+			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
+			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
+			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			//We specifically need this type
+			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+		}
 
 		/**
 		 * By default we need to clone every single variable that 
@@ -13507,14 +13553,15 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
 			new_instruction->inverse_branch = source_instruction->inverse_branch;
-			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+
+			//We choose to use the result type for this copy over. The memory type will be used by other cloning
+			new_instruction->type_storage.result_type = source_instruction->type_storage.result_type;
 
 			/**
 			 * Copy over all of the optional storage fields in one big
-			 * memory copy
-			 *
-			 *
-			 * TODO NEEDS A REVIEW
+			 * memory copy. This is only used in these non-specific
+			 * cases. For more specific copying we'll target individual
+			 * optional storage fields as needed
 			 */
 			memcpy(&(new_instruction->optional_storage), &(source_instruction->optional_storage), sizeof(new_instruction->optional_storage));
 
