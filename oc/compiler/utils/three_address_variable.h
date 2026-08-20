@@ -121,6 +121,12 @@ struct three_addr_var_t{
 	//
 	//
 	//
+	//
+	//TODO DELETE ME
+	u_int32_t use_count;
+	//TODO DELETE ME
+	//
+	//k
 	//Temp var unique identifier
 	u_int32_t temp_var_number;
 	//Types will be used for eventual register assignment
