@@ -444,6 +444,30 @@ void recompute_stack_passed_parameter_region_offsets(stack_data_area_t* stack_pa
 
 
 /**
+ * Clone a given stack region into a separate memory-distinct one. Under the hood
+ * this really just calls into create_stack_region_for_type() and passes along
+ * the type in the given. The important part comes into play when we link the two
+ * regions together. This is how we know which new stack region to use when we're
+ * variable cloning
+ */
+static inline stack_region_t* clone_stack_region(stack_region_t* given){
+
+}
+
+
+/**
+ * Clone one stack data area into another prexisting one. We assume that the given stack
+ * data area has already been allocated. We will do this by cloning all of the regions
+ * from the given data area into the other and adding them onto the top of the given
+ * data area
+ */
+void clone_stack_data_area_into_given(stack_data_area_t* cloning_into, stack_data_area_t* given){
+
+}
+
+
+
+/**
  * Print out the passed parameter stack data
  */
 void print_passed_parameter_stack_data_area(stack_data_area_t* area){

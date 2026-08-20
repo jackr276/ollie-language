@@ -63,6 +63,12 @@ void print_passed_parameter_stack_data_area(stack_data_area_t* area);
 void print_local_stack_data_area(stack_data_area_t* area);
 
 /**
+ * Clone one stack data area into another prexisting one. We assume that the given stack
+ * data area has already been allocated
+ */
+void clone_stack_data_area_into_given(stack_data_area_t* cloning_into, stack_data_area_t* given);
+
+/**
  * Does the stack contain a given pointer value? This is used for avoiding redundant addresses
  * in the stack
  */
