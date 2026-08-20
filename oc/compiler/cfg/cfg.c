@@ -13593,7 +13593,16 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	}
 
 	/**
-	 * Step 2: Run through all of our parameters and get them assigned over to their
+	 * Step 2: we will need to clone our inlined function's stack data area
+	 * into the caller. Doing this now allows the instruction cloning step
+	 * to just use mappings between stack regions when they come up
+	 *
+	 * TODO CURRENTLY JUST LOCAL STACK IS HANDLED
+	 */
+	clone_stack_data_area_into_given(&(current_function->local_stack), &(function_to_clone->local_stack));
+
+	/**
+	 * Step 3: Run through all of our parameters and get them assigned over to their
 	 * actual symtab variables in the inlined function. This step bridges the
 	 * gap between what we see when we call a function and what we have here
 	 *
@@ -13612,7 +13621,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	}
 
 	/**
-	 * Step 3: Now that we've gone through and created all of the new blocks, we need to
+	 * Step 4: Now that we've gone through and created all of the new blocks, we need to
 	 * go through and populate them using our block cloning. There are some caveats, like
 	 * "ret" and "raise" statements will now just be jumps to the function exit block, and
 	 * we'll need to adjust branch statements, so on and so forht

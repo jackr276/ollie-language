@@ -68,7 +68,10 @@ typedef enum {
 struct stack_region_t {
 	//What type are we storing?
 	generic_type_t* type;
-	//What variable are we pointing to? This is
+	/**
+	 * What region are we referencing? This is exclusively used
+	 * inside of the register allocator
+	 */
 	void* variable_referenced;
 	/**
 	 * What does this stack region map to? This is used for variable
