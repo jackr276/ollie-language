@@ -13151,6 +13151,41 @@ static inline u_int8_t is_symtab_variable_excluded_from_cloning(symtab_variable_
 
 
 /**
+ * Clone a given symtab variable. This standardized method of cloning helps us stay consistent across
+ * different variable types
+ */
+static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_record_t* source_variable, variable_map_t* variable_map){
+	/**
+	 * Create a brand new variable using the temp var subsystem. Names are irrelevant because
+	 * we have the mapping so this should work just fine.
+	 */
+	symtab_variable_record_t* clone = create_ssa_compatible_temp_var(current_function, source_variable->type_defined_as, variable_symtab, increment_and_get_temp_id());
+
+	//Clone over some of these important flags
+	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
+	clone->stack_variable = source_variable->stack_variable;
+	clone->passed_by_stack = source_variable->passed_by_stack;
+
+	/**
+	 * If there is a stack region, we'll assign it to be what the source's stack
+	 * region maps to. We need to have this on here
+	 */
+	if(source_variable->stack_region != NULL){
+		clone->stack_region = source_variable->stack_region->maps_to;
+	} else {
+		clone->stack_region = NULL;
+	}
+
+	/**
+	 * Now that it's all been cloned over we can create the mapping
+	 */
+	create_mapping_for_symtab_variable(variable_map, source_variable, clone);
+
+	return clone;
+}
+
+
+/**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
  */
@@ -13233,15 +13268,8 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			symtab_variable_record_t* linked_var;
 			if(mapping != NULL){
 				linked_var = mapping->destination.symtab_variable;
-
 			} else {
-				/**
-				 * Create a branch new variable using the temp var subsystem. Names are irrelevant because
-				 * we have the mapping so this should work just fine. Once we do this we will also create
-				 * the associated mapping
-				 */
-				linked_var = create_ssa_compatible_temp_var(current_function, source_variable->linked_var->type_defined_as, variable_symtab, increment_and_get_temp_id());
-				create_mapping_for_symtab_variable(variable_map, source_variable->linked_var, linked_var);
+				linked_var = clone_symtab_variable(source_variable->linked_var, variable_map);
 			}
 
 			/**
@@ -13253,8 +13281,8 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			break;
 
 		/**
-		 *
-		 * TODO DOC ME
+		 * For memory addresses, we're going to have to account for the stack regions that
+		 * are stored on the variable and/or the symtab variable as we copy it
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			/**
