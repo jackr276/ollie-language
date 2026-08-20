@@ -6,7 +6,7 @@
 
 
 define struct my_struct {
-	x:mut i32;
+	x:i32;
 	y:i64;
 	z:f64;
 	c:char;
