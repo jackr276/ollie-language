@@ -1927,6 +1927,13 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	 */
 	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.address_operand2;
 	three_addr_var_t* destination_memory_address_var = memory_copy_statement->operands.oir.address_operand1;
+	
+	/**
+	 * We're going to be wiping the slate clean with how we do the copying so we
+	 * can go ahead and decrement these use counts now
+	 */
+	decrement_use_count_for_variable(source_memory_address_var);
+	decrement_use_count_for_variable(destination_memory_address_var);
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;

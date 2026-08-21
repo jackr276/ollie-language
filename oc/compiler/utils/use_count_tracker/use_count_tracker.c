@@ -8,6 +8,7 @@
  */
 
 #include "use_count_tracker.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -103,6 +104,20 @@ void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id){
 	} else {
 		tracker->map[id] = 0;
 	}
+}
+
+
+/**
+ * Dump the use count for every single ID that currently exists
+ * in the tracker. This is purely meant for debugging
+ */
+void dump_use_counts(use_count_tracker_t* tracker){
+	printf("============ Use count by variable ID ============\n");
+	for(u_int32_t i = 0; i < tracker->variable_count; i++){
+		printf("ID %d: Use count %d\n", i, tracker->map[i]);
+	}
+
+	printf("============ Use count by variable ID ============\n");
 }
 
 

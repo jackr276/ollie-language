@@ -45,6 +45,12 @@ void increment_use_count(use_count_tracker_t* tracker, u_int32_t id);
 void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id);
 
 /**
+ * Dump the use count for every single ID that currently exists
+ * in the tracker. This is purely meant for debugging
+ */
+void dump_use_counts(use_count_tracker_t* tracker);
+
+/**
  * Deallocate the underlying data structures in the use count tracker
  */
 void use_count_tracker_dealloc(use_count_tracker_t* tracker);
