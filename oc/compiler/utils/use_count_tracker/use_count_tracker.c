@@ -94,8 +94,15 @@ void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id){
 	//Do this if needed
 	perform_dynamic_resize(tracker, id);
 
-	//Knock the use count down for a given ID
-	(tracker->map[id])--;
+	/**
+	 * Make sure that we never end up with a negative
+	 * use count for our variables here
+	 */
+	if(tracker->map[id] > 0){
+		(tracker->map[id])--;
+	} else {
+		tracker->map[id] = 0;
+	}
 }
 
 
