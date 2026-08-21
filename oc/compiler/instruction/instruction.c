@@ -48,7 +48,7 @@
 //======================= Utility macros ===================
 
 //The atomically increasing variable ID
-static u_int32_t current_variable_id = 0;
+static int32_t current_variable_id = 0;
 
 /**
  * A helper function that converts a variable type to a string for debugging
@@ -113,7 +113,7 @@ const char* addressing_mode_to_string(memory_addressing_mode_t mode){
  *
  * TODO WHY DOES THIS NOT WORK IF I CHANGE IT
  */
-u_int32_t get_next_variable_id(){
+int32_t get_next_variable_id(){
 	current_variable_id++;
 	return current_variable_id;
 }
@@ -122,7 +122,7 @@ u_int32_t get_next_variable_id(){
 /**
  * Simply extracts the current variable ID
  */
-u_int32_t get_current_variable_id(){
+int32_t get_current_variable_id(){
 	return current_variable_id;
 }
 
@@ -879,12 +879,19 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	}
 
 	/**
-	 * All variables are required to have a unique variable ID.
-	 * Since this is a regular variable, we'll stash this ID in 
-	 * the regular variable ID slot
+	 * When we emit variables, we want variables that share the
+	 * same symtab variable to have the same ID. So, if we notice
+	 * that this variable has been set before, we will set the
+	 * three_addr_var_t's id to be what this variable has. Otherwise
+	 * this is the first time we're doing this and we will generate
+	 * a new one
 	 */
-	emitted_var->variable_id = get_next_variable_id();
-	var->associate_three_addr_var_ids.variable_id = emitted_var->variable_id;
+	if(var->associated_three_addr_var_ids.variable_id == NEVER_SET){
+		var->associated_three_addr_var_ids.variable_id = get_next_variable_id();
+	}
+
+	//Set this to match the symtab variable
+	emitted_var->variable_id = var->associated_three_addr_var_ids.variable_id;
 	
 	//This is not temporary
 	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
@@ -928,12 +935,19 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	}
 
 	/**
-	 * All variables are required to have a unique variable ID.
-	 * Since this is a regular variable, we'll stash this ID in 
-	 * the regular variable ID slot
+	 * When we emit variables, we want variables that share the
+	 * same symtab variable to have the same ID. So, if we notice
+	 * that this variable has been set before, we will set the
+	 * three_addr_var_t's id to be what this variable has. Otherwise
+	 * this is the first time we're doing this and we will generate
+	 * a new one
 	 */
-	emitted_var->variable_id = get_next_variable_id();
-	var->associate_three_addr_var_ids.memory_address_variable_id = emitted_var->variable_id;
+	if(var->associated_three_addr_var_ids.memory_address_variable_id == NEVER_SET){
+		var->associated_three_addr_var_ids.memory_address_variable_id = get_next_variable_id();
+	}
+
+	//Set this to match the symtab variable exactly
+	emitted_var->variable_id = var->associated_three_addr_var_ids.memory_address_variable_id;
 
 	/**
 	 * We will need to consider things differently whether or not this variable
@@ -1085,7 +1099,6 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	//Copy the memory
 	memcpy(emitted_var, var, sizeof(three_addr_var_t));
 	
-	//TODO VARIABLE ID MANAGEMENT
 	//Transfer this status over
 	emitted_var->variable_type = var->variable_type;
 

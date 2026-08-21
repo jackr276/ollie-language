@@ -126,9 +126,11 @@ struct three_addr_var_t{
 	u_int32_t use_count;
 	//TODO DELETE ME
 	//
-	//k
-	//Unique variable ID
-	u_int32_t variable_id;
+	/**
+	 * Unique variable ID. This needs to be signed because we reserve negative
+	 * values for flagging uninitialized IDs
+	 */
+	int32_t variable_id;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What live range is this variable associate with

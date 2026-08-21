@@ -28,7 +28,7 @@ static cfg_t* cfg_reference;
  */
 typedef struct temporary_variable_mapping_t{
 	//The temp var id of the source variable
-	u_int32_t source_temp_var_id;
+	int32_t source_temp_var_id;
 	//The replacement variable
 	three_addr_var_t* replacement_var;
 } temporary_variable_mapping_t;

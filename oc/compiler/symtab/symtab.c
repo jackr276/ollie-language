@@ -659,8 +659,8 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 	 * for this, we're going to set the variable ID's to -1
 	 * as a flag that they've never been set
 	 */
-	record->associate_three_addr_var_ids.variable_id = NEVER_SET;
-	record->associate_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
+	record->associated_three_addr_var_ids.variable_id = NEVER_SET;
+	record->associated_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
 
 	/**
 	 * Very Important: it is mandatory that we know what function this variable is in. If it
@@ -724,8 +724,8 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 	 * for this, we're going to set the variable ID's to -1
 	 * as a flag that they've never been set
 	 */
-	record->associate_three_addr_var_ids.variable_id = NEVER_SET;
-	record->associate_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
+	record->associated_three_addr_var_ids.variable_id = NEVER_SET;
+	record->associated_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
 
 	//Store the visibility level
 	record->visibility = visibility;
@@ -779,8 +779,8 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, 
 	 * for this, we're going to set the variable ID's to -1
 	 * as a flag that they've never been set
 	 */
-	record->associate_three_addr_var_ids.variable_id = NEVER_SET;
-	record->associate_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
+	record->associated_three_addr_var_ids.variable_id = NEVER_SET;
+	record->associated_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
 
 	//Store all of this information for eventual error printing
 	record->node_defined_in = node_defined_in;

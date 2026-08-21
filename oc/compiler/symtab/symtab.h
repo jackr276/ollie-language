@@ -259,10 +259,10 @@ struct symtab_variable_record_t{
 	 * all different IDs
 	 */
 	struct {
-		u_int32_t variable_id;
-		u_int32_t memory_address_variable_id;
+		int32_t variable_id;
+		int32_t memory_address_variable_id;
 		//TODO ADD AS NEEDED
-	} associate_three_addr_var_ids;
+	} associated_three_addr_var_ids;
 	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
 	//The line number
