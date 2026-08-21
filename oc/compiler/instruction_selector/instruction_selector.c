@@ -1092,6 +1092,21 @@ static inline void increment_use_count_for_variable(three_addr_var_t* variable){
 
 
 /**
+ * Helper function that does any needed checks before lowering the count. As of right
+ * now it's just a NULL check
+ */
+static inline void decrement_use_count_for_variable(three_addr_var_t* variable){
+	//Skip if it's NULL
+	if(variable == NULL){
+		return;
+	}
+
+	//Bump it up by ID
+	decrement_use_count(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
  * Wrapper around the get use count by ID function. Grabs the use count for any
  * given variable so long as it isn't NULL. If it is NULL we return -1
  */
@@ -4467,6 +4482,20 @@ static inline u_int8_t is_instruction_non_converting_load_operation(instruction_
 
 
 /**
+ * Remove a variable from a given instruction's slot. This involves
+ * decrementing the use count and then setting the variable slot
+ * to NULL(hence the double pointer)
+ */
+static inline void remove_variable(three_addr_var_t** variable_to_remove){
+	//Decrement the use count
+	decrement_use_count_for_variable(*variable_to_remove);
+
+	//And NULL it out
+	*variable_to_remove = NULL;
+}
+
+
+/**
  * Combine a given binary operation with a source operand load
  *
  * NOTE: It is assumed that, in the instruction window that is given,
@@ -4583,10 +4612,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Modify the type of the assignment
 		assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-		//The use count here now goes down by one
-		//TODO FIX
-		assign_operation->operands.oir.operand1->use_count--;
-		assign_operation->operands.oir.operand1 = NULL;
+		//Completely scrap this variable
+		remove_variable(&(assign_operation->operands.oir.operand1));
 
 		//Once we've done this, the first statement is entirely useless
 		delete_statement(constant_assignment);
@@ -4619,9 +4646,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Scrap the old op2
-			//TODO FIX
-			binary_operation->operands.oir.operand2->use_count--;
-			binary_operation->operands.oir.operand2 = NULL;
+			remove_variable(&(binary_operation->operands.oir.operand2));
 
 			//Replace it with what we had prior
 			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
@@ -4660,9 +4685,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Scrap the old op2
-			//TODO FIX
-			binary_operation->operands.oir.operand2->use_count--;
-			binary_operation->operands.oir.operand2 = NULL;
+			remove_variable(&(binary_operation->operands.oir.operand2));
 
 			//Replace it with what we had prior
 			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
@@ -4741,10 +4764,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 
-		//NULL the old operand out
-		//TODO FIX
-		binary_operation->operands.oir.operand1->use_count--;
-		binary_operation->operands.oir.operand1 = NULL;
+		//Wipe the old operand out
+		remove_variable(&(binary_operation->operands.oir.operand1));
 
 		//The old binary operation is now simply an assign const statement
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -4814,10 +4835,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 
-		//NULL the old operand out
-		//TODO FIX
-		binary_operation->operands.oir.operand1->use_count--;
-		binary_operation->operands.oir.operand1 = NULL;
+		//Wipe the old operand out
+		remove_variable(&(binary_operation->operands.oir.operand1));
 
 		//The old binary operation is now simply an assign const statement
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -4954,9 +4973,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
 					
 					//Op2 is no longer needed
-					//TODO REPLACE
-					binary_operation->operands.oir.operand2->use_count--;
-					binary_operation->operands.oir.operand2 = NULL;
+					remove_variable(&(binary_operation->operands.oir.operand2));
 
 					//This is now a BIN_OP_WITH_CONST
 					binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -4984,11 +5001,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Spit out the 0 constant to use here
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
-					//Remove these variables
-					binary_operation->operands.oir.operand1->use_count--;
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2->use_count--;
-					binary_operation->operands.oir.operand2 = NULL;
+					//Remove these two operands
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
 
 					//Remove the opcode to avoid confusion
 					binary_operation->op = BLANK;
