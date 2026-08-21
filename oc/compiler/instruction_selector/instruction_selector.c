@@ -7586,6 +7586,39 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 
 
 /**
+ * Helper function that does any needed checks before upping the count
+ */
+static inline void increment_use_count_for_variable(three_addr_var_t* variable){
+	//Skip if it's NULL
+	if(variable == NULL){
+		return;
+	}
+	//TODO MAY ADD MORE CHECKS
+
+	//Bump it up by ID
+	increment_use_count(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
+ * Populate the initial use counts for our given function blocks by running through
+ * every single instruction and updating based on the operands
+ */
+static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		//Run through every signle instruction
+		instruction_t* instruction_cursor = block->leader_statement;
+		while(instruction_cursor != NULL){
+
+			instruction_cursor = instruction_cursor->next_statement;
+		}
+	}
+}
+
+
+/**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
  */
@@ -7601,6 +7634,13 @@ static void simplify(cfg_t* cfg){
 
 		//Extract the function record too
 		symtab_function_record_t* function = function_entry->function_defined_in;
+
+		/**
+		 * Before we do anything else, we'll need to do an initial population
+		 * of the use counts for each three_addr_variable inside of our given 
+		 * function
+		 */
+		populate_use_counts_for_function(&(function->function_blocks));
 
 		//Let this keep going until we're done changing
 		while(simplifier_pass(function_entry) == TRUE);

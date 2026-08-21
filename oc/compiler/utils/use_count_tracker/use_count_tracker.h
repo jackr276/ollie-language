@@ -31,12 +31,12 @@ use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count);
 /**
  * Retrieve the use count for a given ID
  */
-inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id);
+u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id);
 
 /**
  * Increment the use count for a given ID
  */
-inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t id);
+void increment_use_count(use_count_tracker_t* tracker, u_int32_t id);
 
 /**
  * Deallocate the underlying data structures in the use count tracker
