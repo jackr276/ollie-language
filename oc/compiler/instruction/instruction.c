@@ -869,15 +869,22 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//If we have an aliased variable(almost exclusively function
-	//parameters), we will instead emit the alias of that variable instead
-	//of the variable itself
+	/**
+	 * If we have an aliased variable(almost exclusively function
+	 * parameters), we will instead emit the alias of that variable instead
+	 * of the variable itself
+	 */
 	if(var->alias != NULL){
 		var = var->alias;
 	}
 
-	//TODO VARIABLE ID MANAGEMENT
-
+	/**
+	 * All variables are required to have a unique variable ID.
+	 * Since this is a regular variable, we'll stash this ID in 
+	 * the regular variable ID slot
+	 */
+	emitted_var->variable_id = get_next_variable_id();
+	var->associate_three_addr_var_ids.variable_id = emitted_var->variable_id;
 	
 	//This is not temporary
 	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
@@ -920,7 +927,13 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 		var = var->alias;
 	}
 
-	//TODO VARIABLE ID MANAGEMENT
+	/**
+	 * All variables are required to have a unique variable ID.
+	 * Since this is a regular variable, we'll stash this ID in 
+	 * the regular variable ID slot
+	 */
+	emitted_var->variable_id = get_next_variable_id();
+	var->associate_three_addr_var_ids.memory_address_variable_id = emitted_var->variable_id;
 
 	/**
 	 * We will need to consider things differently whether or not this variable
@@ -966,14 +979,11 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//This is a memory address variable. We will flag this for special
-	//printing
+	//This is a memory address variable. We will flag this for special printing
 	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = type;
-	//TODO VARIABLE ID MANAGEMENT
-
 
 	//Give it a temp var number
 	emitted_var->variable_id = get_next_variable_id();
@@ -998,11 +1008,8 @@ three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type,
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//This is a memory address variable. We will flag this for special
-	//printing
+	//This is a memory address variable. We will flag this for special printing
 	emitted_var->variable_type = VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS;
-
-	//TODO VARIABLE ID MANAGEMENT
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = type;
@@ -1031,8 +1038,6 @@ three_addr_var_t* emit_return_by_copy_var(generic_type_t* type){
 
 	//Flag this as a return by copy varialbe
 	emitted_var->variable_type = VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS;
-
-	//TODO VARIABLE ID MANAGEMENT
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = type;
