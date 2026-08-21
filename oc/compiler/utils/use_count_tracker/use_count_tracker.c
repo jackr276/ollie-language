@@ -16,6 +16,7 @@
  * Allocate the underlying data structures in the use count tracker
  */
 use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count){
+	//Stack allocate it
 	use_count_tracker_t tracker;
 
 	//Populate with our starting variable account
@@ -25,7 +26,7 @@ use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count){
 	 * Allocate our underlying array. This array is indexed
 	 * by the variable IDs and has the use counts as its values
 	 */
-	tracker.map = calloc(sizeof(u_int16_t), initial_variable_count);
+	tracker.map = calloc(initial_variable_count, sizeof(u_int16_t));
 
 	return tracker;
 }
@@ -37,7 +38,7 @@ use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count){
  */
 static inline void perform_dynamic_resize(use_count_tracker_t* tracker, u_int32_t requested_id){
 	//Nothing to worry about here
-	if(tracker->variable_count < requested_id){
+	if(tracker->variable_count > requested_id){
 		return;
 	}
 
@@ -52,8 +53,12 @@ static inline void perform_dynamic_resize(use_count_tracker_t* tracker, u_int32_
 	 * We need to make sure that this is all set to 0's. So, grab a pointer to the new 
 	 * region by skipping over all of the variables that already exist, and set all of
 	 * that memory to be 0's
+	 *
+	 * Do a memset where we bump the pointer up to past the old region, and wipe the entire
+	 * thing out starting after the already populated region by setting all the bytes to
+	 * be 0
 	 */
-	memset(tracker->map + old_variable_count, 0, sizeof(u_int16_t) * tracker->variable_count - old_variable_count);
+	memset(tracker->map + old_variable_count, 0, sizeof(u_int16_t) * (tracker->variable_count - old_variable_count));
 }
 
 
