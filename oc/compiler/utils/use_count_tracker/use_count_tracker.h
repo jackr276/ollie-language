@@ -18,7 +18,7 @@ typedef struct use_count_tracker_t use_count_tracker_t;
  * may be overkill but it's ok I'm not sweating it
  */
 struct use_count_tracker_t {
-	u_int32_t* map;
+	u_int16_t* map;
 	u_int32_t variable_count;
 };
 
@@ -31,12 +31,12 @@ use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count);
 /**
  * Retrieve the use count for a given ID
  */
-inline u_int32_t get_use_count_by_id(u_int32_t id);
+inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id);
 
 /**
  * Increment the use count for a given ID
  */
-inline void increment_use_count(u_int32_t id);
+inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t id);
 
 /**
  * Deallocate the underlying data structures in the use count tracker
