@@ -54,7 +54,12 @@ const char* addressing_mode_to_string(memory_addressing_mode_t mode);
 /**
  * A wrapper around our atomically increasing variable ID
  */
-int32_t get_next_variable_id();
+u_int32_t get_next_variable_id();
+
+/**
+ * Simply retrieves the current variable ID
+ */
+u_int32_t get_current_variable_id();
 
 /**
  * A helper function that will create a global variable for us

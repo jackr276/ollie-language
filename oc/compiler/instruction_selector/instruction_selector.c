@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/value_numbering_table/value_numbering_table.h"
+#include "../utils/use_count_tracker/use_count_tracker.h"
 #include "../graph_analyzer/graph_analyzer.h"
 #include "../utils/constants.h"
 #include <stdio.h>
@@ -39,6 +40,9 @@ static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
 //A reference to our CFG
 static cfg_t* cfg_reference;
+
+//Maintain a reference to the use count tracker
+static use_count_tracker_t use_count_tracker;
 
 static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
@@ -15261,6 +15265,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * time that we need something
 	 */
 	value_name_searcher_string = dynamic_string_alloc();
+	use_count_tracker = use_count_tracker_alloc(get_current_variable_id());
 
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
@@ -15312,4 +15317,5 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * regions that we've been using
 	 */
 	dynamic_string_dealloc(&value_name_searcher_string);
+	use_count_tracker_dealloc(&use_count_tracker);
 }

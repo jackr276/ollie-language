@@ -48,7 +48,7 @@
 //======================= Utility macros ===================
 
 //The atomically increasing variable ID
-static int32_t current_variable_id = 0;
+static u_int32_t current_variable_id = 0;
 
 /**
  * A helper function that converts a variable type to a string for debugging
@@ -110,9 +110,20 @@ const char* addressing_mode_to_string(memory_addressing_mode_t mode){
 
 /**
  * A helper function for our atomically increasing temp id
+ *
+ * TODO WHY DOES THIS NOT WORK IF I CHANGE IT
  */
-int32_t get_next_variable_id(){
-	return current_variable_id++;
+u_int32_t get_next_variable_id(){
+	current_variable_id++;
+	return current_variable_id;
+}
+
+
+/**
+ * Simply extracts the current variable ID
+ */
+u_int32_t get_current_variable_id(){
+	return current_variable_id;
 }
 
 
