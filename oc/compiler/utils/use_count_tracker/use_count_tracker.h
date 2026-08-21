@@ -39,6 +39,12 @@ u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id);
 void increment_use_count(use_count_tracker_t* tracker, u_int32_t id);
 
 /**
+ * Decrement the use count for a given ID. If the use count is already
+ * at 0, we will never go negative and will stay at 0
+ */
+void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id);
+
+/**
  * Deallocate the underlying data structures in the use count tracker
  */
 void use_count_tracker_dealloc(use_count_tracker_t* tracker);

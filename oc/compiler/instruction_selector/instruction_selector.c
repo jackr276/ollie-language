@@ -4568,7 +4568,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	//If we see a constant assingment first and then we see a an assignment
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
-		&& window->instruction1->operands.oir.assignee->use_count <= 1
+		&& get_use_count_for_variable(window->instruction1->operands.oir.assignee) <= 1
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
@@ -4584,9 +4584,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 		//The use count here now goes down by one
+		//TODO FIX
 		assign_operation->operands.oir.operand1->use_count--;
-
-		//Make sure that we now null out op1
 		assign_operation->operands.oir.operand1 = NULL;
 
 		//Once we've done this, the first statement is entirely useless
@@ -4613,13 +4612,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& constant_assignment->operands.oir.assignee->use_count <= 1
+			&& get_use_count_for_variable(constant_assignment->operands.oir.assignee) <= 1
 			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Scrap the old op2
+			//TODO FIX
 			binary_operation->operands.oir.operand2->use_count--;
 			binary_operation->operands.oir.operand2 = NULL;
 
@@ -4653,13 +4653,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& constant_assignment->operands.oir.assignee->use_count <= 1
+			&& get_use_count_for_variable(constant_assignment->operands.oir.assignee) <= 1
 			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Scrap the old op2
+			//TODO FIX
 			binary_operation->operands.oir.operand2->use_count--;
 			binary_operation->operands.oir.operand2 = NULL;
 
@@ -4741,6 +4742,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 
 		//NULL the old operand out
+		//TODO FIX
 		binary_operation->operands.oir.operand1->use_count--;
 		binary_operation->operands.oir.operand1 = NULL;
 
@@ -4813,6 +4815,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 
 		//NULL the old operand out
+		//TODO FIX
 		binary_operation->operands.oir.operand1->use_count--;
 		binary_operation->operands.oir.operand1 = NULL;
 
@@ -4850,7 +4853,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
 		if(load->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
 			&& variables_equal(load->operands.oir.assignee, move->operands.oir.operand1) == TRUE
-			&& load->operands.oir.assignee->use_count <= 1){
+			&& get_use_count_for_variable(load->operands.oir.assignee) <= 1){
 
 			//The load's assignee now is the move's assignee
 			load->operands.oir.assignee = move->operands.oir.assignee;
@@ -4889,7 +4892,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Just replace and bump the use count
 		window->instruction2->operands.oir.operand1 = window->instruction1->operands.oir.operand1;
-		window->instruction2->operands.oir.operand1->use_count++;
+		increment_use_count_for_variable(window->instruction2->operands.oir.operand2);
 
 		/**
 		 * Flag that this is changed. We do not need to bother deleting the assignment
@@ -4951,6 +4954,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
 					
 					//Op2 is no longer needed
+					//TODO REPLACE
 					binary_operation->operands.oir.operand2->use_count--;
 					binary_operation->operands.oir.operand2 = NULL;
 
