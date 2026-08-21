@@ -105,27 +105,6 @@ struct live_range_t {
 struct three_addr_var_t{
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
-	//
-	//
-	//TODO why not just give every single
-	//variable a unique ID? If it's a temp var
-	//then we just use that ID and if it's not
-	//use the symtab variable, but honestly 
-	//why reserve this just for temp vars
-	//
-	//Once we have these numbers(they start at 0), we
-	//can have a map that allows O(1) indexing to get
-	//the actual counts???
-	//
-	//Maybe this is just an idea we need to work it through
-	//
-	//
-	//
-	//
-	//TODO DELETE ME
-	u_int32_t use_count;
-	//TODO DELETE ME
-	//
 	/**
 	 * Unique variable ID. This needs to be signed because we reserve negative
 	 * values for flagging uninitialized IDs

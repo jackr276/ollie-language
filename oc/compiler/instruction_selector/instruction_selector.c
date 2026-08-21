@@ -1738,8 +1738,8 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1781,8 +1781,8 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1824,8 +1824,8 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1867,8 +1867,8 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
