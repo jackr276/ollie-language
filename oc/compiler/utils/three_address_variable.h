@@ -127,8 +127,8 @@ struct three_addr_var_t{
 	//TODO DELETE ME
 	//
 	//k
-	//Temp var unique identifier
-	u_int32_t temp_var_number;
+	//Unique variable ID
+	u_int32_t variable_id;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What live range is this variable associate with

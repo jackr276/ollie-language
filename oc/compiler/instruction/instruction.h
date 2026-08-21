@@ -57,9 +57,9 @@ const char* addressing_mode_to_string(memory_addressing_mode_t mode);
 void initialize_varible_and_constant_system();
 
 /**
- * A helper function for our atomically increasing temp id
+ * A wrapper around our atomically increasing variable ID
  */
-int32_t increment_and_get_temp_id();
+int32_t get_next_variable_id();
 
 /**
  * A helper function that will create a global variable for us
@@ -670,15 +670,5 @@ void three_addr_var_dealloc(three_addr_var_t* var);
  * Destroy an entire three address code statement
 */
 void instruction_dealloc(instruction_t* stmt);
-
-/**
- * Destroy all variables
-*/
-void deallocate_all_vars();
-
-/**
- * Destroy all constants
-*/
-void deallocate_all_consts();
 
 #endif /* INSTRUCTION_H */

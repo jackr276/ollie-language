@@ -61,7 +61,11 @@ static inline void perform_dynamic_resize(use_count_tracker_t* tracker, u_int32_
  * Retrieve the use count for a given ID
  */
 inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id){
+	//Do this if needed
+	perform_dynamic_resize(tracker, id);
 
+	//Give back whatever the use count it
+	return tracker->map[id];
 }
 
 
@@ -69,7 +73,11 @@ inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id)
  * Increment the use count for a given ID
  */
 inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t id){
+	//Do this if needed
+	perform_dynamic_resize(tracker, id);
 
+	//Bump the use count for our given id
+	(tracker->map[id])++;
 }
 
 

@@ -47,14 +47,8 @@
 
 //======================= Utility macros ===================
 
-//The atomically increasing temp name id
-static int32_t current_temp_id = 0;
-
-//All created vars
-dynamic_array_t emitted_vars;
-//All created constants
-dynamic_array_t emitted_consts;
-
+//The atomically increasing variable ID
+static int32_t current_variable_id = 0;
 
 /**
  * A helper function that converts a variable type to a string for debugging
@@ -113,21 +107,12 @@ const char* addressing_mode_to_string(memory_addressing_mode_t mode){
 	}
 }
 
-/**
- * Initialize the memory management system
- */
-void initialize_varible_and_constant_system(){
-	emitted_consts = dynamic_array_alloc();
-	emitted_vars = dynamic_array_alloc();
-}
-
 
 /**
  * A helper function for our atomically increasing temp id
  */
-int32_t increment_and_get_temp_id(){
-	current_temp_id++;
-	return current_temp_id;
+int32_t get_next_variable_id(){
+	return current_variable_id++;
 }
 
 
@@ -137,9 +122,6 @@ int32_t increment_and_get_temp_id(){
 global_variable_t* create_global_variable(symtab_variable_record_t* variable, three_addr_const_t* value){
 	//Allocate it
 	global_variable_t* var = calloc(1, sizeof(global_variable_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, var);
 
 	//Copy these over
 	var->variable = variable;
@@ -800,15 +782,12 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 	//Let's first create the temporary variable
 	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
 
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, var);
-
 	//Mark this as temporary
 	var->variable_type = VARIABLE_TYPE_TEMP;
 	//Store the type info
 	var->type = type;
 	//Store the temp var number
-	var->temp_var_number = increment_and_get_temp_id();
+	var->variable_id = get_next_variable_id();
 
 	//Select the size of this variable
 	var->variable_size = get_type_size(type);
@@ -824,9 +803,6 @@ three_addr_var_t* emit_temp_var(generic_type_t* type){
 three_addr_var_t* emit_local_constant_temp_var(local_constant_t* local_constant){
 	//Let's first create the temporary variable
 	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
-
-	//Add here for memory management
-	dynamic_array_add(&emitted_vars, var);
 
 	//This is a special kind of variable that is a local constant variable
 	var->variable_type = VARIABLE_TYPE_LOCAL_CONSTANT;
@@ -855,9 +831,6 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 	//Let's first create the temporary variable
 	three_addr_var_t* var = calloc(1, sizeof(three_addr_var_t)); 
 
-	//Add here for memory management
-	dynamic_array_add(&emitted_vars, var);
-
 	//This is a special kind of variable that is a local constant variable
 	var->variable_type = VARIABLE_TYPE_FUNCTION_ADDRESS;
 
@@ -884,9 +857,6 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 three_addr_var_t* emit_var(symtab_variable_record_t* var){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//If we have an aliased variable(almost exclusively function
 	//parameters), we will instead emit the alias of that variable instead
@@ -926,9 +896,6 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
 
 	/**
 	 * If we have an aliased variable(almost exclusively function
@@ -983,9 +950,6 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
-
 	//This is a memory address variable. We will flag this for special
 	//printing
 	emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
@@ -994,7 +958,7 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
 	emitted_var->type = type;
 
 	//Give it a temp var number
-	emitted_var->temp_var_number = increment_and_get_temp_id();
+	emitted_var->variable_id = get_next_variable_id();
 
 	//Store the associate stack region(this is usually null)
 	emitted_var->associated_memory_region.stack_region = region;
@@ -1016,9 +980,6 @@ three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type,
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
-
 	//This is a memory address variable. We will flag this for special
 	//printing
 	emitted_var->variable_type = VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS;
@@ -1027,7 +988,7 @@ three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type,
 	emitted_var->type = type;
 
 	//Give it a temp var number
-	emitted_var->temp_var_number = increment_and_get_temp_id();
+	emitted_var->variable_id = get_next_variable_id();
 
 	//Store the associate stack region(this is usually null)
 	emitted_var->associated_memory_region.stack_region = region;
@@ -1048,9 +1009,6 @@ three_addr_var_t* emit_return_by_copy_var(generic_type_t* type){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
-
 	//Flag this as a return by copy varialbe
 	emitted_var->variable_type = VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS;
 
@@ -1058,7 +1016,7 @@ three_addr_var_t* emit_return_by_copy_var(generic_type_t* type){
 	emitted_var->type = type;
 
 	//Give it a temp var number
-	emitted_var->temp_var_number = increment_and_get_temp_id();
+	emitted_var->variable_id = get_next_variable_id();
 
 	//Select the size of this variable
 	emitted_var->variable_size = get_type_size(emitted_var->type);
@@ -1076,9 +1034,6 @@ three_addr_var_t* emit_return_by_copy_var(generic_type_t* type){
 three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generic_type_t* inferred_type){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//This is not temporary
 	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
@@ -1104,9 +1059,6 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
 
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
-
 	//This is a temp var
 	emitted_var->variable_type = VARIABLE_TYPE_TEMP;
 
@@ -1128,9 +1080,6 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range){
 three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	//Let's first create the non-temp variable
 	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_vars, emitted_var);
 
 	//Copy the memory
 	memcpy(emitted_var, var, sizeof(three_addr_var_t));
@@ -1944,7 +1893,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 			switch(variable->variable_type){
 				case VARIABLE_TYPE_TEMP:
 					//Print out it's temp var number
-					fprintf(fl, "t%d", variable->temp_var_number);
+					fprintf(fl, "t%d", variable->variable_id);
 					break;
 
 				case VARIABLE_TYPE_NON_TEMP:
@@ -1965,7 +1914,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 						//Print out the normal version, plus the MEM<> wrapper
 						fprintf(fl, "MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
 					} else {
-						fprintf(fl, "MEM<t%d>", variable->temp_var_number);
+						fprintf(fl, "MEM<t%d>", variable->variable_id);
 					}
 
 					break;
@@ -1975,7 +1924,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 						//Print out the normal version, plus the MEM<> wrapper
 						fprintf(fl, "PARAMETER_MEM<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
 					} else {
-						fprintf(fl, "PARAMETER_MEM<t%d>", variable->temp_var_number);
+						fprintf(fl, "PARAMETER_MEM<t%d>", variable->variable_id);
 					}
 
 					break;
@@ -1985,7 +1934,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
 						//Print out the normal version, plus the MEM<> wrapper
 						fprintf(fl, "RETURN_BY_COPY<%s_%d>", variable->linked_var->var_name.string, variable->ssa_generation);
 					} else {
-						fprintf(fl, "RETURN_BY_COPY<t%d>", variable->temp_var_number);
+						fprintf(fl, "RETURN_BY_COPY<t%d>", variable->variable_id);
 					}
 					
 					break;
@@ -5443,9 +5392,6 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 	//First we'll dynamically allocate the constant
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
-	//Add into here for memory management
-	dynamic_array_add(&emitted_consts, constant);
-
 	//Now we'll assign the appropriate values
 	constant->const_type = const_node->constant_type; 
 	constant->type = const_node->inferred_type;
@@ -5505,9 +5451,6 @@ three_addr_const_t* emit_constant(generic_ast_node_t* const_node){
 three_addr_const_t* emit_stack_passed_parameter_offset_constant(stack_region_t* region, generic_type_t* type) {
 	//First we'll dynamically allocate the constant
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_consts, constant);
 
 	//This is a special kind of constant
 	constant->const_type = STACK_PASSED_PARAM_OFFSET;
@@ -6273,9 +6216,6 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type){
 	//First allocate it
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//Add into here for memory management
-	dynamic_array_add(&emitted_consts, constant);
 
 	//Store the type here
 	constant->type = type;
@@ -9047,6 +8987,8 @@ u_int32_t get_estimated_cycle_count(instruction_t* instruction){
 
 /**
  * Are two variables equal? A helper method for searching
+ *
+ * TODO CAN WE MAKE THIS BETTER NOW???
  */
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 	//Easy way to tell here
@@ -9061,7 +9003,7 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 
 	//For temporary variables, the comparison is very easy
 	if(a->variable_type == VARIABLE_TYPE_TEMP){
-		if(a->temp_var_number == b->temp_var_number){
+		if(a->variable_id == b->variable_id){
 			return TRUE;
 		} else {
 			return FALSE;
@@ -9087,6 +9029,8 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 
 /**
  * Are two variables equal regardless of their SSA level? A helper method for searching
+ *
+ * TODO CAN WE MAKE THIS BETTER NOW???
  */
 u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b){
 	//Easy way to tell here
@@ -9101,7 +9045,7 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b){
 
 	//For temporary variables, the comparison is very easy
 	if(a->variable_type == VARIABLE_TYPE_TEMP){
-		if(a->temp_var_number == b->temp_var_number){
+		if(a->variable_id == b->variable_id){
 			return TRUE;
 		} else {
 			return FALSE;
@@ -9153,40 +9097,4 @@ void instruction_dealloc(instruction_t* stmt){
 	
 	//Free the overall stmt -- variables handled elsewhere
 	free(stmt);
-}
-
-
-/**
- * Deallocate all variables using our global list strategy
-*/
-void deallocate_all_vars(){
-	//Until we're empty
-	while(dynamic_array_is_empty(&emitted_vars) == FALSE){
-		//O(1) removal
-		three_addr_var_t* variable = dynamic_array_delete_from_back(&emitted_vars);
-
-		//Free it
-		free(variable);
-	}
-
-	//Finally scrap the array
-	dynamic_array_dealloc(&emitted_vars);
-}
-
-
-/**
- * Deallocate all constants using our global list strategy
-*/
-void deallocate_all_consts(){
-	//Until we're empty
-	while(dynamic_array_is_empty(&emitted_consts) == FALSE){
-		//O(1) removal
-		three_addr_const_t* constant = dynamic_array_delete_from_back(&emitted_consts);
-
-		//Free it
-		free(constant);
-	}
-
-	//Finally scrap the array
-	dynamic_array_dealloc(&emitted_consts);
 }
