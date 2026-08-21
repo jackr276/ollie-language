@@ -52,11 +52,6 @@ const char* variable_type_to_string(variable_type_t type);
 const char* addressing_mode_to_string(memory_addressing_mode_t mode);
 
 /**
- * Initialize the memory management system
- */
-void initialize_varible_and_constant_system();
-
-/**
  * A wrapper around our atomically increasing variable ID
  */
 int32_t get_next_variable_id();

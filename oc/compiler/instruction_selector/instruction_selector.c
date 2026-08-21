@@ -6243,7 +6243,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 * Temporary variables just output as t<number>
 		 */
 		case VARIABLE_TYPE_TEMP:
-			sprintf(buffer, "t%d", variable->temp_var_number);
+			sprintf(buffer, "t%d", variable->variable_id);
 			dynamic_string_concatenate(output, buffer);
 
 			break;
@@ -6272,7 +6272,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			if(variable_record != NULL){
 				sprintf(buffer, "M<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
 			} else {
-				sprintf(buffer, "M<t%d>", variable->temp_var_number);
+				sprintf(buffer, "M<t%d>", variable->variable_id);
 			}
 
 			dynamic_string_concatenate(output, buffer);
@@ -6288,7 +6288,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			if(variable_record != NULL){
 				sprintf(buffer, "SM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
 			} else {
-				sprintf(buffer, "SM<t%d>", variable->temp_var_number);
+				sprintf(buffer, "SM<t%d>", variable->variable_id);
 			}
 
 			dynamic_string_concatenate(output, buffer);
@@ -6304,7 +6304,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			if(variable_record != NULL){
 				sprintf(buffer, "RBC<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
 			} else {
-				sprintf(buffer, "RBC<t%d>", variable->temp_var_number);
+				sprintf(buffer, "RBC<t%d>", variable->variable_id);
 			}
 
 			dynamic_string_concatenate(output, buffer);
@@ -7046,7 +7046,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(stmt->operands.oir.assignee->temp_var_number == variable->temp_var_number){
+					if(stmt->operands.oir.assignee->variable_id == variable->variable_id){
 						dynamic_array_add(worklist, stmt);
 						stmt->mark = TRUE;
 						block->contains_mark = TRUE;

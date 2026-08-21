@@ -481,7 +481,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(assignee->temp_var_number == variable->temp_var_number){
+					if(assignee->variable_id == variable->variable_id){
 						//Add this in
 						dynamic_array_add(worklist, stmt);
 						//Mark it
@@ -1236,7 +1236,7 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 				}
 
 				//Is the assignee our variable AND it's unmarked?
-				if(assignee->temp_var_number == variable->temp_var_number){
+				if(assignee->variable_id == variable->variable_id){
 					//Mark it
 					cursor->mark = TRUE;
 
@@ -1500,7 +1500,7 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, tempo
 	//Run through the entire array
 	for(u_int32_t i = 0; i < *mapping_array_current_index; i++){
 		//If this happens, then we've found what we're supposed to map our temp var to
-		if(variable->temp_var_number == mapping[i].source_temp_var_id){
+		if(variable->variable_id == mapping[i].source_temp_var_id){
 			//Return a duplicate of this replacement
 			return emit_var_copy(mapping[i].replacement_var);
 		}
@@ -1513,12 +1513,12 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, tempo
 	}
 
 	//If we make it down here, then we need to do an entirely new mapping
-	mapping[*mapping_array_current_index].source_temp_var_id = variable->temp_var_number;
+	mapping[*mapping_array_current_index].source_temp_var_id = variable->variable_id;
 
 	//We will still emit a duplicate here
 	three_addr_var_t* replacement_var = emit_var_copy(variable);
 	//Update the ID to be something new
-	replacement_var->temp_var_number = increment_and_get_temp_id();
+	replacement_var->variable_id = get_next_variable_id();
 
 	//This is the replacement var
 	mapping[*mapping_array_current_index].replacement_var = replacement_var;
