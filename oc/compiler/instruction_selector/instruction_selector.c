@@ -838,19 +838,6 @@ static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
 
 
 /**
- * This is used to manage when we need to swap a variable out and handle all use case
- * modifications
- */
-static inline void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
-	//Decrement the old one's use count
-	old->use_count--;
-
-	//And update the new one's use count
-	new->use_count++;
-}
-
-
-/**
  * Take the binary logarithm of something that we already know
  * is a power of 2. 
  *
@@ -1085,6 +1072,69 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 			return TRUE;
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * Helper function that does any needed checks before upping the count. As of right
+ * now it's just a NULL check
+ */
+static inline void increment_use_count_for_variable(three_addr_var_t* variable){
+	//Skip if it's NULL
+	if(variable == NULL){
+		return;
+	}
+
+	//Bump it up by ID
+	increment_use_count(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
+ * Wrapper around the get use count by ID function. Grabs the use count for any
+ * given variable so long as it isn't NULL. If it is NULL we return -1
+ */
+static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
+	if(variable == NULL){
+		return NEVER_SET;
+	}
+
+	//Let the main function do the rest
+	return get_use_count_by_id(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
+ * Populate the initial use counts for our given function blocks by running through
+ * every single instruction and updating based on the operands
+ */
+static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		//Run through every signle instruction
+		instruction_t* instruction_cursor = block->leader_statement;
+		while(instruction_cursor != NULL){
+			//Don't count phi functions in this
+			if(instruction_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+				instruction_cursor = instruction_cursor->next_statement;
+				continue;
+			}
+
+			increment_use_count_for_variable(instruction_cursor->operands.oir.operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.operand2);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
+			increment_use_count_for_variable(instruction_cursor->relies_on);
+
+			//If we hvae function parameters be sure to include those as well
+			for(int32_t j = 0; j < instruction_cursor->parameters.current_index; j++){
+				increment_use_count_for_variable(dynamic_array_get_at(&(instruction_cursor->parameters), j));
+			}
+
+			instruction_cursor = instruction_cursor->next_statement;
+		}
 	}
 }
 
@@ -7582,57 +7632,6 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 	 * take care of any extra assignments that we don't want/need
 	 */
 	return sweep(function_blocks, function_entry);
-}
-
-
-/**
- * Helper function that does any needed checks before upping the count
- */
-static inline void increment_use_count_for_variable(three_addr_var_t* variable){
-	//Skip if it's NULL
-	if(variable == NULL){
-		return;
-	}
-	//TODO MAY ADD MORE CHECKS
-	//
-	//TODO THIS IS NOT GOING TO WORK UNTIL YOU DO THE VARI
-
-	//Bump it up by ID
-	increment_use_count(&use_count_tracker, variable->variable_id);
-}
-
-
-/**
- * Populate the initial use counts for our given function blocks by running through
- * every single instruction and updating based on the operands
- */
-static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
-	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
-
-		//Run through every signle instruction
-		instruction_t* instruction_cursor = block->leader_statement;
-		while(instruction_cursor != NULL){
-			//Don't count phi functions in this
-			if(instruction_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-				instruction_cursor = instruction_cursor->next_statement;
-				continue;
-			}
-
-			increment_use_count_for_variable(instruction_cursor->operands.oir.operand1);
-			increment_use_count_for_variable(instruction_cursor->operands.oir.operand2);
-			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
-			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
-			increment_use_count_for_variable(instruction_cursor->relies_on);
-
-			//If we hvae function parameters be sure to include those as well
-			for(int32_t j = 0; j < instruction_cursor->parameters.current_index; j++){
-				increment_use_count_for_variable(dynamic_array_get_at(&(instruction_cursor->parameters), j));
-			}
-
-			instruction_cursor = instruction_cursor->next_statement;
-		}
-	}
 }
 
 
