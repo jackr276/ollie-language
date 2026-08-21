@@ -876,6 +876,9 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 		var = var->alias;
 	}
 
+	//TODO VARIABLE ID MANAGEMENT
+
+	
 	//This is not temporary
 	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
 	//We always store the type as the type with which this variable was defined in the CFG
@@ -916,6 +919,8 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	if(var->alias != NULL){
 		var = var->alias;
 	}
+
+	//TODO VARIABLE ID MANAGEMENT
 
 	/**
 	 * We will need to consider things differently whether or not this variable
@@ -967,6 +972,8 @@ three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_regio
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = type;
+	//TODO VARIABLE ID MANAGEMENT
+
 
 	//Give it a temp var number
 	emitted_var->variable_id = get_next_variable_id();
@@ -994,6 +1001,8 @@ three_addr_var_t* emit_stack_param_memory_address_temp_var(generic_type_t* type,
 	//This is a memory address variable. We will flag this for special
 	//printing
 	emitted_var->variable_type = VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS;
+
+	//TODO VARIABLE ID MANAGEMENT
 
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = type;
@@ -1023,6 +1032,8 @@ three_addr_var_t* emit_return_by_copy_var(generic_type_t* type){
 	//Flag this as a return by copy varialbe
 	emitted_var->variable_type = VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS;
 
+	//TODO VARIABLE ID MANAGEMENT
+
 	//We always store the type as the type with which this variable was defined in the CFG
 	emitted_var->type = type;
 
@@ -1041,6 +1052,8 @@ three_addr_var_t* emit_return_by_copy_var(generic_type_t* type){
  * Emit a variable for an identifier node. This rule is designed to account for the fact that
  * some identifiers may have had their types casted / coerced, so we need to keep the actual
  * inferred type here
+ *
+ * TODO IS THIS EVEN USED???
 */
 three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generic_type_t* inferred_type){
 	//Let's first create the non-temp variable
@@ -1048,6 +1061,8 @@ three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generi
 
 	//This is not temporary
 	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+	//TODO VARIABLE ID MANAGEMENT
+
 
 	//This variable's type will be what the identifier node deemed it as
 	emitted_var->type = inferred_type;
@@ -1095,6 +1110,7 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	//Copy the memory
 	memcpy(emitted_var, var, sizeof(three_addr_var_t));
 	
+	//TODO VARIABLE ID MANAGEMENT
 	//Transfer this status over
 	emitted_var->variable_type = var->variable_type;
 

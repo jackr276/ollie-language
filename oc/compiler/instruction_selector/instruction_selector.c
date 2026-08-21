@@ -7594,6 +7594,8 @@ static inline void increment_use_count_for_variable(three_addr_var_t* variable){
 		return;
 	}
 	//TODO MAY ADD MORE CHECKS
+	//
+	//TODO THIS IS NOT GOING TO WORK UNTIL YOU DO THE VARI
 
 	//Bump it up by ID
 	increment_use_count(&use_count_tracker, variable->variable_id);
