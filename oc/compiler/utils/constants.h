@@ -22,6 +22,9 @@
 //For loops, we estimate that they'll execute 10 times each
 #define LOOP_ESTIMATED_COST 10
 
+//Flags that a variable has never had its ID set
+#define NEVER_SET -1
+
 /**
  * The maximum average distance between consecutive case values for 
  * a switch statement to be considered as internally jump table eligible

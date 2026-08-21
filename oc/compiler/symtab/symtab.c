@@ -655,6 +655,14 @@ symtab_variable_record_t* create_variable_record(dynamic_string_t* name, symtab_
 	record->token_index_of_definition = token_index;
 
 	/**
+	 * IMPORTANT: since we've never made a three address variable
+	 * for this, we're going to set the variable ID's to -1
+	 * as a flag that they've never been set
+	 */
+	record->associate_three_addr_var_ids.variable_id = NEVER_SET;
+	record->associate_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
+
+	/**
 	 * Very Important: it is mandatory that we know what function this variable is in. If it
 	 * is a global variable/type variable then use NULL
 	 */
@@ -711,6 +719,14 @@ symtab_variable_record_t* create_global_variable_record(dynamic_string_t* name, 
 	record->line_number = line_number;
 	record->token_index_of_definition = token_index;
 
+	/**
+	 * IMPORTANT: since we've never made a three address variable
+	 * for this, we're going to set the variable ID's to -1
+	 * as a flag that they've never been set
+	 */
+	record->associate_three_addr_var_ids.variable_id = NEVER_SET;
+	record->associate_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
+
 	//Store the visibility level
 	record->visibility = visibility;
 
@@ -757,6 +773,14 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, 
 	 * will be used by the CFG in case we have a bunch
 	 */
 	record->static_variable_mangler = 0;
+
+	/**
+	 * IMPORTANT: since we've never made a three address variable
+	 * for this, we're going to set the variable ID's to -1
+	 * as a flag that they've never been set
+	 */
+	record->associate_three_addr_var_ids.variable_id = NEVER_SET;
+	record->associate_three_addr_var_ids.memory_address_variable_id = NEVER_SET;
 
 	//Store all of this information for eventual error printing
 	record->node_defined_in = node_defined_in;
