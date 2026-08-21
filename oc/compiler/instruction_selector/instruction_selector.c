@@ -7611,6 +7611,22 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 		//Run through every signle instruction
 		instruction_t* instruction_cursor = block->leader_statement;
 		while(instruction_cursor != NULL){
+			//Don't count phi functions in this
+			if(instruction_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+				instruction_cursor = instruction_cursor->next_statement;
+				continue;
+			}
+
+			increment_use_count_for_variable(instruction_cursor->operands.oir.operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.operand2);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
+			increment_use_count_for_variable(instruction_cursor->relies_on);
+
+			//If we hvae function parameters be sure to include those as well
+			for(int32_t j = 0; j < instruction_cursor->parameters.current_index; j++){
+				increment_use_count_for_variable(dynamic_array_get_at(&(instruction_cursor->parameters), j));
+			}
 
 			instruction_cursor = instruction_cursor->next_statement;
 		}
