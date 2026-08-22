@@ -26,9 +26,6 @@ int main(int argc, char** argv){
 	u_int32_t num_warnings = 0;
 	u_int32_t num_errors = 0;
 
-	//Initialze the var/const system
-	initialize_varible_and_constant_system();
-
 	//Grab the compiler options
 	compiler_options_t* options = parse_and_store_options(argc, argv, &num_warnings, &num_errors);
 
@@ -121,8 +118,4 @@ int main(int argc, char** argv){
 
 	//Ensure that we can fully deallocate
 	stack_data_area_dealloc(&(main_function->local_stack));
-
-	//Cleanup at the end
-	deallocate_all_consts();
-	deallocate_all_vars();
 }

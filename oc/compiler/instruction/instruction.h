@@ -52,14 +52,14 @@ const char* variable_type_to_string(variable_type_t type);
 const char* addressing_mode_to_string(memory_addressing_mode_t mode);
 
 /**
- * Initialize the memory management system
+ * A wrapper around our atomically increasing variable ID
  */
-void initialize_varible_and_constant_system();
+int32_t get_next_variable_id();
 
 /**
- * A helper function for our atomically increasing temp id
+ * Simply retrieves the current variable ID
  */
-int32_t increment_and_get_temp_id();
+int32_t get_current_variable_id();
 
 /**
  * A helper function that will create a global variable for us
@@ -195,13 +195,6 @@ three_addr_var_t* emit_return_by_copy_var(generic_type_t* type);
  * "memory address vars" will represent the memory address of the variable in question
 */
 three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var);
-
-/**
- * Emit a variable for an identifier node. This rule is designed to account for the fact that
- * some identifiers may have had their types casted / coerced, so we need to keep the actual
- * inferred type here
-*/
-three_addr_var_t* emit_var_from_identifier(symtab_variable_record_t* var, generic_type_t* inferred_type);
 
 /**
  * Emit a variable copied from another variable
@@ -542,8 +535,13 @@ instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b);
 
 /**
- * Are two variables equal regardless of their SSA status? This function should only ever be used
- * by the instruction selector, under very careful circumstances
+ * Are two variables equal regardless of their SSA level? 
+ * 
+ * For variables to be equal they must share the same variable type
+ * and variable identifier. Since this is the no_ssa permutation we
+ * will not look at their SSA levels
+ *
+ * Comparing with a NULL variable will always return false
  */
 u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b);
 
@@ -670,15 +668,5 @@ void three_addr_var_dealloc(three_addr_var_t* var);
  * Destroy an entire three address code statement
 */
 void instruction_dealloc(instruction_t* stmt);
-
-/**
- * Destroy all variables
-*/
-void deallocate_all_vars();
-
-/**
- * Destroy all constants
-*/
-void deallocate_all_consts();
 
 #endif /* INSTRUCTION_H */
