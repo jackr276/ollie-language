@@ -9021,20 +9021,21 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 
 	//Otherwise, we're comparing two non-temp variables
 	} else {
-		//Do they reference the same overall variable?
-		//TODO WHAT IF THIS IS JUST NULL???
-		if(a->linked_var != b->linked_var){
+		/**
+		 * First check - if the IDs are different
+		 * then these cannot be the same
+		 */
+		if(a->variable_id != b->variable_id){
 			return FALSE;
 		}
 
-		//Finally check their SSA levels
-		if(a->ssa_generation == b->ssa_generation){
-			return TRUE;
-		}
+		/**
+		 * Second check - we care about SSA equality
+		 * for the check so they must have the same
+		 * SSA generation
+		 */
+		return a->ssa_generation == b->ssa_generation ? TRUE :  FALSE;
 	}
-
-	//If we get here it's a no go
-	return FALSE;
 }
 
 
