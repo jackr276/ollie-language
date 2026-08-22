@@ -211,6 +211,19 @@ struct symtab_variable_record_t{
 	dynamic_string_t var_name;
 	//For SSA renaming
 	lightstack_t counter_stack;
+	/**
+	 * What three address var IDs are associated with this
+	 * symtab variable? These are the IDs that get stamped
+	 * onto three address variables so that we can uniquely
+	 * identify them. Since there are different types of
+	 * variables that can have a symtab variable associated
+	 * with them(non_temp, memory address, etc) we give them
+	 * all different IDs
+	 */
+	struct {
+		int32_t variable_id;
+		int32_t memory_address_variable_id;
+	} associated_three_addr_var_ids;
 	//What function was it declared in?
 	symtab_function_record_t* function_declared_in;
 	//What type is it?
@@ -249,20 +262,6 @@ struct symtab_variable_record_t{
 	 * inside of the SSA renamer
 	 */
 	dynamic_integer_array_t ssa_overwritten_generation_map;
-	/**
-	 * What three address var IDs are associated with this
-	 * symtab variable? These are the IDs that get stamped
-	 * onto three address variables so that we can uniquely
-	 * identify them. Since there are different types of
-	 * variables that can have a symtab variable associated
-	 * with them(non_temp, memory address, etc) we give them
-	 * all different IDs
-	 */
-	struct {
-		int32_t variable_id;
-		int32_t memory_address_variable_id;
-		//TODO ADD AS NEEDED
-	} associated_three_addr_var_ids;
 	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
 	//The line number
