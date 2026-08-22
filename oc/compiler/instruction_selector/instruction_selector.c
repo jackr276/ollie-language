@@ -7661,7 +7661,9 @@ static void simplify(cfg_t* cfg){
 		populate_use_counts_for_function(&(function->function_blocks));
 
 		//Let this keep going until we're done changing
-		while(simplifier_pass(function_entry) == TRUE);
+		while(simplifier_pass(function_entry) == TRUE){
+
+		}
 
 		/**
 		 * Once we're confident that we've done all of the simplifying that we can, we 

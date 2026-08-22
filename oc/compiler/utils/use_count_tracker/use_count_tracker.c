@@ -108,6 +108,15 @@ void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id){
 
 
 /**
+ * Clear out all of the use counts and start fresh. This is really
+ * just a simple memory wipe
+ */
+void reset_all_use_counts(use_count_tracker_t* tracker){
+	memset(tracker->map, 0, tracker->variable_count * sizeof(u_int16_t));
+}
+
+
+/**
  * Dump the use count for every single ID that currently exists
  * in the tracker. This is purely meant for debugging
  */
