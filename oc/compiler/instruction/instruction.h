@@ -535,8 +535,13 @@ instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b);
 
 /**
- * Are two variables equal regardless of their SSA status? This function should only ever be used
- * by the instruction selector, under very careful circumstances
+ * Are two variables equal regardless of their SSA level? 
+ * 
+ * For variables to be equal they must share the same variable type
+ * and variable identifier. Since this is the no_ssa permutation we
+ * will not look at their SSA levels
+ *
+ * Comparing with a NULL variable will always return false
  */
 u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b);
 

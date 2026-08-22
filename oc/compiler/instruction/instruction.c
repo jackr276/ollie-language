@@ -8999,8 +8999,6 @@ u_int32_t get_estimated_cycle_count(instruction_t* instruction){
 
 /**
  * Are two variables equal? A helper method for searching
- *
- * TODO CAN WE MAKE THIS BETTER NOW???
  */
 u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 	//Easy way to tell here
@@ -9013,17 +9011,18 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 		return FALSE;
 	}
 
-	//For temporary variables, the comparison is very easy
+	/**
+	 * Temporary variables never has SSA generations so
+	 * comparing by that would be useless. We just compare
+	 * by variable ID
+	 */
 	if(a->variable_type == VARIABLE_TYPE_TEMP){
-		if(a->variable_id == b->variable_id){
-			return TRUE;
-		} else {
-			return FALSE;
-		}
+		return a->variable_id == b->variable_id ? TRUE : FALSE;
 
 	//Otherwise, we're comparing two non-temp variables
 	} else {
 		//Do they reference the same overall variable?
+		//TODO WHAT IF THIS IS JUST NULL???
 		if(a->linked_var != b->linked_var){
 			return FALSE;
 		}
@@ -9040,9 +9039,13 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b){
 
 
 /**
- * Are two variables equal regardless of their SSA level? A helper method for searching
+ * Are two variables equal regardless of their SSA level? 
+ * 
+ * For variables to be equal they must share the same variable type
+ * and variable identifier. Since this is the no_ssa permutation we
+ * will not look at their SSA levels
  *
- * TODO CAN WE MAKE THIS BETTER NOW???
+ * Comparing with a NULL variable will always return false
  */
 u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b){
 	//Easy way to tell here
@@ -9055,20 +9058,11 @@ u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b){
 		return FALSE;
 	}
 
-	//For temporary variables, the comparison is very easy
-	if(a->variable_type == VARIABLE_TYPE_TEMP){
-		if(a->variable_id == b->variable_id){
-			return TRUE;
-		} else {
-			return FALSE;
-		}
-	//Otherwise, we're comparing two non-temp variables
-	} else if(a->linked_var == b->linked_var){
-			return TRUE;
-	}
-
-	//If we get here it's a no go
-	return FALSE;
+	/**
+	 * Since we do not care about SSA generations, we can 
+	 * just compare their unique IDs and be done
+	 */
+	return a->variable_id == b->variable_id ? TRUE : FALSE;
 }
 
 
