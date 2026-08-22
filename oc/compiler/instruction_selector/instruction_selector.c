@@ -7658,12 +7658,11 @@ static void simplify(cfg_t* cfg){
 		 * of the use counts for each three_addr_variable inside of our given 
 		 * function
 		 */
-		populate_use_counts_for_function(&(function->function_blocks));
+		do {
+			reset_all_use_counts(&use_count_tracker);
+			populate_use_counts_for_function(&(function->function_blocks));
 
-		//Let this keep going until we're done changing
-		while(simplifier_pass(function_entry) == TRUE){
-
-		}
+		} while(simplifier_pass(function_entry) == TRUE);
 
 		/**
 		 * Once we're confident that we've done all of the simplifying that we can, we 
@@ -7689,8 +7688,15 @@ static void simplify(cfg_t* cfg){
 				order_blocks(cfg);
 			}
 
-			//Now run the simplifier
-			while(simplifier_pass(function_entry) == TRUE);
+			/**
+			 * Run the simplifier after we've done mark and sweep. Be sure
+			 * that we fix the use counts every time that we do this
+			 */
+			do {
+				reset_all_use_counts(&use_count_tracker);
+				populate_use_counts_for_function(&(function->function_blocks));
+
+			} while(simplifier_pass(function_entry) == TRUE);
 
 		/**
 		 * Otherwise we were not able to value number anything, but we still may have redundant instructions
