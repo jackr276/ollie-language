@@ -5409,6 +5409,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			constant_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
 			constant_operation->operands.oir.address_offset = constant_operation->operands.oir.constant_operand;
 
+			/**
+			 * Since this is now a lea operands 1 and 2 do not exist, we'll
+			 * NULL them out to reflect this
+			 */
+			remove_variable(&(constant_operation->operands.oir.operand1));
+			remove_variable(&(constant_operation->operands.oir.operand2));
+
 			//Delete the old binary operation
 			delete_statement(binary_operation);
 
@@ -5469,6 +5476,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
 					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.constant_operand;
 					
+
+					/**
+					 * Since this is now a lea operands 1 and 2 do not exist, we'll
+					 * NULL them out to reflect this
+					 */
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
+
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
 
@@ -5500,6 +5515,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
 					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
 					binary_operation->operands.oir.address_multiplier = bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant;
+
+					/**
+					 * Since this is now a lea operands 1 and 2 do not exist, we'll
+					 * NULL them out to reflect this
+					 */
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
 					
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
