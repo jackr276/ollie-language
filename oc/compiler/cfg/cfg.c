@@ -13714,8 +13714,6 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 *
 	 * TODO NEED FUNCTION RETURN BY COPY PARAMETERS
 	 */
-	//Track our index
-	int32_t function_call_parameters_idx = 0;
 	
 	/**
 	 * SPECIAL CASE: if we're returning via copy then the very first parameter
@@ -13727,16 +13725,11 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * function record's signature
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		//Extract the return by copy param
-		three_addr_var_t* return_by_copy_param = dynamic_array_get_at(parameters, function_call_parameters_idx);
-
-
-		//Bump this up so we skip over it in regular processing
-		function_call_parameters_idx++;
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
 	}
 
-
-	for(; i < parameters->current_index; i++){
+	for(int32_t i = 0; i < parameters->current_index; i++){
 		//Extract the parameter
 		three_addr_var_t* passed_parameter = dynamic_array_get_at(parameters, i);
 
@@ -13885,9 +13878,6 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 */
 	emit_jump(block_inlined_in, inlined_function_entry);
 	emit_jump(inlined_function_exit, after_inline_block);
-
-
-	//TODO ANYTHING ELSE THAT NEEDS TO BE DONE
 }
 
 
