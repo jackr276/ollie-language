@@ -2907,7 +2907,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_CLEAR_STMT:
-			fprintf(fl, "clear_sse ");
+			fprintf(fl, "clear_register ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 

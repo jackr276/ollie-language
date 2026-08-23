@@ -13363,8 +13363,6 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * For a return statement, we have to simulate a return by assigning
 		 * to a synthetic return variable and then jumping to the exit
 		 * block. There's no way for us to actually use the "ret" keyword
-		 *
-		 * TODO THIS SHOULD BE A REGISTER CLEAR FOR THE RAISE
 		 */
 		case THREE_ADDR_CODE_RET_STMT: {
 			/**
@@ -13379,14 +13377,12 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 			/**
 			 * If we have a raise variable, that means that this function has to always have
-			 * the raise variable populated along every return path. We will use the value
-			 * of 0(no error) to simulate this happening
+			 * the raise variable populated along every return path. We will use the value special
+			 * clear instruction to make this 0
 			 */
 			if(raise_variable != NULL){
-				instruction_t* simulated_raise_assignment = emit_assignment_with_const_instruction(emit_var(raise_variable),
-																					   				emit_direct_integer_or_char_constant(0, i32),
-																					   				source_instruction->line_number);
-				add_statement(cloning_into_block, simulated_raise_assignment);
+				instruction_t* clear_instruction = emit_clear_instruction(emit_var(raise_variable), source_instruction->line_number);
+				add_statement(cloning_into_block, clear_instruction);
 			}
 		
 			//To actually simulate we will jump from this block to the exit block
@@ -13398,8 +13394,6 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * A raise statement is essentially a return statement that always takes
 		 * in a constant. We will do the same thing where we simulate returning
 		 * by assignment and then jumping to the exit
-		 *
-		 * TODO THIS SHOULD BE A REGISTER CLEAR FOR THE RET
 		 */
 		case THREE_ADDR_CODE_RAISE_STMT: {
 			//Raise always has an assignee unlike return
@@ -13409,15 +13403,12 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			add_statement(cloning_into_block, simulated_raise_assignment);
 
 			/**
-			 * If we have a return variable as well we'll still need to assign
-			 * it over. We will just use a default assignment of 0 to make this 
-			 * happen
+			 * If we have a return variable we'll need it to be assigned. We will use the specialized
+			 * clear function to make this happen
 			 */
 			if(return_variable != NULL){
-				instruction_t* simulated_return_assignment = emit_assignment_with_const_instruction(emit_var(return_variable),
-																										emit_direct_integer_or_char_constant(0, i32),
-																										source_instruction->line_number);
-				add_statement(cloning_into_block, simulated_return_assignment);
+				instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
+				add_statement(cloning_into_block, clear_instruction);
 			}
 			
 			//To actually simulate we will jump from this block to the exit block
