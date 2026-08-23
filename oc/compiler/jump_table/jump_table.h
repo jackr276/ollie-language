@@ -50,6 +50,12 @@ void add_jump_table_entry(jump_table_t* table, int32_t index, void* entry);
 void print_jump_table(FILE* fl, jump_table_t* table);
 
 /**
+ * Generate the jump table for assembly. This specifically adds the
+ * ending .text section switch which is vital for making this work
+ */
+void generate_jump_table_assembly(FILE* fl, jump_table_t* table);
+
+/**
  * Deallocate the jump table
  */
 void jump_table_dealloc(jump_table_t* table);

@@ -74,9 +74,12 @@ static inline u_int32_t increment_and_get_tmp_file_id(){
  * Print an assembly block out
 */
 static inline void print_assembly_block(FILE* fl, basic_block_t* block){
-	//If this is some kind of switch block, we first print the jump table
+	/**
+	 * If we have a jump table, we will output the jump table using the specific
+	 * assembly generator helper
+	 */
 	if(block->jump_table != NULL){
-		print_jump_table(fl, block->jump_table);
+		generate_jump_table_assembly(fl, block->jump_table);
 	}
 
 	//If it's a function entry block, we need to print this out
