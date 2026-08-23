@@ -82,10 +82,6 @@ static dependency_graph_node_t* current_dependency_node = NULL;
 //Reusable memory regions for our graph traversals
 static heap_queue_t traversal_queue;
 
-//For any/all error printing
-char error_info[1500];
-
-
 /**
  * The actual result type that defines whether we have a struct
  * or constant or variable result
@@ -929,7 +925,7 @@ static basic_block_t* basic_block_alloc_no_estimate(){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in
-	created->block_id = increment_and_get();
+	created->block_id = get_next_block_id();
 
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
@@ -13131,7 +13127,7 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 	 * Create a brand new variable using the temp var subsystem. Names are irrelevant because
 	 * we have the mapping so this should work just fine.
 	 */
-	symtab_variable_record_t* clone = create_ssa_compatible_temp_var(current_function, source_variable->type_defined_as, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* clone = create_ssa_compatible_temp_var(current_function, source_variable->type_defined_as, variable_symtab, get_next_variable_id());
 
 	//Clone over some of these important flags
 	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
@@ -13187,23 +13183,23 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * var id and will use that when we emit our new one
 		 */
 		case VARIABLE_TYPE_TEMP: {
-			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->temp_var_number);
+			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
 
 			/**
 			 * If we found it we can just create a new variable with the new temporary
 			 * variable number. Otherwise, we'll have to make a new temp var number, 
 			 * save the association in the mapping, and then do the cloning
 			 */
-			u_int32_t temp_var_number;
+			u_int32_t variable_id;
 			if(mapping != NULL){
-				temp_var_number = mapping->destination.temporary_id;
+				variable_id = mapping->destination.temporary_id;
 
 			} else {
 				/**
-				 * Create a new one and add the mapping for next time
+				 * Create a new one and add the mapping for next time 
 				 */
-				temp_var_number = increment_and_get_temp_id();
-				create_mapping_for_temporary_variable(variable_map, source_variable->temp_var_number, temp_var_number);
+				variable_id = get_next_variable_id();
+				create_mapping_for_temporary_variable(variable_map, source_variable->variable_id, variable_id);
 			}
 
 			/**
@@ -13211,7 +13207,7 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			 * copy and replace the temp ID with our new one
 			 */
 			new_variable = emit_var_copy(source_variable);
-			new_variable->temp_var_number = temp_var_number;
+			new_variable->variable_id = variable_id;
 			break;
 		}
 
@@ -13238,19 +13234,18 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
 			 * in the same function
 			 */
-			symtab_variable_record_t* linked_var;
+			symtab_variable_record_t* symtab_variable;
 			if(mapping != NULL){
-				linked_var = mapping->destination.symtab_variable;
+				symtab_variable = mapping->destination.symtab_variable;
 			} else {
-				linked_var = clone_symtab_variable(source_variable->linked_var, variable_map);
+				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
 			}
 
 			/**
-			 * Regardless of how we got here, we'll need to emit the variable clone and
-			 * assign the new linked variable over
+			 * We need to go through the entire variable emittal process again to ensure that
+			 * this new symtab variable gets fresh variable references
 			 */
-			new_variable = emit_var_copy(source_variable);
-			new_variable->linked_var = linked_var;
+			new_variable = emit_var(symtab_variable);
 			break;
 		}
 
@@ -13284,8 +13279,11 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			} else {
 				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
 			}
-
-			//We will use the regular memory address emitter to make this work
+			
+			/**
+			 * Go through the process of emitting this variable fresh to ensure that we have
+			 * all of the variable ID linking in
+			 */
 			new_variable = emit_memory_address_var(symtab_variable);
 			break;
 		}
@@ -13790,14 +13788,14 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 * If we do not return void we need a simulated return variable
 	 */
 	if(inlined_function_signature->returns_void == FALSE){
-		symtab_return_variable = create_ssa_compatible_temp_var(current_function, inlined_function_signature->return_type, variable_symtab, increment_and_get_temp_id());
+		symtab_return_variable = create_ssa_compatible_temp_var(current_function, inlined_function_signature->return_type, variable_symtab, get_next_variable_id());
 	}
 
 	/**
 	 * If we raise any errors we need a simulated error raising variable
 	 */
 	if(inlined_function_signature->raises_errors == TRUE){
-		symtab_raise_variable = create_ssa_compatible_temp_var(current_function, u64, variable_symtab, increment_and_get_temp_id());
+		symtab_raise_variable = create_ssa_compatible_temp_var(current_function, u64, variable_symtab, get_next_variable_id());
 	}
 
 	/**
