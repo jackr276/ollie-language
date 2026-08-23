@@ -7721,7 +7721,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
 		//This is stored in the optional second assignee slot
-		function_call_statement->optional_storage.error_assignee = error_assignee;
+		function_call_statement->optional_storage.function_call_storage.error_assignee = error_assignee;
 
 		//Now we'll have a move statement just for register allocation reasons
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
@@ -13513,7 +13513,13 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * a stack data area inside of this function call
 		 */
 		case THREE_ADDR_CODE_FUNC_CALL:
-		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
+			//Create the new statement
+			instruction_t* new_function_all = calloc(1, sizeof(instruction_t));
+
+			//if(source_instruction->)
+
+		}
 			printf("TODO FUNCION CALL NOT IMPLEMENTED\n");
 			exit(1);
 			//TODO
@@ -13868,7 +13874,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 * Same deal if we had errors that we raise
 	 */
 	if(inlined_function_signature->raises_errors == TRUE){
-		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
+		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.function_call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
 		add_statement(inlined_function_exit, raised_variable_assignment);
 	}
 

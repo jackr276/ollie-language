@@ -10,6 +10,7 @@
 #define OLLIE_INSTRUCTION_H
 
 #include <sys/types.h>
+#include "stack_management_structs.h"
 #include "token.h"
 #include "dynamic_array/dynamic_array.h"
 #include "dynamic_string/dynamic_string.h"
@@ -142,8 +143,14 @@ struct instruction_t{
 	union {
 		//Store inlined assembly in a string
 		dynamic_string_t inlined_assembly;
-		//The second error assignee for an errorable function
-		three_addr_var_t* error_assignee;
+
+		struct {
+			//The second error assignee for an errorable function
+			three_addr_var_t* error_assignee;
+			//The data area associated with this function call
+			stack_data_area_t* function_call_data_area;
+		} function_call_storage;
+
 		//Store the byte amount that we want to copy by
 		u_int64_t byte_amount_to_copy;
 		//Signedness forcing - used specifically for shifting

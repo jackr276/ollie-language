@@ -13922,7 +13922,7 @@ static inline void handle_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.function_call_storage.error_assignee;
 }
 
 
@@ -13940,7 +13940,7 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.function_call_storage.error_assignee;
 }
 
 

@@ -2650,16 +2650,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.error_assignee != NULL){
+				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2697,16 +2697,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.error_assignee != NULL){
+				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
