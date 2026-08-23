@@ -13298,8 +13298,19 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * Function addresses should never be cloned because they're not local
 		 * to a function itself. Instead of cloning we will just emit a copy
 		 * to keep physical separation
+		 *
+		 * TODO DONT LIKE THIS
 		 */
 		case VARIABLE_TYPE_FUNCTION_ADDRESS: {
+			new_variable = emit_var_copy(source_variable);
+			break;
+		}
+
+		/**
+		 * Local constant variables are not variables in the true sense. We can get away
+		 * with just cloning it for our purposes
+		 */
+		case VARIABLE_TYPE_LOCAL_CONSTANT: {
 			new_variable = emit_var_copy(source_variable);
 			break;
 		}
@@ -13369,6 +13380,8 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 	new_function_call->statement_type = source_instruction->statement_type;
 	new_function_call->line_number = source_instruction->line_number;
 
+	//TODO STACK DATA AREA
+
 	/**
 	 * Clone over the called function symtab record *or* the operand1.
 	 * As a reminder:
@@ -13388,16 +13401,23 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 	}
 
 	/**
+	 * If we have parameters to clone over now is the time
 	 *
+	 * TODO THIS IS ONLY A BASIC CASE
 	 */
-	if(source_instruction->parameters.current_index != 0){
+	if(called_function_signature->function_parameters.current_index != 0){
+		//Grab some space for it
 		new_function_call->parameters = dynamic_array_alloc();
+
+		//Run through every parameter can clone them over one-to-one
+		for(int32_t i = 0; i < source_instruction->parameters.current_index; i++){
+			three_addr_var_t* new_parameter = clone_variable(dynamic_array_get_at(&source_instruction->parameters, i), variable_map);
+			dynamic_array_add(&(new_function_call->parameters), new_parameter);
+		}
 	}
 
-	printf("TODO FUNCION CALL NOT IMPLEMENTED\n");
-	exit(1);
-	//TODO
-
+	//Finally add this into the new block
+	add_statement(cloning_into_block, new_function_call);
 }
 
 
