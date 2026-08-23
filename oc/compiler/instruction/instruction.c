@@ -937,7 +937,20 @@ three_addr_var_t* emit_var_no_alias(symtab_variable_record_t* var){
 	//Store the associate stack region(this is usually null)
 	emitted_var->associated_memory_region.stack_region = var->stack_region;
 
-	//TODO NEED THE IDS
+	/**
+	 * When we emit variables, we want variables that share the
+	 * same symtab variable to have the same ID. So, if we notice
+	 * that this variable has been set before, we will set the
+	 * three_addr_var_t's id to be what this variable has. Otherwise
+	 * this is the first time we're doing this and we will generate
+	 * a new one
+	 */
+	if(var->associated_three_addr_var_ids.variable_id == NEVER_SET){
+		var->associated_three_addr_var_ids.variable_id = get_next_variable_id();
+	}
+
+	//Set this to match the symtab variable
+	emitted_var->variable_id = var->associated_three_addr_var_ids.variable_id;
 
 	//The membership is also copied
 	emitted_var->membership = var->membership;

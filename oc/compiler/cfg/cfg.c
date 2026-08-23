@@ -13698,6 +13698,8 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * gap between what we see when we call a function and what we have here
 	 *
 	 * TODO THIS IS ONLY THE BASIC CASE
+	 *
+	 * TODO NEED FUNCTION RETURN BY COPY PARAMETERS
 	 */
 	for(int32_t i = 0; i < parameters->current_index; i++){
 		//Extract the parameter
