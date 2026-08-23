@@ -13374,6 +13374,10 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * 	5.) Return-by-copy types
  *
  * These all need to be accounted for when we clone a function call
+ *
+ * This has been shelved pending changes to the infrastructure of function calls
+ *
+ * WORK IN PROGRESS
  */
 static inline void clone_function_call(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map){
 	//Create the new statement
@@ -13394,8 +13398,6 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 	new_function_call->statement_type = source_instruction->statement_type;
 	new_function_call->line_number = source_instruction->line_number;
 
-	//TODO STACK DATA AREA
-
 	/**
 	 * Clone over the called function symtab record *or* the operand1.
 	 * As a reminder:
@@ -13410,22 +13412,10 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 	new_function_call->optional_storage.function_call_storage.error_assignee = clone_variable(new_function_call->optional_storage.function_call_storage.error_assignee, variable_map);
 
 	if(called_function_signature->returns_by_copy){
-		/**
-		 * Let's first extract this return by copy variable. It will always be the very first parameter in the
-		 * parameter list
-		 */
-		three_addr_var_t* return_by_copy_var = dynamic_array_get_at(&(source_instruction->parameters), 0);
-
-		//create_stack_region_for_type(jkk, generic_type_t *type);
-
-		printf("NOT IMPLEMENTED\n");
-		exit(0);
 	}
 
 	/**
 	 * If we have parameters to clone over now is the time
-	 *
-	 * TODO THIS IS ONLY A BASIC CASE
 	 */
 	if(called_function_signature->function_parameters.current_index != 0){
 		//Grab some space for it
@@ -13613,14 +13603,11 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * For a function call/indirect call we need to account for the parameter
 		 * setup as we call into it and the potential that we have
 		 * a stack data area inside of this function call
-		 *
-		 * TODO I think we're going to have to crawl up and replace all of the stack regions for the
-		 * function parameter assignments with the new one but as-of-yet unverified
 		 */
 		case THREE_ADDR_CODE_FUNC_CALL:
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
-			clone_function_call(cloning_into_block, source_instruction, variable_map);
-			break;
+			printf("Function calls are not yet implemented for inlining pending changes to their architecture\n");
+			exit(0);
 		}
 
 		/**
