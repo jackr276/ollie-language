@@ -29,5 +29,8 @@ pub fn main() -> i32 {
 								arithmetic_error_t => ignore,
 								error => ret -1
 								);
+
+	//This should still equal 5 because we made no change
+	OUNIT: [exit_status = 5]
 	ret x;
 }

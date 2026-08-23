@@ -99,10 +99,15 @@ void add_jump_table_entry(jump_table_t* table, int32_t index, void* entry){
 /**
  * Print a jump table in a stylized fashion. This jump table will be printed
  * out in full assembly ready order, as no optimization takes place on it
+ *
+ * NOTE: this version is a purely cosmetic printer. It should *NOT* be used for
+ * the actual assembly generation of a jump table
  */
 void print_jump_table(FILE* fl, jump_table_t* table){
-	//First thing that we'll print is the header info
-	//This is in the read only data section and we want to align by 8 bytes
+	/**
+	 * First thing that we'll print is the header info
+	 * This is in the read only data section and we want to align by 8 bytes
+	 */
 	fprintf(fl, ".section .rodata\n\t.align 8\n.JT%d:\n", table->jump_table_id);
 
 	//Now we'll run through and print out everything in the table's values
@@ -114,8 +119,36 @@ void print_jump_table(FILE* fl, jump_table_t* table){
 		fprintf(fl, "\t.quad\t.L%d\n", node->block_id);
 	}
 
-	//For readabilitiy
+	//For stle
 	fprintf(fl, "\n");
+}
+
+
+/**
+ * Generate the jump table for assembly. This specifically adds the
+ * ending .text section switch which is vital for making this work
+ */
+void generate_jump_table_assembly(FILE* fl, jump_table_t* table){
+	/**
+	 * First thing that we'll print is the header info
+	 * This is in the read only data section and we want to align by 8 bytes
+	 */
+	fprintf(fl, ".section .rodata\n\t.align 8\n.JT%d:\n", table->jump_table_id);
+
+	//Now we'll run through and print out everything in the table's values
+	for(u_int16_t _ = 0; _ < table->num_nodes; _++){
+		//Each node is a basic block
+		basic_block_t* node = dynamic_array_get_at(&(table->nodes), _);
+
+		//Now we'll print it
+		fprintf(fl, "\t.quad\t.L%d\n", node->block_id);
+	}
+
+	/**
+	 * IMPORTANT - we need to have this switch back to the .text section for
+	 * the GAS to properly switch back after emitting the jump table
+	 */
+	fprintf(fl, ".text\n");
 }
 
 
