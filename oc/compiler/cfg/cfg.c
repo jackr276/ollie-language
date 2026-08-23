@@ -13374,6 +13374,18 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 																		source_instruction->line_number);
 				add_statement(cloning_into_block, simulated_return_assignment);
 			}
+
+			/**
+			 * If we have a raise variable, that means that this function has to always have
+			 * the raise variable populated along every return path. We will use the value
+			 * of 0(no error) to simulate this happening
+			 */
+			if(raise_variable != NULL){
+				instruction_t* simulated_raise_assignment = emit_assignment_with_const_instruction(emit_var(raise_variable),
+																					   				emit_direct_integer_or_char_constant(0, i32),
+																					   				source_instruction->line_number);
+				add_statement(cloning_into_block, simulated_raise_assignment);
+			}
 		
 			//To actually simulate we will jump from this block to the exit block
 			emit_jump(cloning_into_block, inlined_exit_block);
@@ -13391,6 +13403,18 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 																	clone_variable(source_instruction->operands.oir.operand1, variable_map),
 																	source_instruction->line_number);
 			add_statement(cloning_into_block, simulated_raise_assignment);
+
+			/**
+			 * If we have a return variable as well we'll still need to assign
+			 * it over. We will just use a default assignment of 0 to make this 
+			 * happen
+			 */
+			if(return_variable != NULL){
+				instruction_t* simulated_return_assignment = emit_assignment_with_const_instruction(emit_var(return_variable),
+																										emit_direct_integer_or_char_constant(0, i32),
+																										source_instruction->line_number);
+				add_statement(cloning_into_block, simulated_return_assignment);
+			}
 			
 			//To actually simulate we will jump from this block to the exit block
 			emit_jump(cloning_into_block, inlined_exit_block);
