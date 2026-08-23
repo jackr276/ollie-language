@@ -13252,8 +13252,6 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		/**
 		 * For memory addresses, we're going to have to account for the stack regions that
 		 * are stored on the variable and/or the symtab variable as we copy it
-		 *
-		 * TODO WHAT ABOUT MEMORY ADDRESS TEMP VARS???? NOT HANDLED CURRENTLY
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS: {
 			if(source_variable->linked_var != NULL){
@@ -13287,19 +13285,16 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 				 */
 				new_variable = emit_memory_address_var(symtab_variable);
 
+			/**
+			 * Will be done at a later time
+			 */
 			} else {
-				printf("TODO MEMORY ADDRESS TEMP VAR NOT IMPLEMENETED\n");
-				exit(1);
+				printf("Function inlining has not yet implemented memory address temporary variables\n");
+				exit(0);
 			}
 
 			break;
 		}
-
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
-
-			break;
 	
 		/**
 		 * Function addresses should never be cloned because they're not local
@@ -13311,10 +13306,13 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			break;
 		}
 
-		//TODO STUFF LIKE MEMORY REGIONS, ETC ETC ETC
+		/**
+		 * For now in the initial step - anything that comes here is not implemented
+		 * so we'll hit this catch-all
+		 */
 		default:
-			printf("TODO NOT IMPLEMENTED FOR %s\n", variable_type_to_string(source_variable->variable_type));
-			exit(1);
+			printf("Function inlining has not yet implemented the variable type %s\n", variable_type_to_string(source_variable->variable_type));
+			exit(0);
 	}
 
 	//Give back the new one
@@ -13713,23 +13711,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * Step 3: Run through all of our parameters and get them assigned over to their
 	 * actual symtab variables in the inlined function. This step bridges the
 	 * gap between what we see when we call a function and what we have here
-	 *
-	 * TODO NEED FUNCTION RETURN BY COPY PARAMETERS
 	 */
-	
-	/**
-	 * SPECIAL CASE: if we're returning via copy then the very first parameter
-	 * inside of the actual dynamic array is the return by copy address. We will
-	 * need to account for this by adjusting the index when we go to crawl
-	 * the regular function parameters because the two will be off by one
-	 *
-	 * Function return by copy parameters do not actually appear in the symtab
-	 * function record's signature
-	 */
-	if(cloning_signature->returns_by_copy == TRUE){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
-	}
 
 	for(int32_t i = 0; i < parameters->current_index; i++){
 		//Extract the parameter
