@@ -141,16 +141,19 @@ struct instruction_t{
 	 * their own dedicated field
 	 */
 	union {
-		//Store inlined assembly in a string
-		dynamic_string_t inlined_assembly;
-
+		/**
+		 * Function calls require an error assignee(for raising errors) and
+		 * some function calls require stack parameter setup
+		 */
 		struct {
+			//Some function calls require their own stack setup
+			stack_data_area_t call_stack_region;
 			//The second error assignee for an errorable function
 			three_addr_var_t* error_assignee;
-			//The data area associated with this function call
-			stack_data_area_t* function_call_data_area;
 		} function_call_storage;
 
+		//Store inlined assembly in a string
+		dynamic_string_t inlined_assembly;
 		//Store the byte amount that we want to copy by
 		u_int64_t byte_amount_to_copy;
 		//Signedness forcing - used specifically for shifting

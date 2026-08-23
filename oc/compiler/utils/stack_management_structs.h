@@ -107,7 +107,7 @@ struct stack_region_t {
  * A structure that contains an automatically organizing linked
  * list. This linked list contains all of our data
  */
-struct stack_data_area_t{
+struct stack_data_area_t {
 	//Heap array for the regions
 	dynamic_array_t stack_regions;
 	//The total size of the data area

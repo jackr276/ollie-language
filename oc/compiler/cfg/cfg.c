@@ -7469,12 +7469,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
  	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
-	 * Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
-	 * have stack parameters though
-	 */
-	stack_data_area_t stack_passed_parameters;
-
-	/**
 	 * Keep track of the first assignment instruction. We're going to need to insert
 	 * the stack allocation before it
 	 */
@@ -7537,16 +7531,19 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Does the function signature contain stack params or not?
 	u_int8_t has_stack_params = signature->contains_stack_params;
 
+	//Grab a pointer to the function call stack region if we need it
+	stack_data_area_t* function_call_stack_region = &(function_call_statement->optional_storage.function_call_storage.call_stack_region);
+
 	/**
 	 * If a function call contains stack params, we are going to have to allocate the stack data area
 	 * for our stack passed parameters. This needs to be done on every function call
 	 * for an indirect call, regardless of whether the stack is dynamic or static
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
+		stack_data_area_alloc(function_call_stack_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
 
 	} else if(signature->contains_stack_params == TRUE){
-		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+		stack_data_area_alloc(function_call_stack_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 	}
 	
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
@@ -7643,14 +7640,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * the storage of them. This will also take care of setting up the stack region/parameter
 	 * assignment if we have a return by copy parameter
 	 */
-	handle_parameter_storage(current_block, signature, &non_elaborative_parameter_results, &stack_passed_parameters, &(function_call_statement->parameters), &first_assignment_instruction, function_call_node->line_number);
+	handle_parameter_storage(current_block, signature, &non_elaborative_parameter_results, function_call_stack_region, &(function_call_statement->parameters), &first_assignment_instruction, function_call_node->line_number);
 
 	/**
 	 * If we do have elaborative stack params to manage, we will do so here
 	 * using the helper method
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &first_assignment_instruction, function_call_node->line_number);
+		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, function_call_stack_region, &first_assignment_instruction, function_call_node->line_number);
 	}
 
 	//We can now add the function call statement in
@@ -7666,10 +7663,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	if(has_stack_params == TRUE){
 		//First thing we do is align it
-		align_stack_data_area(&stack_passed_parameters);
+		align_stack_data_area(function_call_stack_region);
 
 		//Now we'll emit the stack constant
-		three_addr_const_t* stack_allocation_constant = emit_direct_integer_or_char_constant(stack_passed_parameters.total_size, u64);
+		three_addr_const_t* stack_allocation_constant = emit_direct_integer_or_char_constant(function_call_stack_region->total_size, u64);
 
 		//Now we'll emit the allocation
 		instruction_t* stack_allocation = emit_stack_allocation_ir_statement(stack_allocation_constant);
@@ -7678,7 +7675,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		insert_instruction_before_given(stack_allocation, first_assignment_instruction);
 
 		//Now we'll emit the stack deallocation constant. The memory has to be separate in case of future optimization
-		three_addr_const_t* stack_deallocation_constant = emit_direct_integer_or_char_constant(stack_passed_parameters.total_size, u64);
+		three_addr_const_t* stack_deallocation_constant = emit_direct_integer_or_char_constant(function_call_stack_region->total_size, u64);
 
 		//And then the stack deallocation statement
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
@@ -7696,7 +7693,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 
 			//Add this in here from the memory address adjustment
-			memory_address->memory_address_base_adjustment = stack_passed_parameters.total_size;
+			memory_address->memory_address_base_adjustment = function_call_stack_region->total_size;
 		}
 	}
 
