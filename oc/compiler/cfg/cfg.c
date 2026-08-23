@@ -15,6 +15,7 @@
 #include "cfg.h"
 #include <assert.h>
 #include <limits.h>
+#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13353,17 +13354,42 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 	//Create the new statement
 	instruction_t* new_function_call = calloc(1, sizeof(instruction_t));
 
+	/**
+	 * Extract the signature of whatever we're calling for convenience
+	 * down the road
+	 */
+	function_type_t* called_function_signature;
+	if(source_instruction->statement_type == THREE_ADDR_CODE_FUNC_CALL){
+		called_function_signature = source_instruction->called_function->signature->internal_types.function_type;
+	} else {
+		called_function_signature = source_instruction->operands.oir.operand1->type->internal_types.function_type;
+	}
+
 	//We really just need the statement type and line number
 	new_function_call->statement_type = source_instruction->statement_type;
 	new_function_call->line_number = source_instruction->line_number;
 
 	/**
-	 * Clone over the called function symtab record *or* the operand1 that we've cloned
+	 * Clone over the called function symtab record *or* the operand1.
+	 * As a reminder:
+	 * 	Direct calls use the "called_function" slot
+	 * 	Indirect calls use operand1 to hold the function pointer variable
 	 */
 	new_function_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 	new_function_call->called_function = source_instruction->called_function;
 
+	//Clone over both potential assignees
+	new_function_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+	new_function_call->optional_storage.function_call_storage.error_assignee = clone_variable(new_function_call->optional_storage.function_call_storage.error_assignee, variable_map);
 
+	if(called_function_signature->returns_by_copy){
+		printf("NOT IMPLEMENTED\n");
+		exit(0);
+	}
+
+	/**
+	 *
+	 */
 	if(source_instruction->parameters.current_index != 0){
 		new_function_call->parameters = dynamic_array_alloc();
 	}
