@@ -2814,7 +2814,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 				 * We will now use a specialized IR instruction to clear this variable out. In reality
 				 * this clearing will be a PXOR statement
 				 */
-				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var, constant_node->line_number);
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
@@ -2869,7 +2869,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 				 * We will now use a specialized IR instruction to clear this variable out. In reality
 				 * this clearing will be a PXOR statement
 				 */
-				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var, constant_node->line_number);
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
@@ -13363,6 +13363,8 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * For a return statement, we have to simulate a return by assigning
 		 * to a synthetic return variable and then jumping to the exit
 		 * block. There's no way for us to actually use the "ret" keyword
+		 *
+		 * TODO THIS SHOULD BE A REGISTER CLEAR FOR THE RAISE
 		 */
 		case THREE_ADDR_CODE_RET_STMT: {
 			/**
@@ -13396,6 +13398,8 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * A raise statement is essentially a return statement that always takes
 		 * in a constant. We will do the same thing where we simulate returning
 		 * by assignment and then jumping to the exit
+		 *
+		 * TODO THIS SHOULD BE A REGISTER CLEAR FOR THE RET
 		 */
 		case THREE_ADDR_CODE_RAISE_STMT: {
 			//Raise always has an assignee unlike return

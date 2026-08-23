@@ -1248,7 +1248,7 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
  * Emit a CLEAR instruction that is meant for the FP register to be zeroed out
  * This function only takes an assignee because that's all that we're clearing
  */
-instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number){
+instruction_t* emit_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 

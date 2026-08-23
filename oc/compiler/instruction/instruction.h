@@ -258,10 +258,10 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
 instruction_t* emit_pop_instruction(three_addr_var_t* popee, u_int32_t line_number);
 
 /**
- * Emit a CLEAR instruction that is meant for the FP register to be zeroed out
- * This function only takes an assignee because that's all that we're clearing
+ * Emit a clear instruction that is meant for the register to be cleaned out. We only need
+ * the assignee because that's all we're clearing
  */
-instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number);
+instruction_t* emit_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number);
 
 /**
  * Emit a PXOR instruction that's already been instruction selected
