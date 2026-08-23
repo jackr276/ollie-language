@@ -8,7 +8,7 @@ define error invalid_modulo_error_t;
 
 pub fn! divide_values(x:i32, y:i32) -> i32 raises(divide_by_zero_error_t, invalid_modulo_error_t) {
 	//Basic error case here
-	if(x == 0) {
+	if(y == 0) {
 		raise divide_by_zero_error_t;
 	}
 
@@ -30,6 +30,7 @@ pub fn main() -> i32 {
 												error => 55
 											);
 
+	OUNIT: [exit_status = 15]
 	ret result + 5;
 }
 
