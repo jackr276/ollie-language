@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <sys/types.h>
-#include "../cfg/cfg.h"
+#include "../utils/basic_block.h"
 #include "../utils/dynamic_array/dynamic_array.h"
 
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
@@ -65,10 +65,16 @@ void add_jump_table_entry(jump_table_t* table, int32_t index, void* entry){
 /**
  * Print a jump table in a stylized fashion. This jump table will be printed
  * out in full assembly ready order, as no optimization takes place on it
+ *
+ * NOTE: When we emit the jump table, we are switching into the .rodata section. After
+ * we emit this, we *MUST* switch back to the .text section otherwise we will have malformed
+ * control flow
  */
 void print_jump_table(FILE* fl, jump_table_t* table){
-	//First thing that we'll print is the header info
-	//This is in the read only data section and we want to align by 8 bytes
+	/**
+	 * First thing that we'll print is the header info
+	 * This is in the read only data section and we want to align by 8 bytes
+	 */
 	fprintf(fl, ".section .rodata\n\t.align 8\n.JT%d:\n", table->jump_table_id);
 
 	//Now we'll run through and print out everything in the table's values
@@ -80,8 +86,8 @@ void print_jump_table(FILE* fl, jump_table_t* table){
 		fprintf(fl, "\t.quad\t.L%d\n", node->block_id);
 	}
 
-	//For readabilitiy
-	fprintf(fl, "\n");
+	//Switch back to the .text section
+	fprintf(fl, ".text\n\n");
 }
 
 
