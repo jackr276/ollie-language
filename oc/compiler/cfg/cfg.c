@@ -13650,6 +13650,14 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 
 	/**
+	 * We currently haven't done this yet
+	 */
+	if(cloning_signature->contains_elaborative_stack_param || cloning_signature->contains_stack_params || cloning_signature->returns_by_copy){
+		printf("Function inlining with stack usage is currently unimplemented\n");
+		exit(0);
+	}
+
+	/**
 	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
 	 * be added to the function that we're inlining into's blocks because we've set the global
 	 * references properly
@@ -13667,10 +13675,6 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		/**
 		 * Allocate the new block but do *NOT* estimate the execution frequency. We will inherit
 		 * this from the reference
-		 *
-		 *
-		 * TODO SO MUCH TO ACCOUNT FOR HERE - jump table, etc. etc. etc just have a basic working
-		 * version for now
 		 */
 		basic_block_t* new_block = basic_block_alloc_no_estimate();
 		new_block->estimated_execution_frequency = reference_block->estimated_execution_frequency;
@@ -13702,8 +13706,6 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * Step 2: we will need to clone our inlined function's stack data area
 	 * into the caller. Doing this now allows the instruction cloning step
 	 * to just use mappings between stack regions when they come up
-	 *
-	 * TODO CURRENTLY JUST LOCAL STACK IS HANDLED
 	 */
 	clone_stack_data_area_into_given(&(current_function->local_stack), &(function_to_clone->local_stack));
 
