@@ -11,6 +11,7 @@
 #include "instruction_selector.h"
 #include "../utils/queue/heap_queue.h"
 #include "../utils/value_numbering_table/value_numbering_table.h"
+#include "../utils/use_count_tracker/use_count_tracker.h"
 #include "../graph_analyzer/graph_analyzer.h"
 #include "../utils/constants.h"
 #include <stdio.h>
@@ -39,6 +40,9 @@ static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
 //A reference to our CFG
 static cfg_t* cfg_reference;
+
+//Maintain a reference to the use count tracker
+static use_count_tracker_t use_count_tracker;
 
 static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
@@ -834,19 +838,6 @@ static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
 
 
 /**
- * This is used to manage when we need to swap a variable out and handle all use case
- * modifications
- */
-static inline void replace_variable(three_addr_var_t* old, three_addr_var_t* new){
-	//Decrement the old one's use count
-	old->use_count--;
-
-	//And update the new one's use count
-	new->use_count++;
-}
-
-
-/**
  * Take the binary logarithm of something that we already know
  * is a power of 2. 
  *
@@ -1081,6 +1072,84 @@ static inline u_int8_t binary_operator_valid_for_inplace_constant_match(ollie_to
 			return TRUE;
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * Helper function that does any needed checks before upping the count. As of right
+ * now it's just a NULL check
+ */
+static inline void increment_use_count_for_variable(three_addr_var_t* variable){
+	//Skip if it's NULL
+	if(variable == NULL){
+		return;
+	}
+
+	//Bump it up by ID
+	increment_use_count(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
+ * Helper function that does any needed checks before lowering the count. As of right
+ * now it's just a NULL check
+ */
+static inline void decrement_use_count_for_variable(three_addr_var_t* variable){
+	//Skip if it's NULL
+	if(variable == NULL){
+		return;
+	}
+
+	//Bump it up by ID
+	decrement_use_count(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
+ * Wrapper around the get use count by ID function. Grabs the use count for any
+ * given variable so long as it isn't NULL. If it is NULL we return -1
+ */
+static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
+	if(variable == NULL){
+		return NEVER_SET;
+	}
+
+	//Let the main function do the rest
+	return get_use_count_by_id(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
+ * Populate the initial use counts for our given function blocks by running through
+ * every single instruction and updating based on the operands
+ */
+static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		//Run through every signle instruction
+		instruction_t* instruction_cursor = block->leader_statement;
+		while(instruction_cursor != NULL){
+			//Don't count phi functions in this
+			if(instruction_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+				instruction_cursor = instruction_cursor->next_statement;
+				continue;
+			}
+
+			increment_use_count_for_variable(instruction_cursor->operands.oir.operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.operand2);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
+			increment_use_count_for_variable(instruction_cursor->relies_on);
+
+			//If we hvae function parameters be sure to include those as well
+			for(int32_t j = 0; j < instruction_cursor->parameters.current_index; j++){
+				increment_use_count_for_variable(dynamic_array_get_at(&(instruction_cursor->parameters), j));
+			}
+
+			instruction_cursor = instruction_cursor->next_statement;
+		}
 	}
 }
 
@@ -1684,8 +1753,8 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1727,8 +1796,8 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1770,8 +1839,8 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1813,8 +1882,8 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(store_instruction, load_instruction);
 
 	//Update the use counts
-	source_memory_address->use_count++;
-	dest_memory_address->use_count++;
+	increment_use_count_for_variable(source_memory_address);
+	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -1858,6 +1927,13 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	 */
 	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.address_operand2;
 	three_addr_var_t* destination_memory_address_var = memory_copy_statement->operands.oir.address_operand1;
+	
+	/**
+	 * We're going to be wiping the slate clean with how we do the copying so we
+	 * can go ahead and decrement these use counts now
+	 */
+	decrement_use_count_for_variable(source_memory_address_var);
+	decrement_use_count_for_variable(destination_memory_address_var);
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;
@@ -4413,6 +4489,20 @@ static inline u_int8_t is_instruction_non_converting_load_operation(instruction_
 
 
 /**
+ * Remove a variable from a given instruction's slot. This involves
+ * decrementing the use count and then setting the variable slot
+ * to NULL(hence the double pointer)
+ */
+static inline void remove_variable(three_addr_var_t** variable_to_remove){
+	//Decrement the use count
+	decrement_use_count_for_variable(*variable_to_remove);
+
+	//And NULL it out
+	*variable_to_remove = NULL;
+}
+
+
+/**
  * Combine a given binary operation with a source operand load
  *
  * NOTE: It is assumed that, in the instruction window that is given,
@@ -4514,7 +4604,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	//If we see a constant assingment first and then we see a an assignment
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
-		&& window->instruction1->operands.oir.assignee->use_count <= 1
+		&& get_use_count_for_variable(window->instruction1->operands.oir.assignee) <= 1
 		&& window->instruction2 != NULL
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_ASSN_STMT 
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
@@ -4529,11 +4619,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Modify the type of the assignment
 		assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
-		//The use count here now goes down by one
-		assign_operation->operands.oir.operand1->use_count--;
-
-		//Make sure that we now null out op1
-		assign_operation->operands.oir.operand1 = NULL;
+		//Completely scrap this variable
+		remove_variable(&(assign_operation->operands.oir.operand1));
 
 		//Once we've done this, the first statement is entirely useless
 		delete_statement(constant_assignment);
@@ -4559,15 +4646,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& constant_assignment->operands.oir.assignee->use_count <= 1
+			&& get_use_count_for_variable(constant_assignment->operands.oir.assignee) <= 1
 			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Scrap the old op2
-			binary_operation->operands.oir.operand2->use_count--;
-			binary_operation->operands.oir.operand2 = NULL;
+			remove_variable(&(binary_operation->operands.oir.operand2));
 
 			//Replace it with what we had prior
 			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
@@ -4599,15 +4685,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Is the variable in instruction 1 temporary *and* the same one that we're using in instruction2? Let's check.
 		if(constant_assignment->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-			&& constant_assignment->operands.oir.assignee->use_count <= 1
+			&& get_use_count_for_variable(constant_assignment->operands.oir.assignee) <= 1
 			&& variables_equal(constant_assignment->operands.oir.assignee, binary_operation->operands.oir.operand2) == TRUE){
 
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Scrap the old op2
-			binary_operation->operands.oir.operand2->use_count--;
-			binary_operation->operands.oir.operand2 = NULL;
+			remove_variable(&(binary_operation->operands.oir.operand2));
 
 			//Replace it with what we had prior
 			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
@@ -4686,9 +4771,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 
-		//NULL the old operand out
-		binary_operation->operands.oir.operand1->use_count--;
-		binary_operation->operands.oir.operand1 = NULL;
+		//Wipe the old operand out
+		remove_variable(&(binary_operation->operands.oir.operand1));
 
 		//The old binary operation is now simply an assign const statement
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -4758,9 +4842,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 
-		//NULL the old operand out
-		binary_operation->operands.oir.operand1->use_count--;
-		binary_operation->operands.oir.operand1 = NULL;
+		//Wipe the old operand out
+		remove_variable(&(binary_operation->operands.oir.operand1));
 
 		//The old binary operation is now simply an assign const statement
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -4796,7 +4879,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//If the variables are temp and the first one's assignee is the same as the second's op1, we can fold
 		if(load->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP 
 			&& variables_equal(load->operands.oir.assignee, move->operands.oir.operand1) == TRUE
-			&& load->operands.oir.assignee->use_count <= 1){
+			&& get_use_count_for_variable(load->operands.oir.assignee) <= 1){
 
 			//The load's assignee now is the move's assignee
 			load->operands.oir.assignee = move->operands.oir.assignee;
@@ -4835,7 +4918,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 		//Just replace and bump the use count
 		window->instruction2->operands.oir.operand1 = window->instruction1->operands.oir.operand1;
-		window->instruction2->operands.oir.operand1->use_count++;
+		increment_use_count_for_variable(window->instruction2->operands.oir.operand2);
 
 		/**
 		 * Flag that this is changed. We do not need to bother deleting the assignment
@@ -4897,8 +4980,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
 					
 					//Op2 is no longer needed
-					binary_operation->operands.oir.operand2->use_count--;
-					binary_operation->operands.oir.operand2 = NULL;
+					remove_variable(&(binary_operation->operands.oir.operand2));
 
 					//This is now a BIN_OP_WITH_CONST
 					binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -4926,11 +5008,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//Spit out the 0 constant to use here
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
-					//Remove these variables
-					binary_operation->operands.oir.operand1->use_count--;
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2->use_count--;
-					binary_operation->operands.oir.operand2 = NULL;
+					//Remove these two operands
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
 
 					//Remove the opcode to avoid confusion
 					binary_operation->op = BLANK;
@@ -4958,10 +5038,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 				//Remove these variables
-				binary_operation->operands.oir.operand1->use_count--;
-				binary_operation->operands.oir.operand1 = NULL;
-				binary_operation->operands.oir.operand2->use_count--;
-				binary_operation->operands.oir.operand2 = NULL;
+				remove_variable(&(binary_operation->operands.oir.operand1));
+				remove_variable(&(binary_operation->operands.oir.operand2));
 
 				//Avoid any confusion with the op as well
 				binary_operation->op = BLANK;
@@ -4984,8 +5062,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case SINGLE_AND:
 			case SINGLE_OR:
 				//Delete the second operand
-				binary_operation->operands.oir.operand2->use_count--;
-				binary_operation->operands.oir.operand2 = NULL;
+				remove_variable(&(binary_operation->operands.oir.operand2));
 
 				//Avoid confusion by clearing out the operator
 				binary_operation->op = BLANK;
@@ -5012,8 +5089,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
 
 					//Get rid of the second operand and the op
-					binary_operation->operands.oir.operand2->use_count--;
-					binary_operation->operands.oir.operand2 = NULL;
+					remove_variable(&(binary_operation->operands.oir.operand2));
 
 					//Clear out the operator too
 					binary_operation->op = BLANK;
@@ -5062,10 +5138,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
 
 					//Remove these variables
-					binary_operation->operands.oir.operand1->use_count--;
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2->use_count--;
-					binary_operation->operands.oir.operand2 = NULL;
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
 
 					//Avoid any confusion with the op as well
 					binary_operation->op = BLANK;
@@ -5094,10 +5168,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 					//Remove these variables
-					binary_operation->operands.oir.operand1->use_count--;
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2->use_count--;
-					binary_operation->operands.oir.operand2 = NULL;
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
 
 					//Avoid any confusion with the op as well
 					binary_operation->op = BLANK;
@@ -5337,6 +5409,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			constant_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
 			constant_operation->operands.oir.address_offset = constant_operation->operands.oir.constant_operand;
 
+			/**
+			 * Since this is now a lea operands 1 and 2 do not exist, we'll
+			 * NULL them out to reflect this
+			 */
+			remove_variable(&(constant_operation->operands.oir.operand1));
+			remove_variable(&(constant_operation->operands.oir.operand2));
+
 			//Delete the old binary operation
 			delete_statement(binary_operation);
 
@@ -5397,6 +5476,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
 					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.constant_operand;
 					
+
+					/**
+					 * Since this is now a lea operands 1 and 2 do not exist, we'll
+					 * NULL them out to reflect this
+					 */
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
+
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
 
@@ -5428,6 +5515,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
 					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
 					binary_operation->operands.oir.address_multiplier = bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant;
+
+					/**
+					 * Since this is now a lea operands 1 and 2 do not exist, we'll
+					 * NULL them out to reflect this
+					 */
+					remove_variable(&(binary_operation->operands.oir.operand1));
+					remove_variable(&(binary_operation->operands.oir.operand2));
 					
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
@@ -5553,7 +5647,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction2->statement_type != THREE_ADDR_CODE_INDIRECT_JUMP_STMT
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->operands.oir.assignee->use_count <= 1){
+		&& get_use_count_for_variable(window->instruction1->operands.oir.assignee) <= 1){
 
 		//Extract the two instructions for convenience
 		instruction_t* to_be_combined = window->instruction1;
@@ -5803,14 +5897,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 		//Wipe out operand1
-		binary_operation->operands.oir.operand1->use_count--;
-		binary_operation->operands.oir.operand1 = NULL;
+		remove_variable(&(binary_operation->operands.oir.operand1));
 
 		/**
 		 * Instruction 1 is now completely useless *if* that was the only time that
 		 * his assignee was used. Otherwise, we need to keep it in
 		 */
-		if(constant_assignment->operands.oir.assignee->use_count == 0){
+		if(get_use_count_for_variable(constant_assignment->operands.oir.assignee) <= 0){
 			delete_statement(constant_assignment);
 		}
 
@@ -5845,10 +5938,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//Wipe out op1
-					if(current_instruction->operands.oir.operand1 != NULL){
-						current_instruction->operands.oir.operand1->use_count--;
-						current_instruction->operands.oir.operand1 = NULL;
-					}
+					remove_variable(&(current_instruction->operands.oir.operand1));
 
 				//Otherwise, the value is not 0
 				} else {
@@ -5914,10 +6004,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//Wipe out op1
-					if(current_instruction->operands.oir.operand1 != NULL){
-						current_instruction->operands.oir.operand1->use_count--;
-						current_instruction->operands.oir.operand1 = NULL;
-					}
+					remove_variable(&(current_instruction->operands.oir.operand1));
 
 					//Set the constant's value to 1
 					current_instruction->operands.oir.constant_operand->constant_value.signed_long_constant = 1;
@@ -5994,10 +6081,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//The constant is still the same thing(0), let's just wipe out the ops
-					if(first_instruction->operands.oir.operand1 != NULL){
-						first_instruction->operands.oir.operand1->use_count--;
-						first_instruction->operands.oir.operand1 = NULL;
-					}
+					remove_variable(&(first_instruction->operands.oir.operand1));
 
 					//We changed something
 					changed = TRUE;
@@ -6087,10 +6171,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					first_instruction->op = BLANK;
 
 					//We no longer even need our op1
-					if(first_instruction->operands.oir.operand1 != NULL){
-						first_instruction->operands.oir.operand1->use_count--;
-						first_instruction->operands.oir.operand1 = NULL;
-					}
+					remove_variable(&(first_instruction->operands.oir.operand1));
 
 					//We can modify op1 const to just be 0 now. This is lazy but it
 					//works, we'll just 0 out all 64 bits
@@ -6168,7 +6249,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(is_instruction_non_converting_load_operation(window->instruction1) == TRUE
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& window->instruction1->operands.oir.assignee->use_count <= 1
+		&& get_use_count_for_variable(window->instruction1->operands.oir.assignee) <= 1
 		&& is_instruction_memory_operand_compatible_binary_operation(window->instruction2) == TRUE
 		&& variables_equal(window->instruction2->operands.oir.operand2, window->instruction1->operands.oir.assignee) == TRUE){
 
@@ -6243,7 +6324,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 * Temporary variables just output as t<number>
 		 */
 		case VARIABLE_TYPE_TEMP:
-			sprintf(buffer, "t%d", variable->temp_var_number);
+			sprintf(buffer, "t%d", variable->variable_id);
 			dynamic_string_concatenate(output, buffer);
 
 			break;
@@ -6272,7 +6353,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			if(variable_record != NULL){
 				sprintf(buffer, "M<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
 			} else {
-				sprintf(buffer, "M<t%d>", variable->temp_var_number);
+				sprintf(buffer, "M<t%d>", variable->variable_id);
 			}
 
 			dynamic_string_concatenate(output, buffer);
@@ -6288,7 +6369,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			if(variable_record != NULL){
 				sprintf(buffer, "SM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
 			} else {
-				sprintf(buffer, "SM<t%d>", variable->temp_var_number);
+				sprintf(buffer, "SM<t%d>", variable->variable_id);
 			}
 
 			dynamic_string_concatenate(output, buffer);
@@ -6304,7 +6385,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			if(variable_record != NULL){
 				sprintf(buffer, "RBC<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
 			} else {
-				sprintf(buffer, "RBC<t%d>", variable->temp_var_number);
+				sprintf(buffer, "RBC<t%d>", variable->variable_id);
 			}
 
 			dynamic_string_concatenate(output, buffer);
@@ -6514,13 +6595,13 @@ static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_ad
 	//If these aren't equal we replace
 	if(*current != given){
 		//Bump this one's use count down
-		(*current)->use_count--;
+		decrement_use_count_for_variable(*current);
 
 		//Make this equal the given
 		*current = given;
 
 		//Bump this one's use count up
-		given->use_count++;
+		increment_use_count_for_variable(given);
 
 		//We did substitute
 		return TRUE;
@@ -6554,11 +6635,9 @@ static inline u_int8_t replace_all_parameter_list_variables(value_numbering_tabl
 			//Set it in
 			dynamic_array_set_at(parameter_list, value_name, i);
 
-			//Bump his use count down
-			old_variable->use_count--;
-
-			//While this one goes up
-			value_name->use_count++;
+			//Swap the variable increments out
+			decrement_use_count_for_variable(old_variable);
+			increment_use_count_for_variable(value_name);
 
 			//Flag that we did perform one
 			performed_substitution = TRUE;
@@ -6757,11 +6836,9 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 				cursor->op = BLANK;
 
 				//The op1 is just the result that we found
-				cursor->operands.oir.operand1->use_count--;
+				decrement_use_count_for_variable(cursor->operands.oir.operand1);
 				cursor->operands.oir.operand1 = found_result;
-
-				//We've used this one more time
-				found_result->use_count++;
+				increment_use_count_for_variable(found_result);
 
 				/**
 				 * Now we can use the textual string again to create a new 
@@ -7046,7 +7123,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(stmt->operands.oir.assignee->temp_var_number == variable->temp_var_number){
+					if(stmt->operands.oir.assignee->variable_id == variable->variable_id){
 						dynamic_array_add(worklist, stmt);
 						stmt->mark = TRUE;
 						block->contains_mark = TRUE;
@@ -7598,8 +7675,16 @@ static void simplify(cfg_t* cfg){
 		//Extract the function record too
 		symtab_function_record_t* function = function_entry->function_defined_in;
 
-		//Let this keep going until we're done changing
-		while(simplifier_pass(function_entry) == TRUE);
+		/**
+		 * Before we do anything else, we'll need to do an initial population
+		 * of the use counts for each three_addr_variable inside of our given 
+		 * function
+		 */
+		do {
+			reset_all_use_counts(&use_count_tracker);
+			populate_use_counts_for_function(&(function->function_blocks));
+
+		} while(simplifier_pass(function_entry) == TRUE);
 
 		/**
 		 * Once we're confident that we've done all of the simplifying that we can, we 
@@ -7625,8 +7710,15 @@ static void simplify(cfg_t* cfg){
 				order_blocks(cfg);
 			}
 
-			//Now run the simplifier
-			while(simplifier_pass(function_entry) == TRUE);
+			/**
+			 * Run the simplifier after we've done mark and sweep. Be sure
+			 * that we fix the use counts every time that we do this
+			 */
+			do {
+				reset_all_use_counts(&use_count_tracker);
+				populate_use_counts_for_function(&(function->function_blocks));
+
+			} while(simplifier_pass(function_entry) == TRUE);
 
 		/**
 		 * Otherwise we were not able to value number anything, but we still may have redundant instructions
@@ -15261,6 +15353,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * time that we need something
 	 */
 	value_name_searcher_string = dynamic_string_alloc();
+	use_count_tracker = use_count_tracker_alloc(get_current_variable_id());
 
 	//Stash the stack pointer & instruction pointer
 	stack_pointer_variable = cfg->stack_pointer;
@@ -15312,4 +15405,5 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * regions that we've been using
 	 */
 	dynamic_string_dealloc(&value_name_searcher_string);
+	use_count_tracker_dealloc(&use_count_tracker);
 }

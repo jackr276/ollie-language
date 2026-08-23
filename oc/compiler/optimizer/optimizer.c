@@ -20,7 +20,6 @@ static three_addr_var_t* instruction_pointer_variable;
 //A pointer to the cfg
 static cfg_t* cfg_reference;
 
-
 /**
  * Add an item to the current stack worklist
  */
@@ -374,7 +373,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 					}
 
 					//Is the assignee our variable AND it's unmarked?
-					if(assignee->temp_var_number == variable->temp_var_number){
+					if(assignee->variable_id == variable->variable_id){
 						//Add this in
 						dynamic_array_add(worklist, stmt);
 						//Mark it
@@ -1129,7 +1128,7 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 				}
 
 				//Is the assignee our variable AND it's unmarked?
-				if(assignee->temp_var_number == variable->temp_var_number){
+				if(assignee->variable_id == variable->variable_id){
 					//Mark it
 					cursor->mark = TRUE;
 
@@ -1869,11 +1868,8 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 					 */
 					case DOUBLE_AND:
 					case DOUBLE_OR:
-						//This is not a test not zero
+						//Change the type and wipe out op2 completely
 						conditional->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
-
-						//We can remove op2
-						conditional->operands.oir.operand2->use_count--;
 						conditional->operands.oir.operand2 = NULL;
 
 						//Even though there was a little that we could do, we still can't know anything

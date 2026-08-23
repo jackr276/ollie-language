@@ -65,9 +65,19 @@ struct live_range_t {
 	u_int32_t live_range_id;
 	//Store the heuristic spill cost
 	u_int32_t spill_cost;
-	//Store the assignment count - used for stack pointer fixing
+	/**
+	 * ========== IMPORTANT NOTE ===========
+	 * We do not arbitrarily clone live
+	 * ranges like we do three address variables.
+	 * As such, it is completely appropriate for
+	 * us to have a use count tracker with them
+	 * and not have to worry about it. This core
+	 * assumption will never hold for a three_addr_var_t
+	 * and anyone dealing with use counts must be aware
+	 * of this
+	 * ========== IMPORTANT NOTE ===========
+	 */
 	u_int32_t assignment_count;
-	//Store the use count as well
 	u_int32_t use_count;
 	//The degree of this live range
 	u_int16_t degree;
@@ -95,6 +105,11 @@ struct live_range_t {
 struct three_addr_var_t{
 	//Link to symtab(NULL if not there)
 	symtab_variable_record_t* linked_var;
+	/**
+	 * Unique variable ID. This needs to be signed because we reserve negative
+	 * values for flagging uninitialized IDs
+	 */
+	int32_t variable_id;
 	//Types will be used for eventual register assignment
 	generic_type_t* type;
 	//What live range is this variable associate with
@@ -111,12 +126,6 @@ struct three_addr_var_t{
 	u_int32_t ssa_generation;
 	//Base adjustment for stack passed memory address variables
 	u_int32_t memory_address_base_adjustment;
-	//What's the temp var number
-	u_int32_t temp_var_number;
-	//What's the reference count of this variable.
-	//This will be needed later on down the line in 
-	//the instruction selector
-	u_int32_t use_count;
 	//What is the parameter number of this var? Used for parameter passing. If
 	//it is 0, it's ignored
 	u_int32_t class_relative_parameter_order;

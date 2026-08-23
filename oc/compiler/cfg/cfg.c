@@ -692,7 +692,7 @@ static inline void delete_all_unreachable_blocks(dynamic_array_t* function_block
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
-static inline int32_t increment_and_get(){
+static inline int32_t get_next_block_id(){
 	(cfg->block_id)++;
 	return cfg->block_id;
 }
@@ -958,7 +958,7 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in
-	created->block_id = increment_and_get();
+	created->block_id = get_next_block_id();
 
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
@@ -986,7 +986,7 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in even though it is a labeled block
-	created->block_id = increment_and_get();
+	created->block_id = get_next_block_id();
 
 	//We'll mark this to indicate that this is a labeled block
 	created->block_type = BLOCK_TYPE_LABEL;
@@ -1392,26 +1392,6 @@ void delete_statement(instruction_t* stmt){
 		previous->next_statement = next;
 		next->previous_statement = previous;
 	}
-
-	/**
-	 * Now we need to do all maintenance when it comes to used variables for these statements. All variables
-	 * in here that were used now have one less "use" instance, and we'll need to update accordingly
-	 */
-	if(stmt->operands.oir.operand1 != NULL){
-		stmt->operands.oir.operand1->use_count--;
-	}
-
-	if(stmt->operands.oir.operand2 != NULL){
-		stmt->operands.oir.operand2->use_count--;
-	}
-
-	if(stmt->operands.oir.address_operand1 != NULL){
-		stmt->operands.oir.address_operand1->use_count--;
-	}
-
-	if(stmt->operands.oir.address_operand2 != NULL){
-		stmt->operands.oir.address_operand2->use_count--;
-	}
 }
 
 
@@ -1461,9 +1441,6 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 	if(variable == instruction_pointer_var || variable == stack_pointer_variable){
 		return;
 	}
-
-	//Update the USE count regardless
-	variable->use_count++;
 
 	/**
 	 * If we have variables that are temporary or "memory addresses", then
@@ -4910,7 +4887,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	basic_block_t* current_block = starting_block;
 
 	//Create the ternary variable here
-	symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(current_function, ternary_operation->inferred_type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* ternary_variable = create_ssa_compatible_temp_var(current_function, ternary_operation->inferred_type, variable_symtab, get_next_variable_id());
 
 	//Let's first create the final result variable here
 	three_addr_var_t* if_result = emit_var(ternary_variable);
@@ -5045,7 +5022,7 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * we use this unique helper. There will be a phi join node at the end of the
 	 * in statement
 	 */
-	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, result_type, variable_symtab, increment_and_get_temp_id());
+	symtab_variable_record_t* in_assignee = create_ssa_compatible_temp_var(current_function, result_type, variable_symtab, get_next_variable_id());
 	three_addr_var_t* true_variable = emit_var(in_assignee);
 	three_addr_var_t* false_variable = emit_var(in_assignee);
 	three_addr_var_t* final_result = emit_var(in_assignee);
@@ -6683,7 +6660,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 */
 	symtab_variable_record_t* function_result_var = NULL;
 	if(function_assignee != NULL){
-		function_result_var = create_ssa_compatible_temp_var(current_function, function_assignee->type, variable_symtab, increment_and_get_temp_id());
+		function_result_var = create_ssa_compatible_temp_var(current_function, function_assignee->type, variable_symtab, get_next_variable_id());
 	}
 
 	/**
@@ -7969,11 +7946,6 @@ void basic_block_dealloc(basic_block_t* block){
  * NOTE: in reality this is never even used, we don't care to deallocate the CFG
  */
 void dealloc_cfg(cfg_t* cfg){
-	//Destroy all variables
-	deallocate_all_vars();
-	//Destroy all constants
-	deallocate_all_consts();
-
 	dynamic_array_dealloc(&(cfg->function_entry_blocks));
 
 	if(cfg->local_f32_constants.internal_array != NULL){
@@ -11585,7 +11557,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		if(parameter->stack_variable == FALSE 
 			&& parameter->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 			//Create the aliased variable
-			symtab_variable_record_t* alias = create_parameter_alias_variable(current_function, parameter, variable_symtab, increment_and_get_temp_id());
+			symtab_variable_record_t* alias = create_parameter_alias_variable(current_function, parameter, variable_symtab, get_next_variable_id());
 
 			/**
 			 * Store that this alias was *defined* inside of the function entry block. Notice
@@ -14069,9 +14041,6 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
  * Build a cfg from the ground up
 */
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings){
-	//Initialize the variable system
-	initialize_varible_and_constant_system();
-
 	//Store our references here
 	num_errors_ref = num_errors;
 	num_warnings_ref = num_warnings;
