@@ -13256,37 +13256,50 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * TODO WHAT ABOUT MEMORY ADDRESS TEMP VARS???? NOT HANDLED CURRENTLY
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS: {
-			/**
-			 * For static and global variables, we do not need to worry about cloning memory
-			 * regions because the memory region is just in the data segment itself. Instead of
-			 * doing that we'll just emit a straight copy
-			 */
-			if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
-				return emit_var_copy(source_variable);
-			}
-			
-			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
+			if(source_variable->linked_var != NULL){
+				/**
+				 * For static and global variables, we do not need to worry about cloning memory
+				 * regions because the memory region is just in the data segment itself. Instead of
+				 * doing that we'll just emit a straight copy
+				 */
+				if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+					return emit_var_copy(source_variable);
+				}
+				
+				mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
 
-			/**
-			 * If we found it we can just create a new variable from this linked one. If not,
-			 * then we'll need to create an entirely new symtab variable while guaranteeing that
-			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
-			 * in the same function
-			 */
-			symtab_variable_record_t* symtab_variable;
-			if(mapping != NULL){
-				symtab_variable = mapping->destination.symtab_variable;
+				/**
+				 * If we found it we can just create a new variable from this linked one. If not,
+				 * then we'll need to create an entirely new symtab variable while guaranteeing that
+				 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+				 * in the same function
+				 */
+				symtab_variable_record_t* symtab_variable;
+				if(mapping != NULL){
+					symtab_variable = mapping->destination.symtab_variable;
+				} else {
+					symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
+				}
+				
+				/**
+				 * Go through the process of emitting this variable fresh to ensure that we have
+				 * all of the variable ID linking in
+				 */
+				new_variable = emit_memory_address_var(symtab_variable);
+
 			} else {
-				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
+				printf("TODO MEMORY ADDRESS TEMP VAR NOT IMPLEMENETED\n");
+				exit(1);
 			}
-			
-			/**
-			 * Go through the process of emitting this variable fresh to ensure that we have
-			 * all of the variable ID linking in
-			 */
-			new_variable = emit_memory_address_var(symtab_variable);
+
 			break;
 		}
+
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+
+			break;
 	
 		/**
 		 * Function addresses should never be cloned because they're not local
