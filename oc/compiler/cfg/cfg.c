@@ -13339,6 +13339,43 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
 
 
 /**
+ * Function calls are so complex that they warrant their own separate function to handle their cloning. 
+ * As a reminder functions in Ollie can:
+ * 	1.) Raise errors
+ * 	2.) Have stack parameters
+ * 	3.) Have elaborative parameters
+ * 	4.) Have parameters that are passed by copy
+ * 	5.) Return-by-copy types
+ *
+ * These all need to be accounted for when we clone a function call
+ */
+static inline void clone_function_call(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map){
+	//Create the new statement
+	instruction_t* new_function_call = calloc(1, sizeof(instruction_t));
+
+	//We really just need the statement type and line number
+	new_function_call->statement_type = source_instruction->statement_type;
+	new_function_call->line_number = source_instruction->line_number;
+
+	/**
+	 * Clone over the called function symtab record *or* the operand1 that we've cloned
+	 */
+	new_function_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+	new_function_call->called_function = source_instruction->called_function;
+
+
+	if(source_instruction->parameters.current_index != 0){
+		new_function_call->parameters = dynamic_array_alloc();
+	}
+
+	printf("TODO FUNCION CALL NOT IMPLEMENTED\n");
+	exit(1);
+	//TODO
+
+}
+
+
+/**
  * Clone the given instruction into a brand new one. This cloning also
  * involves doing all of our variable replacement logic with the variable
  * mapping, amongst other things
@@ -13508,19 +13545,15 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * For a function call/indirect call we need to account for the parameter
 		 * setup as we call into it and the potential that we have
 		 * a stack data area inside of this function call
+		 *
+		 * TODO I think we're going to have to crawl up and replace all of the stack regions for the
+		 * function parameter assignments with the new one but as-of-yet unverified
 		 */
 		case THREE_ADDR_CODE_FUNC_CALL:
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
-			//Create the new statement
-			instruction_t* new_function_all = calloc(1, sizeof(instruction_t));
-
-			//if(source_instruction->)
-
+			clone_function_call(cloning_into_block, source_instruction, variable_map);
+			break;
 		}
-			printf("TODO FUNCION CALL NOT IMPLEMENTED\n");
-			exit(1);
-			//TODO
-
 
 		/**
 		 * Memory coyp statements touch memory so we'll
