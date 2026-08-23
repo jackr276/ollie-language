@@ -13644,8 +13644,10 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
  */
 static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit,
 											symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable, dynamic_array_t* parameters){
-	//Initialize a branch new variable mapping for our uses
+	//Initialize a brand new variable mapping for our uses
 	variable_map_t variable_map = variable_map_alloc();
+	//Grab this for ease of use
+	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 
 	/**
 	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
@@ -13710,11 +13712,31 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * actual symtab variables in the inlined function. This step bridges the
 	 * gap between what we see when we call a function and what we have here
 	 *
-	 * TODO THIS IS ONLY THE BASIC CASE
-	 *
 	 * TODO NEED FUNCTION RETURN BY COPY PARAMETERS
 	 */
-	for(int32_t i = 0; i < parameters->current_index; i++){
+	//Track our index
+	int32_t function_call_parameters_idx = 0;
+	
+	/**
+	 * SPECIAL CASE: if we're returning via copy then the very first parameter
+	 * inside of the actual dynamic array is the return by copy address. We will
+	 * need to account for this by adjusting the index when we go to crawl
+	 * the regular function parameters because the two will be off by one
+	 *
+	 * Function return by copy parameters do not actually appear in the symtab
+	 * function record's signature
+	 */
+	if(cloning_signature->returns_by_copy == TRUE){
+		//Extract the return by copy param
+		three_addr_var_t* return_by_copy_param = dynamic_array_get_at(parameters, function_call_parameters_idx);
+
+
+		//Bump this up so we skip over it in regular processing
+		function_call_parameters_idx++;
+	}
+
+
+	for(; i < parameters->current_index; i++){
 		//Extract the parameter
 		three_addr_var_t* passed_parameter = dynamic_array_get_at(parameters, i);
 
