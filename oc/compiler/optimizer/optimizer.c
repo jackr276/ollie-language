@@ -69,7 +69,7 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
  * A helper function that makes a new block id. This ensures we have an atomically
  * increasing block ID
  */
-static inline int32_t increment_and_get(){
+static inline int32_t get_next_block_id(){
 	(cfg_reference->block_id)++;
 	return cfg_reference->block_id;
 }
@@ -1397,25 +1397,25 @@ static inline three_addr_var_t* clone_temp_var(three_addr_var_t* variable, varia
 	 * If we're able to just find the mapping then we'll clone our given variable and slap
 	 * a new ID onto it. If not then we'll have to make a new association for future runs
 	 */
-	variable_mapping_t* found_mapping = get_mapping_for_temporary_variable(variable_map, variable->temp_var_number);
+	variable_mapping_t* found_mapping = get_mapping_for_temporary_variable(variable_map, variable->variable_id);
 	if(found_mapping != NULL){
 		//Emit a complete copy
 		three_addr_var_t* replacement_var = emit_var_copy(variable);
 
 		//Update the number to be the clone's
-		replacement_var->temp_var_number = found_mapping->destination.temporary_id;
+		replacement_var->variable_id = found_mapping->destination.temporary_id;
 		return replacement_var;
 	
 	} else {
 		//Create a new temp ID for the new one
-		u_int32_t clone_temp_var_number = increment_and_get_temp_id();
+		u_int32_t clone_temp_var_number = get_next_variable_id();
 
 		//Now we need to create a mapping for future runs
-		create_mapping_for_temporary_variable(variable_map, variable->temp_var_number, clone_temp_var_number);
+		create_mapping_for_temporary_variable(variable_map, variable->variable_id, clone_temp_var_number);
 
 		//Create an exact copy, update the number, and then get out
 		three_addr_var_t* replacement_var = emit_var_copy(variable);
-		replacement_var->temp_var_number = clone_temp_var_number;
+		replacement_var->variable_id = clone_temp_var_number;
 		return replacement_var;
 	}
 }
