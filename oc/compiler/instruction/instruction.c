@@ -842,6 +842,9 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 	//This is a special kind of variable that is a local constant variable
 	var->variable_type = VARIABLE_TYPE_FUNCTION_ADDRESS;
 
+	//Give this a unique identifier for cloning
+	var->variable_id = get_next_variable_id();
+
 	//Store the local constant inside of the memory region slot
 	var->associated_memory_region.rip_relative_function = function_record;
 

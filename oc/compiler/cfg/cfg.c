@@ -13295,14 +13295,28 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		}
 	
 		/**
-		 * Function addresses should never be cloned because they're not local
-		 * to a function itself. Instead of cloning we will just emit a copy
-		 * to keep physical separation
-		 *
-		 * TODO DONT LIKE THIS
+		 * Function addresses work like any other variable in the way that they're cloned
+		 * and passed around
 		 */
 		case VARIABLE_TYPE_FUNCTION_ADDRESS: {
+			//Get the mapping for this based on ID
+			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
+
+			/**
+			 * Either grab the ID off of the mapping or create a new mapping with a 
+			 * fresh ID
+			 */
+			u_int32_t variable_id;
+			if(mapping != NULL){
+				variable_id = mapping->destination.temporary_id;
+			} else {
+				variable_id = get_next_variable_id();
+				create_mapping_for_temporary_variable(variable_map, source_variable->variable_id, variable_id);
+			}
+
+			//Clone it and assign the new ID over
 			new_variable = emit_var_copy(source_variable);
+			new_variable->variable_id = variable_id;
 			break;
 		}
 
