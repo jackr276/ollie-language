@@ -13410,6 +13410,14 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 	new_function_call->optional_storage.function_call_storage.error_assignee = clone_variable(new_function_call->optional_storage.function_call_storage.error_assignee, variable_map);
 
 	if(called_function_signature->returns_by_copy){
+		/**
+		 * Let's first extract this return by copy variable. It will always be the very first parameter in the
+		 * parameter list
+		 */
+		three_addr_var_t* return_by_copy_var = dynamic_array_get_at(&(source_instruction->parameters), 0);
+
+		//create_stack_region_for_type(jkk, generic_type_t *type);
+
 		printf("NOT IMPLEMENTED\n");
 		exit(0);
 	}
