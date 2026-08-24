@@ -7434,6 +7434,66 @@ static inline void handle_return_by_copy_parameter(function_type_t* signature, p
 
 
 /**
+ * Emit a direct or indirect function call statement and all of the parameters that come with it. We will
+ * not handle the storage of these parameters at this point, OIR just has a generic "parameters" array that
+ * will hold all of them until we handle them in the instruction selection step
+ */
+static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
+	//Blank return package for now
+	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Keep track of the current block
+	basic_block_t* current_block = basic_block;
+
+	/**
+	 * Any/all of our conditional processing will be done here. After this everything
+	 * needs to be agnostic to the node type
+	 */
+	switch(function_call_node->ast_node_type){
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+			signature = function_call_node->variable->type_defined_as->internal_types.function_type;
+
+			//May be NULL or not based on what we have as the return type
+			if(signature->returns_void == FALSE){
+				function_assignee = emit_temp_var(signature->return_type);
+			}
+
+			//We first need to emit the function pointer variable
+			three_addr_var_t* function_pointer_var = emit_var(function_call_node->variable);
+
+			//Now we can emit the indirect call statement
+			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, function_call_node->line_number);
+
+			break;
+
+		case AST_NODE_TYPE_FUNCTION_CALL:
+			signature = function_call_node->func_record->signature->internal_types.function_type;
+
+			//May be NULL or not based on what we have as the return type
+			if(signature->returns_void == FALSE){
+				function_assignee = emit_temp_var(signature->return_type);
+			}
+
+			/**
+			 * Now we can emit the direct call statement
+			 * If we have a direct call that is inlined we will flag
+			 * this call instruction as being inlined
+			 */
+			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
+			function_call_statement->is_inlined_call = signature->is_inlined;
+
+			break;
+
+		//This should be unreachable but just to be sure
+		default:
+			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
+			exit(1);
+	}
+
+}
+
+
+/**
  * Emit a call statement like such:
  *
  * call *<function_name>

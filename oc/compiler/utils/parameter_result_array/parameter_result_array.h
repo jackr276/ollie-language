@@ -8,8 +8,8 @@
 #ifndef PARAMETER_RESULT_ARRAY_H
 #define PARAMETER_RESULT_ARRAY_H
 
-//Link to the instruction library
-#include "../../instruction/instruction.h"
+#include "../three_address_constant.h"
+#include "../three_address_variable.h"
 #include <sys/types.h>
 
 typedef struct parameter_result_t parameter_result_t;

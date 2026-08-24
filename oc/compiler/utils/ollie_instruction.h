@@ -10,6 +10,7 @@
 #define OLLIE_INSTRUCTION_H
 
 #include <sys/types.h>
+#include "parameter_result_array/parameter_result_array.h"
 #include "stack_management_structs.h"
 #include "token.h"
 #include "dynamic_array/dynamic_array.h"
@@ -129,6 +130,10 @@ struct instruction_t{
 
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
+
+	//Used for the function calls on the front-end
+	parameter_results_array_t parameter_results;
+
 	//We have 2 ways to jump. The if jump is our affirmative jump,
 	//else is our alternative
 	void* if_block;
