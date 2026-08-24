@@ -7622,6 +7622,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	/**
+	 * Once we've emitted all of the parameter expressions but before we potentially deal
+	 * with any handle statements we'll need to add the actual function call to the block
+	 */
+	add_statement(current_block, function_call_statement);
+
+	/**
 	 * If we get here and we have a handles statement, we will let our special rule
 	 * translate it into a switch statement. Our strategy here is to only emit
 	 * the final result assignment once we're inside of the handle statement itself
@@ -7646,7 +7652,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		error_assignee = assignment->operands.oir.assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		return emit_handle_statement(current_block, param_cursor, function_assignee, error_assignee);
+		result_package = emit_handle_statement(current_block, param_cursor, function_assignee, error_assignee);
 
 	} else {
 		//If this is not a void return type, we'll need to emit this temp assignment
@@ -7671,8 +7677,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		result_package.type = CFG_RESULT_TYPE_VAR;
 		result_package.result_value.result_var = function_assignee;
 		result_package.final_block = current_block;
-		return result_package;
 	}
+
+	//Give back the result package regardless of path
+	return result_package;
 }
 
 
