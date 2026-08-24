@@ -1589,10 +1589,9 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 						}
 					}
 
-					//This variable is defined here
-					//TODO WHAT ABOUT ERROR ASSIGNEE??
+					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-
+					add_variable_to_def_set(cursor->optional_storage.function_call_storage.error_assignee, block);
 					break;
 
 				/**
@@ -1613,9 +1612,9 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 						}
 					}
 
-					//The return variable is defined here
-					//TODO WHAT ABOUT ERROR ASSIGNEE??
+					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
+					add_variable_to_def_set(cursor->optional_storage.function_call_storage.error_assignee, block);
 					break;
 
 				/**
