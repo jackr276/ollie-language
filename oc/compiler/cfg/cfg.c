@@ -1575,40 +1575,47 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 		//Run through everything
 		while(cursor != NULL){
 			switch(cursor->statement_type){
-				//Function calls have parameters - so special case
+				/**
+				 * Function calls contain parameters inside of their parameter results array. These may
+				 * be constants(in which case we don't care) or variables in which case we need to add them
+				 */
 				case THREE_ADDR_CODE_FUNC_CALL:
-					//Run through the params and add them
-					for(int32_t _ = 0; _ < cursor->parameters.current_index; _++){
-						//Grab the param out
-						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
+					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
-						//Add it into the USE set
-						add_variable_to_use_set(parameter, block);
-
+						//If it's a variable result we add it
+						if(result->result_type == PARAM_RESULT_TYPE_VAR){
+							add_variable_to_use_set(result->param_result.variable_result, block);
+						}
 					}
 
-					//Add the DEF var in
+					//This variable is defined here
+					//TODO WHAT ABOUT ERROR ASSIGNEE??
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 
 					break;
 
-				//Same for indirect function calls - also have params
+				/**
+				 * Inidrect function calls contain parameters inside of their parameter results array. These may
+				 * be constants(in which case we don't care) or variables in which case we need to add them
+				 */
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					//Indirect function calls also have their op1's used
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
-					for(int32_t _ = 0; _ < cursor->parameters.current_index; _++){
-						//Grab the param out
-						three_addr_var_t* parameter = dynamic_array_get_at(&(cursor->parameters), _);
+					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
-						//Add it into the USE set
-						add_variable_to_use_set(parameter, block);
+						//If it's a variable result we add it
+						if(result->result_type == PARAM_RESULT_TYPE_VAR){
+							add_variable_to_use_set(result->param_result.variable_result, block);
+						}
 					}
 
-					//Add the DEF var in
+					//The return variable is defined here
+					//TODO WHAT ABOUT ERROR ASSIGNEE??
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-
 					break;
 
 				/**
@@ -13654,6 +13661,8 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 
 	/**
 	 * If we have parameters to clone over now is the time
+	 *
+	 * THIS IS NO LONGER CORRECT
 	 */
 	if(called_function_signature->function_parameters.current_index != 0){
 		//Grab some space for it
@@ -14171,7 +14180,12 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 * Step 2: Now that we have our split we need to get a complete, 100% unique clone of the
 	 * function that we are inlining. While we're at it, we'll save the function entry
 	 * and function exit blocks from the copy 
+	 *
+	 * TODO THIS IS NO LONGER CORRECT
 	 */
+	printf("Function inlining has not been updated to support the new parameter result types\n");
+	exit(0);
+
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
