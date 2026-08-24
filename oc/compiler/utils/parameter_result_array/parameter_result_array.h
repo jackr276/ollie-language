@@ -57,8 +57,8 @@ struct parameter_result_t {
  */
 struct parameter_results_array_t {
 	parameter_result_t* parameter_results;
-	u_int32_t current_index;
-	u_int32_t max_index;
+	int32_t current_index;
+	int32_t max_index;
 };
 
 /**
@@ -71,7 +71,7 @@ parameter_results_array_t parameter_results_array_alloc_default_size();
 /**
  * Allocate a parameter results array with a given initial size
  */
-parameter_results_array_t parameter_results_array_alloc(u_int32_t initial_size);
+parameter_results_array_t parameter_results_array_alloc(int32_t initial_size);
 
 
 /**
@@ -85,7 +85,7 @@ void add_parameter_result_to_results_array(parameter_results_array_t* array, voi
 /**
  * Retrieve a parameter from the array
  */
-parameter_result_t* get_result_at_index(parameter_results_array_t* array, u_int32_t index);
+parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index);
 
 
 /**

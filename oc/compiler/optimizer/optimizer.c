@@ -600,6 +600,8 @@ static void mark(dynamic_array_t* function_blocks){
 
 			//If we have a function call, everything in the function call
 			//is important
+			//
+			//TODO WRONG
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Grab the parameters out
 				params = stmt->parameters;
@@ -615,6 +617,8 @@ static void mark(dynamic_array_t* function_blocks){
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
+			 *
+			 * TODO WRONG
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
@@ -1206,6 +1210,8 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 
 			/**
 			 * If we have a function call, then everything is important
+			 *
+			 * TODO WRONG
 			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
@@ -1219,6 +1225,8 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
+			 *
+			 * TODO WRONG
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important

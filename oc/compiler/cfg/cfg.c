@@ -7055,7 +7055,7 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 	}
 
 	//Now that we have all of this, we need to go through and emit our final assignments for the function calls themselves
-	for(u_int32_t i = result_index_adjustment; i < non_elaborative_parameter_results->current_index; i++){
+	for(int32_t i = result_index_adjustment; i < non_elaborative_parameter_results->current_index; i++){
 		//For any/all call side regions that we need
 		stack_region_t* call_side_region;
 
@@ -7300,7 +7300,7 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 	 * Now that we've accounted for the first 4 bytes, we will go through the entire list of
 	 * results and create the stack regions/store those
 	 */
-	for(u_int32_t i = 0; i < elaborative_param_results->current_index; i++){
+	for(int32_t i = 0; i < elaborative_param_results->current_index; i++){
 		//Extract the result
 		parameter_result_t* elaborative_param_result = get_result_at_index(elaborative_param_results, i); 
 

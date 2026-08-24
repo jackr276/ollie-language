@@ -557,11 +557,6 @@ u_int8_t variables_equal(three_addr_var_t* a, three_addr_var_t* b);
 u_int8_t variables_equal_no_ssa(three_addr_var_t* a, three_addr_var_t* b);
 
 /**
- * Emit a complete, one-for-one copy of an instruction
- */
-instruction_t* copy_instruction(instruction_t* copied);
-
-/**
  * Sum a constant by a raw int64_t value
  * 
  * NOTE: The result is always stored in the first one, and the first one will become 

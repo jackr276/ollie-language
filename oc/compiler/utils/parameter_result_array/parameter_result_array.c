@@ -34,7 +34,7 @@ parameter_results_array_t parameter_results_array_alloc_default_size(){
 /**
  * Allocate a parameter results array with a given initial size
  */
-parameter_results_array_t parameter_results_array_alloc(u_int32_t initial_size){
+parameter_results_array_t parameter_results_array_alloc(int32_t initial_size){
 	//Stack allocate at first
 	parameter_results_array_t results_array = {NULL, 0, 0};
 
@@ -88,7 +88,7 @@ void add_parameter_result_to_results_array(parameter_results_array_t* array, voi
 /**
  * Retrieve a parameter from the array
  */
-parameter_result_t* get_result_at_index(parameter_results_array_t* array, u_int32_t index){
+parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index){
 	//Guard here to make future debugging easier
 	if(array->current_index <= index){
 		fprintf(stderr, "Fatal internal compiler error: attempt to access index %d in a parameter result array of size %d\n", index, array->current_index);
