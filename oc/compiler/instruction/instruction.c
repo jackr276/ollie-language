@@ -2670,15 +2670,33 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//by the function name
 			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
 
-			//Grab this out
-			func_params = stmt->parameters;
+			//If we still have parameter results run through those
+			//TODO REFINE LATER
+			if(stmt->parameter_results.current_index != 0){
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-			//If we event have any
-			if(func_params.internal_array != NULL){
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							print_variable(fl, result->param_result.variable_result, PRINTING_VAR_INLINE);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							print_three_addr_constant(fl, result->param_result.constant_result);
+							break;
+					}
+				}
+
+			/**
+			 * Otherwise if we've updated it to the point where it's using the regular parameters
+			 * array we can go through and print that out
+			 *
+			 * TODO REFINE LATER
+			 */
+			} else if(stmt->parameters.current_index != 0){
 				//Now we can go through and print out all of our parameters here
-				for(u_int16_t i = 0; i < func_params.current_index; i++){
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Grab it out
-					three_addr_var_t* func_param = dynamic_array_get_at(&func_params, i);
+					three_addr_var_t* func_param = dynamic_array_get_at(&(stmt->parameters), i);
 					
 					//Print this out here
 					print_variable(fl, func_param, PRINTING_VAR_INLINE);
@@ -2722,13 +2740,28 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now we can print the opening parenthesis
 			fprintf(fl, "(");
 
-			//Grab this out
-			func_params = stmt->parameters;
+			//If we still have parameter results run through those
+			if(stmt->parameter_results.current_index != 0){
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-			//If we event have any
-			if(func_params.internal_array != NULL){
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							print_variable(fl, result->param_result.variable_result, PRINTING_VAR_INLINE);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							print_three_addr_constant(fl, result->param_result.constant_result);
+							break;
+					}
+				}
+
+			/**
+			 * Otherwise if we've updated it to the point where it's using the regular parameters
+			 * array we can go through and print that out
+			 */
+			} else if(stmt->parameters.current_index != 0){
 				//Now we can go through and print out all of our parameters here
-				for(u_int16_t i = 0; i < func_params.current_index; i++){
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Grab it out
 					three_addr_var_t* func_param = dynamic_array_get_at(&func_params, i);
 					
@@ -6646,6 +6679,8 @@ static inline three_addr_const_t* duplicate_constant(three_addr_const_t* constan
 
 /**
  * Emit a complete copy of whatever was in here previously
+ *
+ * TODO NO IDEA WHAT TO DO WITH THIS
  */
 instruction_t* copy_instruction(instruction_t* copied){
 	//First we allocate
