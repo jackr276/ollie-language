@@ -7446,11 +7446,20 @@ static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, gen
 	basic_block_t* current_block = basic_block;
 
 	/**
+	 * We will need to hold onto the signature, function call statement and
+	 * function assignee here when we emit our actual call statement
+	 */
+	function_type_t* signature;
+	instruction_t* function_call_statement;
+	three_addr_var_t* function_assignee;
+
+	/**
 	 * Any/all of our conditional processing will be done here. After this everything
 	 * needs to be agnostic to the node type
 	 */
 	switch(function_call_node->ast_node_type){
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+			//Signature comes from the variable
 			signature = function_call_node->variable->type_defined_as->internal_types.function_type;
 
 			//May be NULL or not based on what we have as the return type
@@ -7467,6 +7476,7 @@ static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, gen
 			break;
 
 		case AST_NODE_TYPE_FUNCTION_CALL:
+			//Signature is just stored in the symtab record itself
 			signature = function_call_node->func_record->signature->internal_types.function_type;
 
 			//May be NULL or not based on what we have as the return type
@@ -7489,6 +7499,51 @@ static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, gen
 			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
 			exit(1);
 	}
+
+	//If we have parameters allocate the array now
+	if(signature->function_parameters.current_index != 0){
+		function_call_statement->parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
+	}
+
+	/**
+	 * Grab a cursor to process parameters and keep going until we run out or we hit
+	 * a different kind of statement
+	 */
+	generic_ast_node_t* param_cursor = function_call_node->first_child;
+	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
+		/**
+		 * For everything that is not an elaborative param statement, we'll
+		 * handle it internally to this function
+		 */
+		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
+			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
+			cfg_result_package_t results = emit_parameter_expression(current_block, param_cursor, &non_elaborative_parameter_results, &memory_addresses_to_adjust, has_stack_params);
+
+			//Update the final block
+			current_block = results.final_block;
+
+		/**
+		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
+		 * always be the last parameter in our list. Elaborative params no matter what always
+		 * come after everything else. We will let the helper emit everything here and then 
+		 * handle the stack management later
+		 */
+		} else {
+			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
+			cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_parameter_results, &memory_addresses_to_adjust);
+
+			//Update the final block
+			current_block = results.final_block;
+		}
+
+		//And move up
+		param_cursor = param_cursor->next_sibling;
+	}
+
+
+
+	result_package.starting_block = basic_block;
+	result_package.final_block = current_block;
 
 }
 
