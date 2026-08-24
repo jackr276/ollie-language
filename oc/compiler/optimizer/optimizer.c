@@ -578,37 +578,30 @@ static void mark(dynamic_array_t* function_blocks){
 	while(dynamic_array_is_empty(&worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
 		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
-		//Generic array for holding parameters
-		dynamic_array_t params;
 
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
 			case THREE_ADDR_CODE_PHI_FUNC:
-				params = stmt->parameters;
-
 				//Add this in here
-				for(u_int16_t i = 0; i < params.current_index; i++){
-					//Grab the param out
-					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
-
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Add the definitions in
-					mark_and_add_definition(function_blocks, phi_func_param, &worklist);
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
 				}
 
 				break;
 
-			//If we have a function call, everything in the function call
-			//is important
-			//
-			//TODO WRONG
+			//If we have a function call, everything in the function call is important
 			case THREE_ADDR_CODE_FUNC_CALL:
-				//Grab the parameters out
-				params = stmt->parameters;
-
 				//Run through them all and mark them
-				for(u_int16_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					//Get the result out
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
+
+					//If it's a variable then add it
+					if(result->result_type == PARAM_RESULT_TYPE_VAR){
+						mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+					}
 				}
 
 				break;
@@ -617,19 +610,20 @@ static void mark(dynamic_array_t* function_blocks){
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
-			 *
-			 * TODO WRONG
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				//Grab the parameters out
-				params = stmt->parameters;
-
 				//Run through them all and mark them
-				for(u_int16_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					//Get the result out
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
+
+					//If it's a variable then add it
+					if(result->result_type == PARAM_RESULT_TYPE_VAR){
+						mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+					}
 				}
 
 				break;
@@ -1210,13 +1204,17 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 
 			/**
 			 * If we have a function call, then everything is important
-			 *
-			 * TODO WRONG
 			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
-				for(int32_t i = 0; i < current->parameters.current_index; i++){
-					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+				for(int32_t i = 0; i < current->parameter_results.current_index; i++){
+					//Get the result out
+					parameter_result_t* result = get_result_at_index(&(current->parameter_results), i);
+
+					//If it's a variable then add it
+					if(result->result_type == PARAM_RESULT_TYPE_VAR){
+						mark_and_add_definition_block_local(current, result->param_result.variable_result, worklist, &worklist_current_index);
+					}
 				}
 
 				break;
@@ -1225,16 +1223,20 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
-			 *
-			 * TODO WRONG
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
 				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
 
 				//Run through them all and mark them
-				for(u_int16_t i = 0; i < current->parameters.current_index; i++){
-					mark_and_add_definition_block_local(current, dynamic_array_get_at(&(current->parameters), i), worklist, &worklist_current_index);
+				for(int32_t i = 0; i < current->parameter_results.current_index; i++){
+					//Get the result out
+					parameter_result_t* result = get_result_at_index(&(current->parameter_results), i);
+
+					//If it's a variable then add it
+					if(result->result_type == PARAM_RESULT_TYPE_VAR){
+						mark_and_add_definition_block_local(current, result->param_result.variable_result, worklist, &worklist_current_index);
+					}
 				}
 
 				break;
@@ -1455,8 +1457,6 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, varia
  * Clone the entire instruction. This cloning process is going
  * to involve us copying over variables in a way that
  * changes the temp var numbers for correctness
- *
- * TODO WRONG NOW
  */
 static instruction_t* clone_instruction(instruction_t* cloned, variable_map_t* variable_map){
 	//First we allocate
@@ -1474,14 +1474,34 @@ static instruction_t* clone_instruction(instruction_t* cloned, variable_map_t* v
 	copy->operands.oir.constant_operand = clone_constant(cloned->operands.oir.constant_operand);
 	copy->operands.oir.address_offset = clone_constant(cloned->operands.oir.address_offset);
 
-	//If we have function call parameters, emit a copy of them
+	//If we have parameters(phi function only), emit a copy of them
 	if(cloned->parameters.internal_array != NULL){
 		copy->parameters = dynamic_array_alloc();
+
+		//Run through and copy individually
+		for(int32_t i = 0; i < cloned->parameters.current_index; i++){
+			dynamic_array_add(&(copy->parameters), clone_variable(dynamic_array_get_at(&(cloned->parameters), i), variable_map));
+		}
 	}
 
-	//Run through and copy individually
-	for(int32_t i = 0; i < cloned->parameters.current_index; i++){
-		dynamic_array_add(&(copy->parameters), clone_variable(dynamic_array_get_at(&(cloned->parameters), i), variable_map));
+	//If we have parameter results, emit a copy of them
+	if(cloned->parameter_results.current_index != 0){
+		copy->parameter_results = parameter_results_array_alloc(cloned->parameter_results.current_index);
+
+		for(int32_t i = 0; i < cloned->parameters.current_index; i++){
+			//Get the old result out
+			parameter_result_t* old_result = get_result_at_index(&(cloned->parameter_results), i);
+
+			switch(old_result->result_type){
+				case PARAM_RESULT_TYPE_VAR:
+					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.variable_result, PARAM_RESULT_TYPE_VAR);
+					break;
+
+				case PARAM_RESULT_TYPE_CONST:
+					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.constant_result, PARAM_RESULT_TYPE_CONST);
+					break;
+			}
+		}
 	}
 
 	//IMPORTANT: null out the next/previous for the instruction

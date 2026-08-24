@@ -10,7 +10,9 @@
  * so in the OIR
  *
  * This module will take an AST, put it into a CFG, put the CFG into SSA form, and pass it along to the optimizer
-*/
+ *
+ * TODO SWITCH FUNCTION CALLS OVER
+ */
 
 #include "cfg.h"
 #include <assert.h>
