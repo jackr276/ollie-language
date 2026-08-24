@@ -10,8 +10,6 @@
  * so in the OIR
  *
  * This module will take an AST, put it into a CFG, put the CFG into SSA form, and pass it along to the optimizer
- *
- * TODO SWITCH FUNCTION CALLS OVER
  */
 
 #include "cfg.h"
@@ -7525,10 +7523,8 @@ static inline cfg_result_package_t emit_elaborative_param_expressionsV2(basic_bl
  * Emit a direct or indirect function call statement and all of the parameters that come with it. We will
  * not handle the storage of these parameters at this point, OIR just has a generic "parameters" array that
  * will hold all of them until we handle them in the instruction selection step
- *
- * TODO REMOVE THE V2
  */
-static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
+static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Blank return package for now
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -7539,9 +7535,9 @@ static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, gen
 	 * We will need to hold onto the signature, function call statement and
 	 * function assignee here when we emit our actual call statement
 	 */
-	function_type_t* signature;
-	instruction_t* function_call_statement;
-	three_addr_var_t* function_assignee;
+	function_type_t* signature = NULL;
+	instruction_t* function_call_statement = NULL;
+	three_addr_var_t* function_assignee = NULL;
 
 	/**
 	 * Any/all of our conditional processing will be done here. After this everything
@@ -7712,7 +7708,7 @@ static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, gen
  * call function1 -> %eax
  * addq $8, %rsp //cleanup post-call
  */
-static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
+static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Initially we'll emit this, though it may change
  	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
