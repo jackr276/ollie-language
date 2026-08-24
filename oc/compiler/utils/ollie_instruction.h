@@ -155,6 +155,12 @@ struct instruction_t{
 			stack_data_area_t call_stack_region;
 			//The second error assignee for an errorable function
 			three_addr_var_t* error_assignee;
+			/**
+			 * Function calls exist in a weird hybrid state where they're
+			 * not lowered into their lowest OIR until the instruction selector's
+			 * simply stage. This flag will tell us what state they're in
+			 */
+			u_int8_t has_been_fully_lowered;
 		} function_call_storage;
 
 		//Store inlined assembly in a string

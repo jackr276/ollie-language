@@ -201,6 +201,20 @@ static inline u_int8_t is_instruction_binary_operation(instruction_t* instructio
 
 
 /**
+ * Is this a function call statement or not?
+ */
+static inline u_int8_t is_call_statement(instruction_t* statement){
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_FUNC_CALL:
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is a basic type an integer type? We will use the basic type token to determine this
  */
 static inline u_int8_t is_basic_type_integer_type(generic_type_t* type){
@@ -4564,9 +4578,19 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		return changed;
 	}
 
+	if(is_call_statement(window->instruction1) == TRUE){
+
+	} else if(is_call_statement(window->instruction2) == TRUE) {
+
+	} else if(is_call_statement(window->instruction3) == TRUE){
+
+	}
+
 	/**
 	 * These statements by now have served their purpose - we can delete them as
 	 * they are no longer needed and have no assembly equivalent
+	 *
+	 * TODO WHAT IS THIS?????
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
 		delete_statement(window->instruction1);
@@ -7503,6 +7527,7 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			//If we have a function call, everything in the function call is important
+			//TODO WRONG
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Grab the parameters out
 				params = stmt->parameters;
