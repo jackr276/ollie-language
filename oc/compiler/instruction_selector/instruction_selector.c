@@ -1139,14 +1139,41 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
 }
 
 
+static instruction_t* lower_function_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+
+	//TODO DUMMY
+	return call_statement->next_statement;
+
+}
+
+
 /**
+ * Run through every single block in this function and lower any/all function calls
  *
- * TODO MAKE SURE WE FLAG FULL LOWERING
+ * We should flag the lowered function calls with their lowered flag set to TRUE. This
+ * is important for the printer to properly display everything
  */
 static inline void perform_call_lowering_in_function(symtab_function_record_t* function, dynamic_array_t* function_blocks){
 	//Run through every block currently listed
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the block that we want to process
+		basic_block_t* block_to_process = dynamic_array_get_at(function_blocks, i);
 
+		//Now run through every single instruction and process all of them
+		instruction_t* instruction_cursor = block_to_process->leader_statement;
+		while(instruction_cursor != NULL){
+			/**
+			 * If we have a function call statement *AND* it has not already been lowered
+			 * by this process, we will invoke the helper to do all of this
+			 */
+			if(is_call_statement(instruction_cursor) && instruction_cursor->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
+				instruction_cursor = lower_function_call_statement(function, instruction_cursor);
+
+
+			} else {
+				instruction_cursor = instruction_cursor->next_statement;
+			}
+		}
 	}
 }
 
