@@ -204,6 +204,11 @@ static inline u_int8_t is_instruction_binary_operation(instruction_t* instructio
  * Is this a function call statement or not?
  */
 static inline u_int8_t is_call_statement(instruction_t* statement){
+	//Just for sanity
+	if(statement == NULL){
+		return FALSE;
+	}
+
 	switch(statement->statement_type){
 		case THREE_ADDR_CODE_FUNC_CALL:
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
@@ -1131,6 +1136,18 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
 
 	//Let the main function do the rest
 	return get_use_count_by_id(&use_count_tracker, variable->variable_id);
+}
+
+
+/**
+ *
+ * TODO MAKE SURE WE FLAG FULL LOWERING
+ */
+static inline void perform_call_lowering_in_function(symtab_function_record_t* function, dynamic_array_t* function_blocks){
+	//Run through every block currently listed
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+
+	}
 }
 
 
@@ -4578,19 +4595,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		return changed;
 	}
 
-	if(is_call_statement(window->instruction1) == TRUE){
-
-	} else if(is_call_statement(window->instruction2) == TRUE) {
-
-	} else if(is_call_statement(window->instruction3) == TRUE){
-
-	}
-
 	/**
 	 * These statements by now have served their purpose - we can delete them as
 	 * they are no longer needed and have no assembly equivalent
-	 *
-	 * TODO WHAT IS THIS?????
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
 		delete_statement(window->instruction1);
@@ -7527,8 +7534,14 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			//If we have a function call, everything in the function call is important
-			//TODO WRONG
 			case THREE_ADDR_CODE_FUNC_CALL:
+				//TODO TESTER DELETEME
+				if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
+					printf("ERROR NOT FULLY LOWERED\n");
+					exit(1);
+				}
+
+
 				//Grab the parameters out
 				params = stmt->parameters;
 
@@ -7545,6 +7558,13 @@ static void mark(dynamic_array_t* function_blocks){
 			 * the memory address of the function that we're calling
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				//TODO TESTER DELETEME
+				if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
+					printf("ERROR NOT FULLY LOWERED\n");
+					exit(1);
+				}
+
+
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
@@ -7701,6 +7721,16 @@ static void simplify(cfg_t* cfg){
 		symtab_function_record_t* function = function_entry->function_defined_in;
 
 		/**
+		 * Before we do any simplifying, we need to remediate all of the function
+		 * calls inside of this function. Function calls are currently given to the
+		 * instruction selector in a simplified version of OIR that's meant to be
+		 * portable and easy to work with for inlining but does not represent the
+		 * true complexity of a function call. We will now do all of in depth
+		 * work to do this
+		 */
+		perform_call_lowering_in_function(function, &(function->function_blocks));
+
+		/**
 		 * Before we do anything else, we'll need to do an initial population
 		 * of the use counts for each three_addr_variable inside of our given 
 		 * function
@@ -7708,7 +7738,6 @@ static void simplify(cfg_t* cfg){
 		do {
 			reset_all_use_counts(&use_count_tracker);
 			populate_use_counts_for_function(&(function->function_blocks));
-
 		} while(simplifier_pass(function_entry) == TRUE);
 
 		/**
@@ -7742,7 +7771,6 @@ static void simplify(cfg_t* cfg){
 			do {
 				reset_all_use_counts(&use_count_tracker);
 				populate_use_counts_for_function(&(function->function_blocks));
-
 			} while(simplifier_pass(function_entry) == TRUE);
 
 		/**
