@@ -1139,11 +1139,22 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
 }
 
 
-static instruction_t* lower_function_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+/**
+ * Lower a function call statement into the lowest level of OIR that we have before we get to the
+ * acutal instruction selection. This includes adding parameter copying, return by copy handling and
+ * call stack management. One thing that we do not have to do is anything with error handling. That has
+ * all been handled for us on the front end
+ *
+ * TODO DOC MORE
+ */
+static instruction_t* lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+
+
+	//Once we've fully lowered this call statement flag it as fully lowered
+	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
 
 	//TODO DUMMY
 	return call_statement->next_statement;
-
 }
 
 
@@ -1166,10 +1177,8 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 			 * If we have a function call statement *AND* it has not already been lowered
 			 * by this process, we will invoke the helper to do all of this
 			 */
-			if(is_call_statement(instruction_cursor) && instruction_cursor->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
-				instruction_cursor = lower_function_call_statement(function, instruction_cursor);
-
-
+			if(is_call_statement(instruction_cursor) && instruction_cursor->optional_storage.call_storage.has_been_lowered == FALSE){
+				instruction_cursor = lower_call_statement(function, instruction_cursor);
 			} else {
 				instruction_cursor = instruction_cursor->next_statement;
 			}
@@ -7563,7 +7572,7 @@ static void mark(dynamic_array_t* function_blocks){
 			//If we have a function call, everything in the function call is important
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//TODO TESTER DELETEME
-				if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
+				if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
 					printf("ERROR NOT FULLY LOWERED\n");
 					exit(1);
 				}
@@ -7586,7 +7595,7 @@ static void mark(dynamic_array_t* function_blocks){
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//TODO TESTER DELETEME
-				if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
+				if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
 					printf("ERROR NOT FULLY LOWERED\n");
 					exit(1);
 				}
@@ -14002,7 +14011,7 @@ static inline void handle_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.function_call_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.call_storage.error_assignee;
 }
 
 
@@ -14020,7 +14029,7 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.function_call_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.call_storage.error_assignee;
 }
 
 

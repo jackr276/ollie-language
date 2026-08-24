@@ -2650,16 +2650,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+				if(stmt->optional_storage.call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2671,7 +2671,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			 * time we go to print them. The flag inside of the optional storage is what
 			 * keeps track of this for us
 			 */
-			if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
+			if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
@@ -2720,16 +2720,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+				if(stmt->optional_storage.call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2747,7 +2747,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			 * time we go to print them. The flag inside of the optional storage is what
 			 * keeps track of this for us
 			 */
-			if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
+			if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
@@ -6297,7 +6297,7 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	stmt->operands.oir.assignee = assigned_to;
 
 	//Initially we are not fully lowered
-	stmt->optional_storage.function_call_storage.has_been_fully_lowered = FALSE;
+	stmt->optional_storage.call_storage.has_been_lowered = FALSE;
 
 	stmt->line_number = line_number;
 	return stmt;
@@ -6319,7 +6319,7 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 	stmt->operands.oir.assignee = assigned_to;
 
 	//Initially we are not fully lowered
-	stmt->optional_storage.function_call_storage.has_been_fully_lowered = FALSE;
+	stmt->optional_storage.call_storage.has_been_lowered = FALSE;
 
 	stmt->line_number = line_number;
 	return stmt;

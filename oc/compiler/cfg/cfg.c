@@ -1591,7 +1591,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-					add_variable_to_def_set(cursor->optional_storage.function_call_storage.error_assignee, block);
+					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
 					break;
 
 				/**
@@ -1614,7 +1614,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-					add_variable_to_def_set(cursor->optional_storage.function_call_storage.error_assignee, block);
+					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
 					break;
 
 				/**
@@ -7639,7 +7639,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
 		//This is stored in the optional second assignee slot
-		function_call_statement->optional_storage.function_call_storage.error_assignee = error_assignee;
+		function_call_statement->optional_storage.call_storage.error_assignee = error_assignee;
 
 		//Now we'll have a move statement just for register allocation reasons
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
@@ -7783,7 +7783,7 @@ static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, 
 	u_int8_t has_stack_params = signature->contains_stack_params;
 
 	//Grab a pointer to the function call stack region if we need it
-	stack_data_area_t* function_call_stack_region = &(function_call_statement->optional_storage.function_call_storage.call_stack_region);
+	stack_data_area_t* function_call_stack_region = &(function_call_statement->optional_storage.call_storage.call_stack_region);
 
 	/**
 	 * If a function call contains stack params, we are going to have to allocate the stack data area
@@ -7969,7 +7969,7 @@ static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, 
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
 		//This is stored in the optional second assignee slot
-		function_call_statement->optional_storage.function_call_storage.error_assignee = error_assignee;
+		function_call_statement->optional_storage.call_storage.error_assignee = error_assignee;
 
 		//Now we'll have a move statement just for register allocation reasons
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
@@ -13659,7 +13659,7 @@ static inline void clone_function_call(basic_block_t* cloning_into_block, instru
 
 	//Clone over both potential assignees
 	new_function_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-	new_function_call->optional_storage.function_call_storage.error_assignee = clone_variable(new_function_call->optional_storage.function_call_storage.error_assignee, variable_map);
+	new_function_call->optional_storage.call_storage.error_assignee = clone_variable(new_function_call->optional_storage.call_storage.error_assignee, variable_map);
 
 	if(called_function_signature->returns_by_copy){
 	}
@@ -14216,7 +14216,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 * Same deal if we had errors that we raise
 	 */
 	if(inlined_function_signature->raises_errors == TRUE){
-		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.function_call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
+		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
 		add_statement(inlined_function_exit, raised_variable_assignment);
 	}
 

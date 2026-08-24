@@ -160,8 +160,8 @@ struct instruction_t{
 			 * not lowered into their lowest OIR until the instruction selector's
 			 * simply stage. This flag will tell us what state they're in
 			 */
-			u_int8_t has_been_fully_lowered;
-		} function_call_storage;
+			u_int8_t has_been_lowered;
+		} call_storage;
 
 		//Store inlined assembly in a string
 		dynamic_string_t inlined_assembly;
