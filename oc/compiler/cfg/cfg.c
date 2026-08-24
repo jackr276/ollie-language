@@ -7516,6 +7516,8 @@ static inline cfg_result_package_t emit_elaborative_param_expressionsV2(basic_bl
  * Emit a direct or indirect function call statement and all of the parameters that come with it. We will
  * not handle the storage of these parameters at this point, OIR just has a generic "parameters" array that
  * will hold all of them until we handle them in the instruction selection step
+ *
+ * TODO REMOVE THE V2
  */
 static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Blank return package for now
@@ -7590,16 +7592,14 @@ static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, gen
 	 */
 	generic_ast_node_t* param_cursor = function_call_node->first_child;
 	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
+		cfg_result_package_t parameter_results;
+
 		/**
 		 * For everything that is not an elaborative param statement, we'll
 		 * handle it internally to this function
 		 */
 		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
-			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
-			cfg_result_package_t results = emit_parameter_expression(current_block, param_cursor, &non_elaborative_parameter_results, &memory_addresses_to_adjust, has_stack_params);
-
-			//Update the final block
-			current_block = results.final_block;
+			parameter_results = emit_parameter_expressionV2(current_block, param_cursor, &(function_call_statement->parameter_results));
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -7608,22 +7608,66 @@ static cfg_result_package_t emit_function_callV2(basic_block_t* basic_block, gen
 		 * handle the stack management later
 		 */
 		} else {
-			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
-			cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_parameter_results, &memory_addresses_to_adjust);
-
-			//Update the final block
-			current_block = results.final_block;
+			parameter_results = emit_elaborative_param_expressionsV2(current_block, param_cursor, &(function_call_statement->parameter_results));
 		}
 
-		//And move up
+		//Bump the final block and move up
+		current_block = parameter_results.final_block;
 		param_cursor = param_cursor->next_sibling;
 	}
 
+	/**
+	 * If we get here and we have a handles statement, we will let our special rule
+	 * translate it into a switch statement. Our strategy here is to only emit
+	 * the final result assignment once we're inside of the handle statement itself
+	 */
+	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
+		/**
+		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
+		 * the result assignment that comes with it
+		 */
+		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
+		//This is stored in the optional second assignee slot
+		function_call_statement->optional_storage.function_call_storage.error_assignee = error_assignee;
 
-	result_package.starting_block = basic_block;
-	result_package.final_block = current_block;
+		//Now we'll have a move statement just for register allocation reasons
+		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
 
+		//Add it into the block
+		add_statement(current_block, assignment);
+
+		//This now is our error assignee that will be used in the CFG
+		error_assignee = assignment->operands.oir.assignee;
+
+		//Let the helper do the rest. It will spit back the results of the final assignment for us
+		return emit_handle_statement(current_block, param_cursor, function_assignee, error_assignee);
+
+	} else {
+		//If this is not a void return type, we'll need to emit this temp assignment
+		if(signature->returns_void == FALSE){
+			/**
+			 * Emit an assignment instruction. This will become very important way down the line in register
+			 * allocation to avoid interference
+			 */
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
+
+			//Reassign this value
+			function_assignee = assignment->operands.oir.assignee;
+
+			//Add it in
+			add_statement(current_block, assignment);
+		}
+
+		/**
+		 * This is always the assignee we gave above.
+		 * Note that this is nullable, but we do always have a variable type
+		 */
+		result_package.type = CFG_RESULT_TYPE_VAR;
+		result_package.result_value.result_var = function_assignee;
+		result_package.final_block = current_block;
+		return result_package;
+	}
 }
 
 
