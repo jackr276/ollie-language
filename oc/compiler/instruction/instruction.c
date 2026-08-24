@@ -2671,7 +2671,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
 
 			//If we still have parameter results run through those
-			//TODO REFINE LATER
 			if(stmt->parameter_results.current_index != 0){
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
@@ -2684,13 +2683,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 							print_three_addr_constant(fl, result->param_result.constant_result);
 							break;
 					}
+
+					//Comma printing if appropriate
+					if(i != stmt->parameter_results.current_index - 1){
+						fprintf(fl, ", ");
+					}
 				}
 
 			/**
 			 * Otherwise if we've updated it to the point where it's using the regular parameters
 			 * array we can go through and print that out
-			 *
-			 * TODO REFINE LATER
 			 */
 			} else if(stmt->parameters.current_index != 0){
 				//Now we can go through and print out all of our parameters here
@@ -2752,6 +2754,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 						case PARAM_RESULT_TYPE_CONST:
 							print_three_addr_constant(fl, result->param_result.constant_result);
 							break;
+					}
+
+					//Comma printing if appropriate
+					if(i != stmt->parameter_results.current_index - 1){
+						fprintf(fl, ", ");
 					}
 				}
 
