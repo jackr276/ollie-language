@@ -2459,9 +2459,6 @@ static void print_OIR_addressing_mode_expression(FILE* fl, instruction_t* instru
  *
 */
 void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
-	//For later use
-	dynamic_array_t func_params;
-
 	//Go based on what our statatement class is
 	switch(stmt->statement_type){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
@@ -2666,12 +2663,15 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				fprintf(fl, " <- ");
 			}
 
-			//No matter what, we'll need to see the "call" keyword, followed
-			//by the function name
+			//No matter what, we'll need to see the "call" keyword, followed by the function name
 			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
 
-			//If we still have parameter results run through those
-			if(stmt->parameter_results.current_index != 0){
+			/**
+			 * Function call statements may or may not have been fully lowered into OIR by the
+			 * time we go to print them. The flag inside of the optional storage is what
+			 * keeps track of this for us
+			 */
+			if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
@@ -2691,10 +2691,10 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				}
 
 			/**
-			 * Otherwise if we've updated it to the point where it's using the regular parameters
+			 * If we've updated it to the point where it's using the regular parameters
 			 * array we can go through and print that out
 			 */
-			} else if(stmt->parameters.current_index != 0){
+			} else {
 				//Now we can go through and print out all of our parameters here
 				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Grab it out
@@ -2704,7 +2704,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					print_variable(fl, func_param, PRINTING_VAR_INLINE);
 
 					//If we need to, print out a comma
-					if(i != func_params.current_index - 1){
+					if(i != stmt->parameters.current_index - 1){
 						fprintf(fl, ", ");
 					}
 				}
@@ -2742,8 +2742,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now we can print the opening parenthesis
 			fprintf(fl, "(");
 
-			//If we still have parameter results run through those
-			if(stmt->parameter_results.current_index != 0){
+			/**
+			 * Function call statements may or may not have been fully lowered into OIR by the
+			 * time we go to print them. The flag inside of the optional storage is what
+			 * keeps track of this for us
+			 */
+			if(stmt->optional_storage.function_call_storage.has_been_fully_lowered == FALSE){
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
@@ -2763,20 +2767,20 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				}
 
 			/**
-			 * Otherwise if we've updated it to the point where it's using the regular parameters
+			 * If we've updated it to the point where it's using the regular parameters
 			 * array we can go through and print that out
 			 */
-			} else if(stmt->parameters.current_index != 0){
+			} else {
 				//Now we can go through and print out all of our parameters here
 				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Grab it out
-					three_addr_var_t* func_param = dynamic_array_get_at(&func_params, i);
+					three_addr_var_t* func_param = dynamic_array_get_at(&(stmt->parameters), i);
 					
 					//Print this out here
 					print_variable(fl, func_param, PRINTING_VAR_INLINE);
 
 					//If we need to, print out a comma
-					if(i != func_params.current_index - 1){
+					if(i != stmt->parameters.current_index - 1){
 						fprintf(fl, ", ");
 					}
 				}
@@ -6292,7 +6296,9 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	stmt->called_function = func_record;
 	stmt->operands.oir.assignee = assigned_to;
 
-	//Just give back the result
+	//Initially we are not fully lowered
+	stmt->optional_storage.function_call_storage.has_been_fully_lowered = FALSE;
+
 	stmt->line_number = line_number;
 	return stmt;
 }
@@ -6311,6 +6317,9 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 	stmt->operands.oir.operand1 = function_pointer;
 	//Mark the assignee
 	stmt->operands.oir.assignee = assigned_to;
+
+	//Initially we are not fully lowered
+	stmt->optional_storage.function_call_storage.has_been_fully_lowered = FALSE;
 
 	stmt->line_number = line_number;
 	return stmt;
