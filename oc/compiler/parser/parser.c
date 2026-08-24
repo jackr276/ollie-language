@@ -13556,20 +13556,12 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 /**
  * Validate the parameter list for a given function type. There are a few fail
  * cases that we currently watch out for. They are:
- * 	1.) Inlined functions may not have elaborative parameters
- * 	2.) Elaborative parameters must always be the very last function parameter
- * 	3.) There may not be more than one elaborative parameter per function
+ * 	21) Elaborative parameters must always be the very last function parameter
+ * 	32) There may not be more than one elaborative parameter per function
  */
 static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
 	//Grab the internal function type out
 	function_type_t* internal_type = function_type->internal_types.function_type;
-
-	//Case 1: inlined functions cannot have stack params
-	if(internal_type->is_inlined == TRUE && internal_type->contains_stack_params == TRUE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Inlined functions may not contain stack passed parameters", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
 
 	//Extract the number of parameters
 	int32_t num_params = internal_type->function_parameters.current_index;
@@ -14356,8 +14348,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * We'll need to initialize a new variable scope here. This variable scope is designed
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
+	 *
+	 * We will consider this to be the "top level" scope for our function. The function
+	 * record will store a reference to this. In the future if we go to inline, we will
+	 * use this variable scope for all new variable creation
 	 */
 	initialize_variable_scope(variable_symtab, function_record, function_symtab->current);
+	function_record->top_level_scope = variable_symtab->current;
 
 	/**
 	 * IMPORTANT: we need to hang onto this overarching function scope

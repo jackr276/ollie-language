@@ -109,6 +109,15 @@ struct basic_block_t{
 		dynamic_array_t worklist;
 	} dominator_info;
 
+	/**
+	 * When we inline functions(among other things), we may need to maintain
+	 * a 1-to-1 relationship where a block maps to another block. This is wrapped
+	 * in "mapping info" for clarity
+	 */
+	struct {
+		basic_block_t* maps_to;
+	} mapping_info;
+
 	//The reference to a jump table. This is often not used at all
 	jump_table_t* jump_table;
 	//The case statement value -- usually blank

@@ -15,11 +15,13 @@
 #include "cfg.h"
 #include <assert.h>
 #include <limits.h>
+#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include "../utils/variable_mapping/variable_mapping.h"
 #include "../utils/queue/heap_queue.h"
 #include "../static_analyzer/static_analyzer.h"
 #include "../jump_table/jump_table.h"
@@ -74,18 +76,12 @@ static nesting_stack_t nesting_stack;
 static dynamic_array_t* current_function_blocks;
 //Also keep a list of all custom jumps in the function
 static dynamic_array_t current_function_user_defined_jump_statements;
-//The current stack offset for any given function
-static u_int64_t stack_offset = 0;
 
 //Keep track of the current dependency that we are on
 static dependency_graph_node_t* current_dependency_node = NULL;
 
 //Reusable memory regions for our graph traversals
 static heap_queue_t traversal_queue;
-
-//For any/all error printing
-char error_info[1500];
-
 
 /**
  * The actual result type that defines whether we have a struct
@@ -121,6 +117,18 @@ typedef struct{
 	//The operator may or may not always be filled
 	ollie_token_t operator;
 } cfg_result_package_t;
+
+
+/**
+ * For function inlining - when we clone the blocks, we're
+ * going to have an idea of which block maps to what when
+ * we update the predecessor and successor lists as well
+ * as any branch instructions
+ */
+typedef struct {
+	basic_block_t* original_block;
+	basic_block_t* copied_block;
+} block_mapping_t;
 
 
 //Enum for branch conditional types
@@ -909,6 +917,32 @@ static inline three_addr_var_t* emit_direct_floating_point_constant(basic_block_
 
 
 /**
+ * Create a basic block without estimating. This is usually
+ * done when we're creating a block outside of the normal
+ * processes like for example during function inlining
+ */
+static basic_block_t* basic_block_alloc_no_estimate(){
+	//Allocate the block
+	basic_block_t* created = calloc(1, sizeof(basic_block_t));
+
+	//Put the block ID in
+	created->block_id = get_next_block_id();
+
+	//By default we're normal here
+	created->block_type = BLOCK_TYPE_NORMAL;
+
+	//Let's add in what function this block came from
+	created->function_defined_in = current_function;
+
+	//Add it into the function's block array
+	dynamic_array_add(current_function_blocks, created);
+
+	//Give it back
+	return created;
+}
+
+
+/**
  * Create a basic block explicitly using the estimate
  * that comes from the nesting stack that we maintain.
  * 
@@ -973,6 +1007,28 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 
 	//Give it back
 	return created;
+}
+
+
+/**
+ * Print the function inlining order. This is just a debugging helper
+ */
+static inline void print_function_inlining_order(dynamic_integer_array_t* inlining_order, function_symtab_t* symtab){
+	fprintf(stdout, "\nFunction inlining order: [");
+
+	for(int32_t i = 0; i < inlining_order->current_index; i++){
+		//Get the ID and use it to do a lookup
+		int32_t id = dynamic_integer_array_get_at(inlining_order, i);
+		symtab_function_record_t* associated_function = get_function_by_id(symtab, id);
+
+		fprintf(stdout, "%s", associated_function->func_name.string);
+
+		if(i != inlining_order->current_index - 1){
+			fprintf(stdout, ", ");
+		}
+	}
+
+	fprintf(stdout, "]\n");
 }
 
 
@@ -2759,7 +2815,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 				 * We will now use a specialized IR instruction to clear this variable out. In reality
 				 * this clearing will be a PXOR statement
 				 */
-				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var, constant_node->line_number);
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
@@ -2814,7 +2870,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 				 * We will now use a specialized IR instruction to clear this variable out. In reality
 				 * this clearing will be a PXOR statement
 				 */
-				instruction_t* clear_instruction = emit_floating_point_clear_instruction(cleared_var, constant_node->line_number);
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
 
 				//Add it into the block
 				add_statement(basic_block, clear_instruction);
@@ -6547,9 +6603,6 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	 */
 	conditional_result->sets_cc = TRUE;
 
-	//Mark this as the oprand1 so that we can track in the optimizer
-	branch_instruction->operands.oir.operand1 = conditional_result;
-
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
 
@@ -7417,12 +7470,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
  	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
-	 * Store a stack data area variable in the uppermost scope. This will only be acted upon if we see that we
-	 * have stack parameters though
-	 */
-	stack_data_area_t stack_passed_parameters;
-
-	/**
 	 * Keep track of the first assignment instruction. We're going to need to insert
 	 * the stack allocation before it
 	 */
@@ -7466,8 +7513,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				function_assignee = emit_temp_var(signature->return_type);
 			}
 
-			//Now we can emit the direct call statement
+			/**
+			 * Now we can emit the direct call statement
+			 * If we have a direct call that is inlined we will flag
+			 * this call instruction as being inlined
+			 */
 			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
+			function_call_statement->is_inlined_call = signature->is_inlined;
 
 			break;
 
@@ -7480,16 +7532,19 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Does the function signature contain stack params or not?
 	u_int8_t has_stack_params = signature->contains_stack_params;
 
+	//Grab a pointer to the function call stack region if we need it
+	stack_data_area_t* function_call_stack_region = &(function_call_statement->optional_storage.function_call_storage.call_stack_region);
+
 	/**
 	 * If a function call contains stack params, we are going to have to allocate the stack data area
 	 * for our stack passed parameters. This needs to be done on every function call
 	 * for an indirect call, regardless of whether the stack is dynamic or static
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
+		stack_data_area_alloc(function_call_stack_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
 
 	} else if(signature->contains_stack_params == TRUE){
-		stack_data_area_alloc(&stack_passed_parameters, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+		stack_data_area_alloc(function_call_stack_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 	}
 	
 	//We'll assign the first basic block to be "current" - this could change if we hit ternary operations
@@ -7551,8 +7606,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	//So long as this isn't NULL
-	while(param_cursor != NULL 
-		&& param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
+	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 		/**
 		 * For everything that is not an elaborative param statement, we'll
 		 * handle it internally to this function
@@ -7587,14 +7641,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * the storage of them. This will also take care of setting up the stack region/parameter
 	 * assignment if we have a return by copy parameter
 	 */
-	handle_parameter_storage(current_block, signature, &non_elaborative_parameter_results, &stack_passed_parameters, &(function_call_statement->parameters), &first_assignment_instruction, function_call_node->line_number);
+	handle_parameter_storage(current_block, signature, &non_elaborative_parameter_results, function_call_stack_region, &(function_call_statement->parameters), &first_assignment_instruction, function_call_node->line_number);
 
 	/**
 	 * If we do have elaborative stack params to manage, we will do so here
 	 * using the helper method
 	 */
 	if(signature->contains_elaborative_stack_param == TRUE){
-		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, &stack_passed_parameters, &first_assignment_instruction, function_call_node->line_number);
+		handle_elaborative_stack_param_storage(current_block, &elaborative_parameter_results, function_call_stack_region, &first_assignment_instruction, function_call_node->line_number);
 	}
 
 	//We can now add the function call statement in
@@ -7610,10 +7664,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	if(has_stack_params == TRUE){
 		//First thing we do is align it
-		align_stack_data_area(&stack_passed_parameters);
+		align_stack_data_area(function_call_stack_region);
 
 		//Now we'll emit the stack constant
-		three_addr_const_t* stack_allocation_constant = emit_direct_integer_or_char_constant(stack_passed_parameters.total_size, u64);
+		three_addr_const_t* stack_allocation_constant = emit_direct_integer_or_char_constant(function_call_stack_region->total_size, u64);
 
 		//Now we'll emit the allocation
 		instruction_t* stack_allocation = emit_stack_allocation_ir_statement(stack_allocation_constant);
@@ -7622,7 +7676,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		insert_instruction_before_given(stack_allocation, first_assignment_instruction);
 
 		//Now we'll emit the stack deallocation constant. The memory has to be separate in case of future optimization
-		three_addr_const_t* stack_deallocation_constant = emit_direct_integer_or_char_constant(stack_passed_parameters.total_size, u64);
+		three_addr_const_t* stack_deallocation_constant = emit_direct_integer_or_char_constant(function_call_stack_region->total_size, u64);
 
 		//And then the stack deallocation statement
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
@@ -7640,7 +7694,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 
 			//Add this in here from the memory address adjustment
-			memory_address->memory_address_base_adjustment = stack_passed_parameters.total_size;
+			memory_address->memory_address_base_adjustment = function_call_stack_region->total_size;
 		}
 	}
 
@@ -7665,7 +7719,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
 		//This is stored in the optional second assignee slot
-		function_call_statement->optional_storage.error_assignee = error_assignee;
+		function_call_statement->optional_storage.function_call_storage.error_assignee = error_assignee;
 
 		//Now we'll have a move statement just for register allocation reasons
 		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
@@ -7782,6 +7836,23 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			}
 		}
 	}
+}
+
+
+/**
+ * For DEBUGGING purposes - we will print all of the blocks in the control
+ * flow graph. This is meant to be invoked by the programmer, and as such is exposed
+ * via the header file
+ */
+void print_all_cfg_blocks(cfg_t* cfg){
+	//We will emit the DF
+	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
+
+	//Print all global variables after the blocks
+	print_all_global_variables(stdout, &(cfg->global_variables));
+
+	//Now print all of the local constants
+	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 
@@ -11549,8 +11620,6 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	current_function = func_record;
 	//Store the pointer to this function's array of blocks too. This will be used by every basic_block_alloc() call
 	current_function_blocks = &(func_record->function_blocks);
-	//We also need to zero out the current stack offset value
-	stack_offset = 0;
 	//Set this to NULL initially - we will only allocate if we need it
 	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_user_defined_jump_statements);
 	//The starting block
@@ -11614,11 +11683,17 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 			add_successor(compound_statement_exit_block, function_exit_block);
 		}
 	
-	//Otherwise, we have an empty function definition. If this is the case, then the only
-	//predecessor to the exit block is the entry block
+	/**
+	 * Otherwise, we have an empty function definition. If this is the case, then the only
+	 * predecessor to the exit block is the entry block
+	 */
 	} else {
 		add_successor(function_starting_block, function_exit_block);
 	}
+
+	//Add the start and end blocks to their respective arrays
+	dynamic_array_add(&(cfg->function_entry_blocks), function_starting_block);
+	dynamic_array_add(&(cfg->function_exit_blocks), function_exit_block);
 
 	//Determine and insert any needed ret statements
 	determine_and_insert_return_statements(function_exit_block);
@@ -11626,35 +11701,8 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	//We'll need to go through and finalize all user defined jump statements if there are any
 	finalize_all_user_defined_jump_statements(&current_function_user_defined_jump_statements);
 
-	//Add the start and end blocks to their respective arrays
-	dynamic_array_add(&(cfg->function_entry_blocks), function_starting_block);
-	dynamic_array_add(&(cfg->function_exit_blocks), function_exit_block);
-
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
-
-	/**
-	 * Once we are fully complete, we will go through and search for any/all useless
-	 * statements to delete
-	 */
-	delete_all_unreachable_blocks(current_function_blocks);
-
-	/**
-	 * Let's now use the helper to compute all of the USE/DEF sets for each
-	 * block in the function
-	 */
-	compute_use_and_def_sets_for_function(current_function_blocks);
-
-	/**
-	 * Let the graph module compute all dominance relations for the given function. It is essential
-	 * that this be done *before* we do anything with liveness/SSA
-	 */
-	calculate_all_control_flow_relations_for_function(function_starting_block, function_exit_block, current_function_blocks);
-
-	/**
-	 * Finally, we will calculate the liveness sets for this function
-	 */
-	calculate_liveness_sets(current_function_blocks, function_exit_block);
 
 	//Now that we're done, we will clear this current function parameter
 	current_function = NULL;
@@ -12772,27 +12820,16 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 	//A prog node can decay into a function definition, a let statement or otherwise
 	generic_ast_node_t* ast_cursor = prog_node->first_child;
 
-	//So long as the AST cursor is not null
 	while(ast_cursor != NULL){
-		//Switch based on the class of cursor that we have here
 		switch(ast_cursor->ast_node_type){
-			/**
-			 * We've seen a function defintion. In this case we'll
-			 * let the helper deal with it
-			 */
 			case AST_NODE_TYPE_FUNC_DEF:
 				visit_function_definition(cfg, ast_cursor);
 				break;
 
-			/**
-			 * We know that by nature of these variables being here that they
-			 * are global variables
-			 */
 			case AST_NODE_TYPE_LET_STMT:
 				visit_global_let_statement(ast_cursor);
 				break;
 		
-			//Finally, we could see a declaration
 			case AST_NODE_TYPE_DECL_STMT:
 				visit_global_declare_statement(ast_cursor);
 				break;
@@ -12815,19 +12852,1307 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 
 
 /**
- * For DEBUGGING purposes - we will print all of the blocks in the control
- * flow graph. This is meant to be invoked by the programmer, and as such is exposed
- * via the header file
+ * A reverse topological sort will visit the leaves of the graph first. This graph is a DAG,
+ * and by this point in the process there's no reason why we'd have a cycle. If we find a 
+ * cycle the compiler hard fails. If there are no inlined functions, a random order is returned
+ * because there are no edge constraints on the graph
+ *
+ * Reverse topological sort algorithm:
+ * 	sorted_result = []
+ * 	processed = []
+ * 	
+ * 	while sorted_result.size < num_functions:
+ * 		found_fn_to_add = false
+ *
+ * 		for i = 0, i < num_functions:
+ * 			if(processed[i] == true):
+ * 				continue
+ *
+ * 			has_unprocessed_callee = false
+ *
+ * 			for j = 0, j < num_functions:
+ * 				if(A[i][j] == true && removed[j] == false): <---- if i calls j
+ * 					has_unprocessed_callee = true
+ * 					break
+ *
+ * 			if has_unprocessed_callee == false:
+ * 				add i to the result
+ * 				removed[i] = true <--- do not reprocess
+ * 				found_fn_to_add = true
+ *
+ * 		if found_fn_to_add == false:
+ * 			error out for a cycle(should be impossible with our check)
  */
-void print_all_cfg_blocks(cfg_t* cfg){
-	//We will emit the DF
-	emit_blocks_bfs(cfg, EMIT_DOMINANCE_FRONTIER);
+static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_call_graph_matrix, dynamic_integer_array_t* reverse_topological_sort, int32_t function_count){
+	/**
+	 * Maintain a list of values that we've already added to the topological
+	 * sort list. Initially wipe it out to all be FALSE(0)
+	 */
+	u_int8_t already_sorted[function_count];
+	memset(already_sorted, 0, sizeof(u_int8_t) * function_count);
 
-	//Print all global variables after the blocks
-	print_all_global_variables(stdout, &(cfg->global_variables));
+	/**
+	 * So long as we still have functions to add to the sort order
+	 */
+	while(reverse_topological_sort->current_index < function_count){
+		/**
+		 * Every time that a new iteration runs we should be finding
+		 * at least one unprocessed function to add if it's yet to converge.
+		 * If we go through an iteration where we don't find one, that
+		 * means that we have a cycle and this entire thing is invalid
+		 *
+		 * In theory this should never happen by this point but we are
+		 * taking the precaution
+		 */
+		u_int8_t found_fn_to_add = FALSE;
 
-	//Now print all of the local constants
-	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+		//For all functions in the call graph
+		for(int32_t i = 0; i < function_count; i++){
+			/**
+			 * We've already sorted it - avoid reprocessing
+			 * with this check to ensure that we always converge
+			 */
+			if(already_sorted[i] == TRUE){
+				continue;
+			}
+
+			/**
+			 * Now run through all of the functions again. We are looking
+			 * to see if we have at least one unprocessed callee of the function
+			 * with ID "i". Remember A[i][j] = TRUE means that i calls j 
+			 */
+			u_int8_t has_unprocessed_callee = FALSE;
+			for(int32_t j = 0; j < function_count; j++){
+				if(already_sorted[j] == FALSE && inline_call_graph_matrix[i * function_count + j] == TRUE){
+					has_unprocessed_callee = TRUE;
+					break;
+				}
+			}
+
+			/**
+			 * We have no unprocessed callees, meaning that
+			 * this is either a leaf in the DAG *or* all of
+			 * its callees are already in front of it in the
+			 * sort, so we are good to add
+			 */
+			if(has_unprocessed_callee == FALSE){
+				dynamic_integer_array_add(reverse_topological_sort, i);
+				already_sorted[i] = TRUE;
+				//Flag that we foudn something to add
+				found_fn_to_add = TRUE;
+			}
+		}
+
+		/**
+		 * If we did not find at least one unprocessed function
+		 * to add here this iteration, then we have a cycle and this entire CFG
+		 * is invalid
+		 */
+		if(found_fn_to_add == FALSE){
+			fprintf(stderr, "Fatal internal compiler error: Cycle detected inside of reverse topological sort on the inlined function call graph\n");
+			exit(1);
+		}
+	}
+}
+
+
+/**
+ * Use a reverse topological sort to get the function inlining order
+ */
+static inline void get_function_inlining_order(function_symtab_t* function_symtab, dynamic_integer_array_t* inlining_order){
+	//We know that the number of functions will not change by now
+	u_int32_t number_of_functions = function_symtab->current_function_id;
+
+	//EXtract this from the function symtab itself
+	u_int8_t* inline_call_graph = function_symtab->inline_call_graph_matrix;
+
+	//First let the helper do the reverse topological sort to get our order
+	reverse_topological_sort_inline_call_graph(inline_call_graph, inlining_order, number_of_functions);
+}
+
+
+/**
+ * Remove a statement from a block. This is more like a soft deletion, we are
+ * not actually deleting the statement, just moving it from once place to another
+ */
+static void remove_statement(instruction_t* stmt){
+	//Grab the block out
+	basic_block_t* block = stmt->block_contained_in;
+
+	//We are losing a statement here
+	block->number_of_instructions--;
+
+	//If it's the leader statement, we'll just update the references
+	if(block->leader_statement == stmt){
+		//Special case - it's the only statement. We'll just delete it here
+		if(block->leader_statement->next_statement == NULL){
+			//Just remove it entirely
+			block->leader_statement = NULL;
+			block->exit_statement = NULL;
+
+		//Otherwise it is the leader, but we have more
+		} else {
+			//Update the reference
+			block->leader_statement = stmt->next_statement;
+			//Set this to NULL
+			block->leader_statement->previous_statement = NULL;
+		}
+
+	//What if it's the exit statement?
+	} else if(block->exit_statement == stmt){
+		instruction_t* previous = stmt->previous_statement;
+		//Nothing at the end
+		previous->next_statement = NULL;
+
+		//This now is the exit statement
+		block->exit_statement = previous;
+		
+	//Otherwise, we have one in the middle
+	} else {
+		//Regular middle deletion here
+		instruction_t* previous = stmt->previous_statement;
+		instruction_t* next = stmt->next_statement;
+		previous->next_statement = next;
+		next->previous_statement = previous;
+	}
+
+	//This statement is listless(for now)
+	stmt->previous_statement = NULL;
+	stmt->next_statement = NULL;
+	stmt->block_contained_in = NULL;
+}
+
+
+/**
+ * Split a block, taking all statements beginning at start(exclusive) until
+ * the end and putting them into the new block. We will also be updating all
+ * of the successors as well. When we are done, the starting block will not
+ * have any successors and the new block will inherit its successors
+ *
+ * Start:
+ * .L1
+ * 	Pred:{.L0}
+ * 	Succ:{.L3, .L4}
+ *   A
+ *   B
+ *   C <----- split start
+ *   D
+ *   E
+ *
+ * Final result:
+ *  .L1
+ *   Pred:{.L0}
+ *   Succ: {} <-- left empty on purpose
+ *   A
+ *   B
+ *   C
+ *   
+ *  .L2
+ *   Pred:{} <-- left empty on purpose
+ *   Succ:{.L3, .L4}
+ *   D
+ *   E
+ */
+static inline void split_block_around_instruction(basic_block_t* source_block, basic_block_t* new_block, instruction_t* split_start){
+	/**
+	 * Step 1: perform the actual instruction movement. Starting
+	 * at the first instruction after the given split start, move the
+	 * statement from one block to the other
+	 */
+	instruction_t* cursor = split_start->next_statement;
+	while(cursor != NULL){
+		//What we'll actually use
+		instruction_t* holder = cursor;
+
+		//Push this one up
+		cursor = cursor->next_statement;
+
+		//Remove the holder from the original block
+		remove_statement(holder);
+
+		//Add it to the new block
+		add_statement(new_block, holder);
+	}
+
+	/**
+	 * Step 2: all successors of the original source block will now
+	 * be successors of the new block instead. We can do a straight clone
+	 * to achieve this. After we clone, wipe out the source block's successors
+	 * because it now has none
+	 */
+	new_block->successors = clone_dynamic_array((&source_block->successors));
+	clear_dynamic_array(&(source_block->successors));
+
+	/**
+	 * Step 3: for the successors that we just cloned, we need to replace all
+	 * references to the source block in their predecessor set with references
+	 * to the new successor
+	 */
+	for(int32_t i = 0; i < new_block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(new_block->successors), i);
+
+		for(int32_t j= 0; j < successor->predecessors.current_index; j++){
+			/**
+			 * If this successor's predecessor is the old block, we need to 
+			 * make it the new block. Once we find it we can also break out
+			 */
+			if(successor->predecessors.internal_array[j] == source_block){
+				successor->predecessors.internal_array[j] = new_block;
+				break;
+			}
+		}
+	}
+}
+
+
+/**
+ * There are some variables that do not need to be cloned because
+ * they are shared across a global state. Global and static variables
+ * are the only two as of writing this that are excluded
+ */
+static inline u_int8_t is_symtab_variable_excluded_from_cloning(symtab_variable_record_t* variable){
+	variable_membership_t membership = variable->membership;
+	return ((membership == GLOBAL_VARIABLE) || (membership == STATIC_VARIABLE)) ? TRUE : FALSE;
+}
+
+
+/**
+ * Clone a given symtab variable. This standardized method of cloning helps us stay consistent across
+ * different variable types
+ */
+static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_record_t* source_variable, variable_map_t* variable_map){
+	/**
+	 * Create a brand new variable using the temp var subsystem. Names are irrelevant because
+	 * we have the mapping so this should work just fine.
+	 */
+	symtab_variable_record_t* clone = create_ssa_compatible_temp_var(current_function, source_variable->type_defined_as, variable_symtab, get_next_variable_id());
+
+	//Clone over some of these important flags
+	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
+	clone->stack_variable = source_variable->stack_variable;
+	clone->passed_by_stack = source_variable->passed_by_stack;
+
+	/**
+	 * If there is a stack region, we'll assign it to be what the source's stack
+	 * region maps to. We need to have this on here
+	 */
+	if(source_variable->stack_region != NULL){
+		clone->stack_region = source_variable->stack_region->maps_to;
+	} else {
+		clone->stack_region = NULL;
+	}
+
+	/**
+	 * Now that it's all been cloned over we can create the mapping
+	 */
+	create_mapping_for_symtab_variable(variable_map, source_variable, clone);
+
+	return clone;
+}
+
+
+/**
+ * Clone a variable(temporary or not) using the variable map strategy where every
+ * source variable maps to a branch new variable in the inlined function
+ */
+static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
+	/**
+	 * This is a completely valid and frequent case. In this case, just leave
+	 */
+	if(source_variable == NULL){
+		return NULL;
+	}
+
+	/**
+	 * Instruction pointer and stack pointer are universal across all functions so they should
+	 * never be cloned
+	 */
+	if(source_variable == instruction_pointer_var || source_variable == stack_pointer_variable){
+		return instruction_pointer_var;
+	}
+
+	//Our new variable that we'll be handing back
+	three_addr_var_t* new_variable = NULL;
+	variable_mapping_t* mapping = NULL;
+
+	switch(source_variable->variable_type){
+		/**
+		 * For temporary variables we maintain a mapping from temp var id to temp
+		 * var id and will use that when we emit our new one
+		 */
+		case VARIABLE_TYPE_TEMP: {
+			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
+
+			/**
+			 * If we found it we can just create a new variable with the new temporary
+			 * variable number. Otherwise, we'll have to make a new temp var number, 
+			 * save the association in the mapping, and then do the cloning
+			 */
+			u_int32_t variable_id;
+			if(mapping != NULL){
+				variable_id = mapping->destination.temporary_id;
+
+			} else {
+				/**
+				 * Create a new one and add the mapping for next time 
+				 */
+				variable_id = get_next_variable_id();
+				create_mapping_for_temporary_variable(variable_map, source_variable->variable_id, variable_id);
+			}
+
+			/**
+			 * Whatever happened from there, we'll need to emit a new variable
+			 * copy and replace the temp ID with our new one
+			 */
+			new_variable = emit_var_copy(source_variable);
+			new_variable->variable_id = variable_id;
+			break;
+		}
+
+		/**
+		 * For non temporary variables we maintain a mapping from source symtab variable
+		 * to destination symtab variable. We will need to use some tricks to get the 
+		 * symtab variables unique for each run
+		 */
+		case VARIABLE_TYPE_NON_TEMP: {
+			/**
+			 * There are notable cases where variables are excluded from cloning entirely.
+			 * These variables would all be true variables tied to symtab variables. If this
+			 * is the case, then we just emit a copy and leave
+			 */
+			if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+				return emit_var_copy(source_variable);
+			}
+
+			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
+
+			/**
+			 * If we found it we can just create a new variable from this linked one. If not,
+			 * then we'll need to create an entirely new symtab variable while guaranteeing that
+			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+			 * in the same function
+			 */
+			symtab_variable_record_t* symtab_variable;
+			if(mapping != NULL){
+				symtab_variable = mapping->destination.symtab_variable;
+			} else {
+				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
+			}
+
+			/**
+			 * We need to go through the entire variable emittal process again to ensure that
+			 * this new symtab variable gets fresh variable references
+			 */
+			new_variable = emit_var(symtab_variable);
+			break;
+		}
+
+		/**
+		 * For memory addresses, we're going to have to account for the stack regions that
+		 * are stored on the variable and/or the symtab variable as we copy it
+		 */
+		case VARIABLE_TYPE_MEMORY_ADDRESS: {
+			if(source_variable->linked_var != NULL){
+				/**
+				 * For static and global variables, we do not need to worry about cloning memory
+				 * regions because the memory region is just in the data segment itself. Instead of
+				 * doing that we'll just emit a straight copy
+				 */
+				if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+					return emit_var_copy(source_variable);
+				}
+				
+				mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
+
+				/**
+				 * If we found it we can just create a new variable from this linked one. If not,
+				 * then we'll need to create an entirely new symtab variable while guaranteeing that
+				 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+				 * in the same function
+				 */
+				symtab_variable_record_t* symtab_variable;
+				if(mapping != NULL){
+					symtab_variable = mapping->destination.symtab_variable;
+				} else {
+					symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
+				}
+				
+				/**
+				 * Go through the process of emitting this variable fresh to ensure that we have
+				 * all of the variable ID linking in
+				 */
+				new_variable = emit_memory_address_var(symtab_variable);
+
+			/**
+			 * Will be done at a later time
+			 */
+			} else {
+				printf("Function inlining has not yet implemented memory address temporary variables\n");
+				exit(0);
+			}
+
+			break;
+		}
+	
+		/**
+		 * Function addresses work like any other variable in the way that they're cloned
+		 * and passed around
+		 */
+		case VARIABLE_TYPE_FUNCTION_ADDRESS: {
+			//Get the mapping for this based on ID
+			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
+
+			/**
+			 * Either grab the ID off of the mapping or create a new mapping with a 
+			 * fresh ID
+			 */
+			u_int32_t variable_id;
+			if(mapping != NULL){
+				variable_id = mapping->destination.temporary_id;
+			} else {
+				variable_id = get_next_variable_id();
+				create_mapping_for_temporary_variable(variable_map, source_variable->variable_id, variable_id);
+			}
+
+			//Clone it and assign the new ID over
+			new_variable = emit_var_copy(source_variable);
+			new_variable->variable_id = variable_id;
+			break;
+		}
+
+		/**
+		 * Local constant variables are not variables in the true sense. We can get away
+		 * with just cloning it for our purposes
+		 */
+		case VARIABLE_TYPE_LOCAL_CONSTANT: {
+			new_variable = emit_var_copy(source_variable);
+			break;
+		}
+
+		/**
+		 * For now in the initial step - anything that comes here is not implemented
+		 * so we'll hit this catch-all
+		 */
+		default:
+			printf("Function inlining has not yet implemented the variable type %s\n", variable_type_to_string(source_variable->variable_type));
+			exit(0);
+	}
+
+	//Give back the new one
+	return new_variable;
+}
+
+
+/**
+ * Clone a constant. This will create separate memory so we maintain
+ * complete separation
+ */
+static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
+}
+
+
+/**
+ * Function calls are so complex that they warrant their own separate function to handle their cloning. 
+ * As a reminder functions in Ollie can:
+ * 	1.) Raise errors
+ * 	2.) Have stack parameters
+ * 	3.) Have elaborative parameters
+ * 	4.) Have parameters that are passed by copy
+ * 	5.) Return-by-copy types
+ *
+ * These all need to be accounted for when we clone a function call
+ *
+ * This has been shelved pending changes to the infrastructure of function calls
+ *
+ * WORK IN PROGRESS
+ */
+static inline void clone_function_call(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map){
+	//Create the new statement
+	instruction_t* new_function_call = calloc(1, sizeof(instruction_t));
+
+	/**
+	 * Extract the signature of whatever we're calling for convenience
+	 * down the road
+	 */
+	function_type_t* called_function_signature;
+	if(source_instruction->statement_type == THREE_ADDR_CODE_FUNC_CALL){
+		called_function_signature = source_instruction->called_function->signature->internal_types.function_type;
+	} else {
+		called_function_signature = source_instruction->operands.oir.operand1->type->internal_types.function_type;
+	}
+
+	//We really just need the statement type and line number
+	new_function_call->statement_type = source_instruction->statement_type;
+	new_function_call->line_number = source_instruction->line_number;
+
+	/**
+	 * Clone over the called function symtab record *or* the operand1.
+	 * As a reminder:
+	 * 	Direct calls use the "called_function" slot
+	 * 	Indirect calls use operand1 to hold the function pointer variable
+	 */
+	new_function_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+	new_function_call->called_function = source_instruction->called_function;
+
+	//Clone over both potential assignees
+	new_function_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+	new_function_call->optional_storage.function_call_storage.error_assignee = clone_variable(new_function_call->optional_storage.function_call_storage.error_assignee, variable_map);
+
+	if(called_function_signature->returns_by_copy){
+	}
+
+	/**
+	 * If we have parameters to clone over now is the time
+	 */
+	if(called_function_signature->function_parameters.current_index != 0){
+		//Grab some space for it
+		new_function_call->parameters = dynamic_array_alloc();
+
+		//Run through every parameter can clone them over one-to-one
+		for(int32_t i = 0; i < source_instruction->parameters.current_index; i++){
+			three_addr_var_t* new_parameter = clone_variable(dynamic_array_get_at(&source_instruction->parameters, i), variable_map);
+			dynamic_array_add(&(new_function_call->parameters), new_parameter);
+		}
+	}
+
+	//Finally add this into the new block
+	add_statement(cloning_into_block, new_function_call);
+}
+
+
+/**
+ * Clone the given instruction into a brand new one. This cloning also
+ * involves doing all of our variable replacement logic with the variable
+ * mapping, amongst other things
+ *
+ * NOTE: this is a manual clone and we will not use any memcpy() for this. This
+ * is done so as new instruction fields are added we don't just blindly copy
+ * over everything, the author will have to come in here and update it
+ */
+static inline void clone_instruction_into_block(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map,
+											   symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
+												basic_block_t* inlined_exit_block){
+	/**
+	 * Now certain instruction types may require special treatment due to blocks,
+	 * special variables like returned variables, etc. We'll account for this
+	 * now that the common code has been done
+	 */
+	switch(source_instruction->statement_type){
+		/**
+		 * For a return statement, we have to simulate a return by assigning
+		 * to a synthetic return variable and then jumping to the exit
+		 * block. There's no way for us to actually use the "ret" keyword
+		 */
+		case THREE_ADDR_CODE_RET_STMT: {
+			/**
+			 * If we have something to clone, we'll emit the assignment now
+			 */
+			if(source_instruction->operands.oir.operand1 != NULL){
+				instruction_t* simulated_return_assignment = emit_assignment_instruction(emit_var(return_variable),
+																		clone_variable(source_instruction->operands.oir.operand1, variable_map),
+																		source_instruction->line_number);
+				add_statement(cloning_into_block, simulated_return_assignment);
+			}
+
+			/**
+			 * If we have a raise variable, that means that this function has to always have
+			 * the raise variable populated along every return path. We will use the value special
+			 * clear instruction to make this 0
+			 */
+			if(raise_variable != NULL){
+				instruction_t* clear_instruction = emit_clear_instruction(emit_var(raise_variable), source_instruction->line_number);
+				add_statement(cloning_into_block, clear_instruction);
+			}
+		
+			//To actually simulate we will jump from this block to the exit block
+			emit_jump(cloning_into_block, inlined_exit_block);
+			return;
+		}
+
+		/**
+		 * A raise statement is essentially a return statement that always takes
+		 * in a constant. We will do the same thing where we simulate returning
+		 * by assignment and then jumping to the exit
+		 */
+		case THREE_ADDR_CODE_RAISE_STMT: {
+			//Raise always has an assignee unlike return
+			instruction_t* simulated_raise_assignment = emit_assignment_instruction(emit_var(raise_variable),
+																	clone_variable(source_instruction->operands.oir.operand1, variable_map),
+																	source_instruction->line_number);
+			add_statement(cloning_into_block, simulated_raise_assignment);
+
+			/**
+			 * If we have a return variable we'll need it to be assigned. We will use the specialized
+			 * clear function to make this happen
+			 */
+			if(return_variable != NULL){
+				instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
+				add_statement(cloning_into_block, clear_instruction);
+			}
+			
+			//To actually simulate we will jump from this block to the exit block
+			emit_jump(cloning_into_block, inlined_exit_block);
+			return;
+		}
+	
+
+		/**
+		 * For an asm inline statement we need to copy over all of the inlined
+		 * assembly which is as easy as just cloning the dynamic string
+		 */
+		case THREE_ADDR_CODE_ASM_INLINE_STMT: {
+			instruction_t* asm_inline_statement = calloc(1, sizeof(instruction_t));
+			asm_inline_statement->statement_type = THREE_ADDR_CODE_ASM_INLINE_STMT;
+
+			//Clone over the assembly and we should be good
+			asm_inline_statement->optional_storage.inlined_assembly = clone_dynamic_string(&(source_instruction->optional_storage.inlined_assembly));
+			add_statement(cloning_into_block, asm_inline_statement);
+			return;
+		}
+
+		/**
+		 * For branch statements, we need to take care to replace
+		 * the block references with what they really go to
+		 */
+		case THREE_ADDR_CODE_BRANCH_STMT: {
+			//Allocate fresh
+			instruction_t* branch_stmt = calloc(1, sizeof(instruction_t));
+			
+			//Copy over everything that we'll need
+			branch_stmt->statement_type = source_instruction->statement_type;
+			branch_stmt->op = source_instruction->op;
+			branch_stmt->branch_type = source_instruction->branch_type;
+			branch_stmt->line_number = source_instruction->line_number;
+			branch_stmt->inverse_branch = source_instruction->inverse_branch;
+
+			//Branch statements *need* to have the "relies_on" field populated properly
+			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Populate the if and else block with what they directly map to
+			 */
+			basic_block_t* old_if_block = source_instruction->if_block;
+			basic_block_t* old_else_block = source_instruction->else_block;
+			branch_stmt->if_block = old_if_block->mapping_info.maps_to;
+			branch_stmt->else_block = old_else_block->mapping_info.maps_to;
+
+			//Add it into the block and we should be good
+			add_statement(cloning_into_block, branch_stmt);
+			return;
+		}
+	
+		/**
+		 * For a jump statement we need to use the block's "maps_to" reference
+		 * to create an equivalent substitution in the inlined function
+		 */
+		case THREE_ADDR_CODE_JUMP_STMT: {
+			basic_block_t* source_jumping_to_block = source_instruction->if_block;
+			emit_jump(cloning_into_block, source_jumping_to_block->mapping_info.maps_to);
+			return;
+		}
+
+		/**
+		 * Indirect jump statements always come with an associated jump table. In order for
+		 * this to work, we can't just clone the statement itself, we'll also need to create
+		 * an equivalent jump table for this block
+		 */
+		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
+			/**
+			 * First we'll need to copy over the entire jump table into the new block
+			 * that we're cloning into
+			 */
+			basic_block_t* cloning_from_block = source_instruction->block_contained_in;
+			cloning_into_block->jump_table = clone_jump_table(cloning_from_block->jump_table);
+
+			//Make a fresh jump statement
+			instruction_t* new_jump = calloc(1, sizeof(instruction_t));
+
+			//We need to copy/clone over all of this info
+			new_jump->statement_type = source_instruction->statement_type;
+			new_jump->addressing_mode = source_instruction->addressing_mode;
+			new_jump->line_number = source_instruction->line_number;
+
+			//Jump table reference
+			new_jump->if_block = cloning_into_block->jump_table; 
+
+			//Indirect jump statements have address operands and a multiplier
+			new_jump->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_jump->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+			new_jump->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
+			new_jump->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+
+			add_statement(cloning_into_block, new_jump);
+			return;
+		}
+	
+		/**
+		 * For a function call/indirect call we need to account for the parameter
+		 * setup as we call into it and the potential that we have
+		 * a stack data area inside of this function call
+		 */
+		case THREE_ADDR_CODE_FUNC_CALL:
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
+			printf("Function calls are not yet implemented for inlining pending changes to their architecture\n");
+			exit(0);
+		}
+
+		/**
+		 * Memory coyp statements touch memory so we'll
+		 * need to clone over the memory read/write type
+		 * and the byte amount that we need to copy
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:{
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			//Copy all of the basic instruction info over as well
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			//We only need these two variables
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+
+			//We need to know how much copying must be done
+			new_instruction->optional_storage.byte_amount_to_copy = source_instruction->optional_storage.byte_amount_to_copy;
+
+			//Add it in and get out
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
+
+		/**
+		 * Load and store statements touch memory so we'll need
+		 * to clone over the memory read/write type specifically
+		 */
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			/**
+			 * First clone every single variable using our mapping strategy
+			 */
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Then clone all of the constants - there's no mapping for this we just do a complete
+			 * memory copy for all of them
+			 */
+			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
+			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
+			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			//We specifically need this type
+			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+
+			//Add it in and get out
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
+
+		/**
+		 * By default we need to clone every single variable that 
+		 */
+		default: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			/**
+			 * First clone every single variable using our mapping strategy
+			 */
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Then clone all of the constants - there's no mapping for this we just do a complete
+			 * memory copy for all of them
+			 */
+			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
+			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
+			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->op = source_instruction->op;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->branch_type = source_instruction->branch_type;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+			new_instruction->inverse_branch = source_instruction->inverse_branch;
+
+			//We choose to use the result type for this copy over. The memory type will be used by other cloning
+			new_instruction->type_storage.result_type = source_instruction->type_storage.result_type;
+
+			/**
+			 * Copy over all of the optional storage fields in one big
+			 * memory copy. This is only used in these non-specific
+			 * cases. For more specific copying we'll target individual
+			 * optional storage fields as needed
+			 */
+			memcpy(&(new_instruction->optional_storage), &(source_instruction->optional_storage), sizeof(new_instruction->optional_storage));
+
+			//Add this new instruction into the new block
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
+	}
+}
+
+
+/**
+ * Take a function that we want to inline and perform a 100% clone of it. This means that literally
+ * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
+ * of it
+ *
+ *
+ * As part of this cloning, we have two parameters that take in a simulated return and raise variable if appropriate.
+ * These variables are necessary for us to simulate the process of returning/raising without actually using the "ret"
+ * instruction because that won't work when we inline
+ *
+ * We also pass in a list of all of our parameters from the given function call so that we can manage them
+ */
+static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit,
+											symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable, dynamic_array_t* parameters){
+	//Initialize a brand new variable mapping for our uses
+	variable_map_t variable_map = variable_map_alloc();
+	//Grab this for ease of use
+	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
+
+	/**
+	 * We currently haven't done this yet
+	 */
+	if(cloning_signature->contains_elaborative_stack_param || cloning_signature->contains_stack_params || cloning_signature->returns_by_copy){
+		printf("Function inlining with stack usage is currently unimplemented\n");
+		exit(0);
+	}
+
+	/**
+	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
+	 * be added to the function that we're inlining into's blocks because we've set the global
+	 * references properly
+	 *
+	 * We need to create all of the blocks first before we even try to deal with the instructions
+	 * in them because a lot of instructions(branch, jmp) and successor/predecessor management rely
+	 * on us knowing what the actual new block IDs are going to be
+	 *
+	 * All of the new blocks will have a one-to-one mapping with the block that they've been
+	 * cloned from. This is done to make our job of successor/predecessor management easier
+	 */
+	for(int32_t i = 0; i < function_to_clone->function_blocks.current_index; i++){
+		basic_block_t* reference_block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
+
+		/**
+		 * Allocate the new block but do *NOT* estimate the execution frequency. We will inherit
+		 * this from the reference
+		 */
+		basic_block_t* new_block = basic_block_alloc_no_estimate();
+		new_block->estimated_execution_frequency = reference_block->estimated_execution_frequency;
+
+		//IMPORTANT - create the mapping association here
+		reference_block->mapping_info.maps_to = new_block;
+
+		/**
+		 * Based on the block type we will either flag the entry and exit
+		 * block or copy it over. One thing that we should never do is flag
+		 * any of these new blocks as function entry or exit blocks as it would
+		 * mess up the dominator analysis later on
+		 */
+		switch(reference_block->block_type){
+			case BLOCK_TYPE_FUNC_ENTRY:
+				*function_entry = new_block;
+				break;
+			case BLOCK_TYPE_FUNC_EXIT:
+				*function_exit = new_block;
+				break;
+			//It's not a type that's reserved so copy it over
+			default:
+				new_block->block_type = reference_block->block_type;
+				break;
+		}
+	}
+
+	/**
+	 * Step 2: we will need to clone our inlined function's stack data area
+	 * into the caller. Doing this now allows the instruction cloning step
+	 * to just use mappings between stack regions when they come up
+	 */
+	clone_stack_data_area_into_given(&(current_function->local_stack), &(function_to_clone->local_stack));
+
+	/**
+	 * Step 3: Run through all of our parameters and get them assigned over to their
+	 * actual symtab variables in the inlined function. This step bridges the
+	 * gap between what we see when we call a function and what we have here
+	 */
+
+	for(int32_t i = 0; i < parameters->current_index; i++){
+		//Extract the parameter
+		three_addr_var_t* passed_parameter = dynamic_array_get_at(parameters, i);
+
+		//Get the actual symtab variable that it maps to
+		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
+
+		//Emit a copy assignment from the given parameter over to this variable
+		instruction_t* parameter_assignment = emit_assignment_instruction(clone_variable(emit_var_no_alias(parameter_variable), &variable_map), passed_parameter, function_to_clone->line_number);
+		add_statement(*function_entry, parameter_assignment);
+	}
+
+	/**
+	 * Step 4: Now that we've gone through and created all of the new blocks, we need to
+	 * go through and populate them using our block cloning. There are some caveats, like
+	 * "ret" and "raise" statements will now just be jumps to the function exit block, and
+	 * we'll need to adjust branch statements, so on and so forht
+	 */
+	for(int32_t i = 0; i < function_to_clone->function_blocks.current_index; i++){
+		//Get the reference block and the new block
+		basic_block_t* reference_block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
+		basic_block_t* new_block = reference_block->mapping_info.maps_to;
+
+		/**
+		 * Run through every instruction, clone it and add it into the new block
+		 * in order. This is where all of our substitution mapping is going to
+		 * come into play
+		 */
+		instruction_t* cursor = reference_block->leader_statement;
+		while(cursor != NULL){
+			//Clone this instruction into the new block
+			clone_instruction_into_block(new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
+
+			//Onto the next one
+			cursor = cursor->next_statement;
+		}
+
+		/**
+		 * Every successor in the reference block corresponds to a new cloned block.
+		 * We need to add all of these cloned blocks as successors to this new
+		 * block
+		 */
+		for(int32_t i = 0; i < reference_block->successors.current_index; i++){
+			basic_block_t* old_successor = dynamic_array_get_at(&(reference_block->successors), i);
+
+			//Get the new cloned block that it maps to and add that as a successor
+			basic_block_t* new_successor = old_successor->mapping_info.maps_to;
+			add_successor(new_block, new_successor);
+		}
+	}
+
+	//Now that we're done destroy the variable map
+	variable_map_dealloc(&variable_map);
+}
+
+
+/**
+ * Inline a function call inside of the given block. To achieve this, we have
+ * to split the block where inlined call happens into two pieces and shove the
+ * inlined function right in the middle of it. We are going to have to make sure
+ * that the inlined function is a 100% new copy of the original one, as one function
+ * may be inlined 100s of times throughout the process
+ */
+static void inline_function_call(instruction_t* call_to_inline){
+	//Extract the signature of the function that we're calling
+	function_type_t* inlined_function_signature = call_to_inline->called_function->signature->internal_types.function_type;
+
+	//Get the block where this function call is currently
+	basic_block_t* block_inlined_in = call_to_inline->block_contained_in;
+
+	/**
+	 * We'll need a fresh block that comes after our inlining takes place
+	 */
+	basic_block_t* after_inline_block = basic_block_alloc_no_estimate();
+	after_inline_block->estimated_execution_frequency = block_inlined_in->estimated_execution_frequency;
+
+	/**
+	 * Step 0: we need to set up a synthetic return variable and a synthetic error return variable
+	 * if we have them. This will simulate the way that regular function calls return/raise errors. 
+	 * In an inlined function, instead of using the "ret" keyword, we will just jump to the simulated
+	 * exit block
+	 */
+	symtab_variable_record_t* symtab_return_variable = NULL;
+	symtab_variable_record_t* symtab_raise_variable = NULL;
+
+	/**
+	 * If we do not return void we need a simulated return variable
+	 */
+	if(inlined_function_signature->returns_void == FALSE){
+		symtab_return_variable = create_ssa_compatible_temp_var(current_function, inlined_function_signature->return_type, variable_symtab, get_next_variable_id());
+	}
+
+	/**
+	 * If we raise any errors we need a simulated error raising variable
+	 */
+	if(inlined_function_signature->raises_errors == TRUE){
+		symtab_raise_variable = create_ssa_compatible_temp_var(current_function, u64, variable_symtab, get_next_variable_id());
+	}
+
+	/**
+	 * Step 1: split the original block around the inlined call instruction. When we're done
+	 * the call instruction will still be in the original block, but everything after it will
+	 * be in the new block
+	 */
+	split_block_around_instruction(block_inlined_in, after_inline_block, call_to_inline);
+
+	/**
+	 * Step 2: Now that we have our split we need to get a complete, 100% unique clone of the
+	 * function that we are inlining. While we're at it, we'll save the function entry
+	 * and function exit blocks from the copy 
+	 */
+	basic_block_t* inlined_function_entry = NULL;
+	basic_block_t* inlined_function_exit = NULL;
+	symtab_function_record_t* inlined_function = call_to_inline->called_function;
+	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameters));
+
+	/**
+	 * We no longer need this statement at all so remove it. It still
+	 * exists in memory for us to reference
+	 */
+	remove_statement(call_to_inline);
+
+	/**
+	 * If we do have something that we return, we'll need
+	 * to assign the returned variable over to what the function
+	 * call returned
+	 */
+	if(inlined_function_signature->returns_void == FALSE){
+		instruction_t* returned_variable_assignment = emit_assignment_instruction(call_to_inline->operands.oir.assignee, emit_var(symtab_return_variable), call_to_inline->line_number);
+		add_statement(inlined_function_exit, returned_variable_assignment);
+	}
+
+	/**
+	 * Same deal if we had errors that we raise
+	 */
+	if(inlined_function_signature->raises_errors == TRUE){
+		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.function_call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
+		add_statement(inlined_function_exit, raised_variable_assignment);
+	}
+
+	/**
+	 * Step 4: once we have cloned the entire function, we should in theory have a populated
+	 * inline function entry and exit block that we can use. The way that the actual inline 
+	 * works is by having the "block_inlined_in" jump to the inline function entry, and the
+	 * inline function exit jump to the "after_inline_block". We'll also need to manage
+	 * the returned/raised variables(see below)
+	 */
+	emit_jump(block_inlined_in, inlined_function_entry);
+	emit_jump(inlined_function_exit, after_inline_block);
+}
+
+
+/**
+ * Inline all of the eligible calls within a function. This involves a full crawl
+ * of the three address code and a lot of manipulation of the overall structure of
+ * the function itself
+ */
+static inline void inline_eligible_calls_in_function(symtab_function_record_t* function, dynamic_array_t* calls_to_inline){
+	//VERY IMPORTANT - set the current function & blocks to be this function's
+	current_function_blocks = &(function->function_blocks);
+	current_function = function;
+
+	/**
+	 * IMPORTANT - for any/all new variables that we create, we'll need them to be in the right
+	 * lexical scope. We'll set the lexical scope now to be inside of the caller function
+	 */
+	set_current_lexical_scope(variable_symtab, function->top_level_scope);
+
+	/**
+	 * The calls_to_inline is reusable for memory efficiency - we need to wipe
+	 * it now to remove whatever was left from prior calls
+	 */
+	clear_dynamic_array(calls_to_inline);
+
+	/**
+	 * Crawl over every single function block and determine what calls
+	 * need to be inlined. We maintain a special instruction flag that will
+	 * help us do this
+	 */
+	for(int32_t i = 0; i < current_function_blocks->current_index; i++){
+		//Crawl through this whole block to see if we have anything to inline
+		basic_block_t* candidate_block = dynamic_array_get_at(current_function_blocks, i);
+
+		instruction_t* cursor = candidate_block->leader_statement;
+		while(cursor != NULL){
+			/**
+			 * If we find a call that should be inlined we'll add it onto
+			 * our list
+			 */
+			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
+				dynamic_array_add(calls_to_inline, cursor);
+			}
+
+			cursor = cursor->next_statement;
+		}
+	}
+
+	/**
+	 * Now that we've accumulated all of the calls that we need to inline, we
+	 * can go through and actually do the inlining
+	 */
+	for(int32_t i = 0; i < calls_to_inline->current_index; i++){
+		instruction_t* call_to_inline = dynamic_array_get_at(calls_to_inline, i);
+		inline_function_call(call_to_inline);
+	}
+
+	/**
+	 * Now that we're done undo the function & block array pointers
+	 */
+	current_function_blocks = NULL;
+	current_function = NULL;
+}
+
+
+/**
+ * In order to inline our functions, we need an order with which
+ * to inline. We need this because we may have an inlined function that
+ * inlines another function and so on. Instead of doing a fixed point
+ * computation(inlining until there are no more inline calls in a loop), we
+ * will instead perform a reverse topological sort on the inline call graph. This
+ * will tell us what we need to inline first. In short, *inline a function only
+ * after it's inlined callees have been processed*
+ */
+static inline void perform_all_function_inlining(function_symtab_t* function_symtab){
+	/**
+	 * We have no inlined functions in this program so we don't
+	 * need to do anything. We can exit early in this case
+	 */
+	if(function_symtab->inlined_function_count == 0){
+		return;
+	}
+
+	/**
+	 * We'll need a one dimensional array to hold the inlining order. We'll also
+	 * need the inline call graph to get the order
+	 *
+	 * We'll also maintain a reusable list of calls to inline in each function. Since
+	 * it's reusable we'll need to allocate it now
+	 */
+	dynamic_integer_array_t inlining_order = dynamic_integer_array_alloc();
+	dynamic_array_t calls_to_inline = dynamic_array_alloc();
+
+	/**
+	 * First we'll go an get the actual order in which we need to inline things
+	 */
+	get_function_inlining_order(function_symtab, &inlining_order);
+
+	/**
+	 * Now that we have the order in which we need to inline, we can go through
+	 * the order and do the actual inlining. Remember that if a function itself
+	 * does not call any inline functions we skip it, there will always be a few
+	 * in this ordering that fall into that camp as they're the leaves of the graph
+	 */
+	for(int32_t i = 0; i < inlining_order.current_index; i++){
+		int32_t current_id = dynamic_integer_array_get_at(&inlining_order, i);
+		symtab_function_record_t* current_function = get_function_by_id(function_symtab, current_id);
+
+		//As mentioned above this will happen - just skip it
+		if(current_function->calls_inlined_function == FALSE){
+			continue;
+		}
+
+		//Otherwise let the helper do all the inlining
+		inline_eligible_calls_in_function(current_function, &calls_to_inline);
+	}
+
+	//Don't need these anymore
+	dynamic_integer_array_dealloc(&inlining_order);
+	dynamic_array_dealloc(&calls_to_inline);
+}
+
+
+/**
+ * Using the given front end results package, convert the AST that was passed to us
+ * into a CFG and perform all necessary postprocessing actions.
+ *
+ * Postprocessing actions include:
+ * 	1.) Inlining functions
+ * 	2.) Deleting all unreachable blocks
+ * 	3.) Calculating use/def sets
+ * 	4.) Calculating LIVE-IN/LIVE-OUT sets
+ * 	5.) Calculating all needed dominance relations
+ */
+static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* results){
+	/**
+	 * First convert the entire thing into a raw CFG. This does not handle any
+	 * inlining or any dominance relations
+	 */
+	visit_prog_node(cfg, results->root);
+
+	/**
+	 * Invoke the helper to perform all function inlining if there are inlined
+	 * functions at all
+	 */
+	perform_all_function_inlining(results->function_symtab);
+
+	/**
+	 * Once we know that all function inlining has been completed, we are now able
+	 * to go through all functions(regardless of inlining status) and do the 
+	 * needed postprocessing
+	 */
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		//Get the entry block, exit block and actual function
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
+		symtab_function_record_t* function = function_entry->function_defined_in;
+
+		/**
+		 * Once we are fully complete, we will go through and search for any/all useless
+		 * statements to delete
+		 */
+		delete_all_unreachable_blocks(&(function->function_blocks));
+
+		/**
+		 * Let's now use the helper to compute all of the USE/DEF sets for each
+		 * block in the function
+		 */
+		compute_use_and_def_sets_for_function(&(function->function_blocks));
+
+		/**
+		 * Let the graph module compute all dominance relations for the given function. It is essential
+		 * that this be done *before* we do anything with liveness/SSA
+		 */
+		calculate_all_control_flow_relations_for_function(function_entry, function_exit, &(function->function_blocks));
+
+		/**
+		 * Finally, we will calculate the liveness sets for this function
+		 */
+		calculate_liveness_sets(&(function->function_blocks), function_exit);
+	}
 }
 
 
@@ -12895,12 +14220,11 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	cfg->instruction_pointer = instruction_pointer_var;
 
 	/**
-	 * Call into the visiter at the very top level using
-	 * the root of the CFG. It should in theory be
-	 * impossible for this to fail as we know that
-	 * the program is well-formed if it gets here
+	 * Call the top level converter that will do
+	 * all of the conversion and postprocessing
+	 * for us
 	 */
-	visit_prog_node(cfg, results->root);
+	convert_ast_to_cfg(cfg, results);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static

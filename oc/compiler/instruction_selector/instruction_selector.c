@@ -13922,7 +13922,7 @@ static inline void handle_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.function_call_storage.error_assignee;
 }
 
 
@@ -13940,7 +13940,7 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->optional_storage.function_call_storage.error_assignee;
 }
 
 
@@ -14442,15 +14442,42 @@ static inline void handle_not_instruction(instruction_t* instruction){
 
 
 /**
- * Handle a three address code CLEAR instruction. In reality this is just going to turn into
- * a PXOR_CLEAR instruction on the backend
+ * Handle a clear instruction. Based on the variable type this will either end
+ * up being a PXOR_CLEAR or and XOR_CLEAR. For XOR_CLEAR we will also use the quad
+ * word clearer to knock the whole register out and avoid a category of errors were
+ * the upper bits weren't cleared
  */
-static inline void handle_pxor_clear_instruction(instruction_t* instruction){
-	//This is a PXOR_CLEAR
-	instruction->instruction_type = PXOR_CLEAR;
+static inline void handle_clear_instruction(instruction_t* instruction){
+	//Get the assignee out
+	three_addr_var_t* assignee = instruction->operands.oir.assignee;
+
+	/**
+	 * If this is not a floating point type we'll be using the 
+	 * XORQ_CLEAR instruction variety
+	 */
+	if(IS_FLOATING_POINT(assignee->type) == FALSE){
+		/**
+		 * If the assignee is too small we'll make it a quad
+		 * word assignee via copying
+		 */
+		if(assignee->variable_size != QUAD_WORD){
+			assignee = emit_var_copy(assignee);
+			assignee->type = u64;
+			assignee->variable_size = QUAD_WORD;
+		}
+
+		instruction->instruction_type = XORQ_CLEAR;
+	
+	/**
+	 * Otherwise this is a floating point clear so we'll be using
+	 * the PXOR_CLEAR for it
+	 */
+	} else {
+		instruction->instruction_type = PXOR_CLEAR;
+	}
 
 	//And the destination register is just the assignee
-	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
+	instruction->operands.x86.destination_register = assignee;
 }
 
 
@@ -15266,7 +15293,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			handle_test_if_not_zero_instruction(window);
 			break;
 		case THREE_ADDR_CODE_CLEAR_STMT:
-			handle_pxor_clear_instruction(instruction);
+			handle_clear_instruction(instruction);
 			break;
 		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
 			handle_stack_allocation_statement(instruction);

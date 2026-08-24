@@ -72,15 +72,18 @@
 //A large prime for hashing
 #define LARGE_PRIME 611593
 
-//Default size for a token array is 5. This is smaller because we don't likely
+//Default size for a token array is 8. This is smaller because we don't likely
 //have tons of tokens in our macro
-#define TOKEN_ARRAY_DEFAULT_SIZE 5
+#define TOKEN_ARRAY_DEFAULT_SIZE 8 
 
-//The default is 20 -- this can always be reupped
-#define DYNAMIC_ARRAY_DEFAULT_SIZE 20 
+//The default is 16 -- this can always be reupped
+#define DYNAMIC_ARRAY_DEFAULT_SIZE 16
 
-//Default length of the string is 60 characters
-#define DEFAULT_DYNAMIC_STRING_LENGTH 60
+//The default variable mapping size
+#define VARIABLE_MAPPING_DEFAULT_SIZE 16
+
+//Default length of the string is 64 characters
+#define DEFAULT_DYNAMIC_STRING_LENGTH 64
 
 //For the dynamic arrays/sets
 #define NOT_FOUND -1

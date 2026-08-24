@@ -20,7 +20,7 @@ static int32_t current_jump_block_id = 0;
 /**
  * Increment and get the ID for the jump table
  */
-static int32_t increment_and_get_id(){
+static inline int32_t increment_and_get_id(){
 	current_jump_block_id++;
 	return current_jump_block_id;
 }
@@ -44,6 +44,40 @@ jump_table_t* jump_table_alloc(int32_t size){
 
 	//And return a copy of this stack data
 	return table;
+}
+
+
+/**
+ * Completely clone a jump table using the "maps_to" entries inside
+ * of the basic block struct. This is intended to be used only for
+ * function inlining
+ */
+jump_table_t* clone_jump_table(jump_table_t* target){
+	//Heap allocate the jump table
+	jump_table_t* new_table = calloc(1, sizeof(jump_table_t));
+
+	//Get it a fresh ID
+	new_table->jump_table_id = increment_and_get_id();
+	
+	//Copy over the size
+	new_table->num_nodes = target->num_nodes;
+
+	//Allocate the actual jump table
+	new_table->nodes = dynamic_array_alloc_initial_size(new_table->num_nodes);
+
+	/**
+	 * Now we will run through the target jump table in order and populate
+	 * the new one using each block's "maps_to" field
+	 */
+	for(int32_t i = 0; i < new_table->num_nodes; i++){
+		//Extract the target block
+		basic_block_t* target_block = dynamic_array_get_at(&(target->nodes), i);
+
+		//Populate the new jump table with the equivalent "maps_to" block
+		dynamic_array_add(&(new_table->nodes), target_block->mapping_info.maps_to);
+	}
+
+	return new_table;
 }
 
 

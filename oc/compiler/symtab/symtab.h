@@ -155,6 +155,10 @@ struct symtab_function_record_t{
 	dependency_graph_node_t* dependency_graph_node;
 	//Maintain a reference to the entry block
 	void* function_entry_block;
+	/**
+	 * Store the top level scope for this function
+	 */
+	symtab_variable_sheaf_t* top_level_scope;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers
@@ -465,14 +469,24 @@ struct module_symtab_t {
 struct function_symtab_t{
 	//All of our namespaces
 	dynamic_array_t namespaces;
+	//Mapping of IDs to functions
+	dynamic_array_t id_to_function_mapping;
 	//The current sheaf
 	function_namespace_t* current;
 	//The adjacency matrix for the call graph
 	u_int8_t* call_graph_matrix;
 	//The transitive closure for the call graph
 	u_int8_t* call_graph_transitive_closure;
+	//The call graph matrix specifically for inline functions
+	u_int8_t* inline_call_graph_matrix;
 	//The current function id
 	u_int32_t current_function_id;
+	/**
+	 * How many inlined functions do we have? This will determine
+	 * whether we do all of the extra work in scanning the symtab
+	 * to perform inlining
+	 */
+	u_int32_t inlined_function_count;
 };
 
 
@@ -701,12 +715,6 @@ u_int8_t insert_module(module_symtab_t* symtab, symtab_module_record_t* record);
 u_int8_t insert_label(label_symtab_t* label, symtab_label_record_t* label_record);
 
 /**
- * Determine whether or not a function is directly recursive using the function
- * symtab's adjacency matrix
- */
-u_int8_t is_function_directly_recursive(function_symtab_t* symtab, symtab_function_record_t* record);
-
-/**
  * Determine whether or not a function is recursive(direct or indirect) using the function
  * symtab's transitive closure 
  */
@@ -813,6 +821,11 @@ symtab_type_record_t* lookup_array_type(type_symtab_t* symtab, generic_type_t* m
  * Looking up a type by name only also requires that we know the mutability that we desire
  */
 symtab_type_record_t* lookup_type_name_only(type_symtab_t* symtab, char* name, mutability_type_t mutability);
+
+/**
+ * Use the ID to function mapping to lookup a function for a given ID
+ */
+symtab_function_record_t* get_function_by_id(function_symtab_t* symtab, int32_t id);
 
 /**
  * Print out the initialization state array for a variable. This is a debugging

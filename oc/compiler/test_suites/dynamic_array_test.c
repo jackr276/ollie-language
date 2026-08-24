@@ -75,21 +75,24 @@ void test_dynamic_array(){
 
 	printf("\n================= TESTING SETTING =================\n");
 
-	//Allocate this one with an initial size
-	array = dynamic_array_alloc_initial_size(35);
+	//Allocate this one with a tiny initial size
+	array = dynamic_array_alloc_initial_size(3);
 
-	for(int32_t i = 34; i >= 0; i--){
+	for(int32_t i = 1000; i >= 0; i--){
 		int32_t* c = malloc(1 * sizeof(int32_t));
 
-		*c = i % 2;
+		*c = i;
 
 		dynamic_array_set_at(&array, c, i);
 	}
 
 	printf("[");
 
-	for(int32_t i = 0; i < 35; i++){
+	for(int32_t i = 0; i < 1001; i++){
 		int* value = dynamic_array_get_at(&array, i);
+
+		//This should be equal to i
+		assert(*value == i);
 
 		if(value == NULL){
 			printf("(NULL)");
@@ -97,7 +100,7 @@ void test_dynamic_array(){
 			printf("%d", *value);
 		}
 
-		if(i != 34){
+		if(i != 1000){
 			printf(", ");
 		}
 
@@ -158,22 +161,25 @@ void test_dynamic_integer_array(){
 
 	printf("\n================= TESTING SETTING =================\n");
 
-	//Allocate this one with an initial size
-	array = dynamic_integer_array_alloc_initial_size(35);
+	//Allocate with a tiny initial size and see if we can resize correctly
+	array = dynamic_integer_array_alloc_initial_size(3);
 
 	//Set them with even/odd values
-	for(int32_t i = 34; i >= 0; i--){
-		dynamic_integer_array_set_at(&array, i % 2, i);
+	for(int32_t i = 1000; i >= 0; i--){
+		dynamic_integer_array_set_at(&array, i, i);
 	}
 
 	printf("[");
 
-	for(int32_t i = 0; i < 35; i++){
+	for(int32_t i = 0; i < 1001; i++){
 		int32_t value = dynamic_integer_array_get_at(&array, i);
+
+		//This should be the exact same as the index
+		assert(value == i);
 
 		printf("%d", value);
 
-		if(i != 34){
+		if(i != 1000){
 			printf(", ");
 		}
 	}

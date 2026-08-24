@@ -24,8 +24,6 @@ typedef struct jump_table_t jump_table_t;
 struct jump_table_t {
 	//The list of all nodes. This is internally a dynamic array
 	dynamic_array_t nodes;
-	//The default block
-	void* default_block;
 	//The number of nodes
 	int32_t num_nodes;
 	//The ID of the jump table. Jump tables get IDs just like blocks, although
@@ -37,6 +35,13 @@ struct jump_table_t {
  * Allocate the jump table
  */
 jump_table_t* jump_table_alloc(int32_t size);
+
+/**
+ * Completely clone a jump table using the "maps_to" entries inside
+ * of the basic block struct. This is intended to be used only for
+ * function inlining
+ */
+jump_table_t* clone_jump_table(jump_table_t* target);
 
 /**
  * Insert an entry into the jump table. This will be used

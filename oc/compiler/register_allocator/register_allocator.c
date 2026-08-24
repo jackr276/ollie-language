@@ -421,9 +421,11 @@ static inline stack_region_t* get_stack_region_for_live_range(stack_data_area_t*
 		//Extract it
 		stack_region_t* region = dynamic_array_get_at(&(data_area->stack_regions), i);
 
-		//We need an exact memory address match. Anything short and
-		//this does not count
-		if(region->variable_referenced == lr){
+		/**
+		 * We need an exact memory address match. Anything short and
+		 * this does not count
+		 */
+		if(region->live_range_referenced == lr){
 			return region;
 		}
 	}
@@ -3929,7 +3931,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 			stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr_to_save));
 
 			//Cache this for later
-			stack_region->variable_referenced = lr_to_save;
+			stack_region->live_range_referenced = lr_to_save;
 		}
 
 		//Emit the store instruction and load instruction
@@ -4188,7 +4190,7 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 			stack_region = create_stack_region_for_type(&(caller->local_stack), get_largest_type_in_live_range(lr_to_save));
 
 			//Cache this for later
-			stack_region->variable_referenced = lr_to_save;
+			stack_region->live_range_referenced = lr_to_save;
 		}
 
 		//Emit the store instruction and load instruction

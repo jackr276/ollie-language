@@ -215,6 +215,9 @@ void* dynamic_array_get_at(dynamic_array_t* array, int32_t index){
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
  * will be in effect here
+ *
+ * NOTE: we will NOT modify the so-called "current-index" that is used for setting. If the user
+ * mixes these two together, they are responsible for the consequences
  */
 void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index){
 	//Let's just double check here
@@ -223,16 +226,20 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index){
 		exit(1);
 	}
 
-	//This is not allowed
+	/**
+	 * If the array's max size is smaller than the index
+	 * that we want to insert at, we will dynamically resize
+	 */
 	if(array->current_max_size <= index){
-		printf("ERROR: Attempting to set index %d in an array of size %d\n", index, array->current_max_size);
+		//Bump up to twice this to be safe
+		array->current_max_size = index * 2;
+
+		//Reallocate the internal array
+		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
 	}
 
 	//Now that we've taken care of all that, we'll perform the setting
 	array->internal_array[index] = ptr;
-
-	//NOTE: we will NOT modify the so-called "current-index" that is used for setting. If the user
-	//mixes these two together, they are responsible for the consequences
 }
 
 

@@ -172,6 +172,17 @@ three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 three_addr_var_t* emit_var(symtab_variable_record_t* var);
 
 /**
+ * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
+ * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
+ * that they share is the overall variable that they're linked back to, which stores their type information,
+ * etc.
+ *
+ * This version of emit var specifically will never use the "alias" field. It's designed specifically
+ * for special cases in function inlining and is *not* meant for general use
+ */
+three_addr_var_t* emit_var_no_alias(symtab_variable_record_t* var);
+
+/**
  * Create and return a three address var from an existing variable. These special
  * "memory address vars" will represent the memory address of the variable in question
 */
@@ -247,10 +258,10 @@ instruction_t* emit_direct_gp_register_pop_instruction(general_purpose_register_
 instruction_t* emit_pop_instruction(three_addr_var_t* popee, u_int32_t line_number);
 
 /**
- * Emit a CLEAR instruction that is meant for the FP register to be zeroed out
- * This function only takes an assignee because that's all that we're clearing
+ * Emit a clear instruction that is meant for the register to be cleaned out. We only need
+ * the assignee because that's all we're clearing
  */
-instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number);
+instruction_t* emit_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number);
 
 /**
  * Emit a PXOR instruction that's already been instruction selected

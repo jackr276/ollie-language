@@ -63,10 +63,10 @@ void print_passed_parameter_stack_data_area(stack_data_area_t* area);
 void print_local_stack_data_area(stack_data_area_t* area);
 
 /**
- * Does the stack contain a given pointer value? This is used for avoiding redundant addresses
- * in the stack
+ * Clone one stack data area into another prexisting one. We assume that the given stack
+ * data area has already been allocated
  */
-stack_region_t* does_stack_contain_pointer_to_variable(stack_data_area_t* area, void* variable);
+void clone_stack_data_area_into_given(stack_data_area_t* cloning_into, stack_data_area_t* given);
 
 /**
  * Align the stack data area to be 16-byte aligned

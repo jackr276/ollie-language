@@ -68,8 +68,17 @@ typedef enum {
 struct stack_region_t {
 	//What type are we storing?
 	generic_type_t* type;
-	//What variable are we pointing to? This is
-	void* variable_referenced;
+	/**
+	 * This is used only for live range spilling. It would not be used
+	 * anywhere else in the system
+	 */
+	void* live_range_referenced;
+	/**
+	 * What does this stack region map to? This is used for variable
+	 * cloning when we do function inlining only, and prevents us
+	 * from needed to maintain a map like we have to do for variables
+	 */
+	stack_region_t* maps_to;
 	//used for array addresses
 	//The unique ID for this region
 	u_int32_t stack_region_id;
@@ -98,7 +107,7 @@ struct stack_region_t {
  * A structure that contains an automatically organizing linked
  * list. This linked list contains all of our data
  */
-struct stack_data_area_t{
+struct stack_data_area_t {
 	//Heap array for the regions
 	dynamic_array_t stack_regions;
 	//The total size of the data area

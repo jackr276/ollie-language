@@ -842,6 +842,9 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 	//This is a special kind of variable that is a local constant variable
 	var->variable_type = VARIABLE_TYPE_FUNCTION_ADDRESS;
 
+	//Give this a unique identifier for cloning
+	var->variable_id = get_next_variable_id();
+
 	//Store the local constant inside of the memory region slot
 	var->associated_memory_region.rip_relative_function = function_record;
 
@@ -899,6 +902,58 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
 
 	//Store the associate stack region(this is usually null)
 	emitted_var->associated_memory_region.stack_region = var->stack_region;
+
+	//The membership is also copied
+	emitted_var->membership = var->membership;
+
+	//Copy these over
+	emitted_var->class_relative_parameter_order = var->class_relative_function_parameter_order;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
+ * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
+ * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
+ * that they share is the overall variable that they're linked back to, which stores their type information,
+ * etc.
+ *
+ * This version of emit var specifically will never use the "alias" field. It's designed specifically
+ * for special cases in function inlining and is *not* meant for general use
+ */
+three_addr_var_t* emit_var_no_alias(symtab_variable_record_t* var){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	//This is not temporary
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+	//We always store the type as the type with which this variable was defined in the CFG
+	emitted_var->type = var->type_defined_as;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Store the associate stack region(this is usually null)
+	emitted_var->associated_memory_region.stack_region = var->stack_region;
+
+	/**
+	 * When we emit variables, we want variables that share the
+	 * same symtab variable to have the same ID. So, if we notice
+	 * that this variable has been set before, we will set the
+	 * three_addr_var_t's id to be what this variable has. Otherwise
+	 * this is the first time we're doing this and we will generate
+	 * a new one
+	 */
+	if(var->associated_three_addr_var_ids.variable_id == NEVER_SET){
+		var->associated_three_addr_var_ids.variable_id = get_next_variable_id();
+	}
+
+	//Set this to match the symtab variable
+	emitted_var->variable_id = var->associated_three_addr_var_ids.variable_id;
 
 	//The membership is also copied
 	emitted_var->membership = var->membership;
@@ -1196,7 +1251,7 @@ instruction_t* emit_pxor_instruction(three_addr_var_t* destination, three_addr_v
  * Emit a CLEAR instruction that is meant for the FP register to be zeroed out
  * This function only takes an assignee because that's all that we're clearing
  */
-instruction_t* emit_floating_point_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number){
+instruction_t* emit_clear_instruction(three_addr_var_t* assignee, u_int32_t line_number){
 	//First allocate
 	instruction_t* instruction = calloc(1, sizeof(instruction_t));
 
@@ -2598,16 +2653,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.error_assignee != NULL){
+				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2645,16 +2700,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.error_assignee != NULL){
+				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2855,7 +2910,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_CLEAR_STMT:
-			fprintf(fl, "clear_sse ");
+			fprintf(fl, "clear_register ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 

@@ -10,6 +10,7 @@
 #define OLLIE_INSTRUCTION_H
 
 #include <sys/types.h>
+#include "stack_management_structs.h"
 #include "token.h"
 #include "dynamic_array/dynamic_array.h"
 #include "dynamic_string/dynamic_string.h"
@@ -140,10 +141,19 @@ struct instruction_t{
 	 * their own dedicated field
 	 */
 	union {
+		/**
+		 * Function calls require an error assignee(for raising errors) and
+		 * some function calls require stack parameter setup
+		 */
+		struct {
+			//Some function calls require their own stack setup
+			stack_data_area_t call_stack_region;
+			//The second error assignee for an errorable function
+			three_addr_var_t* error_assignee;
+		} function_call_storage;
+
 		//Store inlined assembly in a string
 		dynamic_string_t inlined_assembly;
-		//The second error assignee for an errorable function
-		three_addr_var_t* error_assignee;
 		//Store the byte amount that we want to copy by
 		u_int64_t byte_amount_to_copy;
 		//Signedness forcing - used specifically for shifting
@@ -184,6 +194,8 @@ struct instruction_t{
 	u_int8_t cannot_be_combined;
 	//Does this instruction handle callee saving?
 	u_int8_t is_callee_saving_instruction;
+	//Is this an inlined function call or not?
+	u_int8_t is_inlined_call;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//The conditional movement type that we have
