@@ -1455,6 +1455,8 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* variable, varia
  * Clone the entire instruction. This cloning process is going
  * to involve us copying over variables in a way that
  * changes the temp var numbers for correctness
+ *
+ * TODO WRONG NOW
  */
 static instruction_t* clone_instruction(instruction_t* cloned, variable_map_t* variable_map){
 	//First we allocate
