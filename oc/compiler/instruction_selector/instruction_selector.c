@@ -1229,15 +1229,13 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	}
 
 	/**
-	 * We are going to need to adjust this memory address with the offset of the stack
-	 * allocation that comes if there are stack passed parameters. We will allocate
-	 * and add this in now for tracking
+	 * This is a memory address variable so we'll need to adjust it if there
+	 * are stack params. The caller has allocated this dynamic array if there
+	 * are stack params, so we can use that as our test
 	 */
-	if(memory_addresses_to_adjust->internal_array == NULL){
-		*memory_addresses_to_adjust = dynamic_array_alloc();
+	if(memory_addresses_to_adjust->internal_array != NULL){
+		dynamic_array_add(memory_addresses_to_adjust, region_memory_address);
 	}
-
-	dynamic_array_add(memory_addresses_to_adjust, region_memory_address);
 }
 
 
@@ -1303,13 +1301,6 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
  * there are so many calls out to helper methods for each step
  */
 static instruction_t* lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
-	/**
-	 * We may need to adjust memory addresses if we have stack parameters that require an individual stack
-	 * allocation for each call. We will not initialize this now but will when the time comes if it's
-	 * necessary
-	 */
-	dynamic_array_t memory_addresses_to_adjust = INITIALIZE_DYNAMIC_ARRAY;
-
 	//Counters for the function parameter order
 	int32_t current_gp_parameter_order = 1;
 	int32_t current_sse_paramter_order = 1;
@@ -1333,17 +1324,29 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		called_function_signature = call_statement->operands.oir.operand1->type->internal_types.function_type;
 	}
 
-	//Maintain the elaborative parameter count
+	//Get the total number of non-elaborative parameters and whether or not we have stack params
 	int32_t non_elaborative_param_count = get_non_elaborative_parameter_count(called_function_signature);
+	u_int8_t has_stack_params = called_function_signature->contains_stack_params;
 
 	/**
-	 * Any one of these 3 conditions being true(they may all be true at once) means that we need
-	 * to have a dynamic array of function parameters allocated so we can do that now
+	 * Maintain a dynamic array that contains all of the memory addresses that we need to adjust.
+	 * Whenever we stumble across a memory address var that's in the parameter result array,
+	 * we'll add it's stack region here as something that we need to adjust. See below for
+	 * more details
+	 *
+	 * TODO DOC MORE LATER
 	 */
-	if(non_elaborative_param_count > 0
-		|| called_function_signature->returns_by_copy == TRUE
-		//TODO IS ELABORATIVE STACK PARAM SOMETHING THAT COUNTS??
-		|| called_function_signature->contains_elaborative_stack_param == TRUE){
+	dynamic_array_t memory_addresses_to_adjust = INITIALIZE_DYNAMIC_ARRAY;
+	if(has_stack_params == TRUE){
+		memory_addresses_to_adjust = dynamic_array_alloc();
+	}
+
+	/**
+	 * Functions that have more than one non-elaborative param *OR* return by copy
+	 * almost certainly have parameters(it could be all pass by copy but that's not worth
+	 * the hassle) so we can allocate now
+	 */
+	if(non_elaborative_param_count > 0 || called_function_signature->returns_by_copy == TRUE){
 		call_statement->parameters = dynamic_array_alloc();
 	}
 
@@ -1507,6 +1510,12 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		}
 	}
 
+	//This has served it's purpose so deallocate it
+	dynamic_array_dealloc(&memory_addresses_to_adjust);
+
+	//Same with the parameter results - they're now useless
+	parameter_results_array_dealloc(&(call_statement->parameter_results));
+
 	//Once we've fully lowered this call statement flag it as fully lowered
 	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
 
@@ -1567,7 +1576,7 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
 			increment_use_count_for_variable(instruction_cursor->relies_on);
 
-			//If we hvae function parameters be sure to include those as well
+			//If we have function parameters be sure to include those as well
 			for(int32_t j = 0; j < instruction_cursor->parameters.current_index; j++){
 				increment_use_count_for_variable(dynamic_array_get_at(&(instruction_cursor->parameters), j));
 			}
