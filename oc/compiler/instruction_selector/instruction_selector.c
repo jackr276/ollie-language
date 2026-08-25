@@ -1186,8 +1186,32 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 
 
 /**
+ *
  */
-static inline void handle_non_elaborative_parameter_storage(){
+static inline void handle_gp_parameter_storage(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
+											   	int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+	/**
+	 * If we are at or under the max number of GP register passed parameters
+	 * we are not going to need a stack allocation in the parameter call stack.
+	 * However if we are above this we are going to need an allocation to make
+	 * things work
+	 */
+	if(*gp_parameter_order <= MAX_GP_REGISTER_PASSED_PARAMS){
+
+	} else {
+
+	}
+
+}
+
+
+static inline void handle_sse_parameter_storage(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
+											   	int32_t* sse_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+	if(*sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
+
+	} else {
+
+	}
 }
 
 
@@ -1308,6 +1332,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		if(memory_addresses_to_adjust.internal_array == NULL){
 			memory_addresses_to_adjust = dynamic_array_alloc();
 		}
+
 		dynamic_array_add(&memory_addresses_to_adjust, region_memory_address);
 	}
 
@@ -1339,6 +1364,18 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		 */
 		parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
 		generic_type_t* parameter_type = dynamic_array_get_at(&(called_function_signature->function_parameters), signature_params_index);
+
+		/**
+		 * Split processing down the lines of floating point vs. non-floating
+		 * point because they use different register classes. We will handle
+		 * the processing of each separately. These individual processing
+		 * rules will take care of 100% of what's needed so we call and move on
+		 */
+		if(IS_FLOATING_POINT(parameter_type) == FALSE){
+			handle_gp_parameter_storage(call_statement, parameter_type, result, &current_gp_parameter_order, &memory_addresses_to_adjust);
+		} else {
+			handle_sse_parameter_storage(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
+		}
 
 		/**
 		 * Remember that these can be variables or constants at this stage
