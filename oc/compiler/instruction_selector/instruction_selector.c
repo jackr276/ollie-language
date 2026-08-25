@@ -1211,6 +1211,16 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	//Maintain the elaborative parameter count
 	int32_t non_elaborative_param_count = get_non_elaborative_parameter_count(called_function_signature);
 
+	/**
+	 * Any one of these 3 conditions being true(they may all be true at once) means that we need
+	 * to have a dynamic array of function parameters allocated so we can do that now
+	 */
+	if(non_elaborative_param_count > 0
+		|| called_function_signature->returns_by_copy == TRUE
+		|| called_function_signature->contains_elaborative_stack_param == TRUE){
+		call_statement->parameters = dynamic_array_alloc();
+	}
+
 	//TODO NOT YET DONE
 	if(called_function_signature->returns_by_copy == TRUE){
 		printf("TODO NOT IMPLEMENTED\n");
@@ -1272,6 +1282,12 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 			insert_instruction_before_given(parameter_assignment, call_statement);
 
 			/**
+			 * This result var is now part of the function call's parameters, so we will
+			 * add it into the statement's parameter array
+			 */
+			dynamic_array_add(&(call_statement->parameters), result_var);
+
+			/**
 			 * If the first instruction is still the call statement, then this is now the first
 			 * because we've just inserted before it
 			 */
@@ -1302,6 +1318,12 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 			//Emit and insert this immediately before the call statement
 			instruction_t* parameter_assignment = emit_assignment_with_const_instruction(result_var, result->param_result.constant_result, call_statement->line_number);
 			insert_instruction_before_given(parameter_assignment, call_statement);
+
+			/**
+			 * This result var is now part of the function call's parameters, so we will
+			 * add it into the statement's parameter array
+			 */
+			dynamic_array_add(&(call_statement->parameters), result_var);
 
 			/**
 			 * If the first instruction is still the call statement, then this is now the first
