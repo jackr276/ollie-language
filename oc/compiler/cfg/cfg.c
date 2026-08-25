@@ -7413,32 +7413,6 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 	}
 }
 
-
-/**
- * For functions that have a return by copy value, we will need to create a stack region
- * and initialize the %rdi parameter(first GP parameter) to be the address of the region
- * that the callee will copy into. We will do that in this function here
- */
-static inline void handle_return_by_copy_parameter(function_type_t* signature, parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust){
-	//We will have one to adjust so add it now
-	if(memory_addresses_to_adjust->internal_array == NULL){
-		*memory_addresses_to_adjust = dynamic_array_alloc();
-	}
-
-	//Create the region that we will eventually copy back into
-	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
-
-	//Emit the memory address var for the temp region
-	three_addr_var_t* return_by_copy_var = emit_memory_address_temp_var(signature->return_type, return_by_copy_region);
-
-	//Add this into the results array for later processing
-	add_parameter_result_to_results_array(parameter_results, return_by_copy_var, PARAM_RESULT_TYPE_VAR);
-
-	//Add the memory addresses into the set of all addresses that need adjustment
-	dynamic_array_add(memory_addresses_to_adjust, return_by_copy_var);
-}
-
-
 /**
  *
  *
@@ -7852,7 +7826,7 @@ static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, 
 	 * else
 	 */
 	if(signature->returns_by_copy == TRUE){
-		handle_return_by_copy_parameter(signature, &non_elaborative_parameter_results, &memory_addresses_to_adjust);
+		//handle_return_by_copy_parameter(signature, &non_elaborative_parameter_results, &memory_addresses_to_adjust);
 	}
 
 	//So long as this isn't NULL

@@ -201,6 +201,26 @@ static inline u_int8_t is_instruction_binary_operation(instruction_t* instructio
 
 
 /**
+ * Is a given variable a memory address variable
+ */
+static inline u_int8_t is_memory_address_variable(three_addr_var_t* variable){
+	//Sanity check
+	if(variable == NULL){
+		return FALSE;
+	}
+
+	switch(variable->variable_type){
+		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this a function call statement or not?
  */
 static inline u_int8_t is_call_statement(instruction_t* statement){
@@ -1194,14 +1214,6 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	instruction_t* last_instruction = call_statement;
 
 	/**
-	 * Grab a pointer to this in case we need it for convenience
-	 *
-	 * NOTE: at the time we enter this will not be allocated, *we* need to allocate it 
-	 * if appropriate
-	 */
-	stack_data_area_t* function_call_stack_region = &(call_statement->optional_storage.call_storage.call_stack_region);
-
-	/**
 	 * Maintain an index to the actual parameter type in the 
 	 * function signature and the result index
 	 */
@@ -1229,10 +1241,17 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		call_statement->parameters = dynamic_array_alloc();
 	}
 
-	//TODO LOOK INTO MEMORY ADDRESS TO ADJUST
+	/**
+	 * Step 1: if we have a function that has stack parameters, it is up to us to allocate
+	 * the stack data area for it now. We'll also grab a pointer to it for our convenience
+	 */
+	stack_data_area_t* stack_passed_param_region = &(call_statement->optional_storage.call_storage.call_stack_region);
+	if(called_function_signature->contains_stack_params == TRUE){
+		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+	}
 
 	/**
-	 * STEP 1: if we have a return by copy paremeter, we will actually
+	 * STEP 2: if we have a return by copy paremeter, we will actually
 	 * maintain that parameter inside of the callee's stack frame and
 	 * just pass a reference to its memory address in as the very first
 	 * GP parameter(in %rdi). As such, we need to handle this before we
@@ -1303,7 +1322,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 
 
 	/**
-	 * Step TODO: process the non-elaborative parameters at this stage. We will run
+	 * Step 2: process the non-elaborative parameters at this stage. We will run
 	 * through whatever our parameter result index is at until we hit the end of
 	 * the non-elaborative parameter count
 	 */
@@ -1321,8 +1340,23 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		 * so we account for both. 
 		 */
 		if(result->result_type == PARAM_RESULT_TYPE_VAR){
-			//Emit a result var to assign over and into
+			//Get the result out and also emit a result variable for our use
+			three_addr_var_t* parameter_result = result->param_result.variable_result;
 			three_addr_var_t* result_var = emit_temp_var(parameter_type);
+
+			/**
+			 * If this is a memory address variable, then we need to add it to our 
+			 * list of memory addresses that may need adjustment if there is a stack
+			 * allocation
+			 */
+			if(is_memory_address_variable(parameter_result) == TRUE){
+				//Allocate if need be
+				if(memory_addresses_to_adjust.internal_array == NULL){
+					memory_addresses_to_adjust = dynamic_array_alloc();
+				}
+
+				dynamic_array_add(&memory_addresses_to_adjust, parameter_result);
+			}
 
 			/**
 			 * Remember that SSE and GP registers have their own register assignment
