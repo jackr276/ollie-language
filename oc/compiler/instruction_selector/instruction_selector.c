@@ -1146,8 +1146,27 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
  * all been handled for us on the front end
  *
  * TODO DOC MORE
+ *
+ * NOTE: this function will always return a pointer to the next statement after the very last one in the set
+ * of statements that it has created/modified
  */
 static instruction_t* lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+	//Counters for the function parameter order
+	u_int32_t current_gp_parameter_order = 1;
+	u_int32_t current_sse_paramter_order = 1;
+
+	//Let's extract the signature of what it is that we're calling
+	function_type_t* called_function_signature;
+	if(call_statement->statement_type == THREE_ADDR_CODE_FUNC_CALL){
+		called_function_signature = call_statement->called_function->signature->internal_types.function_type;
+	} else {
+		called_function_signature = call_statement->operands.oir.operand1->type->internal_types.function_type;
+	}
+
+	//TODO NOT YET DONE
+	if(called_function_signature->returns_by_copy == TRUE){
+		printf("TODO NOT IMPLEMENTED\n");
+	}
 
 
 	//Once we've fully lowered this call statement flag it as fully lowered
