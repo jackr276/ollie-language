@@ -1140,6 +1140,40 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
 
 
 /**
+ * Determine the number of parameters that do not count as elaborative. This will include
+ * any return by copy variables
+ */
+static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
+	//Get the initial count here
+	u_int32_t count = function_type->function_parameters.current_index;
+
+	//Count is more than 0 - we need to check for elaborative params and update the count
+	if(count != 0){
+		//The last index is where an elaborative param would be
+		int32_t last_index = function_type->function_parameters.current_index - 1;
+
+		//Extract the type at the very last index
+		generic_type_t* parameter_type = dynamic_array_get_at(&(function_type->function_parameters), last_index);
+
+		//Bump the count down by one if this is the case
+		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
+			count--;
+		}
+	}
+
+	/**
+	 * If we return by copy, the address for the callee to coyp into will
+	 * be stored in %rdi. We need to bump the GP param count here for that
+	 */
+	if(function_type->returns_by_copy == TRUE){
+		count++;
+	}
+
+	return count;
+}
+
+
+/**
  * Lower a function call statement into the lowest level of OIR that we have before we get to the
  * acutal instruction selection. This includes adding parameter copying, return by copy handling and
  * call stack management. One thing that we do not have to do is anything with error handling. That has
