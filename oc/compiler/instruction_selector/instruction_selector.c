@@ -1152,8 +1152,11 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
  */
 static instruction_t* lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
 	//Counters for the function parameter order
-	u_int32_t current_gp_parameter_order = 1;
-	u_int32_t current_sse_paramter_order = 1;
+	int32_t current_gp_parameter_order = 1;
+	int32_t current_sse_paramter_order = 1;
+
+	//Maintain an index to the actual parameter type in the function signature
+	int32_t parameter_type_index = 0;
 
 	//Let's extract the signature of what it is that we're calling
 	function_type_t* called_function_signature;
@@ -1166,6 +1169,31 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	//TODO NOT YET DONE
 	if(called_function_signature->returns_by_copy == TRUE){
 		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
+	if(called_function_signature->contains_stack_params == TRUE){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
+	/**
+	 * Run through every single parameter result in this parameter result array that
+	 * we have. For each one of these results, we need to emit a temporary assignment
+	 * that represents us moving the parameter into its alloted slot
+	 */
+	for(int32_t i = 0; i < call_statement->parameter_results.current_index; i++){
+		//Extract the result at this index
+		parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), i);
+
+		/**
+		 */
+		if(result->result_type == PARAM_RESULT_TYPE_VAR){
+
+		} else {
+
+		}
+
 	}
 
 
