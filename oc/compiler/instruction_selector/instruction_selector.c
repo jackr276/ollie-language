@@ -1248,13 +1248,42 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		 * so we account for both. 
 		 */
 		if(result->result_type == PARAM_RESULT_TYPE_VAR){
+			//Emit a result var to assign over and into
+			three_addr_var_t* result_var = emit_temp_var(parameter_type);
+
+			/**
+			 * Remember that SSE and GP registers have their own register assignment
+			 * by parameter order. Based on the type of the parameter, we will
+			 * give the new result variable the class appropriate order and update
+			 * the counter appropriately
+			 */
+			if(IS_FLOATING_POINT(parameter_type) == FALSE){
+				//Give this the order and then bump it for the next go around
+				result_var->class_relative_parameter_order = current_gp_parameter_order;
+				current_gp_parameter_order++;
+			} else {
+				//Give this the order and then bump it for the next go around
+				result_var->class_relative_parameter_order = current_sse_paramter_order;
+				current_sse_paramter_order++;
+			}
+
+			//Emit and insert this immediately before the call statement
+			instruction_t* parameter_assignment = emit_assignment_instruction(result_var, result->param_result.variable_result, call_statement->line_number);
+			insert_instruction_before_given(parameter_assignment, call_statement);
+
+			/**
+			 * If the first instruction is still the call statement, then this is now the first
+			 * because we've just inserted before it
+			 */
+			if(first_instruction == call_statement){
+				first_instruction = parameter_assignment;
+			}
 
 		} else {
+			three_addr_var_t* result_var = emit_temp_var(parameter_type);
 
 		}
-
 	}
-
 
 	//Once we've fully lowered this call statement flag it as fully lowered
 	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
