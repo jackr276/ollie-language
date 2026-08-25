@@ -1189,8 +1189,16 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	int32_t current_gp_parameter_order = 1;
 	int32_t current_sse_paramter_order = 1;
 
-	//Maintain an index to the actual parameter type in the function signature
-	int32_t parameter_type_index = 0;
+	//Maintain pointers to the first and last instruction in our little chain related to this call
+	instruction_t* first_instruction = call_statement;
+	instruction_t* last_instruction = call_statement;
+
+	/**
+	 * Maintain an index to the actual parameter type in the 
+	 * function signature and the result index
+	 */
+	int32_t signature_params_index = 0;
+	int32_t parameter_result_index = 0;
 
 	//Let's extract the signature of what it is that we're calling
 	function_type_t* called_function_signature;
@@ -1200,8 +1208,17 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		called_function_signature = call_statement->operands.oir.operand1->type->internal_types.function_type;
 	}
 
+	//Maintain the elaborative parameter count
+	int32_t non_elaborative_param_count = get_non_elaborative_parameter_count(called_function_signature);
+
 	//TODO NOT YET DONE
 	if(called_function_signature->returns_by_copy == TRUE){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
+	//TODO NOT YET DONE
+	if(called_function_signature->contains_elaborative_stack_param == TRUE){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
@@ -1211,16 +1228,24 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		exit(1);
 	}
 
+
 	/**
-	 * Run through every single parameter result in this parameter result array that
-	 * we have. For each one of these results, we need to emit a temporary assignment
-	 * that represents us moving the parameter into its alloted slot
+	 * Step TODO: process the non-elaborative parameters at this stage. We will run
+	 * through whatever our parameter result index is at until we hit the end of
+	 * the non-elaborative parameter count
 	 */
-	for(int32_t i = 0; i < call_statement->parameter_results.current_index; i++){
-		//Extract the result at this index
-		parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), i);
+	for(; parameter_result_index < non_elaborative_param_count; parameter_result_index++, signature_params_index++){
+		/**
+		 * Extract the result at the result index and the type at the current parameter type index. 
+		 * If all of our counting is correct then these should be lining up perfectly with result
+		 * to desired type
+		 */
+		parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
+		generic_type_t* parameter_type = dynamic_array_get_at(&(called_function_signature->function_parameters), signature_params_index);
 
 		/**
+		 * Remember that these can be variables or constants at this stage
+		 * so we account for both. 
 		 */
 		if(result->result_type == PARAM_RESULT_TYPE_VAR){
 
@@ -1234,8 +1259,8 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	//Once we've fully lowered this call statement flag it as fully lowered
 	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
 
-	//TODO DUMMY
-	return call_statement->next_statement;
+	//Always give back a pointer to the very last instruction in our little chain
+	return last_instruction;
 }
 
 
