@@ -1234,15 +1234,31 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		//Create a stack region inside of this function that represents it
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(function->local_stack), called_function_signature->return_type);
 
-		three_addr_var_t* region_var = emit_memory_address_temp_var(called_function_signature->return_type, );
+		//Emit the special memory address temp var for this
+		three_addr_var_t* region_memory_address = emit_memory_address_temp_var(called_function_signature->return_type, return_by_copy_region);
 
+		//We'll assign to this so give it the GP parameter order
+		three_addr_var_t* region_variable = emit_temp_var(called_function_signature->return_type);
 
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		//Give it the GP order and then bump it for next time
+		region_variable->class_relative_parameter_order = current_gp_parameter_order;
+		current_gp_parameter_order++;
+
+		//Emit the assignment and add it before the call statement
+		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, region_memory_address, call_statement->line_number);
+		insert_instruction_before_given(call_statement, parameter_assignment);
+
+		//Add this into the parameter array
+		dynamic_array_add(&(call_statement->parameters), region_variable);
+
+		/**
+		 * If the first instruction is still the call statement, then it now should be updated as
+		 * this parameter assignment 
+		 */
+		if(first_instruction == call_statement){
+			first_instruction = parameter_assignment;
+		}
 	}
-
-
-
 
 	//TODO NOT YET DONE
 	//NEEDS IMPLEMENTATION
