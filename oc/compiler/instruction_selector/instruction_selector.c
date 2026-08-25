@@ -1140,8 +1140,8 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
 
 
 /**
- * Determine the number of parameters that do not count as elaborative. This will include
- * any return by copy variables
+ * Determine the number of parameters that do not count as elaborative. This will not
+ * include any return by copy variables
  */
 static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
 	//Get the initial count here
@@ -1159,14 +1159,6 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
 			count--;
 		}
-	}
-
-	/**
-	 * If we return by copy, the address for the callee to coyp into will
-	 * be stored in %rdi. We need to bump the GP param count here for that
-	 */
-	if(function_type->returns_by_copy == TRUE){
-		count++;
 	}
 
 	return count;
@@ -1229,6 +1221,9 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	 * just pass a reference to its memory address in as the very first
 	 * GP parameter(in %rdi). As such, we need to handle this before we
 	 * handle anything else
+	 *
+	 * NOTE: this does not bump the parameter result index because we don't
+	 * see this as a parameter result until the very end
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
 		//Create a stack region inside of this function that represents it
@@ -1246,7 +1241,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 
 		//Emit the assignment and add it before the call statement
 		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, region_memory_address, call_statement->line_number);
-		insert_instruction_before_given(call_statement, parameter_assignment);
+		insert_instruction_before_given(parameter_assignment, call_statement);
 
 		//Add this into the parameter array
 		dynamic_array_add(&(call_statement->parameters), region_variable);
