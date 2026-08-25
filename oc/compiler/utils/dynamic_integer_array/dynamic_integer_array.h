@@ -28,10 +28,7 @@ struct dynamic_integer_array_t{
 /**
  * Macro to initialize a NULL stack allocated dynamic array
  */
-#define INITIALIZE_NULL_DYNAMIC_INTEGER_ARRAY(dynamic_integer_array)\
-	dynamic_integer_array.internal_array = NULL;\
-	dynamic_integer_array.current_max_size = 0;\
-	dynamic_integer_array.current_index = 0;\
+#define INITIALIZE_DYNAMIC_INTEGER_ARRAY (dynamic_integer_array_t){NULL, 0, 0}
 
 /**
  * Initialize a dynamic integer array. The resulting
