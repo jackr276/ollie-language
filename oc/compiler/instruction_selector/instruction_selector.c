@@ -1221,18 +1221,38 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		call_statement->parameters = dynamic_array_alloc();
 	}
 
-	//TODO NOT YET DONE
+	//TODO LOOK INTO MEMORY ADDRESS TO ADJUST
+
+	/**
+	 * STEP 1: if we have a return by copy paremeter, we will actually
+	 * maintain that parameter inside of the callee's stack frame and
+	 * just pass a reference to its memory address in as the very first
+	 * GP parameter(in %rdi). As such, we need to handle this before we
+	 * handle anything else
+	 */
 	if(called_function_signature->returns_by_copy == TRUE){
+		//Create a stack region inside of this function that represents it
+		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(function->local_stack), called_function_signature->return_type);
+
+		three_addr_var_t* region_var = emit_memory_address_temp_var(called_function_signature->return_type, );
+
+
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
 
+
+
+
 	//TODO NOT YET DONE
+	//NEEDS IMPLEMENTATION
 	if(called_function_signature->contains_elaborative_stack_param == TRUE){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
 
+	//TODO NOT YET DONE
+	//NEEDS IMPLEMENTATION
 	if(called_function_signature->contains_stack_params == TRUE){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
