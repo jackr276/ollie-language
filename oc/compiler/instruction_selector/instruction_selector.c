@@ -1186,13 +1186,69 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 
 
 /**
+ * Handle a return-by-copy parameter by allocating a special parameter that goes into %rdi which contains
+ * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
+ * it is guaranteed to survive after the function that we're calling returns. This helper also handles all
+ * of the needed updates to the various trackers around memory addresses, parameter order, etc.
+ */
+static inline void handle_return_by_copy_parameter(instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
+												   generic_type_t* return_type, instruction_t** first_instruction,
+												   int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+	//Create a stack region inside of this function that represents it
+	stack_region_t* return_by_copy_region = create_stack_region_for_type(caller_stack_frame, return_type);
+
+	/**
+	 * We can mark this now because we know that it's going to be used. Function calls may
+	 * never be optimized away
+	 */
+	return_by_copy_region->mark = TRUE;
+
+	//Emit the special memory address temp var for this
+	three_addr_var_t* region_memory_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
+
+	//We'll assign to this so give it the GP parameter order
+	three_addr_var_t* region_variable = emit_temp_var(return_type);
+
+	//Give it the GP order and then bump it for next time
+	region_variable->class_relative_parameter_order = *gp_parameter_order;
+	(*gp_parameter_order)++;
+
+	//Emit the assignment and add it before the call statement
+	instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, region_memory_address, call_statement->line_number);
+	insert_instruction_before_given(parameter_assignment, call_statement);
+
+	//Add this into the parameter array
+	dynamic_array_add(&(call_statement->parameters), region_variable);
+
+	/**
+	 * If the first instruction is still the call statement, then it now should be updated as
+	 * this parameter assignment 
+	 */
+	if(*first_instruction == call_statement){
+		*first_instruction = parameter_assignment;
+	}
+
+	/**
+	 * We are going to need to adjust this memory address with the offset of the stack
+	 * allocation that comes if there are stack passed parameters. We will allocate
+	 * and add this in now for tracking
+	 */
+	if(memory_addresses_to_adjust->internal_array == NULL){
+		*memory_addresses_to_adjust = dynamic_array_alloc();
+	}
+
+	dynamic_array_add(memory_addresses_to_adjust, region_memory_address);
+}
+
+
+/**
  *
  *
  * TODO
  */
-static inline void handle_gp_parameter_storage(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-											   instruction_t** first_instruction, int32_t* gp_parameter_order,
-											   dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
+									   instruction_t** first_instruction, int32_t* gp_parameter_order,
+									   dynamic_array_t* memory_addresses_to_adjust){
 	/**
 	 * Pass by copy handling: if we have a struct or union type, we automatically will be passing
 	 * it by copy. This means that it is treated entirely separate from the way in which we handle
@@ -1220,9 +1276,9 @@ static inline void handle_gp_parameter_storage(instruction_t* call_statement, ge
 
 
 //TODO
-static inline void handle_sse_parameter_storage(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-											   	instruction_t** first_instruction, int32_t* sse_parameter_order, 
-												dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
+									   	instruction_t** first_instruction, int32_t* sse_parameter_order, 
+										dynamic_array_t* memory_addresses_to_adjust){
 
 	if(*sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
 
@@ -1242,6 +1298,9 @@ static inline void handle_sse_parameter_storage(instruction_t* call_statement, g
  *
  * NOTE: this function will always return a pointer to the next statement after the very last one in the set
  * of statements that it has created/modified
+ *
+ * This overall lowerer has been split up into as atomic units of work as possible for tidyness, which is why
+ * there are so many calls out to helper methods for each step
  */
 static instruction_t* lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
 	/**
@@ -1283,6 +1342,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	 */
 	if(non_elaborative_param_count > 0
 		|| called_function_signature->returns_by_copy == TRUE
+		//TODO IS ELABORATIVE STACK PARAM SOMETHING THAT COUNTS??
 		|| called_function_signature->contains_elaborative_stack_param == TRUE){
 		call_statement->parameters = dynamic_array_alloc();
 	}
@@ -1302,55 +1362,11 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	 * just pass a reference to its memory address in as the very first
 	 * GP parameter(in %rdi). As such, we need to handle this before we
 	 * handle anything else
-	 *
-	 * NOTE: this does not bump the parameter result index because we don't
-	 * see this as a parameter result until the very end
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
-		//Create a stack region inside of this function that represents it
-		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(function->local_stack), called_function_signature->return_type);
-
-		/**
-		 * We can mark this now because we know that it's going to be used. Function calls may
-		 * never be optimized away
-		 */
-		return_by_copy_region->mark = TRUE;
-
-		//Emit the special memory address temp var for this
-		three_addr_var_t* region_memory_address = emit_memory_address_temp_var(called_function_signature->return_type, return_by_copy_region);
-
-		//We'll assign to this so give it the GP parameter order
-		three_addr_var_t* region_variable = emit_temp_var(called_function_signature->return_type);
-
-		//Give it the GP order and then bump it for next time
-		region_variable->class_relative_parameter_order = current_gp_parameter_order;
-		current_gp_parameter_order++;
-
-		//Emit the assignment and add it before the call statement
-		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, region_memory_address, call_statement->line_number);
-		insert_instruction_before_given(parameter_assignment, call_statement);
-
-		//Add this into the parameter array
-		dynamic_array_add(&(call_statement->parameters), region_variable);
-
-		/**
-		 * If the first instruction is still the call statement, then it now should be updated as
-		 * this parameter assignment 
-		 */
-		if(first_instruction == call_statement){
-			first_instruction = parameter_assignment;
-		}
-
-		/**
-		 * We are going to need to adjust this memory address with the offset of the stack
-		 * allocation that comes if there are stack passed parameters. We will allocate
-		 * and add this in now for tracking
-		 */
-		if(memory_addresses_to_adjust.internal_array == NULL){
-			memory_addresses_to_adjust = dynamic_array_alloc();
-		}
-
-		dynamic_array_add(&memory_addresses_to_adjust, region_memory_address);
+		handle_return_by_copy_parameter(call_statement, &(function->local_stack),
+								  		called_function_signature->return_type, &first_instruction,
+								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
 
 	//TODO NOT YET DONE
@@ -1389,9 +1405,9 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		 * rules will take care of 100% of what's needed so we call and move on
 		 */
 		if(IS_FLOATING_POINT(parameter_type) == FALSE){
-			handle_gp_parameter_storage(call_statement, parameter_type, result, &first_instruction, &current_gp_parameter_order, &memory_addresses_to_adjust);
+			store_gp_parameter(call_statement, parameter_type, result, &first_instruction, &current_gp_parameter_order, &memory_addresses_to_adjust);
 		} else {
-			handle_sse_parameter_storage(call_statement, parameter_type, result, &first_instruction, &current_sse_paramter_order, &memory_addresses_to_adjust);
+			store_sse_parameter(call_statement, parameter_type, result, &first_instruction, &current_sse_paramter_order, &memory_addresses_to_adjust);
 		}
 
 		/**
