@@ -7817,8 +7817,7 @@ static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, 
 	 * we have a stack allocation statement. This will be done after the stack allocation
 	 * happens, but we will need to hold onto these variables in here
 	 */
-	dynamic_array_t memory_addresses_to_adjust;
-	INITIALIZE_NULL_DYNAMIC_ARRAY(memory_addresses_to_adjust);
+	dynamic_array_t memory_addresses_to_adjust = INITIALIZE_DYNAMIC_ARRAY;
 
 	/**
 	 * Since returning by copy requires the memory address of the return region to be passed in inside
@@ -11844,8 +11843,8 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	current_function = func_record;
 	//Store the pointer to this function's array of blocks too. This will be used by every basic_block_alloc() call
 	current_function_blocks = &(func_record->function_blocks);
-	//Set this to NULL initially - we will only allocate if we need it
-	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_user_defined_jump_statements);
+	//Initialize the jump statements array
+	current_function_user_defined_jump_statements = INITIALIZE_DYNAMIC_ARRAY;
 	//The starting block
 	basic_block_t* function_starting_block = basic_block_alloc_and_estimate();
 	//The function exit block

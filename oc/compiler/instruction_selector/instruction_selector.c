@@ -1186,6 +1186,12 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 
 
 /**
+ */
+static inline void handle_non_elaborative_parameter_storage(){
+}
+
+
+/**
  * Lower a function call statement into the lowest level of OIR that we have before we get to the
  * acutal instruction selection. This includes adding parameter copying, return by copy handling and
  * call stack management. One thing that we do not have to do is anything with error handling. That has
@@ -1202,8 +1208,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	 * allocation for each call. We will not initialize this now but will when the time comes if it's
 	 * necessary
 	 */
-	dynamic_array_t memory_addresses_to_adjust;
-	INITIALIZE_NULL_DYNAMIC_ARRAY(memory_addresses_to_adjust);
+	dynamic_array_t memory_addresses_to_adjust = INITIALIZE_DYNAMIC_ARRAY;
 
 	//Counters for the function parameter order
 	int32_t current_gp_parameter_order = 1;

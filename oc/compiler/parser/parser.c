@@ -14229,7 +14229,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * Since most functions do not use user defined jumps, we will initialize
 	 * this to be NULL here and only allocate when the need arises
 	 */
-	INITIALIZE_NULL_DYNAMIC_ARRAY(current_function_jump_statements);
+	current_function_jump_statements = INITIALIZE_DYNAMIC_ARRAY;
 
 	/**
 	 * We also have the AST function node, this will be intialized immediately
