@@ -1187,9 +1187,23 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 
 /**
  *
+ *
+ * TODO
  */
 static inline void handle_gp_parameter_storage(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-											   	int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+											   instruction_t** first_instruction, int32_t* gp_parameter_order,
+											   dynamic_array_t* memory_addresses_to_adjust){
+	/**
+	 * Pass by copy handling: if we have a struct or union type, we automatically will be passing
+	 * it by copy. This means that it is treated entirely separate from the way in which we handle
+	 * regular parameters. 
+	 */
+	if(parameter_type->type_class == TYPE_CLASS_STRUCT || parameter_type->type_class == TYPE_CLASS_UNION){
+
+		//Get out - done processing this
+		return;
+	}
+
 	/**
 	 * If we are at or under the max number of GP register passed parameters
 	 * we are not going to need a stack allocation in the parameter call stack.
@@ -1205,8 +1219,11 @@ static inline void handle_gp_parameter_storage(instruction_t* call_statement, ge
 }
 
 
+//TODO
 static inline void handle_sse_parameter_storage(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-											   	int32_t* sse_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+											   	instruction_t** first_instruction, int32_t* sse_parameter_order, 
+												dynamic_array_t* memory_addresses_to_adjust){
+
 	if(*sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
 
 	} else {
@@ -1372,9 +1389,9 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		 * rules will take care of 100% of what's needed so we call and move on
 		 */
 		if(IS_FLOATING_POINT(parameter_type) == FALSE){
-			handle_gp_parameter_storage(call_statement, parameter_type, result, &current_gp_parameter_order, &memory_addresses_to_adjust);
+			handle_gp_parameter_storage(call_statement, parameter_type, result, &first_instruction, &current_gp_parameter_order, &memory_addresses_to_adjust);
 		} else {
-			handle_sse_parameter_storage(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
+			handle_sse_parameter_storage(call_statement, parameter_type, result, &first_instruction, &current_sse_paramter_order, &memory_addresses_to_adjust);
 		}
 
 		/**
