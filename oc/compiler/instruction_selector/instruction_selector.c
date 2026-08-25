@@ -1229,6 +1229,12 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		//Create a stack region inside of this function that represents it
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(function->local_stack), called_function_signature->return_type);
 
+		/**
+		 * We can mark this now because we know that it's going to be used. Function calls may
+		 * never be optimized away
+		 */
+		return_by_copy_region->mark = TRUE;
+
 		//Emit the special memory address temp var for this
 		three_addr_var_t* region_memory_address = emit_memory_address_temp_var(called_function_signature->return_type, return_by_copy_region);
 
