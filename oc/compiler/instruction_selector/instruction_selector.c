@@ -1177,6 +1177,14 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
  * of statements that it has created/modified
  */
 static instruction_t* lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+	/**
+	 * We may need to adjust memory addresses if we have stack parameters that require an individual stack
+	 * allocation for each call. We will not initialize this now but will when the time comes if it's
+	 * necessary
+	 */
+	dynamic_array_t memory_addresses_to_adjust;
+	INITIALIZE_NULL_DYNAMIC_ARRAY(memory_addresses_to_adjust);
+
 	//Counters for the function parameter order
 	int32_t current_gp_parameter_order = 1;
 	int32_t current_sse_paramter_order = 1;
@@ -1184,6 +1192,14 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	//Maintain pointers to the first and last instruction in our little chain related to this call
 	instruction_t* first_instruction = call_statement;
 	instruction_t* last_instruction = call_statement;
+
+	/**
+	 * Grab a pointer to this in case we need it for convenience
+	 *
+	 * NOTE: at the time we enter this will not be allocated, *we* need to allocate it 
+	 * if appropriate
+	 */
+	stack_data_area_t* function_call_stack_region = &(call_statement->optional_storage.call_storage.call_stack_region);
 
 	/**
 	 * Maintain an index to the actual parameter type in the 
@@ -1259,6 +1275,16 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		if(first_instruction == call_statement){
 			first_instruction = parameter_assignment;
 		}
+
+		/**
+		 * We are going to need to adjust this memory address with the offset of the stack
+		 * allocation that comes if there are stack passed parameters. We will allocate
+		 * and add this in now for tracking
+		 */
+		if(memory_addresses_to_adjust.internal_array == NULL){
+			memory_addresses_to_adjust = dynamic_array_alloc();
+		}
+		dynamic_array_add(&memory_addresses_to_adjust, region_memory_address);
 	}
 
 	//TODO NOT YET DONE
