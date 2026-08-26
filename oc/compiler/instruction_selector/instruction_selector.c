@@ -1512,17 +1512,16 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
  * This overall lowerer has been split up into as atomic units of work as possible for tidyness, which is why
  * there are so many calls out to helper methods for each step
  */
-static instruction_t* lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+static void lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+	//Extract the block
+	basic_block_t* block_contained_in = call_statement->block_contained_in;
+
 	//Counters for the function parameter order
 	int32_t current_gp_parameter_order = 1;
 	int32_t current_sse_paramter_order = 1;
 
-	/**
-	 * We will keep track of what came before and after our call statement
-	 * originally so we will know where to put any/all stack allocations
-	 */
+	//Keep track of what originally came before our call statement
 	instruction_t* before_call = call_statement->previous_statement;
-	instruction_t* after_call = call_statement->next_statement;
 
 	/**
 	 * Maintain an index to the actual parameter type in the 
@@ -1635,24 +1634,61 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		}
 	}
 
+	/**
+	 * Let's now handle everything that we need to do with the stack(if we're touching it at all)
+	 *
+	 * If we have stack parameters, then we need to emit an allocation and deallocation statement. The
+	 * allocation has to go before all of the parameter assignments, and the deallocation must go immediately
+	 * after the function call. However before we do all that, we need to make sure that stack memory is
+	 * properly aligned, so we'll call out to the stack aligner first
+	 */
+	if(has_stack_params == TRUE){
+		//First thing we do is align it
+		align_stack_data_area(stack_passed_param_region);
 
-	//TODO CALL STACK HANDLING AND MEMORY ADJUSTMENT
+		//We'll need separate constants for the alloc and dealloc statements
+		three_addr_const_t* stack_allocation_constant = emit_direct_integer_or_char_constant(stack_passed_param_region->total_size, u64);
+		three_addr_const_t* stack_deallocation_constant = emit_direct_integer_or_char_constant(stack_passed_param_region->total_size, u64);
 
-	//This has served it's purpose so deallocate it
+		//Emit and insert our stack allocation statement
+		instruction_t* stack_allocation = emit_stack_allocation_ir_statement(stack_allocation_constant);
+
+		/**
+		 * We need to insert this right *after* whatever came before our call statement. The
+		 * two scenarios are:
+		 * 	1.) before_call not null, just insert right after it
+		 * 	2.) before_call is null, this was the first statement in the block, insert it *before* the leader
+		 */
+		if(before_call != NULL){
+			insert_instruction_after_given(stack_allocation, before_call);
+		} else {
+			insert_instruction_before_given(stack_allocation, block_contained_in->leader_statement);
+		}
+
+		//Emit and insert our stack deallocation statement - this always goes immediately after the call
+		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
+		insert_instruction_after_given(stack_deallocation, call_statement);
+
+		/**
+		 * If we have memory addresses before stack allocations, we need to adjust the offset
+		 * of the source memory region because we've emitted new stack allocation statements
+		 * for it
+		 *
+		 * TODO DOC MORE
+		 */
+		for(int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
+			//Get the variable and add in the base adjustment
+			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
+			memory_address->memory_address_base_adjustment = stack_passed_param_region->total_size;
+		}
+	}
+
+	//These are both no longer of use
 	dynamic_array_dealloc(&memory_addresses_to_adjust);
-
-	//Same with the parameter results - they're now useless
 	parameter_results_array_dealloc(&(call_statement->parameter_results));
 
 	//Once we've fully lowered this call statement flag it as fully lowered
 	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
-
-	//Always give back a pointer to the very last instruction in our little chain
-	//TODO
-	//
-	//
-	//NOT RIGHT
-	return after_call;
 }
 
 
@@ -1676,10 +1712,11 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 			 * by this process, we will invoke the helper to do all of this
 			 */
 			if(is_call_statement(instruction_cursor) && instruction_cursor->optional_storage.call_storage.has_been_lowered == FALSE){
-				instruction_cursor = lower_call_statement(function, instruction_cursor);
-			} else {
-				instruction_cursor = instruction_cursor->next_statement;
+				lower_call_statement(function, instruction_cursor);
 			}
+
+			//Bump up to the next statement
+			instruction_cursor = instruction_cursor->next_statement;
 		}
 	}
 }
