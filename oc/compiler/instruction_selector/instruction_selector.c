@@ -1254,6 +1254,9 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  */
 static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
 												parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
+	//Extract the block that we're in
+	basic_block_t* current_block = call_statement->block_contained_in;
+
 	//This should always be a variable if we're copying
 	three_addr_var_t* copying_from_var = result->param_result.variable_result;
 	
@@ -1281,6 +1284,12 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 	 */
 	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, parameter_type->type_size, call_statement->line_number);
 	insert_instruction_before_given(copy_instruction, call_statement);
+
+	/**
+	 * This function performs a copy assignment, so we need to make sure everything here 
+	 * is going to be aligned so that we can use x86 aligned moves
+	 */
+	current_block->function_defined_in->requires_initial_alignment = TRUE;
 }
 
 

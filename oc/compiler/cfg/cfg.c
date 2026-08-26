@@ -6842,171 +6842,6 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 
 /**
- * Handle the parsing for a normal function parameter. This is different than the parsing for an elaborative
- * parameter, which is handled by an overloaded method
- */
-static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basic_block, generic_ast_node_t* parameter_node,
-															  	parameter_results_array_t* parameter_results, dynamic_array_t* memory_addresses_to_adjust,
-															 	u_int8_t has_stack_params){
-	//Holder for the result variable;
-	three_addr_var_t* result_var;
-	//Keep track of our current block
-	basic_block_t* current_block = basic_block;
-
-	//Emit whatever we have here into the basic block
-	cfg_result_package_t results_package = emit_expression(current_block, parameter_node);
-
-	//Always reassign this
-	current_block = results_package.final_block;
-
-	/**
-	 * Based on the result package type, we will unpack and store
-	 * the results themselves accordingly
-	 */
-	switch(results_package.type){
-		/**
-		 * For a consant there are no other checks, we just throw
-		 * it into the parameter result array
-		 */
-		case CFG_RESULT_TYPE_CONST:
-			add_parameter_result_to_results_array(parameter_results, results_package.result_value.result_const, PARAM_RESULT_TYPE_CONST);
-			break;
-
-		/**
-		 * For a variable result type, there will be some more work to do around
-		 * memory addresses/special cases
-		 */
-		case CFG_RESULT_TYPE_VAR:
-			//Extract the result var
-			result_var = results_package.result_value.result_var;
-
-			/**
-			 * For future reference - we store all of the memory address
-			 * and stack param memory address variable results that we 
-			 * end up with
-			 */
-			if(has_stack_params == TRUE){
-				switch(result_var->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						//Allocate it if need be
-						if(memory_addresses_to_adjust->internal_array == NULL){
-							*memory_addresses_to_adjust = dynamic_array_alloc();
-						}
-
-						//Throw this into storage for later
-						dynamic_array_add(memory_addresses_to_adjust, result_var);
-
-						break;
-
-					//If it's not a memory address do nothing
-					default:	
-						break;
-				}
-			}
-
-			//Regardless of the type we now add this in as a result
-			add_parameter_result_to_results_array(parameter_results, result_var, PARAM_RESULT_TYPE_VAR);
-			break;
-	}
-
-	//Give back the results in the end
-	return results_package;
-}
-
-
-/**
- * Handle the parsing for an elaborative parameter. This rule is just meant to help
- * neaten things up because it's going to involve looping over all of the children
- * inside of the elaborative param node and emitting them separately. Note that
- * we are not going to do any kind of stack management here, that all is going
- * to come afterwards when we do the final result assignment
- */
-static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node,
-																	  	parameter_results_array_t* elaborative_param_results, dynamic_array_t* memory_addresses_to_adjust){
-	three_addr_var_t* result_var;
-	//NOTE: we will never have an assignee here
-	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-
-	//Keep track of the current block
-	basic_block_t* current_block = basic_block;
-
-	//Extract the first child here
-	generic_ast_node_t* child_cursor = elaborative_param_node->first_child;
-	
-	/**
-	 * Run through everything. Do note that it's possible to have nothing in here
-	 * which is why we're not using a do-while
-	 */
-	while(child_cursor != NULL){
-		//Emit each expression
-		cfg_result_package_t expression_results = emit_expression(current_block, child_cursor);
-
-		//Always reassign to be the final block that we got back
-		current_block = expression_results.final_block;
-
-		/**
-		 * Based on the result package type, we will unpack and store
-		 * the results themselves accordingly
-		 */
-		switch(expression_results.type){
-			/**
-			 * For a consant there are no other checks, we just throw
-			 * it into the parameter result array
-			 */
-			case CFG_RESULT_TYPE_CONST:
-				add_parameter_result_to_results_array(elaborative_param_results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_CONST);
-				break;
-
-			/**
-			 * For a variable result type, there will be some more work to do around
-			 * memory addresses/special cases
-			 */
-			case CFG_RESULT_TYPE_VAR:
-				//Extract the result var
-				result_var = expression_results.result_value.result_var;
-
-				/**
-				 * For future reference - we store all of the memory address
-				 * and stack param memory address variable results that we 
-				 * end up with
-				 */
-				switch(result_var->variable_type){
-					case VARIABLE_TYPE_MEMORY_ADDRESS:
-					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-						//Allocate it if need be
-						if(memory_addresses_to_adjust->internal_array == NULL){
-							*memory_addresses_to_adjust = dynamic_array_alloc();
-						}
-
-						//Throw this into storage for later
-						dynamic_array_add(memory_addresses_to_adjust, result_var);
-
-						break;
-
-					//If it's not a memory address do nothing
-					default:	
-						break;
-				}
-
-				//Regardless of the type we now add this in as a result
-				add_parameter_result_to_results_array(elaborative_param_results, result_var, PARAM_RESULT_TYPE_VAR);
-				break;
-		}
-
-		//Advance it up here
-		child_cursor = child_cursor->next_sibling;
-	}
-
-	//Assign this over in case it changed
-	result_package.final_block = current_block;
-
-	//Give back the result package
-	return result_package;
-}
-
-
-/**
  * Handle all of the storage for regular, non-elaborative parameters. This method handles everything involved, including the minutia
  * around memory address and stack parameter saving
  */
@@ -7413,14 +7248,13 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 	}
 }
 
+
 /**
- *
+ * Simple wrapper that invokes the expresssion emitter on a given parameter node and packages up the result
  *
  * NOTE: The assignee here will be NULL, we only use the result package for block management
- *
- * TODO REMOVE THE V2
  */
-static inline cfg_result_package_t emit_parameter_expressionV2(basic_block_t* basic_block, generic_ast_node_t* parameter_node, parameter_results_array_t* results){
+static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basic_block, generic_ast_node_t* parameter_node, parameter_results_array_t* results){
 	//Emit whatever we have here into the basic block
 	cfg_result_package_t results_package = emit_expression(basic_block, parameter_node);
 
@@ -7444,12 +7278,12 @@ static inline cfg_result_package_t emit_parameter_expressionV2(basic_block_t* ba
 
 
 /**
+ * Simple wrapper that crawls the elaborative param node and invokes the expression handler for
+ * each child it finds, and packages up the results
  *
  * NOTE: The assignee here will be NULL, we only use the result package for block management
- *
- * TODO REMOVE THE V2
  */
-static inline cfg_result_package_t emit_elaborative_param_expressionsV2(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node, parameter_results_array_t* results){
+static inline cfg_result_package_t emit_elaborative_param_expressions(basic_block_t* basic_block, generic_ast_node_t* elaborative_param_node, parameter_results_array_t* results){
 	//NOTE: we will never have an assignee here
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -7577,7 +7411,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle it internally to this function
 		 */
 		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
-			parameter_results = emit_parameter_expressionV2(current_block, param_cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_parameter_expression(current_block, param_cursor, &(function_call_statement->parameter_results));
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -7586,7 +7420,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle the stack management later
 		 */
 		} else {
-			parameter_results = emit_elaborative_param_expressionsV2(current_block, param_cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_elaborative_param_expressions(current_block, param_cursor, &(function_call_statement->parameter_results));
 		}
 
 		//Bump the final block and move up
@@ -7836,10 +7670,10 @@ static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, 
 		 */
 		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
 			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
-			cfg_result_package_t results = emit_parameter_expression(current_block, param_cursor, &non_elaborative_parameter_results, &memory_addresses_to_adjust, has_stack_params);
+			//cfg_result_package_t results = emit_parameter_expression(current_block, param_cursor, &non_elaborative_parameter_results, &memory_addresses_to_adjust, has_stack_params);
 
 			//Update the final block
-			current_block = results.final_block;
+			//current_block = results.final_block;
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -7849,10 +7683,10 @@ static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, 
 		 */
 		} else {
 			//Let the helper do all of this - do note that there is not going to be anything in the "assignee" here - it's all handled internally
-			cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_parameter_results, &memory_addresses_to_adjust);
+			//cfg_result_package_t results = emit_elaborative_param_expressions(current_block, param_cursor, &elaborative_parameter_results, &memory_addresses_to_adjust);
 
 			//Update the final block
-			current_block = results.final_block;
+			//current_block = results.final_block;
 		}
 
 		//And move up
