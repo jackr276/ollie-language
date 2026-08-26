@@ -1251,8 +1251,6 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  * be cautious about the memory addresses to adjust especially here, because we
  * will be making a caller stack allocation that will mess up original address
  * variables
- *
- * TODO REMOVE THE FIRST INSTRUCTION AND INSTEAD JUST USE WHAT WAS BEFORE THE CALL AS A BAROMETER
  */
 static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
 												parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
@@ -1287,11 +1285,8 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 
 
 /**
- *
- *
- * TODO
- *
- * TODO WORRY ABOUT ARRAY TYPE CONVERSIONS TO POINTERS FOR STACK STORAGE???
+ * Handle the storage of a general purpose register type parameter and everything that comes with it. This rule will
+ * automatically decide whether or not a parameter needs to be stored on the stack based on the parameter order
  */
 static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
 									  int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
@@ -1342,16 +1337,70 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 		dynamic_array_add(&(call_statement->parameters), parameter_variable);
 
 	} else {
+		/**
+		 * Because we always pass array types by reference, we don't want to give the
+		 * illusion that the size is huge when in reality it's just a pointer. We'll
+		 * trick the type system into thinking we're a pointer in this special case
+		 */
+		if(parameter_type->type_class == TYPE_CLASS_ARRAY){
+			parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
+		}
 
+		//Create a stack region for this type and get a variable for it
+		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
+
+		//TODO GOING TO NOT GET CONSTANT OFFSETS IN THIS ONE NEED TO TEST HOW IT WORKS
+
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR: {
+				//Extract the result
+				three_addr_var_t* result_var = result->param_result.variable_result;
+
+				/**
+				 * If this is a memory address variable, we'll need to adjust it if
+				 * we have a stack passed parameter region so add it to the list if it
+				 * exists
+				 */
+				if(is_memory_address_variable(result_var)){
+					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
+				}
+
+				/**
+				 * Store this parameter result into the allocated region for it. Note we will
+				 * not be adding this to the list of parameters in the call itself because
+				 * it's stored in the stack
+				 */
+				instruction_t* store_statement = emit_store_base_address_only(stack_region_address, result_var, parameter_type, call_statement->line_number);
+				insert_instruction_before_given(store_statement, call_statement);
+				break;
+			}
+
+			case PARAM_RESULT_TYPE_CONST:{
+				//Extract the result constant
+				three_addr_const_t* result_const = result->param_result.constant_result;
+
+				/**
+				 * Store this parameter result into the allocated region for it. Note we will
+				 * not be adding this to the list of parameters in the call itself because
+				 * it's stored in the stack
+				 */
+				instruction_t* store_statement = emit_constant_store_base_address_and_constant_offsett(stack_region_address, result_var, parameter_type, call_statement->line_number);
+				insert_instruction_before_given(store_statement, call_statement);
+			}
+
+		}
 	}
-
 
 	//Bump up the general purpose parameter order index
 	(*gp_parameter_order)++;
 }
 
 
-//TODO
+/**
+ * Handle the storage of an SSE register type parameter and everything that comes with it. This rule will
+ * automatically decide whether or not a parameter needs to be stored on the stack based on the parameter order
+ */
 static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
 									   int32_t* sse_parameter_order,dynamic_array_t* memory_addresses_to_adjust){
 
