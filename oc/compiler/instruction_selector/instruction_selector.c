@@ -10150,30 +10150,21 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	}
 
 	/**
-	 * For a shift instruction's second operand, we are only allowed to use the
-	 * byte version of the regsiter for it. We will account for all of those
-	 * possibilities here
+	 * If we have a register operand for our shift amount, we will need to emit a copy at least here to avoid
+	 * collisions with other precolored values. This is because the second shift register always goes into 
+	 * %rcx, which also happens to be where the 4th GP parameter goes if we're parameter passing. This 
+	 * copy instruction allows us to avoid collisions if they would have happened
+	 *
+	 * The actual final operand is always going to be byte-sized, so once we're done copying we will
+	 * replace op2 with a byte sized copy of the copy instruction's destination
 	 */
 	if(left_shift_instruction->operands.oir.operand2 != NULL){
-		/**
-		 * If this is a function parameter, we'll need to emit a copy instruction
-		 * here for the eventual precolorer to use. If we don't do this, the precolorer
-		 * will clash because it doesn't know whether to use the parameter register or
-		 * the %ecx register that shift operands must be in. This is a unique case for shifting
-		 * due to a quirk of x86
-		 */
-		if(left_shift_instruction->operands.oir.operand2->class_relative_parameter_order > 0){
-			//Move it on over here
-			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(left_shift_instruction->operands.oir.operand2->type), left_shift_instruction->operands.oir.operand2);
-			//Add this instruction to our block
-			insert_instruction_before_given(copy_instruction, left_shift_instruction);
+		//Emit and add the copy instruction
+		instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(left_shift_instruction->operands.oir.operand2->type), left_shift_instruction->operands.oir.operand2);
+		insert_instruction_before_given(copy_instruction, left_shift_instruction);
 
-			//Now our op2 is really this one's assignee
-			left_shift_instruction->operands.oir.operand2 = copy_instruction->operands.x86.destination_register;
-		}
-	
-		//We will always emit the byte copy version of the source register here
-		left_shift_instruction->operands.oir.operand2 = emit_byte_copy_of_variable(left_shift_instruction->operands.oir.operand2);
+		//The copy's destination should just be the byte copy of the copy assignment destination
+		left_shift_instruction->operands.oir.operand2 = emit_byte_copy_of_variable(copy_instruction->operands.x86.destination_register);
 	}
 
 	//Go ahead and select it now
@@ -10332,30 +10323,21 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	}
 
 	/**
-	 * For a shift instruction's second operand, we are only allowed to use the
-	 * byte version of the regsiter for it. We will account for all of those
-	 * possibilities here
+	 * If we have a register operand for our shift amount, we will need to emit a copy at least here to avoid
+	 * collisions with other precolored values. This is because the second shift register always goes into 
+	 * %rcx, which also happens to be where the 4th GP parameter goes if we're parameter passing. This 
+	 * copy instruction allows us to avoid collisions if they would have happened
+	 *
+	 * The actual final operand is always going to be byte-sized, so once we're done copying we will
+	 * replace op2 with a byte sized copy of the copy instruction's destination
 	 */
 	if(right_shift_instruction->operands.oir.operand2 != NULL){
-		/**
-		 * If this is a function parameter, we'll need to emit a copy instruction
-		 * here for the eventual precolorer to use. If we don't do this, the precolorer
-		 * will clash because it doesn't know whether to use the parameter register or
-		 * the %ecx register that shift operands must be in. This is a unique case for shifting
-		 * due to a quirk of x86
-		 */
-		if(right_shift_instruction->operands.oir.operand2->class_relative_parameter_order > 0){
-			//Move it on over here
-			instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(right_shift_instruction->operands.oir.operand2->type), right_shift_instruction->operands.oir.operand2);
-			//Add this instruction to our block
-			insert_instruction_before_given(copy_instruction, right_shift_instruction);
+		//Emit the copy and then insert it before our given
+		instruction_t* copy_instruction = emit_move_instruction(emit_temp_var(right_shift_instruction->operands.oir.operand2->type), right_shift_instruction->operands.oir.operand2);
+		insert_instruction_before_given(copy_instruction, right_shift_instruction);
 
-			//Now our op2 is really this one's assignee
-			right_shift_instruction->operands.oir.operand2 = copy_instruction->operands.x86.destination_register;
-		}
-	
-		//We will always emit the byte copy version of the source register here
-		right_shift_instruction->operands.oir.operand2 = emit_byte_copy_of_variable(right_shift_instruction->operands.oir.operand2);
+		//The actual operand is the byte version of this new copy instruction's assignee
+		right_shift_instruction->operands.oir.operand2 = emit_byte_copy_of_variable(copy_instruction->operands.x86.destination_register);
 	}
 
 	//Go ahead and select it now
