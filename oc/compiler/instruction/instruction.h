@@ -372,6 +372,11 @@ instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, th
 instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
+ * Emit a store statement that only uses the base address
+ */
+instruction_t* emit_constant_store_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
+
+/**
  * Emit a load instruction that only uses the base address
  */
 instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type, u_int32_t line_number);

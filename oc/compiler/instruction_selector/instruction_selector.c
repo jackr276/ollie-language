@@ -1351,7 +1351,6 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
 		//TODO GOING TO NOT GET CONSTANT OFFSETS IN THIS ONE NEED TO TEST HOW IT WORKS
-
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
@@ -1385,10 +1384,9 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 				 * not be adding this to the list of parameters in the call itself because
 				 * it's stored in the stack
 				 */
-				instruction_t* store_statement = emit_constant_store_base_address_and_constant_offsett(stack_region_address, result_var, parameter_type, call_statement->line_number);
+				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
 				insert_instruction_before_given(store_statement, call_statement);
 			}
-
 		}
 	}
 
@@ -1451,7 +1449,48 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 		dynamic_array_add(&(call_statement->parameters), parameter_variable);
 
 	} else {
+		//Create a stack region for this type and get a variable for it
+		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
+		//TODO GOING TO NOT GET CONSTANT OFFSETS IN THIS ONE NEED TO TEST HOW IT WORKS
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR: {
+				//Extract the result
+				three_addr_var_t* result_var = result->param_result.variable_result;
+
+				/**
+				 * If this is a memory address variable, we'll need to adjust it if
+				 * we have a stack passed parameter region so add it to the list if it
+				 * exists
+				 */
+				if(is_memory_address_variable(result_var)){
+					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
+				}
+
+				/**
+				 * Store this parameter result into the allocated region for it. Note we will
+				 * not be adding this to the list of parameters in the call itself because
+				 * it's stored in the stack
+				 */
+				instruction_t* store_statement = emit_store_base_address_only(stack_region_address, result_var, parameter_type, call_statement->line_number);
+				insert_instruction_before_given(store_statement, call_statement);
+				break;
+			}
+
+			case PARAM_RESULT_TYPE_CONST:{
+				//Extract the result constant
+				three_addr_const_t* result_const = result->param_result.constant_result;
+
+				/**
+				 * Store this parameter result into the allocated region for it. Note we will
+				 * not be adding this to the list of parameters in the call itself because
+				 * it's stored in the stack
+				 */
+				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
+				insert_instruction_before_given(store_statement, call_statement);
+			}
+		}
 	}
 
 	//Bump up the SSE parameter order index
