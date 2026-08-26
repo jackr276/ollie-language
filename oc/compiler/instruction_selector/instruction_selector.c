@@ -1290,6 +1290,8 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
  *
  *
  * TODO
+ *
+ * TODO WORRY ABOUT ARRAY TYPE CONVERSIONS TO POINTERS FOR STACK STORAGE???
  */
 static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
 									  int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
@@ -1353,11 +1355,58 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
 									   int32_t* sse_parameter_order,dynamic_array_t* memory_addresses_to_adjust){
 
+	/**
+	 * If we are at or under the max number of SSE register passed parameters
+	 * we are not going to need a stack allocation in the parameter call stack.
+	 * However if we are above this we are going to need an allocation to make
+	 * things work
+	 */
 	if(*sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
+		//Emit a result variable of this parameter's type and give it the parameter order
+		three_addr_var_t* parameter_variable = emit_temp_var(parameter_type);
+		parameter_variable->class_relative_parameter_order = *sse_parameter_order;
+
+		//Handle a constant or variable result type
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR: {
+				//Extract the result
+				three_addr_var_t* result_var = result->param_result.variable_result;
+
+				/**
+				 * If this is a memory address variable, we'll need to adjust it if
+				 * we have a stack passed parameter region so add it to the list if it
+				 * exists
+				 */
+				if(is_memory_address_variable(result_var)){
+					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
+				}
+
+				//Emit the assignment and insert it before the call statement
+				instruction_t* param_assignment = emit_assignment_instruction(parameter_variable, result_var, call_statement->line_number); 
+				insert_instruction_before_given(param_assignment, call_statement);
+				break;
+			}
+
+			case PARAM_RESULT_TYPE_CONST:{
+				//Extract the result constant
+				three_addr_const_t* result_const = result->param_result.constant_result;
+
+				//Emit the assignment and insert it before the call statement
+				instruction_t* param_assignment = emit_assignment_with_const_instruction(parameter_variable, result_const, call_statement->line_number); 
+				insert_instruction_before_given(param_assignment, call_statement);
+				break;
+			}
+		}
+
+		//Once done we can add this to the list of parameters
+		dynamic_array_add(&(call_statement->parameters), parameter_variable);
 
 	} else {
 
 	}
+
+	//Bump up the SSE parameter order index
+	(*sse_parameter_order)++;
 }
 
 
