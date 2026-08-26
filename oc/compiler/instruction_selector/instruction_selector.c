@@ -10161,6 +10161,8 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 		 * will clash because it doesn't know whether to use the parameter register or
 		 * the %ecx register that shift operands must be in. This is a unique case for shifting
 		 * due to a quirk of x86
+		 *
+		 * TODO WE NEED TO ALWAYS BE DOING THIS
 		 */
 		if(left_shift_instruction->operands.oir.operand2->class_relative_parameter_order > 0){
 			//Move it on over here
@@ -10343,6 +10345,9 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 		 * will clash because it doesn't know whether to use the parameter register or
 		 * the %ecx register that shift operands must be in. This is a unique case for shifting
 		 * due to a quirk of x86
+		 *
+		 *
+		 * TODO WE NEED TO ALWAYS BE DOING THIS
 		 */
 		if(right_shift_instruction->operands.oir.operand2->class_relative_parameter_order > 0){
 			//Move it on over here
