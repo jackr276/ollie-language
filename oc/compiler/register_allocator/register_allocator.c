@@ -2193,11 +2193,11 @@ static void precolor_instruction(instruction_t* instruction){
 			//Grab the parameters out
 			dynamic_array_t function_params = instruction->parameters;
 
-			u_int16_t general_purpose_parameter_order = 0;
-			u_int16_t sse_parameter_order = 0;
+			int32_t general_purpose_parameter_order = 0;
+			int32_t sse_parameter_order = 0;
 
 			//Run thorugh all of the params and precolor
-			for(u_int16_t i = 0; i < function_params.current_index; i++){
+			for(int32_t i = 0; i < function_params.current_index; i++){
 				//Grab it out
 				three_addr_var_t* param = dynamic_array_get_at(&function_params, i);
 

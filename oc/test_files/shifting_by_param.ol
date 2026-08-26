@@ -20,5 +20,6 @@ fn tester2(x:i32, j:i32) -> i32 {
 
 pub fn main() -> i32 {
 	//Just invoke the shifter
+	OUNIT: [exit_status = 96]
 	ret @tester(3, 5) + @tester2(5, 3);
 }
