@@ -1264,6 +1264,21 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  */
 static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
 												instruction_t** first_instruction, dynamic_array_t* memory_addresses_to_adjust){
+	//This should always be a variable if we're copying
+	three_addr_var_t* copying_from_var = result->param_result.variable_result;
+	
+	/**
+	 * If this is a memory address variable(remember it could just be 
+	 * a pointer var), then we'll need to add it to the list of memory
+	 * addresses that need adjustment once we actually allocate the stack
+	 * regions
+	 */
+	if(is_memory_address_variable(copying_from_var) == TRUE){
+		dynamic_array_add_if_allocated(memory_addresses_to_adjust, copying_from_var);
+	}
+
+	//Let's now create the parameter stack region for this
+	//TODO
 
 }
 

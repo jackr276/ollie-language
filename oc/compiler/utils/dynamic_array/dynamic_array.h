@@ -78,6 +78,13 @@ u_int8_t dynamic_array_is_empty(dynamic_array_t* array);
 void dynamic_array_add(dynamic_array_t* array, void* ptr);
 
 /**
+ * Add an item into the dynamic array *IF* the dynamic array
+ * itself has been allocated. This is intended for a very specific
+ * use in the instruction selector
+ */
+void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr);
+
+/**
  * Clear a dynamic array entirely - keeps the size unchanged, but
  * sets the entire internal array to 0
  */
