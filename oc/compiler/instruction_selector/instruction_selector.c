@@ -10331,7 +10331,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 		insert_instruction_before_given(copy_instruction, right_shift_instruction);
 
 		//The actual operand is the byte version of this new copy instruction's assignee
-		right_shift_instruction->operands.oir.operand2 = emit_byte_copy_of_variable(right_shift_instruction->operands.x86.destination_register);
+		right_shift_instruction->operands.oir.operand2 = emit_byte_copy_of_variable(copy_instruction->operands.x86.destination_register);
 	}
 
 	//Go ahead and select it now
