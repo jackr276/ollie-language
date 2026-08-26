@@ -221,6 +221,21 @@ static inline u_int8_t is_memory_address_variable(three_addr_var_t* variable){
 
 
 /**
+ * Is a given type pass-by-copy? As of right now the only types that are
+ * are structs and unions but this may change
+ */
+static inline u_int8_t is_pass_by_copy_type(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this a function call statement or not?
  */
 static inline u_int8_t is_call_statement(instruction_t* statement){
@@ -1240,6 +1255,20 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 
 
 /**
+ * If we have a struct or union type, we automatically will be passing it by copy.
+ * This means that it is treated entirely separate from the way in which we handle
+ * regular parameters which is why we have this separate rule for it. We need to 
+ * be cautious about the memory addresses to adjust especially here, because we
+ * will be making a caller stack allocation that will mess up original address
+ * variables
+ */
+static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
+												instruction_t** first_instruction, dynamic_array_t* memory_addresses_to_adjust){
+
+}
+
+
+/**
  *
  *
  * TODO
@@ -1247,17 +1276,6 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
 									   instruction_t** first_instruction, int32_t* gp_parameter_order,
 									   dynamic_array_t* memory_addresses_to_adjust){
-	/**
-	 * Pass by copy handling: if we have a struct or union type, we automatically will be passing
-	 * it by copy. This means that it is treated entirely separate from the way in which we handle
-	 * regular parameters. 
-	 */
-	if(parameter_type->type_class == TYPE_CLASS_STRUCT || parameter_type->type_class == TYPE_CLASS_UNION){
-
-		//Get out - done processing this
-		return;
-	}
-
 	/**
 	 * If we are at or under the max number of GP register passed parameters
 	 * we are not going to need a stack allocation in the parameter call stack.
@@ -1402,15 +1420,21 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		generic_type_t* parameter_type = dynamic_array_get_at(&(called_function_signature->function_parameters), signature_params_index);
 
 		/**
-		 * Split processing down the lines of floating point vs. non-floating
-		 * point because they use different register classes. We will handle
-		 * the processing of each separately. These individual processing
-		 * rules will take care of 100% of what's needed so we call and move on
+		 * We will split first by whether or not a type is pass by copy. If it's not
+		 * pass-by-copy, then we'll need to further split along the lines of SSE
+		 * vs. GP as they are entirely different register classes
+		 *
+		 * This branching is arranged in order of what should be most common. GP is
+		 * most common, then comes SSE, and then pass by copy
 		 */
-		if(IS_FLOATING_POINT(parameter_type) == FALSE){
-			store_gp_parameter(call_statement, parameter_type, result, &first_instruction, &current_gp_parameter_order, &memory_addresses_to_adjust);
+		if(is_pass_by_copy_type(parameter_type) == FALSE){
+			if(IS_FLOATING_POINT(parameter_type) == FALSE){
+				store_gp_parameter(call_statement, parameter_type, result, &first_instruction, &current_gp_parameter_order, &memory_addresses_to_adjust);
+			} else {
+				store_sse_parameter(call_statement, parameter_type, result, &first_instruction, &current_sse_paramter_order, &memory_addresses_to_adjust);
+			}
 		} else {
-			store_sse_parameter(call_statement, parameter_type, result, &first_instruction, &current_sse_paramter_order, &memory_addresses_to_adjust);
+			store_pass_by_copy_parameter(call_statement, parameter_type, result, &first_instruction, &memory_addresses_to_adjust);
 		}
 
 		/**
