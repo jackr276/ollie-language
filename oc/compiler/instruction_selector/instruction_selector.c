@@ -1279,7 +1279,7 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 	 * to the function parameters, the stack region that we're building should sync up with
 	 * what the function we're calling has on hand locally
 	 */
-	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, get_type_size(parameter_type), call_statement->line_number);
+	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, parameter_type->type_size, call_statement->line_number);
 	insert_instruction_before_given(copy_instruction, call_statement);
 }
 
@@ -1591,14 +1591,6 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
-
-	//TODO NOT YET DONE
-	//NEEDS IMPLEMENTATION
-	if(called_function_signature->contains_stack_params == TRUE){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
-	}
-
 
 	/**
 	 * Step 2: process the non-elaborative parameters at this stage. We will run
