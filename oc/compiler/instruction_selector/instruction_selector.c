@@ -1248,9 +1248,7 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 * are stack params. The caller has allocated this dynamic array if there
 	 * are stack params, so we can use that as our test
 	 */
-	if(memory_addresses_to_adjust->internal_array != NULL){
-		dynamic_array_add(memory_addresses_to_adjust, region_memory_address);
-	}
+	dynamic_array_add_if_allocated(memory_addresses_to_adjust, region_memory_address);
 }
 
 
@@ -1467,12 +1465,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 			 * allocation
 			 */
 			if(is_memory_address_variable(parameter_result) == TRUE){
-				//Allocate if need be
-				if(memory_addresses_to_adjust.internal_array == NULL){
-					memory_addresses_to_adjust = dynamic_array_alloc();
-				}
-
-				dynamic_array_add(&memory_addresses_to_adjust, parameter_result);
+				dynamic_array_add_if_allocated(&memory_addresses_to_adjust, parameter_result);
 			}
 
 			/**
