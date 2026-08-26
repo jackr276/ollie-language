@@ -10167,8 +10167,13 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 	left_shift_instruction->instruction_type = select_left_shift_instruction(size, is_signed);
 
 	/**
-	 * Now if op1 and the assignee line up, we are good. Otherwise we will
-	 * need to make them align and insert some actual instructions
+	 * If we have a register operand for our shift amount, we will need to emit a copy at least here to avoid
+	 * collisions with other precolored values. This is because the second shift register always goes into 
+	 * %rcx, which also happens to be where the 4th GP parameter goes if we're parameter passing. This 
+	 * copy instruction allows us to avoid collisions if they would have happened
+	 *
+	 * The actual final operand is always going to be byte-sized, so once we're done copying we will
+	 * replace op2 with a byte sized copy of the copy instruction's destination
 	 */
 	if(variables_equal_no_ssa(left_shift_instruction->operands.oir.assignee, left_shift_instruction->operands.oir.operand1) == TRUE){
 		//Destination is the assignee
@@ -10319,11 +10324,13 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 	}
 
 	/**
-	 * For a shift instruction's second operand, we are only allowed to use the
-	 * byte version of the regsiter for it. We will account for all of those
-	 * possibilities here
+	 * If we have a register operand for our shift amount, we will need to emit a copy at least here to avoid
+	 * collisions with other precolored values. This is because the second shift register always goes into 
+	 * %rcx, which also happens to be where the 4th GP parameter goes if we're parameter passing. This 
+	 * copy instruction allows us to avoid collisions if they would have happened
 	 *
-	 * TODO UPDATE DOC
+	 * The actual final operand is always going to be byte-sized, so once we're done copying we will
+	 * replace op2 with a byte sized copy of the copy instruction's destination
 	 */
 	if(right_shift_instruction->operands.oir.operand2 != NULL){
 		//Emit the copy and then insert it before our given
