@@ -1207,8 +1207,8 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
  * of the needed updates to the various trackers around memory addresses, parameter order, etc.
  */
 static inline void handle_return_by_copy_parameter(instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
-												   generic_type_t* return_type, instruction_t** first_instruction,
-												   int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+													generic_type_t* return_type, int32_t* gp_parameter_order,
+												   	dynamic_array_t* memory_addresses_to_adjust){
 	//Create a stack region inside of this function that represents it
 	stack_region_t* return_by_copy_region = create_stack_region_for_type(caller_stack_frame, return_type);
 
@@ -1236,14 +1236,6 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	dynamic_array_add(&(call_statement->parameters), region_variable);
 
 	/**
-	 * If the first instruction is still the call statement, then it now should be updated as
-	 * this parameter assignment 
-	 */
-	if(*first_instruction == call_statement){
-		*first_instruction = parameter_assignment;
-	}
-
-	/**
 	 * This is a memory address variable so we'll need to adjust it if there
 	 * are stack params. The caller has allocated this dynamic array if there
 	 * are stack params, so we can use that as our test
@@ -1262,8 +1254,8 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  *
  * TODO REMOVE THE FIRST INSTRUCTION AND INSTEAD JUST USE WHAT WAS BEFORE THE CALL AS A BAROMETER
  */
-static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-												instruction_t** first_instruction, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
+												parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
 	//This should always be a variable if we're copying
 	three_addr_var_t* copying_from_var = result->param_result.variable_result;
 	
@@ -1291,12 +1283,6 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 	 */
 	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, get_type_size(parameter_type), call_statement->line_number);
 	insert_instruction_before_given(copy_instruction, call_statement);
-
-	//Update the first instruction pointer if appropriate
-	//TODO GOING TO REMOVE
-	if(*first_instruction == call_statement){
-		*first_instruction = copy_instruction;
-	}
 }
 
 
@@ -1306,8 +1292,7 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
  * TODO
  */
 static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-									   instruction_t** first_instruction, int32_t* gp_parameter_order,
-									   dynamic_array_t* memory_addresses_to_adjust){
+									  int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	/**
 	 * If we are at or under the max number of GP register passed parameters
 	 * we are not going to need a stack allocation in the parameter call stack.
@@ -1325,8 +1310,7 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 
 //TODO
 static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-									   	instruction_t** first_instruction, int32_t* sse_parameter_order, 
-										dynamic_array_t* memory_addresses_to_adjust){
+									   int32_t* sse_parameter_order,dynamic_array_t* memory_addresses_to_adjust){
 
 	if(*sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
 
@@ -1355,9 +1339,12 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	int32_t current_gp_parameter_order = 1;
 	int32_t current_sse_paramter_order = 1;
 
-	//Maintain pointers to the first and last instruction in our little chain related to this call
-	instruction_t* first_instruction = call_statement;
-	instruction_t* last_instruction = call_statement;
+	/**
+	 * We will keep track of what came before and after our call statement
+	 * originally so we will know where to put any/all stack allocations
+	 */
+	instruction_t* before_call = call_statement->previous_statement;
+	instruction_t* after_call = call_statement->next_statement;
 
 	/**
 	 * Maintain an index to the actual parameter type in the 
@@ -1417,8 +1404,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	 * handle anything else
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
-		handle_return_by_copy_parameter(call_statement, &(function->local_stack),
-								  		called_function_signature->return_type, &first_instruction,
+		handle_return_by_copy_parameter(call_statement, &(function->local_stack), called_function_signature->return_type,
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
 
@@ -1461,12 +1447,13 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		 */
 		if(is_pass_by_copy_type(parameter_type) == FALSE){
 			if(IS_FLOATING_POINT(parameter_type) == FALSE){
-				store_gp_parameter(call_statement, parameter_type, result, &first_instruction, &current_gp_parameter_order, &memory_addresses_to_adjust);
+				store_gp_parameter(call_statement, parameter_type, result, &current_gp_parameter_order, &memory_addresses_to_adjust);
 			} else {
-				store_sse_parameter(call_statement, parameter_type, result, &first_instruction, &current_sse_paramter_order, &memory_addresses_to_adjust);
+				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
 			}
+
 		} else {
-			store_pass_by_copy_parameter(call_statement, parameter_type, result, &first_instruction, &memory_addresses_to_adjust);
+			store_pass_by_copy_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
 		}
 
 		/**
@@ -1513,14 +1500,6 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 			 */
 			dynamic_array_add(&(call_statement->parameters), result_var);
 
-			/**
-			 * If the first instruction is still the call statement, then this is now the first
-			 * because we've just inserted before it
-			 */
-			if(first_instruction == call_statement){
-				first_instruction = parameter_assignment;
-			}
-
 		} else {
 			//Emit a result var to assign over and into
 			three_addr_var_t* result_var = emit_temp_var(parameter_type);
@@ -1550,14 +1529,6 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 			 * add it into the statement's parameter array
 			 */
 			dynamic_array_add(&(call_statement->parameters), result_var);
-
-			/**
-			 * If the first instruction is still the call statement, then this is now the first
-			 * because we've just inserted before it
-			 */
-			if(first_instruction == call_statement){
-				first_instruction = parameter_assignment;
-			}
 		}
 	}
 
@@ -1571,7 +1542,11 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
 
 	//Always give back a pointer to the very last instruction in our little chain
-	return last_instruction;
+	//TODO
+	//
+	//
+	//NOT RIGHT
+	return after_call;
 }
 
 
