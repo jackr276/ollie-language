@@ -1359,7 +1359,6 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
-		//TODO GOING TO NOT GET CONSTANT OFFSETS IN THIS ONE NEED TO TEST HOW IT WORKS
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
@@ -1462,7 +1461,6 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
-		//TODO GOING TO NOT GET CONSTANT OFFSETS IN THIS ONE NEED TO TEST HOW IT WORKS
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
@@ -1556,8 +1554,6 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * Whenever we stumble across a memory address var that's in the parameter result array,
 	 * we'll add it's stack region here as something that we need to adjust. See below for
 	 * more details
-	 *
-	 * TODO DOC MORE LATER
 	 */
 	dynamic_array_t memory_addresses_to_adjust = INITIALIZE_DYNAMIC_ARRAY;
 	if(has_stack_params == TRUE){
@@ -1635,13 +1631,14 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		}
 	}
 
+	//TODO ELABORATIVE
+
 	/**
-	 * Let's now handle everything that we need to do with the stack(if we're touching it at all)
+	 * Step 4: Let's now handle everything that we need to do with the stack(if we're touching it at all)
 	 *
 	 * If we have stack parameters, then we need to emit an allocation and deallocation statement. The
 	 * allocation has to go before all of the parameter assignments, and the deallocation must go immediately
-	 * after the function call. However before we do all that, we need to make sure that stack memory is
-	 * properly aligned, so we'll call out to the stack aligner first
+	 * after the function call
 	 */
 	if(has_stack_params == TRUE){
 		//First thing we do is align it
@@ -1673,14 +1670,35 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		/**
 		 * If we have memory addresses before stack allocations, we need to adjust the offset
 		 * of the source memory region because we've emitted new stack allocation statements
-		 * for it
+		 * for it. Remember that memory address variables in OIR only tell us how far off the
+		 * stack to offset
 		 *
-		 * TODO DOC MORE
+		 * Say we have this in OIR where my_region is a local stack region:
+		 *
+		 * 	call x(MEM<my_region>)
+		 *
+		 * What happens if we decide that we need to pass my_region by copy. Well
+		 * then we'll have to allocate a stack region for that function parameter
+		 * passing like this during lowering:
+		 *
+		 * 	rsp - 16 <- allocate 16 bytes
+		 * 	memory_copy parameter_mem<t1> <- MEM<my_region>  <-- my_region's address is now off by 16 bytes
+		 * 	rsp + 16 <- deallocate 16 bytes
+		 *
+		 * Note how doing this will make the old memory address invalid because it's stack offset is
+		 * not accounting for the 16 bytes we just allocated. This is why we maintain a list of 
+		 * memory address like MEM<my_region> who are at risk of this happening, so at the end
+		 * here we can go through and "adjust" their address by bumping the offset up by however
+		 * much we allocated
 		 */
 		for(int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
 			//Get the variable and add in the base adjustment
 			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 			memory_address->memory_address_base_adjustment = stack_passed_param_region->total_size;
+
+			//TODO WE NEED TO TEST USING MEM my_region after the copy here - I want to make
+			//sure that that base address adjustment isn't sticking around(it's not but we need
+			//a test to be 100% sure)
 		}
 	}
 
