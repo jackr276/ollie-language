@@ -152,7 +152,7 @@ struct instruction_t{
 		 */
 		struct {
 			//Some function calls require their own stack setup
-			stack_data_area_t call_stack_region;
+			stack_data_area_t stack_parameter_area;
 			//The second error assignee for an errorable function
 			three_addr_var_t* error_assignee;
 			/**

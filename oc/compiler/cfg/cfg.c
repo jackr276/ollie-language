@@ -7757,7 +7757,7 @@ static cfg_result_package_t emit_function_call__OLD(basic_block_t* basic_block, 
 	u_int8_t has_stack_params = signature->contains_stack_params;
 
 	//Grab a pointer to the function call stack region if we need it
-	stack_data_area_t* function_call_stack_region = &(function_call_statement->optional_storage.call_storage.call_stack_region);
+	stack_data_area_t* function_call_stack_region = &(function_call_statement->optional_storage.call_storage.stack_parameter_area);
 
 	/**
 	 * If a function call contains stack params, we are going to have to allocate the stack data area

@@ -1259,6 +1259,8 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  * be cautious about the memory addresses to adjust especially here, because we
  * will be making a caller stack allocation that will mess up original address
  * variables
+ *
+ * TODO REMOVE THE FIRST INSTRUCTION AND INSTEAD JUST USE WHAT WAS BEFORE THE CALL AS A BAROMETER
  */
 static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
 												instruction_t** first_instruction, dynamic_array_t* memory_addresses_to_adjust){
@@ -1275,9 +1277,26 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 		dynamic_array_add_if_allocated(memory_addresses_to_adjust, copying_from_var);
 	}
 
-	//Let's now create the parameter stack region for this
-	//TODO
+	/**
+	 * Let's now create the parameter stack region for this parameter to be copied
+	 * into. We'll allocate a memory address temp var for it as well
+	 */
+	stack_region_t* pass_by_copy_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+	three_addr_var_t* pass_by_copy_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_copy_region);
 
+	/**
+	 * Now create a memory copy statement going into this region. Note that we do not add this
+	 * to the function parameters, the stack region that we're building should sync up with
+	 * what the function we're calling has on hand locally
+	 */
+	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, get_type_size(parameter_type), call_statement->line_number);
+	insert_instruction_before_given(copy_instruction, call_statement);
+
+	//Update the first instruction pointer if appropriate
+	//TODO GOING TO REMOVE
+	if(*first_instruction == call_statement){
+		*first_instruction = copy_instruction;
+	}
 }
 
 
@@ -1385,7 +1404,7 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 	 * Step 1: if we have a function that has stack parameters, it is up to us to allocate
 	 * the stack data area for it now. We'll also grab a pointer to it for our convenience
 	 */
-	stack_data_area_t* stack_passed_param_region = &(call_statement->optional_storage.call_storage.call_stack_region);
+	stack_data_area_t* stack_passed_param_region = &(call_statement->optional_storage.call_storage.stack_parameter_area);
 	if(called_function_signature->contains_stack_params == TRUE){
 		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 	}
