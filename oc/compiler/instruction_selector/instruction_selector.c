@@ -1300,11 +1300,52 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 	 * things work
 	 */
 	if(*gp_parameter_order <= MAX_GP_REGISTER_PASSED_PARAMS){
+		//Emit a result variable of this parameter's type and give it the parameter order
+		three_addr_var_t* parameter_variable = emit_temp_var(parameter_type);
+		parameter_variable->class_relative_parameter_order = *gp_parameter_order;
+
+		//Handle a constant or variable result type
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR: {
+				//Extract the result
+				three_addr_var_t* result_var = result->param_result.variable_result;
+
+				/**
+				 * If this is a memory address variable, we'll need to adjust it if
+				 * we have a stack passed parameter region so add it to the list if it
+				 * exists
+				 */
+				if(is_memory_address_variable(result_var)){
+					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
+				}
+
+				//Emit the assignment and insert it before the call statement
+				instruction_t* param_assignment = emit_assignment_instruction(parameter_variable, result_var, call_statement->line_number); 
+				insert_instruction_before_given(param_assignment, call_statement);
+				break;
+			}
+
+			case PARAM_RESULT_TYPE_CONST:{
+				//Extract the result constant
+				three_addr_const_t* result_const = result->param_result.constant_result;
+
+				//Emit the assignment and insert it before the call statement
+				instruction_t* param_assignment = emit_assignment_with_const_instruction(parameter_variable, result_const, call_statement->line_number); 
+				insert_instruction_before_given(param_assignment, call_statement);
+				break;
+			}
+		}
+
+		//Once done we can add this to the list of parameters
+		dynamic_array_add(&(call_statement->parameters), parameter_variable);
 
 	} else {
 
 	}
 
+
+	//Bump up the general purpose parameter order index
+	(*gp_parameter_order)++;
 }
 
 
@@ -1455,82 +1496,10 @@ static instruction_t* lower_call_statement(symtab_function_record_t* function, i
 		} else {
 			store_pass_by_copy_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
 		}
-
-		/**
-		 * Remember that these can be variables or constants at this stage
-		 * so we account for both. 
-		 */
-		if(result->result_type == PARAM_RESULT_TYPE_VAR){
-			//Get the result out and also emit a result variable for our use
-			three_addr_var_t* parameter_result = result->param_result.variable_result;
-			three_addr_var_t* result_var = emit_temp_var(parameter_type);
-
-			/**
-			 * If this is a memory address variable, then we need to add it to our 
-			 * list of memory addresses that may need adjustment if there is a stack
-			 * allocation
-			 */
-			if(is_memory_address_variable(parameter_result) == TRUE){
-				dynamic_array_add_if_allocated(&memory_addresses_to_adjust, parameter_result);
-			}
-
-			/**
-			 * Remember that SSE and GP registers have their own register assignment
-			 * by parameter order. Based on the type of the parameter, we will
-			 * give the new result variable the class appropriate order and update
-			 * the counter appropriately
-			 */
-			if(IS_FLOATING_POINT(parameter_type) == FALSE){
-				//Give this the order and then bump it for the next go around
-				result_var->class_relative_parameter_order = current_gp_parameter_order;
-				current_gp_parameter_order++;
-			} else {
-				//Give this the order and then bump it for the next go around
-				result_var->class_relative_parameter_order = current_sse_paramter_order;
-				current_sse_paramter_order++;
-			}
-
-			//Emit and insert this immediately before the call statement
-			instruction_t* parameter_assignment = emit_assignment_instruction(result_var, result->param_result.variable_result, call_statement->line_number);
-			insert_instruction_before_given(parameter_assignment, call_statement);
-
-			/**
-			 * This result var is now part of the function call's parameters, so we will
-			 * add it into the statement's parameter array
-			 */
-			dynamic_array_add(&(call_statement->parameters), result_var);
-
-		} else {
-			//Emit a result var to assign over and into
-			three_addr_var_t* result_var = emit_temp_var(parameter_type);
-
-			/**
-			 * Remember that SSE and GP registers have their own register assignment
-			 * by parameter order. Based on the type of the parameter, we will
-			 * give the new result variable the class appropriate order and update
-			 * the counter appropriately
-			 */
-			if(IS_FLOATING_POINT(parameter_type) == FALSE){
-				//Give this the order and then bump it for the next go around
-				result_var->class_relative_parameter_order = current_gp_parameter_order;
-				current_gp_parameter_order++;
-			} else {
-				//Give this the order and then bump it for the next go around
-				result_var->class_relative_parameter_order = current_sse_paramter_order;
-				current_sse_paramter_order++;
-			}
-
-			//Emit and insert this immediately before the call statement
-			instruction_t* parameter_assignment = emit_assignment_with_const_instruction(result_var, result->param_result.constant_result, call_statement->line_number);
-			insert_instruction_before_given(parameter_assignment, call_statement);
-
-			/**
-			 * This result var is now part of the function call's parameters, so we will
-			 * add it into the statement's parameter array
-			 */
-			dynamic_array_add(&(call_statement->parameters), result_var);
-		}
 	}
+
+
+	//TODO CALL STACK HANDLING AND MEMORY ADJUSTMENT
 
 	//This has served it's purpose so deallocate it
 	dynamic_array_dealloc(&memory_addresses_to_adjust);
