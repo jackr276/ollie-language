@@ -1499,8 +1499,49 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 }
 
 
-static inline void store_elaborative_parameter_member(instruction_t* call_statement, generic_type_t* parameter_type, 
+/**
+ * Store an elaborative parameter result to the stack passed parameter region. We will have to create the region
+ * for each parameter that we see. This rule takes care of memory copy parameters and regular parameter types
+ */
+static inline void store_elaborative_parameter_result(instruction_t* call_statement, generic_type_t* parameter_type, 
 													  parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
+	/**
+	 * Recall our special case that arrays are never passed by copy, so we don't
+	 * want the size of the true array to skew what we're doing. In this case
+	 * we'll force it to decay to a pointer
+	 */
+	if(parameter_type->type_class == TYPE_CLASS_ARRAY){
+		parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
+	}
+
+	/**
+	 * Most common - we are not passing by copy so we'll have to break done by either constant or
+	 * variable result. There's no need to split along SSE/GP because we are always storing to
+	 * the stack
+	 */
+	if(is_pass_by_copy_type(parameter_type) == FALSE){
+		//Allocate a fresh region for this and get a variable for it
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
+
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR: {
+				three_addr_var_t* result_var = result->param_result.variable_result;
+
+				break;
+			}
+
+			case PARAM_RESULT_TYPE_CONST: {
+				three_addr_const_t* result_const = result->param_result.constant_result;
+				break;
+			}
+		}
+
+
+	} else {
+
+	}
+
 
 	//TODO SPECIAL ARRAY HANDLING
 
