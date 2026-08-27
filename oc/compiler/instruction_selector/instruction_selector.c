@@ -1526,25 +1526,36 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR: {
+				//Extract the result var
 				three_addr_var_t* result_var = result->param_result.variable_result;
 
+				//Bookkeeping: stash this if it's a memory address variable
+				if(is_memory_address_variable(result_var) == TRUE){
+					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
+				}
+
+				//Emit and add the store for this variable parameter
+				instruction_t* store_statement = emit_store_base_address_only(region_variable, result_var, parameter_type, call_statement->line_number);
+				insert_instruction_before_given(store_statement, call_statement);
 				break;
 			}
 
 			case PARAM_RESULT_TYPE_CONST: {
 				three_addr_const_t* result_const = result->param_result.constant_result;
+
+				//Emit and add the store for this variable parameter
+				instruction_t* store_statement = emit_constant_store_base_address_only(region_variable, result_const, parameter_type, call_statement->line_number);
+				insert_instruction_before_given(store_statement, call_statement);
 				break;
 			}
 		}
 
-
 	} else {
 
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+
 	}
-
-
-	//TODO SPECIAL ARRAY HANDLING
-
 }
 
 
@@ -1699,12 +1710,8 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		for(; parameter_result_index < call_statement->parameter_results.current_index; parameter_result_index++){
 			//Pass it along to the helper to process
 			parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
-			store_elaborative_parameter_member(call_statement, elaborated_type, result, &memory_addresses_to_adjust);
+			store_elaborative_parameter_result(call_statement, elaborated_type, result, &memory_addresses_to_adjust);
 		}
-
-
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
 	}
 
 	/**
