@@ -1633,6 +1633,9 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * "paramcount" that always needs to be populated even if there are 0 parameters
 	 */
 	if(called_function_signature->contains_elaborative_stack_param == TRUE){
+		//Let's extract what the type being elaborated is
+		generic_type_t* elaborated_type = get_elaborated_type(called_function_signature);
+
 		//The number is however many results we have left over. This is our "paramcount"
 		int32_t elaborative_paramcount = call_statement->parameter_results.current_index - parameter_result_index;
 		three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(elaborative_paramcount, i32);
@@ -1655,7 +1658,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		for(; parameter_result_index < call_statement->parameter_results.current_index; parameter_result_index++){
 			//Pass it along to the helper to process
 			parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
-			store_elaborative_parameter_member(call_statement, TODO, result, memory_addresses_to_adjust);
+			store_elaborative_parameter_member(call_statement, elaborated_type, result, &memory_addresses_to_adjust);
 		}
 
 

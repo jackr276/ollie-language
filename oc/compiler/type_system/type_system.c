@@ -2723,6 +2723,26 @@ generic_type_t* create_anonymous_union_type(u_int32_t line_number, mutability_ty
 
 
 /**
+ * Get the type that a given function's elaborative parameter "elaborates"
+ * If someone mistakenly calls this with a function that doesn't have
+ * an elaborative param we return NULL
+ */
+generic_type_t* get_elaborated_type(function_type_t* signature){
+	//We don't have one so give nothing back
+	if(signature->contains_elaborative_stack_param == FALSE){
+		return NULL;
+	}
+
+	//It's always the very last parameter
+	int32_t last_index = signature->function_parameters.current_index - 1;
+	generic_type_t* elaborative_type = dynamic_array_get_at(&(signature->function_parameters), last_index);
+
+	//Give back what it elaborates, not the type itself
+	return elaborative_type->internal_types.elaborates;
+}
+
+
+/**
  * Does this struct contain said member? Return the variable if yes, NULL if not
  */
 void* get_struct_member(generic_type_t* structure, char* name){
