@@ -454,7 +454,7 @@ static inline void rhs_new_name(three_addr_var_t* var){
  */
 dynamic_string_t generate_fully_qualified_namespace_name_for_mangling(function_namespace_t* namespace_record){
 	//Initially it's null
-	dynamic_string_t namespace_name = NULL_DYNAMIC_STRING;
+	dynamic_string_t namespace_name = INITIALIZE_DYNAMIC_STRING;
 
 	//If this is the default then get out
 	if(namespace_record->is_default == TRUE){
@@ -1168,13 +1168,15 @@ static void rename_block(basic_block_t* entry){
 				}
 				
 				//Function calls contain parameters that count as RHS vars
-				dynamic_array_t* func_params = &(cursor->parameters);
+				parameter_results_array_t* func_params = &(cursor->parameter_results);
 
 				for(int32_t k = 0; k < func_params->current_index; k++){
-					three_addr_var_t* current_param = dynamic_array_get_at(func_params, k);
+					parameter_result_t* current_param = get_result_at_index(func_params, k);
 
-					if(is_variable_ssa_eligible(current_param) == TRUE){
-						rhs_new_name(current_param);
+					//If we have a variable result we'll run through now and put it in
+					if(current_param->result_type == PARAM_RESULT_TYPE_VAR
+						&& is_variable_ssa_eligible(current_param->param_result.variable_result) == TRUE){
+						rhs_new_name(current_param->param_result.variable_result);
 					}
 				}
 
@@ -1696,11 +1698,15 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
 
-	//Check all parameters as well
-	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
-		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
+	//Check all parameters as well for function calls
+	for(int32_t i = 0; i < instruction->parameter_results.current_index; i++){
+		//Get the parameter result
+		parameter_result_t* result = get_result_at_index(&(instruction->parameter_results), i);
 
-		overall_result &= check_variable_for_definite_assignment(instruction, parameter);
+		//If it's a variable we'll check it
+		if(result->result_type == PARAM_RESULT_TYPE_VAR){
+			overall_result &= check_variable_for_definite_assignment(instruction, result->param_result.variable_result);
+		}
 	}
 
 	return overall_result;

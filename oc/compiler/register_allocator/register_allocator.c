@@ -3743,12 +3743,8 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * to traverse them. GP always comes first to avoid any issues with the stack, which is then
 	 * followed by SSE afterwards
 	 */
-	dynamic_array_t general_purpose_lrs_to_save;
-	dynamic_array_t SSE_lrs_to_save;
-	
-	//Wipe them all out first
-	INITIALIZE_NULL_DYNAMIC_ARRAY(general_purpose_lrs_to_save);
-	INITIALIZE_NULL_DYNAMIC_ARRAY(SSE_lrs_to_save);
+	dynamic_array_t general_purpose_lrs_to_save = INITIALIZE_DYNAMIC_ARRAY;
+	dynamic_array_t SSE_lrs_to_save = INITIALIZE_DYNAMIC_ARRAY;
 
 	//Use the helper to calculate LIVE_AFTER up to but not including the actual function call
 	dynamic_array_t live_after = calculate_live_after_for_block(function_call->block_contained_in, function_call);
@@ -4015,12 +4011,8 @@ static instruction_t* insert_caller_saved_logic_for_indirect_call(symtab_functio
 	 * to traverse them. GP always comes first to avoid any issues with the stack, which is then
 	 * followed by SSE afterwards
 	 */
-	dynamic_array_t general_purpose_lrs_to_save;
-	dynamic_array_t SSE_lrs_to_save;
-	
-	//Wipe them all out first
-	INITIALIZE_NULL_DYNAMIC_ARRAY(general_purpose_lrs_to_save);
-	INITIALIZE_NULL_DYNAMIC_ARRAY(SSE_lrs_to_save);
+	dynamic_array_t general_purpose_lrs_to_save = INITIALIZE_DYNAMIC_ARRAY;
+	dynamic_array_t SSE_lrs_to_save = INITIALIZE_DYNAMIC_ARRAY;
 
 	//Maintain pointers to instructions that are our landmarks, especially if we have stack param passing
 	instruction_t* before_stack_param_setup = function_call;
@@ -4536,7 +4528,8 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	 *
 	 * If we see this flag *AND* there is nothing currently on the stack, we will bump the
 	 * amount up by 8 to flag that we need this. If there is something already on the stack
-	 * then we don't need to do this
+	 * then we don't need to do this because our stack aligner for function stacks already
+	 * accounts for this fact
 	 */
 	if(function->requires_initial_alignment == TRUE && local_stack_size == 0){
 		local_stack_size = 8;

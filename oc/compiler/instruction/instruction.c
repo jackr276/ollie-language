@@ -2459,9 +2459,6 @@ static void print_OIR_addressing_mode_expression(FILE* fl, instruction_t* instru
  *
 */
 void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
-	//For later use
-	dynamic_array_t func_params;
-
 	//Go based on what our statatement class is
 	switch(stmt->statement_type){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
@@ -2653,38 +2650,61 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+				if(stmt->optional_storage.call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
-			//No matter what, we'll need to see the "call" keyword, followed
-			//by the function name
+			//No matter what, we'll need to see the "call" keyword, followed by the function name
 			fprintf(fl, "call %s(", stmt->called_function->func_name.string);
 
-			//Grab this out
-			func_params = stmt->parameters;
+			/**
+			 * Function call statements may or may not have been fully lowered into OIR by the
+			 * time we go to print them. The flag inside of the optional storage is what
+			 * keeps track of this for us
+			 */
+			if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-			//If we event have any
-			if(func_params.internal_array != NULL){
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							print_variable(fl, result->param_result.variable_result, PRINTING_VAR_INLINE);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							print_three_addr_constant(fl, result->param_result.constant_result);
+							break;
+					}
+
+					//Comma printing if appropriate
+					if(i != stmt->parameter_results.current_index - 1){
+						fprintf(fl, ", ");
+					}
+				}
+
+			/**
+			 * If we've updated it to the point where it's using the regular parameters
+			 * array we can go through and print that out
+			 */
+			} else {
 				//Now we can go through and print out all of our parameters here
-				for(u_int16_t i = 0; i < func_params.current_index; i++){
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Grab it out
-					three_addr_var_t* func_param = dynamic_array_get_at(&func_params, i);
+					three_addr_var_t* func_param = dynamic_array_get_at(&(stmt->parameters), i);
 					
 					//Print this out here
 					print_variable(fl, func_param, PRINTING_VAR_INLINE);
 
 					//If we need to, print out a comma
-					if(i != func_params.current_index - 1){
+					if(i != stmt->parameters.current_index - 1){
 						fprintf(fl, ", ");
 					}
 				}
@@ -2700,16 +2720,16 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				//Print the variable and assop out
 				print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-				if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+				if(stmt->optional_storage.call_storage.error_assignee != NULL){
 					fprintf(fl, ", ");
-					print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+					print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				}
 
 				fprintf(fl, " <- ");
 
-			} else if(stmt->optional_storage.function_call_storage.error_assignee != NULL){
+			} else if(stmt->optional_storage.call_storage.error_assignee != NULL){
 				fprintf(fl, "void, ");
-				print_variable(fl, stmt->optional_storage.function_call_storage.error_assignee, PRINTING_VAR_INLINE);
+				print_variable(fl, stmt->optional_storage.call_storage.error_assignee, PRINTING_VAR_INLINE);
 				fprintf(fl, " <- ");
 			}
 
@@ -2722,21 +2742,45 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Now we can print the opening parenthesis
 			fprintf(fl, "(");
 
-			//Grab this out
-			func_params = stmt->parameters;
+			/**
+			 * Function call statements may or may not have been fully lowered into OIR by the
+			 * time we go to print them. The flag inside of the optional storage is what
+			 * keeps track of this for us
+			 */
+			if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-			//If we event have any
-			if(func_params.internal_array != NULL){
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							print_variable(fl, result->param_result.variable_result, PRINTING_VAR_INLINE);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							print_three_addr_constant(fl, result->param_result.constant_result);
+							break;
+					}
+
+					//Comma printing if appropriate
+					if(i != stmt->parameter_results.current_index - 1){
+						fprintf(fl, ", ");
+					}
+				}
+
+			/**
+			 * If we've updated it to the point where it's using the regular parameters
+			 * array we can go through and print that out
+			 */
+			} else {
 				//Now we can go through and print out all of our parameters here
-				for(u_int16_t i = 0; i < func_params.current_index; i++){
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Grab it out
-					three_addr_var_t* func_param = dynamic_array_get_at(&func_params, i);
+					three_addr_var_t* func_param = dynamic_array_get_at(&(stmt->parameters), i);
 					
 					//Print this out here
 					print_variable(fl, func_param, PRINTING_VAR_INLINE);
 
 					//If we need to, print out a comma
-					if(i != func_params.current_index - 1){
+					if(i != stmt->parameters.current_index - 1){
 						fprintf(fl, ", ");
 					}
 				}
@@ -5891,6 +5935,32 @@ instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, thre
 
 
 /**
+ * Emit a store statement that only uses the base address
+ */
+instruction_t* emit_constant_store_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This is the base address only mode
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
+	//The first address op is the memory address
+	stmt->operands.oir.address_operand1 = base_address;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->type_storage.memory_read_write_type = memory_write_type;
+
+	//The storee goes inside of the constant slot
+	stmt->operands.oir.constant_operand = storee;
+
+	//And that's it, we'll now just give it back
+	stmt->line_number = line_number;
+	return stmt;
+}
+
+
+/**
  * Emit a store with a base address and an index value(variable offset). This maps
  * to an addressing mode of REGISTERS_ONLY
  */
@@ -6252,7 +6322,9 @@ instruction_t* emit_function_call_instruction(symtab_function_record_t* func_rec
 	stmt->called_function = func_record;
 	stmt->operands.oir.assignee = assigned_to;
 
-	//Just give back the result
+	//Initially we are not fully lowered
+	stmt->optional_storage.call_storage.has_been_lowered = FALSE;
+
 	stmt->line_number = line_number;
 	return stmt;
 }
@@ -6271,6 +6343,9 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 	stmt->operands.oir.operand1 = function_pointer;
 	//Mark the assignee
 	stmt->operands.oir.assignee = assigned_to;
+
+	//Initially we are not fully lowered
+	stmt->optional_storage.call_storage.has_been_lowered = FALSE;
 
 	stmt->line_number = line_number;
 	return stmt;
@@ -6605,82 +6680,6 @@ instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var
 	//Give it back
 	stmt->line_number = line_number;
 	return stmt;
-}
-
-
-/**
- * Duplicate a variable. This is used for copy instructions where we
- * need to maintain separation of variables
- */
-static inline three_addr_var_t* duplicate_variable(three_addr_var_t* variable){
-	//If this is NULL then return NULL
-	if(variable == NULL){
-		return NULL;
-	}
-
-	//Give back a copy of it
-	return emit_var_copy(variable);
-}
-
-
-/**
- * Duplicate a constant. This is used for copy instructions where we need to maintain a
- * separation
- */
-static inline three_addr_const_t* duplicate_constant(three_addr_const_t* constant){
-	//If it's empty just leave
-	if(constant == NULL){
-		return NULL;
-	}
-
-	//Complete duplication
-	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
-
-	//And a full copy over
-	memcpy(copy, constant, sizeof(three_addr_const_t));
-
-	//Give it back
-	return copy;
-}
-
-
-/**
- * Emit a complete copy of whatever was in here previously
- */
-instruction_t* copy_instruction(instruction_t* copied){
-	//First we allocate
-	instruction_t* copy = calloc(1, sizeof(instruction_t));
-
-	//Perform a complete memory copy
-	memcpy(copy, copied, sizeof(instruction_t));
-	
-	//Duplicate the variables
-	copy->operands.oir.assignee = duplicate_variable(copied->operands.oir.assignee);
-	copy->operands.oir.operand1 = duplicate_variable(copied->operands.oir.operand1);
-	copy->operands.oir.operand2 = duplicate_variable(copied->operands.oir.operand2);
-	copy->operands.oir.address_offset = duplicate_constant(copied->operands.oir.address_offset);
-	copy->operands.oir.constant_operand = duplicate_constant(copied->operands.oir.constant_operand);
-	copy->operands.oir.address_operand1 = duplicate_variable(copied->operands.oir.address_operand1);
-	copy->operands.oir.address_operand2 = duplicate_variable(copied->operands.oir.address_operand2);
-	copy->operands.oir.address_multiplier = copied->operands.oir.address_multiplier;
-
-	//If we have function call parameters, emit a copy of them
-	if(copied->parameters.internal_array != NULL){
-		copy->parameters = dynamic_array_alloc();
-	}
-
-	//Run through and copy individually
-	for(int32_t i = 0; i < copied->parameters.current_index; i++){
-		dynamic_array_add(&(copy->parameters), duplicate_variable(dynamic_array_get_at(&(copied->parameters), i)));
-	}
-
-	//IMPORTANT: null out the next/previous for the instruction
-	copy->next_statement = NULL;
-	copy->previous_statement = NULL;
-	copy->block_contained_in = NULL;
-
-	//Give back the copied one
-	return copied;
 }
 
 

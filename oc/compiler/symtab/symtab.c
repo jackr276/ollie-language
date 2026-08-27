@@ -2700,7 +2700,7 @@ void print_type_name(symtab_type_record_t* record){
  */
 dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* namespace_record){
 	//Initially it's null
-	dynamic_string_t namespace_name = NULL_DYNAMIC_STRING;
+	dynamic_string_t namespace_name = INITIALIZE_DYNAMIC_STRING;
 
 	//If this is the default then get out
 	if(namespace_record->is_default == TRUE){

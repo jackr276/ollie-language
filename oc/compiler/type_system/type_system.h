@@ -352,6 +352,13 @@ generic_type_t* create_union_type(dynamic_string_t type_name, u_int32_t line_num
 generic_type_t* create_anonymous_union_type(u_int32_t line_number, mutability_type_t mutability);
 
 /**
+ * Get the type that a given function's elaborative parameter "elaborates"
+ * If someone mistakenly calls this with a function that doesn't have
+ * an elaborative param we return NULL
+ */
+generic_type_t* get_elaborated_type(function_type_t* signature);
+
+/**
  * Is the given binary operation valid for the type that was specificed?
  */
 u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t binary_op, side_type_t side);

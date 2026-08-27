@@ -126,8 +126,6 @@ struct generic_ast_node_t{
 		generic_type_t* error_type;
 		//For any/all error types, we'll hold onto the actual value of the error here
 		u_int32_t error_id;
-		//Storage for the elaborative param count
-		u_int32_t elaborative_param_count;
 		//Store the number of bytes to copy for a copy assignment
 		u_int64_t bytes_to_copy;
 		//The label record that we're storing

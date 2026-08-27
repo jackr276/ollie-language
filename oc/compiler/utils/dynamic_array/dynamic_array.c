@@ -171,8 +171,43 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 
 	//Bump this up by 1
 	array->current_index++;
+}
 
-	//And we're all set
+
+/**
+ * Add an item into the dynamic array *IF* the dynamic array
+ * itself has been allocated. This is intended for a very specific
+ * use in the instruction selector
+ */
+void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr){
+	/**
+	 * The dynamic array has not been allocated so we just move on. If it
+	 * has been then we'll fall into the regular add logic
+	 */
+	if(array->internal_array == NULL){
+		return;
+	}
+
+	//Let's just double check here. Hard fail if this happens
+	if(ptr == NULL){
+		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
+		exit(1);
+	}
+	
+	//Now we'll see if we need to reallocate this
+	if(array->current_index == array->current_max_size){
+		//We'll double the current max size
+		array->current_max_size *= 2;
+
+		//And we'll reallocate the array
+		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+	}
+
+	//Now that we're all set, we can add our element in. Elements are always added in at the very end
+	array->internal_array[array->current_index] = ptr;
+
+	//Bump this up by 1
+	array->current_index++;
 }
 
 
@@ -298,6 +333,21 @@ void dynamic_array_delete(dynamic_array_t* array, void* ptr){
 	dynamic_array_delete_at(array, index);
 
 	//And we're done
+}
+
+
+/**
+ * Get the very last element in the dynamic array. Returns NULL if
+ * the array is empty
+ */
+void* dynamic_array_get_from_back(dynamic_array_t* array){
+	//Already empty
+	if(array->current_index == 0){
+		return NULL;
+	}
+
+	//Grab off of the very end
+	return array->internal_array[array->current_index - 1];
 }
 
 

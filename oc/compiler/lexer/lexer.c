@@ -721,7 +721,7 @@ static u_int8_t generate_tokens(FILE* fl, ollie_token_stream_t* stream, int32_t 
 	//By default we do not ignore
 	lex_item.ignore = FALSE;
 	lex_item.line_num = 0;
-	INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
+	lex_item.lexeme = INITIALIZE_DYNAMIC_STRING;
 
 	/**
 	 * We will need this numeric lexeme for any number we encounter.
@@ -758,7 +758,7 @@ static u_int8_t generate_tokens(FILE* fl, ollie_token_stream_t* stream, int32_t 
 				lex_item.constant_values.signed_long_value = 0;
 				lex_item.tok = LEXER_ERROR;
 				lex_item.line_num = 0;
-				INITIALIZE_NULL_DYNAMIC_STRING(lex_item.lexeme);
+				lex_item.lexeme = INITIALIZE_DYNAMIC_STRING;
 
 				//If we see whitespace we just get out
 				if(is_whitespace(ch, &line_number) == TRUE){
