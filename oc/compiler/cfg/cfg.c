@@ -6856,11 +6856,11 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 	 */
 	switch(results_package.type){
 		case CFG_RESULT_TYPE_CONST:
-			add_parameter_result_to_results_array(results, results_package.result_value.result_const, PARAM_RESULT_TYPE_CONST);
+			add_parameter_result_to_results_array(results, results_package.result_value.result_const, parameter_node->parameter_variable, PARAM_RESULT_TYPE_CONST);
 			break;
 
 		case CFG_RESULT_TYPE_VAR:
-			add_parameter_result_to_results_array(results, results_package.result_value.result_var, PARAM_RESULT_TYPE_VAR);
+			add_parameter_result_to_results_array(results, results_package.result_value.result_var, parameter_node->parameter_variable, PARAM_RESULT_TYPE_VAR);
 			break;
 	}
 
@@ -6900,11 +6900,11 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		 */
 		switch(expression_results.type){
 			case CFG_RESULT_TYPE_CONST:
-				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_CONST);
+				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, elaborative_param_node->parameter_variable, PARAM_RESULT_TYPE_CONST);
 				break;
 
 			case CFG_RESULT_TYPE_VAR:
-				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_VAR);
+				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, elaborative_param_node->parameter_variable, PARAM_RESULT_TYPE_VAR);
 				break;
 		}
 
@@ -13153,7 +13153,6 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	for(int32_t i = 0; i < parameter_results->current_index; i++){
 		//Extract the result at this given index
 		parameter_result_t* passed_param_result = get_result_at_index(parameter_results, i);
-
 	}
 
 	for(int32_t i = 0; i < parameters->current_index; i++){

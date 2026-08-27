@@ -2230,7 +2230,11 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					propogate_no_dereference_required_flag(current_param);
 				}
 
-				//TODO PARAM VARIABLE
+				/**
+				 * We know that this is valid now so we can stash the corresponding function
+				 * parameter variable(if there is one) onto this node
+				 */
+				current_param->parameter_variable = associated_parameter_variable;
 
 				//We can now safely add this into the function call node as a child. In the function call node, 
 				//the parameters will appear in order from left to right
@@ -2250,7 +2254,11 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					return print_and_return_error("Invalid elaborative parameter detected", parser_line_num);
 				}
 
-				//TODO ADD ASSOCIATION
+				/**
+				 * We know that this is valid now so we can stash the corresponding function
+				 * parameter variable(if there is one) onto this node
+				 */
+				current_param->parameter_variable = associated_parameter_variable;
 
 				//This is a child
 				add_child_node(function_call_node, elaborative_param_node);
@@ -2287,11 +2295,18 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//Extract it - let's see if it is elaborative
 			generic_type_t* final_param_type = dynamic_array_get_at(&(function_signature->function_parameters), function_signature->function_parameters.current_index - 1);
 
-			//TODO FIX THIS ONE ONCE WE'RE DONE!!!!
-
 			//If it is then this is ok, we will handle accordingly
 			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
 				generic_ast_node_t* empty_elaborative_param = create_empty_elaborative_param(final_param_type);
+
+				//Grab the symtab variable for bookkeeping
+				symtab_variable_record_t* final_param = NULL;
+				if(function_record != NULL){
+					final_param = dynamic_array_get_at(&(function_record->function_parameters), function_record->function_parameters.current_index - 1);
+				}
+
+				//Store the parameter variable if we got one
+				empty_elaborative_param->parameter_variable = final_param;
 
 				//Add it in and bump the param count so we pass the next check
 				add_child_node(function_call_node, empty_elaborative_param);
