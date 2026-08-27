@@ -6856,11 +6856,11 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 	 */
 	switch(results_package.type){
 		case CFG_RESULT_TYPE_CONST:
-			add_parameter_result_to_results_array(results, results_package.result_value.result_const, parameter_node->parameter_variable, PARAM_RESULT_TYPE_CONST);
+			add_parameter_result_to_results_array(results, results_package.result_value.result_const, PARAM_RESULT_TYPE_CONST);
 			break;
 
 		case CFG_RESULT_TYPE_VAR:
-			add_parameter_result_to_results_array(results, results_package.result_value.result_var, parameter_node->parameter_variable, PARAM_RESULT_TYPE_VAR);
+			add_parameter_result_to_results_array(results, results_package.result_value.result_var, PARAM_RESULT_TYPE_VAR);
 			break;
 	}
 
@@ -6900,11 +6900,11 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 		 */
 		switch(expression_results.type){
 			case CFG_RESULT_TYPE_CONST:
-				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, elaborative_param_node->parameter_variable, PARAM_RESULT_TYPE_CONST);
+				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_CONST);
 				break;
 
 			case CFG_RESULT_TYPE_VAR:
-				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, elaborative_param_node->parameter_variable, PARAM_RESULT_TYPE_VAR);
+				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_VAR);
 				break;
 		}
 
@@ -13147,12 +13147,20 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * actual symtab variables in the inlined function. This step bridges the
 	 * gap between what we see when we call a function and what we have here
 	 *
+	 * We have a one-to-one mapping now. Once we implement return by copy, stack param
+	 * and elaborative it won't be this easy
+	 *
 	 * NOTE: this is not in a working state for pass by copy or stack parameters. That is going
 	 * to be fully implemented later on
 	 */
-	for(int32_t i = 0; i < parameter_results->current_index; i++){
-		//Extract the result at this given index
-		parameter_result_t* passed_param_result = get_result_at_index(parameter_results, i);
+	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
+		//Extract the parameter and emit a dummy variable that we'll use for the mapping
+		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
+		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
+
+
+		//TODO FINISH UP NOT DONE
+
 	}
 
 	/*

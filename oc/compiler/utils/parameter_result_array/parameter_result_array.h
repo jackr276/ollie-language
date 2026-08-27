@@ -45,14 +45,6 @@ struct parameter_result_t {
 		three_addr_const_t* constant_result;
 		three_addr_var_t* variable_result;
 	} param_result;
-
-	/**
-	 * For both constant and variable types, we are going to
-	 * want to store the symtab variable in the actual function signature
-	 * itself that this relates to. This makes cross referencing
-	 * easier later on in steps like inlining
-	 */
-	symtab_variable_record_t* associated_parameter_variable;
 };
 
 
@@ -86,7 +78,7 @@ parameter_results_array_t parameter_results_array_alloc(int32_t initial_size);
  * type here. The pointer is generic for this reason, we never need to actually access this memory, just
  * store the pointer
  */
-void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, symtab_variable_record_t* related_parameter_variable, parameter_result_type_t result_type);
+void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type);
 
 
 /**

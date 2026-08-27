@@ -113,8 +113,6 @@ struct generic_ast_node_t{
 	generic_type_t* inferred_type;
 	//Variable/jump label holder
 	symtab_variable_record_t* variable;
-	//Function parmaeter variable that this corresponds to
-	symtab_variable_record_t* parameter_variable;
 	//The symtab function record
 	symtab_function_record_t* func_record;
 	union{

@@ -2170,17 +2170,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), params_seen - 1);
 
 			/**
-			 * If we have a direct function call, then we will be able to draw
-			 * the associated parameter variable out of the function's symtab
-			 * record. If it's an indirect call then we won't bother. This is
-			 * mainly for use in inlining
-			 */
-			symtab_variable_record_t* associated_parameter_variable = NULL;
-			if(function_record != NULL){
-				associated_parameter_variable = dynamic_array_get_at(&(function_record->function_parameters), params_seen - 1);
-			}
-
-			/**
 			 * For an elaborative param, we need to sort of pause here and accumulate.
 			 * Elaborative params can have 0 to many things inside of them so inside
 			 * of a function call like this, we need to account for that
@@ -2231,12 +2220,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					propogate_no_dereference_required_flag(current_param);
 				}
 
-				/**
-				 * We know that this is valid now so we can stash the corresponding function
-				 * parameter variable(if there is one) onto this node
-				 */
-				current_param->parameter_variable = associated_parameter_variable;
-
 				//We can now safely add this into the function call node as a child. In the function call node, 
 				//the parameters will appear in order from left to right
 				add_child_node(function_call_node, current_param);
@@ -2254,12 +2237,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				if(elaborative_param_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 					return print_and_return_error("Invalid elaborative parameter detected", parser_line_num);
 				}
-
-				/**
-				 * We know that this is valid now so we can stash the corresponding function
-				 * parameter variable(if there is one) onto this node
-				 */
-				elaborative_param_node->parameter_variable = associated_parameter_variable;
 
 				//This is a child
 				add_child_node(function_call_node, elaborative_param_node);
@@ -2299,16 +2276,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			//If it is then this is ok, we will handle accordingly
 			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
 				generic_ast_node_t* empty_elaborative_param = create_empty_elaborative_param(final_param_type);
-
-				//Grab the symtab variable for bookkeeping
-				symtab_variable_record_t* final_param = NULL;
-				if(function_record != NULL){
-					print_function_record(function_record);
-					final_param = dynamic_array_get_from_back(&(function_record->function_parameters));
-				}
-
-				//Store the parameter variable if we got one
-				empty_elaborative_param->parameter_variable = final_param;
 
 				//Add it in and bump the param count so we pass the next check
 				add_child_node(function_call_node, empty_elaborative_param);
