@@ -1577,13 +1577,16 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
  * call stack management. One thing that we do not have to do is anything with error handling. That has
  * all been handled for us on the front end
  *
- * TODO DOC MORE
- *
- * NOTE: this function will always return a pointer to the next statement after the very last one in the set
- * of statements that it has created/modified
- *
  * This overall lowerer has been split up into as atomic units of work as possible for tidyness, which is why
- * there are so many calls out to helper methods for each step
+ * there are so many calls out to helper methods for each step. There are 5 main steps in total, they
+ * are as follows:
+ * 	1.) Create the function call stack region if appropriate
+ * 	2.) Handle a return by copy parameter if one exists
+ * 	3.) Handle any/all regular parameters(stack passed is included)
+ * 	4.) Handle the elaborative parameter if one exists
+ * 	5.) Allocate the function call stack region. If needed, adjust any memory addresses
+ * 		used in the parameter storage to account for the extra offset made by said stack
+ * 		allocation
  */
 static void lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
 	//Extract the block
@@ -1645,7 +1648,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	}
 
 	/**
-	 * STEP 2: if we have a return by copy paremeter, we will actually
+	 * Step 2: if we have a return by copy paremeter, we will actually
 	 * maintain that parameter inside of the callee's stack frame and
 	 * just pass a reference to its memory address in as the very first
 	 * GP parameter(in %rdi). As such, we need to handle this before we
@@ -1657,7 +1660,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	}
 
 	/**
-	 * Step 2: process the non-elaborative parameters at this stage. We will run
+	 * Step 3: process the non-elaborative parameters at this stage. We will run
 	 * through whatever our parameter result index is at until we hit the end of
 	 * the non-elaborative parameter count
 	 */
@@ -1691,7 +1694,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	}
 
 	/**
-	 * If we have an elaborative parameter, it will *always* come after all of the
+	 * Step 4: If we have an elaborative parameter, it will *always* come after all of the
 	 * regular ones. Note that we cannot just rely on whether or not we still
 	 * have parameters to process elaborative stack params have a special hidden
 	 * "paramcount" that always needs to be populated even if there are 0 parameters
@@ -1727,7 +1730,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	}
 
 	/**
-	 * Step 4: Let's now handle everything that we need to do with the stack(if we're touching it at all)
+	 * Step 5: Let's now handle everything that we need to do with the stack(if we're touching it at all)
 	 *
 	 * If we have stack parameters, then we need to emit an allocation and deallocation statement. The
 	 * allocation has to go before all of the parameter assignments, and the deallocation must go immediately
@@ -1788,10 +1791,6 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 			//Get the variable and add in the base adjustment
 			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
 			memory_address->memory_address_base_adjustment = stack_passed_param_region->total_size;
-
-			//TODO WE NEED TO TEST USING MEM my_region after the copy here - I want to make
-			//sure that that base address adjustment isn't sticking around(it's not but we need
-			//a test to be 100% sure)
 		}
 	}
 
