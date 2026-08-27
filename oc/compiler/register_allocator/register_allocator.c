@@ -4528,7 +4528,8 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 	 *
 	 * If we see this flag *AND* there is nothing currently on the stack, we will bump the
 	 * amount up by 8 to flag that we need this. If there is something already on the stack
-	 * then we don't need to do this
+	 * then we don't need to do this because our stack aligner for function stacks already
+	 * accounts for this fact
 	 */
 	if(function->requires_initial_alignment == TRUE && local_stack_size == 0){
 		local_stack_size = 8;

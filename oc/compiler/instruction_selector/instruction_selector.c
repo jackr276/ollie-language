@@ -1284,12 +1284,6 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 	 */
 	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, parameter_type->type_size, call_statement->line_number);
 	insert_instruction_before_given(copy_instruction, call_statement);
-
-	/**
-	 * This function performs a copy assignment, so we need to make sure everything here 
-	 * is going to be aligned so that we can use x86 aligned moves
-	 */
-	current_block->function_defined_in->requires_initial_alignment = TRUE;
 }
 
 
@@ -2543,6 +2537,16 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
  *	 that we maintain all of the existing logic around memory address variables
  */
 static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window, instruction_t* memory_copy_statement){
+	/**
+	 * Since this function performs a copy assignment, we'll need to make sure that everything here 
+	 * is going to be aligned so that we can use x86 aligned moves. The initial alignment
+	 * flag will tell us that we need to account for the 8 bytes that a call offsets
+	 * on the stack frame. We wait to set this flag until we get here in the instruction
+	 * simplifier for simplicity, because we know that every memory copy must flow through here
+	 */
+	basic_block_t* block = memory_copy_statement->block_contained_in;
+	block->function_defined_in->requires_initial_alignment = TRUE;
+
 	/**
 	 * For memory copy statements, we copy *from* address operand 2 *to* address operand 1
 	 */

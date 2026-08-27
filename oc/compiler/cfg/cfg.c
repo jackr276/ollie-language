@@ -6935,12 +6935,6 @@ static inline void handle_parameter_storage(basic_block_t* basic_block, function
 					*first_assignment_instruction = memory_copy;
 				}
 
-				/**
-				 * This function performs a copy assignment, so we need to make sure everything here 
-				 * is going to be aligned
-				 */
-				current_function->requires_initial_alignment = TRUE;
-
 				break;
 
 			/**
@@ -7192,12 +7186,6 @@ static inline void handle_elaborative_stack_param_storage(basic_block_t* basic_b
 
 						//Add this into the block
 						add_statement(basic_block, memory_copy);
-
-						/**
-						 * This function performs a copy assignment, so we need to make sure everything here 
-						 * is going to be aligned
-						 */
-						current_function->requires_initial_alignment = TRUE;
 						
 						break;
 
