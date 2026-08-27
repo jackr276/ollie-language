@@ -1550,11 +1550,26 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 			}
 		}
 
+	/**
+	 * Otherwise we're going to need a full memory copy into the elaborative parameter region and not just
+	 * a simple store. This behaves almost identically to regular pass by copy parameters
+	 */
 	} else {
+		//Allocate a fresh region for this and get a variable for it
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
 
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		//Unpack the parameter result - it will always be a variable
+		three_addr_var_t* result_var = result->param_result.variable_result;
 
+		//Bookkeeping: stash this if it's a memory address variable
+		if(is_memory_address_variable(result_var) == TRUE){
+			dynamic_array_add(memory_addresses_to_adjust, result_var);
+		}
+
+		//Create the memory copy and throw it in before the call statement
+		instruction_t* memory_copy = emit_memory_copy_instruction(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
+		insert_instruction_before_given(memory_copy, call_statement);
 	}
 }
 
