@@ -1625,6 +1625,23 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * "paramcount" that always needs to be populated even if there are 0 parameters
 	 */
 	if(called_function_signature->contains_elaborative_stack_param == TRUE){
+		//The number is however many results we have left over. This is our "paramcount"
+		int32_t elaborative_paramcount = call_statement->parameter_results.current_index - parameter_result_index;
+		three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(elaborative_paramcount, i32);
+
+		/**
+		 * First we need to store the paramcount onto the stack. The paramcount is a 4 byte signed integer
+		 * that stores how many elaborative params there are. Even if it's 0 we must store it
+		 */
+		stack_region_t* paramcount_region = create_stack_region_for_type(stack_passed_param_region, i32);
+		three_addr_var_t* memory_var = emit_memory_address_temp_var(i32, paramcount_region);
+
+		//Emit a store to get this into that region
+		instruction_t* store_paramcount = emit_constant_store_base_address_only(memory_var, paramcount_constant, i32, call_statement->line_number);
+		insert_instruction_before_given(store_paramcount, call_statement);
+
+
+
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
