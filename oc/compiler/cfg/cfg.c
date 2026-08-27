@@ -13074,12 +13074,15 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 
 	/**
-	 * We currently haven't done this yet
+	 * We currently haven't done this yet but will be doing it in the future
 	 */
 	if(cloning_signature->contains_elaborative_stack_param || cloning_signature->contains_stack_params || cloning_signature->returns_by_copy){
 		printf("Function inlining with stack usage is currently unimplemented\n");
 		exit(0);
 	}
+
+	printf("Function inlining has not been updated to support the new parameter result types\n");
+	exit(0);
 
 	/**
 	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
@@ -13127,9 +13130,12 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	}
 
 	/**
-	 * Step 2: we will need to clone our inlined function's stack data area
+	 * Step 2: we will need to clone our inlined function's local stack data area
 	 * into the caller. Doing this now allows the instruction cloning step
 	 * to just use mappings between stack regions when they come up
+	 *
+	 * NOTE: this is not to be confused with any kind of parameter passing stack. It
+	 * is the local stack for this function for locally stack allocated items
 	 */
 	clone_stack_data_area_into_given(&(current_function->local_stack), &(function_to_clone->local_stack));
 
@@ -13249,12 +13255,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	 * Step 2: Now that we have our split we need to get a complete, 100% unique clone of the
 	 * function that we are inlining. While we're at it, we'll save the function entry
 	 * and function exit blocks from the copy 
-	 *
-	 * TODO THIS IS NO LONGER CORRECT
 	 */
-	printf("Function inlining has not been updated to support the new parameter result types\n");
-	exit(0);
-
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
