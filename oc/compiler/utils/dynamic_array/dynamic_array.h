@@ -118,6 +118,12 @@ void* dynamic_array_delete_at(dynamic_array_t* array, int32_t index);
 void dynamic_array_delete(dynamic_array_t* array, void* ptr);
 
 /**
+ * Get the very last element in the dynamic array. Returns NULL if
+ * the array is empty
+ */
+void* dynamic_array_get_from_back(dynamic_array_t* array);
+
+/**
  * Remove an element from the back of the dynamic array - O(1) removal
  */
 void* dynamic_array_delete_from_back(dynamic_array_t* array);

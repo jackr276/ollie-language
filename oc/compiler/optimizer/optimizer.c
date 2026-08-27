@@ -1494,11 +1494,11 @@ static instruction_t* clone_instruction(instruction_t* cloned, variable_map_t* v
 
 			switch(old_result->result_type){
 				case PARAM_RESULT_TYPE_VAR:
-					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.variable_result, PARAM_RESULT_TYPE_VAR);
+					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.variable_result, old_result->associated_parameter_variable, PARAM_RESULT_TYPE_VAR);
 					break;
 
 				case PARAM_RESULT_TYPE_CONST:
-					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.constant_result, PARAM_RESULT_TYPE_CONST);
+					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.constant_result, old_result->associated_parameter_variable, PARAM_RESULT_TYPE_CONST);
 					break;
 			}
 		}

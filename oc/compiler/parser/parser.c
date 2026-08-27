@@ -2149,14 +2149,15 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * the R_PAREN
 	 */
 	if(function_signature->function_parameters.current_index > 0){
-		//A node to hold our current parameter
-		generic_ast_node_t* current_param;
 
 		//The number of parameters that we've seen
 		int32_t params_seen = 0;
 
 		//So long as we don't see the R_PAREN we aren't done
 		do {
+			//A node to hold our current parameter, NULLED out for safety
+			generic_ast_node_t* current_param = NULL;
+
 			//Record that we saw one more parameter
 			params_seen++;
 
@@ -2258,7 +2259,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				 * We know that this is valid now so we can stash the corresponding function
 				 * parameter variable(if there is one) onto this node
 				 */
-				current_param->parameter_variable = associated_parameter_variable;
+				elaborative_param_node->parameter_variable = associated_parameter_variable;
 
 				//This is a child
 				add_child_node(function_call_node, elaborative_param_node);
@@ -2293,7 +2294,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 */
 		if(params_seen == function_signature->function_parameters.current_index - 1){
 			//Extract it - let's see if it is elaborative
-			generic_type_t* final_param_type = dynamic_array_get_at(&(function_signature->function_parameters), function_signature->function_parameters.current_index - 1);
+			generic_type_t* final_param_type = dynamic_array_get_from_back(&(function_signature->function_parameters));
 
 			//If it is then this is ok, we will handle accordingly
 			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
@@ -2302,7 +2303,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				//Grab the symtab variable for bookkeeping
 				symtab_variable_record_t* final_param = NULL;
 				if(function_record != NULL){
-					final_param = dynamic_array_get_at(&(function_record->function_parameters), function_record->function_parameters.current_index - 1);
+					print_function_record(function_record);
+					final_param = dynamic_array_get_from_back(&(function_record->function_parameters));
 				}
 
 				//Store the parameter variable if we got one

@@ -13155,6 +13155,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		parameter_result_t* passed_param_result = get_result_at_index(parameter_results, i);
 	}
 
+	/*
 	for(int32_t i = 0; i < parameters->current_index; i++){
 		//Extract the parameter
 		three_addr_var_t* passed_parameter = dynamic_array_get_at(parameters, i);
@@ -13166,6 +13167,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		instruction_t* parameter_assignment = emit_assignment_instruction(clone_variable(emit_var_no_alias(parameter_variable), &variable_map), passed_parameter, function_to_clone->line_number);
 		add_statement(*function_entry, parameter_assignment);
 	}
+	*/
 
 	/**
 	 * Step 4: Now that we've gone through and created all of the new blocks, we need to
