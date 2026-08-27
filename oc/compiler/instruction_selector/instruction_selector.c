@@ -1499,6 +1499,14 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 }
 
 
+static inline void store_elaborative_parameter_member(instruction_t* call_statement, generic_type_t* parameter_type, 
+													  parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
+
+	//TODO SPECIAL ARRAY HANDLING
+
+}
+
+
 /**
  * Lower a function call statement into the lowest level of OIR that we have before we get to the
  * acutal instruction selection. This includes adding parameter copying, return by copy handling and
@@ -1640,6 +1648,15 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		instruction_t* store_paramcount = emit_constant_store_base_address_only(memory_var, paramcount_constant, i32, call_statement->line_number);
 		insert_instruction_before_given(store_paramcount, call_statement);
 
+		/**
+		 * Now run through the remaining parameter results and store them to the stack region
+		 * after we've already added the paramcount
+		 */
+		for(; parameter_result_index < call_statement->parameter_results.current_index; parameter_result_index++){
+			//Pass it along to the helper to process
+			parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
+			store_elaborative_parameter_member(call_statement, TODO, result, memory_addresses_to_adjust);
+		}
 
 
 		printf("TODO NOT IMPLEMENTED\n");
