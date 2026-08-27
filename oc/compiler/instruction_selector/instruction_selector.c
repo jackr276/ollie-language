@@ -1584,13 +1584,6 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
 
-	//TODO NOT YET DONE
-	//NEEDS IMPLEMENTATION
-	if(called_function_signature->contains_elaborative_stack_param == TRUE){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
-	}
-
 	/**
 	 * Step 2: process the non-elaborative parameters at this stage. We will run
 	 * through whatever our parameter result index is at until we hit the end of
@@ -1625,7 +1618,16 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		}
 	}
 
-	//TODO ELABORATIVE
+	/**
+	 * If we have an elaborative parameter, it will *always* come after all of the
+	 * regular ones. Note that we cannot just rely on whether or not we still
+	 * have parameters to process elaborative stack params have a special hidden
+	 * "paramcount" that always needs to be populated even if there are 0 parameters
+	 */
+	if(called_function_signature->contains_elaborative_stack_param == TRUE){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
 
 	/**
 	 * Step 4: Let's now handle everything that we need to do with the stack(if we're touching it at all)
@@ -8129,13 +8131,6 @@ static void mark(dynamic_array_t* function_blocks){
 
 			//If we have a function call, everything in the function call is important
 			case THREE_ADDR_CODE_FUNC_CALL:
-				//TODO TESTER DELETEME
-				if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
-					printf("ERROR NOT FULLY LOWERED\n");
-					exit(1);
-				}
-
-
 				//Grab the parameters out
 				params = stmt->parameters;
 
@@ -8152,13 +8147,6 @@ static void mark(dynamic_array_t* function_blocks){
 			 * the memory address of the function that we're calling
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
-				//TODO TESTER DELETEME
-				if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
-					printf("ERROR NOT FULLY LOWERED\n");
-					exit(1);
-				}
-
-
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
