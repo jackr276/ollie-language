@@ -13059,15 +13059,18 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
  *
+ * TODO PARAM HANDLING STRATEGY
+ *
  *
  * As part of this cloning, we have two parameters that take in a simulated return and raise variable if appropriate.
  * These variables are necessary for us to simulate the process of returning/raising without actually using the "ret"
  * instruction because that won't work when we inline
  *
- * We also pass in a list of all of our parameters from the given function call so that we can manage them
+ * We also pass in a list of all of our parameter results from the given function call so that we can manage them
  */
 static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit,
-											symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable, dynamic_array_t* parameters){
+												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
+											   	parameter_results_array_t* parameter_results){
 	//Initialize a brand new variable mapping for our uses
 	variable_map_t variable_map = variable_map_alloc();
 	//Grab this for ease of use
@@ -13143,7 +13146,15 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * Step 3: Run through all of our parameters and get them assigned over to their
 	 * actual symtab variables in the inlined function. This step bridges the
 	 * gap between what we see when we call a function and what we have here
+	 *
+	 * NOTE: this is not in a working state for pass by copy or stack parameters. That is going
+	 * to be fully implemented later on
 	 */
+	for(int32_t i = 0; i < parameter_results->current_index; i++){
+		//Extract the result at this given index
+		parameter_result_t* passed_param_result = get_result_at_index(parameter_results, i);
+
+	}
 
 	for(int32_t i = 0; i < parameters->current_index; i++){
 		//Extract the parameter
@@ -13259,7 +13270,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameters));
+	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameter_results));
 
 	/**
 	 * We no longer need this statement at all so remove it. It still

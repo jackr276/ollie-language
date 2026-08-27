@@ -46,6 +46,13 @@ struct parameter_result_t {
 		three_addr_var_t* variable_result;
 	} param_result;
 
+	/**
+	 * For both constant and variable types, we are going to
+	 * want to store the symtab variable in the actual function signature
+	 * itself that this relates to. This makes cross referencing
+	 * easier later on in steps like inlining
+	 */
+	symtab_variable_record_t* associated_parameter_variable;
 };
 
 
