@@ -13059,9 +13059,6 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
  *
- * TODO PARAM HANDLING STRATEGY
- *
- *
  * As part of this cloning, we have two parameters that take in a simulated return and raise variable if appropriate.
  * These variables are necessary for us to simulate the process of returning/raising without actually using the "ret"
  * instruction because that won't work when we inline
@@ -13083,9 +13080,6 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		printf("Function inlining with stack usage is currently unimplemented\n");
 		exit(0);
 	}
-
-	printf("Function inlining has not been updated to support the new parameter result types\n");
-	exit(0);
 
 	/**
 	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
@@ -13158,24 +13152,25 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
 		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
 
+		//We'll now leverage the copy system to get the equivalent of the parameter
+		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map);
 
-		//TODO FINISH UP NOT DONE
+		//Get the result to process - should be a one-to-one mapping for now
+		parameter_result_t* result = get_result_at_index(parameter_results, i);
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR:{
+				instruction_t* assignment = emit_assignment_instruction(parameter_assignee_clone, result->param_result.variable_result, function_to_clone->line_number);
+				add_statement(*function_entry, assignment);
+				break;
+			}
 
+			case PARAM_RESULT_TYPE_CONST:{
+				instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee_clone, result->param_result.constant_result, function_to_clone->line_number);
+				add_statement(*function_entry, assignment);
+				break;
+			}
+		}
 	}
-
-	/*
-	for(int32_t i = 0; i < parameters->current_index; i++){
-		//Extract the parameter
-		three_addr_var_t* passed_parameter = dynamic_array_get_at(parameters, i);
-
-		//Get the actual symtab variable that it maps to
-		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
-
-		//Emit a copy assignment from the given parameter over to this variable
-		instruction_t* parameter_assignment = emit_assignment_instruction(clone_variable(emit_var_no_alias(parameter_variable), &variable_map), passed_parameter, function_to_clone->line_number);
-		add_statement(*function_entry, parameter_assignment);
-	}
-	*/
 
 	/**
 	 * Step 4: Now that we've gone through and created all of the new blocks, we need to
