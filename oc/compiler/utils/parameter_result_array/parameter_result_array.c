@@ -54,7 +54,8 @@ parameter_results_array_t parameter_results_array_alloc(int32_t initial_size){
  * type here. The pointer is generic for this reason, we never need to actually access this memory, just
  * store the pointer
  */
-void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type){
+void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, symtab_variable_record_t* related_parameter_variable,
+										   parameter_result_type_t result_type){
 	//Dynamic resize ability
 	if(array->current_index == array->max_index){
 		//Double it
@@ -79,6 +80,12 @@ void add_parameter_result_to_results_array(parameter_results_array_t* array, voi
 			array->parameter_results[array->current_index].param_result.variable_result = result;
 			break;
 	}
+
+	/**
+	 * For later ease of retrieval - we'll need to store the parameter varible in the symtab
+	 * function record's parameter list that this belongs to
+	 */
+	array->parameter_results[array->current_index].associated_parameter_variable = related_parameter_variable;
 
 	//Current index needs to be upped for the next go around
 	(array->current_index)++;

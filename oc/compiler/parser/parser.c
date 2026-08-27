@@ -1597,9 +1597,6 @@ static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t*
 	//Allocate it
 	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, SIDE_TYPE_RIGHT);
 
-	//Set the count to be 0
-	elaborative_param_node->optional_storage.elaborative_param_count = 0;
-
 	//Store the type here as well
 	elaborative_param_node->inferred_type = elaborative_param_type; 
 
@@ -1718,9 +1715,6 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 			}
 
 		} while(TRUE);
-
-		//Store the final count in here - is needed in the CFG
-		elaborative_param_node->optional_storage.elaborative_param_count = elaborated_param_count;
 
 	/**
 	 * Otherwise we have an entirely empty elaborative param here. We'll just use the helper
@@ -2159,21 +2153,31 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		generic_ast_node_t* current_param;
 
 		//The number of parameters that we've seen
-		u_int8_t num_params = 0;
+		int32_t params_seen = 0;
 
 		//So long as we don't see the R_PAREN we aren't done
 		do {
 			//Record that we saw one more parameter
-			num_params++;
+			params_seen++;
 
-			//We'll let the error below handle this, we just don't
-			//want to segfault
-			if(num_params > function_signature->function_parameters.current_index){
+			//We'll let the error below handle this, we just don't want to segfault
+			if(params_seen > function_signature->function_parameters.current_index){
 				break;
 			}
 
 			//Grab the current function param
-			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), num_params - 1);
+			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), params_seen - 1);
+
+			/**
+			 * If we have a direct function call, then we will be able to draw
+			 * the associated parameter variable out of the function's symtab
+			 * record. If it's an indirect call then we won't bother. This is
+			 * mainly for use in inlining
+			 */
+			symtab_variable_record_t* associated_parameter_variable = NULL;
+			if(function_record != NULL){
+				associated_parameter_variable = dynamic_array_get_at(&(function_record->function_parameters), params_seen - 1);
+			}
 
 			/**
 			 * For an elaborative param, we need to sort of pause here and accumulate.
@@ -2202,7 +2206,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 							function_name.string, 
 							(param_type->mutability == MUTABLE ? "mut ": ""),
-							param_type->type_name.string, num_params,
+							param_type->type_name.string, params_seen,
 							//Print the mut keyword if we need it
 							(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
 							current_param->inferred_type->type_name.string, function_type->type_name.string);
@@ -2226,6 +2230,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					propogate_no_dereference_required_flag(current_param);
 				}
 
+				//TODO PARAM VARIABLE
+
 				//We can now safely add this into the function call node as a child. In the function call node, 
 				//the parameters will appear in order from left to right
 				add_child_node(function_call_node, current_param);
@@ -2243,6 +2249,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 				if(elaborative_param_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 					return print_and_return_error("Invalid elaborative parameter detected", parser_line_num);
 				}
+
+				//TODO ADD ASSOCIATION
 
 				//This is a child
 				add_child_node(function_call_node, elaborative_param_node);
@@ -2275,9 +2283,11 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * empty elaborative param. We still have to handle this, so now is
 		 * the time to pick up on that
 		 */
-		if(num_params == function_signature->function_parameters.current_index - 1){
+		if(params_seen == function_signature->function_parameters.current_index - 1){
 			//Extract it - let's see if it is elaborative
 			generic_type_t* final_param_type = dynamic_array_get_at(&(function_signature->function_parameters), function_signature->function_parameters.current_index - 1);
+
+			//TODO FIX THIS ONE ONCE WE'RE DONE!!!!
 
 			//If it is then this is ok, we will handle accordingly
 			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
@@ -2285,16 +2295,16 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 				//Add it in and bump the param count so we pass the next check
 				add_child_node(function_call_node, empty_elaborative_param);
-				num_params++;
+				params_seen++;
 			}
 		}
 
 		/**
 		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
 		 */
-		if(num_params != function_signature->function_parameters.current_index){
+		if(params_seen != function_signature->function_parameters.current_index){
 			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-			  function_name.string, function_signature->function_parameters.current_index, num_params, function_type->type_name.string);
+			  function_name.string, function_signature->function_parameters.current_index, params_seen, function_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			//Error out

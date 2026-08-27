@@ -86,7 +86,7 @@ parameter_results_array_t parameter_results_array_alloc(int32_t initial_size);
  * type here. The pointer is generic for this reason, we never need to actually access this memory, just
  * store the pointer
  */
-void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type);
+void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, symtab_variable_record_t* related_parameter_variable, parameter_result_type_t result_type);
 
 
 /**
