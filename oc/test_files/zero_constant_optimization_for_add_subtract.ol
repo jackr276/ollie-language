@@ -11,6 +11,7 @@ let pub global:mut i32 = 0;
 
 //Serves as a way to see the number of calls
 fn inc_and_get_global() -> i32{
+	//TODO THIS IS A BUG - ITS NOT GENERATING PROPER OIR
 	global++;
 
 	ret global;
