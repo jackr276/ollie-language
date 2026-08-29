@@ -5189,41 +5189,52 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		}
 
 		/**
-		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
-		 * optimization by adding them together right now and just giving back a constant node. The node that we give back
-		 * will always
+		 * 3 cases here that we're looking for: either one or the
+		 * other is a constant or they are both constant in which
+		 * case we'll do the addition here
 		 */
-		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
-			//Go based on the token
-			switch(op.tok){
-				//Add the two constants
-				case PLUS:
+		if(temp_holder_is_constant == TRUE){
+			/**
+			 * Case 1: they're both constants, the user is just trying to add/subtract two constants together, then we can do a preemptive
+			 * optimization by adding them together right now and just giving back a constant node. The node that we give back
+			 * will always
+			 */
+			if(right_child_is_constant == TRUE){
+				if(op.tok == PLUS){
 					//Add them, result is in temp-holder
 					add_constant_nodes(temp_holder, right_child);
-					break;
-
-				case MINUS:
+				} else {
 					//Subtract them, result is in temp-holder
 					subtract_constant_nodes(temp_holder, right_child);
-					break;
+				}
 
-				//Unreachable
-				default:
-					break;
+				//The right child is now useless, so we can scrap it. The temp holder is the sub-tree-root
+				sub_tree_root = temp_holder;
+
+				//Update the type appropriately
+				sub_tree_root->inferred_type = return_type;
+
+				//By the end of this, we always have a proper subtree with the operator as the root, being held in 
+				//"sub-tree root". We'll now refresh the token to keep looking
+				lookahead = get_next_token(token_stream, &parser_line_num);
+				
+				//Skip forward
+				continue;
 			}
 
-			//The right child is now useless, so we can scrap it. The temp holder is the sub-tree-root
-			sub_tree_root = temp_holder;
+			/**
+			 * Case 2: just the temp holder is constant. In the additive expression case,
+			 * the only significant value here would be 0 because we'd be doing 0 -/+ <VALUE>
+			 * and we are able to optimize that
+			 */
 
-			//Update the type appropriately
-			sub_tree_root->inferred_type = return_type;
+		/**
+		 * Case 3: just the right child is constant. In the additive expression case,
+		 * the only significant value here would be 0 because we'd be doing <VALUE> +/- 0
+		 * and we are able to optimize that
+		 */
+		} else if(right_child_is_constant == TRUE){
 
-			//By the end of this, we always have a proper subtree with the operator as the root, being held in 
-			//"sub-tree root". We'll now refresh the token to keep looking
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			
-			//Skip forward
-			continue;
 		}
 
 		//Now that everything above is good, we can make the operator node
