@@ -4281,64 +4281,35 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Initialize this off the bat
 	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->operands.oir.assignee}, CFG_RESULT_TYPE_VAR, BLANK};
 
-	//If the assignee is not a pointer, we'll handle the normal case
-	switch(assignee->type->type_class){
-		//If we have basic or reference types, we emit the
-		//inc codes
-		case TYPE_CLASS_BASIC:
-			switch(node->unary_operator){
-				case PLUSPLUS:
-					//Go based on the token type. If we have floating
-					//point operations here, we need special handling
-					switch(assignee->type->basic_type_token){
-						case F32:
-						case F64:
-							//Let the special helper deal with it
-							assignee = emit_sse_inc_code(current_block, assignee, node->line_number);
-							break;
-							
-						default:
-							//We really just have an "inc" instruction here
-							assignee = emit_general_purpose_inc_code(current_block, assignee, node->line_number);
-							break;
-					}
-
-					break;
-					
-				case MINUSMINUS:
-					//Go based on the token type. If we have floating
-					//point operations here, we need special handling
-					switch(assignee->type->basic_type_token){
-						case F32:
-						case F64:
-							//Call out to the helper to deal with the special float case
-							assignee = emit_sse_dec_code(current_block, assignee, node->line_number);
-							break;
-
-						default:
-							//We really just have an "inc" instruction here
-							assignee = emit_general_purpose_dec_code(current_block, assignee, node->line_number);
-							break;
-					}
-
-					break;
-
-				//We shouldn't ever hit here
-				default:
-					break;
+	/**
+	 * Go first by the type that we're actually postincrementing
+	 */
+	if(assignee->type->type_class == TYPE_CLASS_BASIC){
+		/**
+		 * Breakdown by operator and then by whether or not we're an SSE
+		 * (floating point) operation or not
+		 */
+		if(node->unary_operator == PLUSPLUS){
+			if(IS_FLOATING_POINT(assignee->type) == FALSE){
+				assignee = emit_general_purpose_inc_code(current_block, assignee, node->line_number);
+			} else {
+				assignee = emit_sse_inc_code(current_block, assignee, node->line_number);
 			}
 
-			break;
+		} else {
+			if(IS_FLOATING_POINT(assignee->type) == FALSE){
+				assignee = emit_general_purpose_dec_code(current_block, assignee, node->line_number);
+			} else {
+				assignee = emit_sse_dec_code(current_block, assignee, node->line_number);
+			}
+		}
+ 
+	} else if(assignee->type->type_class == TYPE_CLASS_POINTER){
+		assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, assignee, node->line_number);
 
-		//A pointer type is a special case
-		case TYPE_CLASS_POINTER:
-			assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, assignee, node->line_number);
-			break;
-
-		//Everything else should be impossible
-		default:
-			printf("Fatal internal compiler error: Unreachable path hit for postinc in the CFG with type %s\n", assignee->type->type_name.string);
-			exit(1);
+	} else {
+		printf("Fatal internal compiler error: Unreachable path hit for postinc in the CFG with type %s\n", assignee->type->type_name.string);
+		exit(1);
 	}
 
 	/**
