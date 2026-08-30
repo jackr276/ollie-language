@@ -12555,6 +12555,9 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 
 			break;
 		}
+
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
+			
 	
 		/**
 		 * Function addresses work like any other variable in the way that they're cloned
@@ -12623,77 +12626,6 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
 
 	//Give it back
 	return copy;
-}
-
-
-/**
- * Function calls are so complex that they warrant their own separate function to handle their cloning. 
- * As a reminder functions in Ollie can:
- * 	1.) Raise errors
- * 	2.) Have stack parameters
- * 	3.) Have elaborative parameters
- * 	4.) Have parameters that are passed by copy
- * 	5.) Return-by-copy types
- *
- * These all need to be accounted for when we clone a function call
- *
- * This has been shelved pending changes to the infrastructure of function calls
- *
- * WORK IN PROGRESS
- */
-static inline void clone_function_call(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map){
-	//Create the new statement
-	instruction_t* new_function_call = calloc(1, sizeof(instruction_t));
-
-	/**
-	 * Extract the signature of whatever we're calling for convenience
-	 * down the road
-	 */
-	function_type_t* called_function_signature;
-	if(source_instruction->statement_type == THREE_ADDR_CODE_FUNC_CALL){
-		called_function_signature = source_instruction->called_function->signature->internal_types.function_type;
-	} else {
-		called_function_signature = source_instruction->operands.oir.operand1->type->internal_types.function_type;
-	}
-
-	//We really just need the statement type and line number
-	new_function_call->statement_type = source_instruction->statement_type;
-	new_function_call->line_number = source_instruction->line_number;
-
-	/**
-	 * Clone over the called function symtab record *or* the operand1.
-	 * As a reminder:
-	 * 	Direct calls use the "called_function" slot
-	 * 	Indirect calls use operand1 to hold the function pointer variable
-	 */
-	new_function_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
-	new_function_call->called_function = source_instruction->called_function;
-
-	//Clone over both potential assignees
-	new_function_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-	new_function_call->optional_storage.call_storage.error_assignee = clone_variable(new_function_call->optional_storage.call_storage.error_assignee, variable_map);
-
-	if(called_function_signature->returns_by_copy){
-	}
-
-	/**
-	 * If we have parameters to clone over now is the time
-	 *
-	 * THIS IS NO LONGER CORRECT
-	 */
-	if(called_function_signature->function_parameters.current_index != 0){
-		//Grab some space for it
-		new_function_call->parameters = dynamic_array_alloc();
-
-		//Run through every parameter can clone them over one-to-one
-		for(int32_t i = 0; i < source_instruction->parameters.current_index; i++){
-			three_addr_var_t* new_parameter = clone_variable(dynamic_array_get_at(&source_instruction->parameters, i), variable_map);
-			dynamic_array_add(&(new_function_call->parameters), new_parameter);
-		}
-	}
-
-	//Finally add this into the new block
-	add_statement(cloning_into_block, new_function_call);
 }
 
 
@@ -12870,6 +12802,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 */
 		case THREE_ADDR_CODE_FUNC_CALL:
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
+			//TODO WE CAN DO THIS NOW
 			printf("Function calls are not yet implemented for inlining pending changes to their architecture\n");
 			exit(0);
 		}
