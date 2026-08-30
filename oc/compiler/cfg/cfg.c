@@ -13024,7 +13024,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	/**
 	 * We currently haven't done this yet but will be doing it in the future
 	 */
-	if(cloning_signature->contains_elaborative_stack_param || cloning_signature->contains_stack_params || cloning_signature->returns_by_copy){
+	if(cloning_signature->contains_elaborative_stack_param || cloning_signature->contains_stack_params){
 		printf("Function inlining with stack usage is currently unimplemented\n");
 		exit(0);
 	}
