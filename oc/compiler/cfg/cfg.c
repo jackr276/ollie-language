@@ -12825,13 +12825,39 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 */
 		case THREE_ADDR_CODE_FUNC_CALL:
 		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
+			//Create our new instruction
+			instruction_t* new_call = calloc(1, sizeof(instruction_t));
+
+			//Clone over all of this information
+			new_call->statement_type = source_instruction->statement_type;
+			new_call->is_inlined_call = source_instruction->is_inlined_call;
+			new_call->line_number = source_instruction->line_number;
+
+			//Clone our assignee over
+			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map, return_by_copy_variable);
+
+			/**
+			 * Remember that indirect calls use operand1 and direct calls use
+			 * the called function slot, either or is fine here we'll copy 
+			 * them both
+			 */
+			new_call->called_function = source_instruction->called_function;
+			new_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map, return_by_copy_variable);
+
+			//Allocate a fresh parameter results array so that we can clone over the parameters
+			new_call->parameter_results = parameter_results_array_alloc(source_instruction->parameter_results.current_index);
+
+			
+
 			//TODO WE CAN DO THIS NOW
 			printf("Function calls are not yet implemented for inlining pending changes to their architecture\n");
 			exit(0);
+
+			break;
 		}
 
 		/**
-		 * Memory coyp statements touch memory so we'll
+		 * Memory copy statements touch memory so we'll
 		 * need to clone over the memory read/write type
 		 * and the byte amount that we need to copy
 		 */
