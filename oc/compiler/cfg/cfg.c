@@ -13030,7 +13030,9 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	}
 
 	/**
-	 * Step 1: Run through and create all of the new blocks. The new blocks will automatically
+	 * Step 1: Clone all function blocks without cloning instructions
+	 *
+	 * Run through and create all of the new blocks. The new blocks will automatically
 	 * be added to the function that we're inlining into's blocks because we've set the global
 	 * references properly
 	 *
@@ -13075,7 +13077,24 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	}
 
 	/**
-	 * Step 2: we will need to clone our inlined function's local stack data area
+	 * Step TODO: return by copy handling
+	 *
+	 * If we have a function that returns by copy, we will need to create a stack region
+	 * to clone into and associate it with the return variable that we've already made and passed
+	 * along here
+	 */
+	if(cloning_signature->returns_by_copy == TRUE){
+		//Create the stack region
+		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
+
+		//Associate it with our return variable
+		return_variable->stack_region = return_by_copy_region;
+	} 
+
+	/**
+	 * Step TODO:
+	 *
+	 * we will need to clone our inlined function's local stack data area
 	 * into the caller. Doing this now allows the instruction cloning step
 	 * to just use mappings between stack regions when they come up
 	 *
@@ -13085,7 +13104,9 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	clone_stack_data_area_into_given(&(current_function->local_stack), &(function_to_clone->local_stack));
 
 	/**
-	 * Step 3: Run through all of our parameters and get them assigned over to their
+	 * Step TODO:
+	 *
+	 * Run through all of our parameters and get them assigned over to their
 	 * actual symtab variables in the inlined function. This step bridges the
 	 * gap between what we see when we call a function and what we have here
 	 *
