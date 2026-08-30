@@ -266,6 +266,12 @@ struct symtab_variable_record_t{
 	 * inside of the SSA renamer
 	 */
 	dynamic_integer_array_t ssa_overwritten_generation_map;
+	/**
+	 * Store the ID for the mapping where this symtab
+	 * variable is the *SOURCE*. This is used for O(1)
+	 * retrieval in inlining
+	 */
+	int32_t mapping_id;
 	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
 	//The line number
