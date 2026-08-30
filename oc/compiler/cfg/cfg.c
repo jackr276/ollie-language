@@ -12416,8 +12416,11 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 /**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
+ *
+ * This is the generic variable cloner rule. There are other specialized rules for
+ * special variable types that we don't have here - i.e. return by copy address variables
  */
-static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
+static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map, symtab_variable_record_t* return_variable){
 	/**
 	 * This is a completely valid and frequent case. In this case, just leave
 	 */
@@ -12556,9 +12559,20 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			break;
 		}
 
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
-			
-	
+		/**
+		 * For all return by copy address variables, we know for a fact that they can only ever
+		 * go into the one stack region allocated for the return by copy. Since we know what that
+		 * region is by now, we can replace all of these with references to the return variable
+		 * itself
+		 */
+		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
+
+			printf("TODO RETURN BY COPY\n");
+			exit(0);
+
+			break;
+		}
+
 		/**
 		 * Function addresses work like any other variable in the way that they're cloned
 		 * and passed around
@@ -12658,7 +12672,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			 */
 			if(source_instruction->operands.oir.operand1 != NULL){
 				instruction_t* simulated_return_assignment = emit_assignment_instruction(emit_var(return_variable),
-																		clone_variable(source_instruction->operands.oir.operand1, variable_map),
+																		clone_variable(source_instruction->operands.oir.operand1, variable_map, return_variable),
 																		source_instruction->line_number);
 				add_statement(cloning_into_block, simulated_return_assignment);
 			}
@@ -12686,7 +12700,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		case THREE_ADDR_CODE_RAISE_STMT: {
 			//Raise always has an assignee unlike return
 			instruction_t* simulated_raise_assignment = emit_assignment_instruction(emit_var(raise_variable),
-																	clone_variable(source_instruction->operands.oir.operand1, variable_map),
+																	clone_variable(source_instruction->operands.oir.operand1, variable_map, return_variable),
 																	source_instruction->line_number);
 			add_statement(cloning_into_block, simulated_raise_assignment);
 
@@ -12735,7 +12749,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			branch_stmt->inverse_branch = source_instruction->inverse_branch;
 
 			//Branch statements *need* to have the "relies_on" field populated properly
-			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_variable);
 
 			/**
 			 * Populate the if and else block with what they directly map to
@@ -12785,9 +12799,9 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_jump->if_block = cloning_into_block->jump_table; 
 
 			//Indirect jump statements have address operands and a multiplier
-			new_jump->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_jump->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
-			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+			new_jump->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_variable);
+			new_jump->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_variable);
+			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_variable);
 			new_jump->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
 			new_jump->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
 
@@ -12822,8 +12836,8 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_instruction->line_number = source_instruction->line_number;
 
 			//We only need these two variables
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_variable);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_variable);
 
 			//We need to know how much copying must be done
 			new_instruction->optional_storage.byte_amount_to_copy = source_instruction->optional_storage.byte_amount_to_copy;
@@ -12844,13 +12858,13 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			/**
 			 * First clone every single variable using our mapping strategy
 			 */
-			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
-			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
-			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
-			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map, return_variable);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map, return_variable);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_variable);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_variable);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map, return_variable);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map, return_variable);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_variable);
 
 			/**
 			 * Then clone all of the constants - there's no mapping for this we just do a complete
@@ -12887,13 +12901,13 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			/**
 			 * First clone every single variable using our mapping strategy
 			 */
-			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
-			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
-			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
-			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map, return_variable);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map, return_variable);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_variable);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_variable);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map, return_variable);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map, return_variable);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_variable);
 
 			/**
 			 * Then clone all of the constants - there's no mapping for this we just do a complete
@@ -13055,7 +13069,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
 
 		//We'll now leverage the copy system to get the equivalent of the parameter
-		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map);
+		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map, return_variable);
 
 		//Get the result to process - should be a one-to-one mapping for now
 		parameter_result_t* result = get_result_at_index(parameter_results, i);
