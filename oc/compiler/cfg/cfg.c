@@ -4431,70 +4431,41 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
 			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
-		
-			//Go based on what we have here
-			switch(assignee->type->type_class){
-				case TYPE_CLASS_BASIC:
-					//Go based on the op here
-					switch(unary_operator_node->unary_operator){
-						case PLUSPLUS:
-							/**
-							 * Go based on the basic type. Since SSE variables are not
-							 * compatible with normal inc instructions, we need to
-							 * break out like this
-							 */
-							switch(assignee->type->basic_type_token){
-								case F32:
-								case F64:
-									//Let the special helper deal with it
-									assignee = emit_sse_inc_code(current_block, assignee, unary_expression_child->line_number);
-									break;
 
-								default:
-									//We really just have an "inc" instruction here
-									assignee = emit_general_purpose_inc_code(current_block, assignee, unary_expression_child->line_number);
-									break;
-							}
-
-							break;
-							
-						case MINUSMINUS:
-							/**
-							 * Go based on the basic type. Since SSE variables are not
-							 * compatible with normal dec instructions, we need to
-							 * break out like this
-							 */
-							switch(assignee->type->basic_type_token){
-								case F32:
-								case F64:
-									//Call out to the helper to deal with the special float case
-									assignee = emit_sse_dec_code(current_block, assignee, unary_expression_child->line_number);
-									break;
-
-								default:
-									//We really just have an "inc" instruction here
-									assignee = emit_general_purpose_dec_code(current_block, assignee, unary_expression_child->line_number);
-									break;
-							}
-
-							break;
-
-						//We shouldn't ever hit here
-						default:	
-							break;
+			/**
+			 * Split this down by what kind of types we have. We are only able to see basic types
+			 * and pointer types for this
+			 */
+			if(assignee->type->type_class == TYPE_CLASS_BASIC){
+				/**
+				 * Split first by the operator type and then by whether
+				 * or not we're an SSE(floating point) operation, and make calls
+				 * out to the appropriate helpers
+				 */
+				if(unary_operator_node->unary_operator == PLUSPLUS){
+					if(IS_FLOATING_POINT(assignee->type) == FALSE){
+						assignee = emit_general_purpose_inc_code(current_block, assignee, unary_expression_child->line_number);
+					} else {
+						assignee = emit_sse_inc_code(current_block, assignee, unary_expression_child->line_number);
 					}
 
-					break;
+				} else {
+					if(IS_FLOATING_POINT(assignee->type) == FALSE){
+						assignee = emit_general_purpose_dec_code(current_block, assignee, unary_expression_child->line_number);
+					} else {
+						assignee = emit_sse_dec_code(current_block, assignee, unary_expression_child->line_number);
+					}
+				}
 
-				//The pointer type is a special case
-				case TYPE_CLASS_POINTER:
-					assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee, unary_expression_child->line_number);
-					break;
-				
-				//This should never occur
-				default:
-					printf("Fatal internal compiler error: unreachable type for postincrement found\n");
-					exit(1);
+			/**
+			 * For pointers this is a bit more complex due to the need to multiply by the underlying "pointed to" type
+			 * size so we'll have the helper generate all of this for us
+			 */
+ 			} else if(assignee->type->type_class == TYPE_CLASS_POINTER){
+				assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee, unary_expression_child->line_number);
+			} else {
+				printf("Fatal internal compiler error: unreachable type for postincrement found\n");
+				exit(1);
 			}
 
 			/**
