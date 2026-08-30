@@ -12562,22 +12562,16 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		/**
 		 * For all return by copy address variables, we know for a fact that they can only ever
 		 * go into the one stack region allocated for the return by copy. Since we know what that
-		 * region is by now, we can replace all of these with references to the return variable
-		 * itself
+		 * region is by now, we can replace all of these with references to the return by copy
+		 * variable itself
 		 */
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
 			//Let's see if this mapping already exists
 			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
 
-			symtab_variable_record_t* return_by_copy_variable;
-			if(mapping != NULL){
-				return_by_copy_variable = mapping->destination.symtab_variable;
-			} else {
-				//Create the mapping
+			//If it doesn't already exist we'll make it now with the given return by copy variable
+			if(mapping == NULL){
 				create_mapping_for_temp_to_symtab_variable(variable_map, source_variable->variable_id, return_by_copy_variable);
-
-				//This is the return variable
-				return_by_copy_variable = return_by_copy_variable;
 			}
 
 			//Emit a memory address variable using the return by copy variable
@@ -13039,8 +13033,7 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 	 * Step TODO: return by copy handling
 	 *
 	 * If we have a function that returns by copy, we will need to create a stack region
-	 * to clone into and associate it with the return variable that we've already made and passed
-	 * along here
+	 * to clone into and associate it with a given return by copy variable
 	 *
 	 * We will need to maintain separation between the actual return variable and the return by copy
 	 * variable in the event that there is one, which is why we have a separate symtab variable for
