@@ -4500,12 +4500,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				}
 
 			/**
-			 * Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
+			 * Otherwise - it is possible that we have a stack variable or global/static variable here. In that case, we'll need to emit a
 			 * store to get the variable back to where it needs to be
-			 *
-			 * TODO I THINK HERE AS WELL
 			 */
-			} else if (unary_expression_child->variable->stack_variable == TRUE){
+			} else if (is_store_assignment_required_for_variable(unary_expression_child->variable) == TRUE){
 				//Type of the variable
 				generic_type_t* type = unary_expression_child->variable->type_defined_as; 
 
