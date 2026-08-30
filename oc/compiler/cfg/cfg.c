@@ -1995,8 +1995,11 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 					 * Now that we have the dummy variable, we will copy from the returned variable over into the return-by-copy
 					 * address variable. Remember that the caller is responsible for absolutely everything related to memory
 					 * management for this so we aren't worrying about that here
+					 *
+					 * It is not a guarantee that the return variable will always be a stack variable, so we cannot rely on that
+					 * stack region size for the byte amount to copy in here
 					 */
-					instruction_t* copy_to_ret_region = emit_memory_copy_instruction(return_by_copy_address_var, return_variable, return_variable->associated_memory_region.stack_region->size, ret_node->line_number);
+					instruction_t* copy_to_ret_region = emit_memory_copy_instruction(return_by_copy_address_var, return_variable, ret_node->inferred_type->type_size, ret_node->line_number);
 
 					//Add this into the block
 					add_statement(current, copy_to_ret_region);
