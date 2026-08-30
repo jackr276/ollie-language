@@ -12566,16 +12566,22 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * itself
 		 */
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
+			//Let's see if this mapping already exists
+			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
 
-			mapping = get_mapping_for_temporary_variable(jk, symtab_variable_record_t *source_variable)
+			symtab_variable_record_t* return_by_copy_variable;
+			if(mapping != NULL){
+				return_by_copy_variable = mapping->destination.symtab_variable;
+			} else {
+				//Create the mapping
+				create_mapping_for_temp_to_symtab_variable(variable_map, source_variable->variable_id, return_variable);
 
+				//This is the return variable
+				return_by_copy_variable = return_variable;
+			}
 
-			//Return by copy variables are temp vars so we'll do temp to symtab
-			//create_
-
-			printf("TODO RETURN BY COPY\n");
-			exit(0);
-
+			//Emit a memory address variable using the return by copy variable
+			new_variable = emit_memory_address_var(return_by_copy_variable);
 			break;
 		}
 
@@ -13042,6 +13048,10 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 
 		//Associate it with our return variable
 		return_variable->stack_region = return_by_copy_region;
+
+		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
+		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(return_variable), function_to_clone->line_number);
+		add_statement(*function_entry, initialization);
 	} 
 
 	/**
@@ -13484,6 +13494,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
