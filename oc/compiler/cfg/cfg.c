@@ -13021,13 +13021,16 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
  *
  * We also pass in a list of all of our parameter results from the given function call so that we can manage them
  */
-static void clone_entire_function_for_inlining(symtab_function_record_t* function_to_clone, basic_block_t** function_entry, basic_block_t** function_exit,
+static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, symtab_function_record_t* function_to_clone,
+											   	basic_block_t** function_entry, basic_block_t** function_exit,
 												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
 											   	parameter_results_array_t* parameter_results){
 	//Initialize a brand new variable mapping for our uses
 	variable_map_t variable_map = variable_map_alloc();
 	//Grab this for ease of use
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
+	//Store the estimated execution frequency of the block that we've inlined in
+	int32_t inlined_in_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
 	/**
 	 * We currently haven't done this yet but will be doing it in the future
@@ -13055,11 +13058,12 @@ static void clone_entire_function_for_inlining(symtab_function_record_t* functio
 		basic_block_t* reference_block = dynamic_array_get_at(&(function_to_clone->function_blocks), i);
 
 		/**
-		 * Allocate the new block but do *NOT* estimate the execution frequency. We will inherit
-		 * this from the reference
+		 * Allocate a new block without an estimate initially. To get a full estimate, we will multiply
+		 * the old block's estimated execution frequency by the frequency of the block that we're inlining
+		 * into to get a more accurate estimate
 		 */
 		basic_block_t* new_block = basic_block_alloc_no_estimate();
-		new_block->estimated_execution_frequency = reference_block->estimated_execution_frequency;
+		new_block->estimated_execution_frequency = reference_block->estimated_execution_frequency * inlined_in_execution_frequency;
 
 		//IMPORTANT - create the mapping association here
 		reference_block->mapping_info.maps_to = new_block;
@@ -13262,7 +13266,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameter_results));
+	clone_entire_function_for_inlining(block_inlined_in, inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameter_results));
 
 	/**
 	 * We no longer need this statement at all so remove it. It still
