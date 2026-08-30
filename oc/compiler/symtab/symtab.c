@@ -859,12 +859,17 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
  * inserted. It will also not be declared as temp
  */
 symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
-	//And here is the special part - we'll need to make a symtab record
-	//for this variable and add it in
+	/**
+	 * And here is the special part - we'll need to make a symtab record
+	 * for this variable and add it in
+	 */
 	char variable_name[100];
-	//Grab a new temp var number from here. We use the
-	//^ because it is illegal for variables typed in by the
-	//user to have that, so we will not have collisions
+
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
 	sprintf(variable_name, "^t%d", temp_id);
 
 	//Create and set the name here
@@ -896,6 +901,7 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
  * Create a return by copy variable record
  */
 symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+	//TODO
 
 }
 
