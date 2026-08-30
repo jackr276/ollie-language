@@ -893,6 +893,14 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 
 
 /**
+ * Create a return by copy variable record
+ */
+symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+
+}
+
+
+/**
  * Create and return a function parameter alis variable. A parameter alias variable is halfway
  * between a temp and a full fledged non-temp variable. It will have a 
  * symtab record, and as such will be picked up by the phi function
@@ -1085,7 +1093,7 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * is pushed over the edge to be a stack param. We need to make the adjustment for all
  * of them, as well as for their function_parameter_order
  */
-void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature){
+void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, function_type_t* signature){
 	for(int32_t i = 0; i < record->function_parameters.current_index; i++){
 		//Grab the parameter out
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);

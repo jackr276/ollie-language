@@ -10778,14 +10778,27 @@ static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* us
  * take, this is going to be a different story
  */
 static inline void setup_function_parameters(symtab_function_record_t* function_record, basic_block_t* function_entry_block, u_int32_t line_number){
+	//Extract the signature function type for convenience
+	function_type_t* signature = function_record->signature->internal_types.function_type;
+
+	/**
+	 * If we return by copy, we'll need to create a special SSA variable that represents
+	 * the return by copy parameter that we're passing in
+	 */
+	if(signature->returns_by_copy == TRUE){
+		//Create it in the symtab
+		symtab_variable_record_t* return_by_copy_address = create_ssa_compatible_temp_var(current_function, signature->return_type, variable_symtab, get_next_variable_id());
+
+		//Store this inside of the function so that we have it on hand for later
+		function_record->return_by_copy_variable = return_by_copy_address;
+	}
+
+	//TODO WE NEED TO SET UP RETURN BY COPY VARS HERE TO MAKE THIS WORK
+
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
 	 * at some point want to take the memory address of them), then we need to load
 	 * these variables into the stack preemptively
-	 */
-	/**
-	 * Now we are going to process all of our normal function parameters. There is a special
-	 * case that we need to account for: if the user takes that address of a *non stack-passed*
 	 */
 	for(int32_t i = 0; i < function_record->function_parameters.current_index; i++){
 		//Extract the parameter

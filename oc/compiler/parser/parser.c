@@ -14419,9 +14419,12 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * we are looking out for: if we had 6 GP params, now we have 7, and the last one
 	 * is pushed over the edge to be a stack param. We need to make the adjustment for all
 	 * of them, as well as for their function_parameter_order
+	 *
+	 * We will also create an SSA compatible variable that represents the return by copy
+	 * passed parameter internally to the function
 	 */
 	if(function_signature->returns_by_copy == TRUE){
-		remediate_return_by_copy_gp_parameter_order(function_record, function_signature);
+		remediate_return_by_copy_gp_parameters(function_record, function_signature);
 	}
 
 	//We can optionally see the raises keyword here

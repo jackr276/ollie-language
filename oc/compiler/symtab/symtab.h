@@ -151,13 +151,16 @@ struct symtab_function_record_t{
 	dynamic_set_t called_functions;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
+	/**
+	 * Functions that return by copy will have their own special return
+	 * by copy variable for use internally
+	 */
+	symtab_variable_record_t* return_by_copy_variable;
 	//What dependency graph node does this function come from?
 	dependency_graph_node_t* dependency_graph_node;
 	//Maintain a reference to the entry block
 	void* function_entry_block;
-	/**
-	 * Store the top level scope for this function
-	 */
+	//Store the top level scope for this function
 	symtab_variable_sheaf_t* top_level_scope;
 	//The line number
 	u_int32_t line_number;
@@ -604,6 +607,11 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, 
 symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
+ * Create a return by copy variable record
+ */
+symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+
+/**
  * Create a parameter alias variable record
  */
 symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record_t* function, symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
@@ -626,7 +634,7 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * is pushed over the edge to be a stack param. We need to make the adjustment for all
  * of them, as well as for their function_parameter_order
  */
-void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature);
+void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, function_type_t* signature);
 
 /**
  * Make a function record
