@@ -212,6 +212,7 @@ static inline u_int8_t is_memory_address_variable(three_addr_var_t* variable){
 	switch(variable->variable_type){
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		//TODO WILL BE SCRAPPING
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			return TRUE;
 		default:
@@ -7104,6 +7105,7 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 * variable name. Otherwise we just use the temp var
 		 * number
 		 */
+		//Will be scrapping this
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			if(variable_record != NULL){
 				sprintf(buffer, "RBC<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
@@ -7783,6 +7785,7 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		//Will be deleting it
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			return;
 		default:

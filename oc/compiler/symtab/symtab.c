@@ -1132,7 +1132,6 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, fu
 			}
 
 			setup_stack_region_for_function_parameter(&(record->stack_passed_parameters), parameter);
-
 		}
 
 		//Regardless of what happened, bump the class relative function parameter order

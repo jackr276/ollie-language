@@ -114,7 +114,7 @@ typedef enum variable_membership_t {
 	GLOBAL_VARIABLE,
 	STATIC_VARIABLE,
 	FUNCTION_PARAMETER,
-	RETURNED_VARIABLE, //Is this returned by a function?
+	//TODO NEW RETURN_BY_COPY_MEMBER
 } variable_membership_t;
 
 
@@ -235,6 +235,8 @@ struct symtab_variable_record_t{
 	symtab_function_record_t* function_declared_in;
 	//What type is it?
 	generic_type_t* type_defined_as;
+	//FREQUENTLY ACCESSED - What type structure or language concept does this variable belong to?
+	variable_membership_t membership;
 	/**
 	 * We are able to alias variables as other variables. This is
 	 * typically only used for function parameters in the presaving step
@@ -310,12 +312,13 @@ struct symtab_variable_record_t{
 	 * checking
 	 */
 	u_int8_t is_user_defined;
-	//What type structure or language concept does this variable belong to?
-	variable_membership_t membership;
 	//Where does this variable get stored? By default we assume register, so
 	//this flag will only be set if we have a memory address value
+	//
+	//TODO MAYBE MAKE THIS A STORAGE CLASS?
 	u_int8_t stack_variable;
 	//Is this a function parameter that is passed via stack?
+	//Can we make this a membership??
 	u_int8_t passed_by_stack;
 	//What's the visibility of this(only used for global variables)
 	visibilty_type_t visibility;

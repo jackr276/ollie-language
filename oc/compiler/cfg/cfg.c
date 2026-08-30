@@ -12581,6 +12581,9 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * region is by now, we can replace all of these with references to the return by copy
 		 * variable itself
 		 */
+
+
+		// TODO We will be scrapping this entirely as a variable type
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
 			//Let's see if this mapping already exists
 			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);

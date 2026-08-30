@@ -1997,6 +1997,9 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		 * If we have a return by copy variable, we *must*, without any exception ever,
 		 * precolor it to be in %rdi. There is never a case where a variable like this is not in
 		 * %rdi
+		 *
+		 *
+		 * TODO COMPLETELY DEPRECATE THIS
 		 */
 		if(first_variable->variable_type == VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS){
 			general_purpose_lr->reg.gen_purpose = RDI;
