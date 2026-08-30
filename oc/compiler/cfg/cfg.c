@@ -13089,7 +13089,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	}
 
 	/**
-	 * Step TODO: return by copy handling
+	 * Step 2: return by copy handling
 	 *
 	 * If we have a function that returns by copy, we will need to create a stack region
 	 * to clone into and associate it with a given return by copy variable
@@ -13115,7 +13115,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	} 
 
 	/**
-	 * Step TODO:
+	 * Step 3: stack area duplication
 	 *
 	 * we will need to clone our inlined function's local stack data area
 	 * into the caller. Doing this now allows the instruction cloning step
@@ -13127,7 +13127,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	clone_stack_data_area_into_given(&(current_function->local_stack), &(function_to_clone->local_stack));
 
 	/**
-	 * Step TODO:
+	 * Step 4: function parameter management
 	 *
 	 * Run through all of our parameters and get them assigned over to their
 	 * actual symtab variables in the inlined function. This step bridges the
@@ -13165,7 +13165,9 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	}
 
 	/**
-	 * Step 4: Now that we've gone through and created all of the new blocks, we need to
+	 * Step 5: clone all instructions over
+	 *
+	 * Now that we've gone through and created all of the new blocks, we need to
 	 * go through and populate them using our block cloning. There are some caveats, like
 	 * "ret" and "raise" statements will now just be jumps to the function exit block, and
 	 * we'll need to adjust branch statements, so on and so forht
@@ -13554,7 +13556,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static

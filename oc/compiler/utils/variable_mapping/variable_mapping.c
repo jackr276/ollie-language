@@ -56,6 +56,17 @@ variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_
  * that has the given source symtab variable. We return NULL if none is found
  */
 variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
+	/**
+	 * First try: get the mapping using the variable ID here. If we get a mapping and the source
+	 * matches then we are going to skip the linear scan
+	 */
+
+
+	if(variable_map->mappings[source_variable->mapping_id].source.symtab_variable == source_variable){
+		return ;
+	}
+
+
 	for(int32_t i = 0; i < variable_map->current_index; i++){
 		//Get a pointer to the mapping
 		variable_mapping_t* mapping = &(variable_map->mappings[i]);
@@ -147,6 +158,9 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 
 	//The mapping ID is the index where it exists
 	mapping->mapping_id = variable_map->current_index;
+
+	//Store on the symtab variable the mapping that we correspond to
+	source_variable->mapping_id = mapping->mapping_id;
 
 	//Bump this up for the next go around
 	(variable_map->current_index)++;
