@@ -12856,15 +12856,22 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 				//Get the source result
 				parameter_result_t* source_result = get_result_at_index(&(source_instruction->parameter_results), i);
 
-				//Clone over by type
+				/**
+				 * Clone over by type. Note that we do need to clone even for constants because we need distinct
+				 * memory areas for each constant in case of future optimizations
+				 */
 				switch(source_result->result_type){
 					case PARAM_RESULT_TYPE_CONST:{
-						add_parameter_result_to_results_array(&(new_call->parameter_results), source_result->param_result.constant_result, PARAM_RESULT_TYPE_CONST);
+						//Clone the constant and add it in
+						three_addr_const_t* cloned_constant = clone_constant(source_result->param_result.constant_result);
+						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_VAR:{
-						add_parameter_result_to_results_array(&(new_call->parameter_results), source_result->param_result.variable_result, PARAM_RESULT_TYPE_VAR);
+						//Clone the parameter variable and add it in
+						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map, return_by_copy_variable);
+						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
 						break;
 					}
 				}
@@ -13543,6 +13550,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
