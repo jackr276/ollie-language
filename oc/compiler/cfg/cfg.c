@@ -486,6 +486,22 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
 
 
 /**
+ * Does a given variable need a store assignment for whenever we copy it over? Variables that
+ * are explicitly on the stack as well as global and static variables which are in the data 
+ * segment do
+ */
+static inline u_int8_t is_store_assignment_required_for_variable(symtab_variable_record_t* variable){
+	//First check - if it's a stack var we're done
+	if(variable->stack_variable == TRUE){
+		return TRUE;
+	}
+
+	//Otherwise if it's global or static we will have to use a store
+	return (variable->membership == GLOBAL_VARIABLE || variable->membership == STATIC_VARIABLE) ? TRUE : FALSE;
+}
+
+
+/**
  * Does a given type require copy assignment? Structs and unions fall under this category
  */
 static inline u_int8_t does_type_require_parameter_copy_assignment(generic_type_t* type){
@@ -4347,10 +4363,10 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		postoperation_package.final_block = current_block;
 
 	/**
-	 * Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
+	 * Otherwise - it is possible that we have a stack variable or global/static variable here. In that case, we'll need to emit a
 	 * store to get the variable back to where it needs to be
 	 */
-	} else if (postfix_node->variable->stack_variable == TRUE){
+	} else if (is_store_assignment_required_for_variable(postfix_node->variable) == TRUE){
 		generic_type_t* type = postfix_node->variable->type_defined_as; 
 
 		/**
@@ -4515,6 +4531,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			/**
 			 * Otherwise - it is possible that we have a stack variable or reference here. In that case, we'll need to emit a
 			 * store to get the variable back to where it needs to be
+			 *
+			 * TODO I THINK HERE AS WELL
 			 */
 			} else if (unary_expression_child->variable->stack_variable == TRUE){
 				//Type of the variable
@@ -6158,13 +6176,10 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				store_statement->operands.oir.operand1 = result_var;
 
 			/**
-			 * If we have a variable that is on the stack or is a global variable, then a regular assignment won't
+			 * If we have a variable that is on the stack or is a global/static variable, then a regular assignment won't
 			 * work. We'll need to do a store here
 			 */
-			} else if(left_hand_var->linked_var != NULL
-						&& (left_hand_var->linked_var->stack_variable == TRUE
-						|| is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
-
+			} else if(left_hand_var->linked_var != NULL && is_store_assignment_required_for_variable(left_hand_var->linked_var) == TRUE){
 				//Emit the memory address var for this variable
 				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
@@ -6257,13 +6272,10 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				current_block->exit_statement->operands.oir.constant_operand = right_hand_package.result_value.result_const;
 
 			/**
-			 * Second case: If we have a variable that is on the stack or is a global variable, then a regular assignment won't
+			 * Second case: If we have a variable that is on the stack or is a global/static variable, then a regular assignment won't
 			 * work. We'll need to do a store here and emit this one ourselves
 			 */
-			} else if(left_hand_var->linked_var != NULL
-						&& (left_hand_var->linked_var->stack_variable == TRUE 
-						|| is_variable_data_segment_variable(left_hand_var->linked_var) == TRUE)){
-				//Emit the memory address var for this variable
+			} else if(left_hand_var->linked_var != NULL && is_store_assignment_required_for_variable(left_hand_var->linked_var) == TRUE){
 				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
 
 				//Now for the final store code
@@ -11807,9 +11819,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			} else if(let_variable->linked_var != NULL
-				&& (let_variable->linked_var->stack_variable == TRUE
-					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
+			} else if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
@@ -11889,9 +11899,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			if(let_variable->linked_var != NULL
-				&& (let_variable->linked_var->stack_variable == TRUE
-					|| is_variable_data_segment_variable(let_variable->linked_var) == TRUE)){
+			if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
