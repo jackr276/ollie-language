@@ -27,19 +27,22 @@ variable_map_t variable_map_alloc(){
  */
 variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id){
 	for(int32_t i = 0; i < variable_map->current_index; i++){
+		//Get a pointer to the mapping
+		variable_mapping_t* mapping = &(variable_map->mappings[i]);
+
 		/**
 		 * We only care to look for temp var mappings here - if it's not
 		 * that then skip
 		 */
-		if(variable_map->mappings[i].mapping_type != MAPPING_TYPE_TEMP){
+		if(mapping->mapping_type != MAPPING_TYPE_TEMP_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_TEMP_TO_TEMP){
 			continue;
 		}
 
 		/**
 		 * We have a hit - return the address of this mapping to avoid copying
 		 */
-		if(variable_map->mappings[i].source.temporary_id == source_temp_var_id){
-			return &(variable_map->mappings[i]);
+		if(mapping->source.temporary_id == source_temp_var_id){
+			return mapping;
 		}
 	}
 
@@ -54,19 +57,22 @@ variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_
  */
 variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
 	for(int32_t i = 0; i < variable_map->current_index; i++){
+		//Get a pointer to the mapping
+		variable_mapping_t* mapping = &(variable_map->mappings[i]);
+
 		/**
 		 * We only care to look for symtab mappings here - if it's not
 		 * that then skip
 		 */
-		if(variable_map->mappings[i].mapping_type != MAPPING_TYPE_SYMTAB){
+		if(mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_TEMP){
 			continue;
 		}
 
 		/**
 		 * We have a hit - return the address of this mapping to avoid copying
 		 */
-		if(variable_map->mappings[i].source.symtab_variable == source_variable){
-			return &(variable_map->mappings[i]);
+		if(mapping->source.symtab_variable == source_variable){
+			return mapping;
 		}
 	}
 
@@ -105,7 +111,7 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
 	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
 
 	//This is a temp mapping
-	mapping->mapping_type = MAPPING_TYPE_TEMP;
+	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_TEMP;
 
 	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
@@ -133,7 +139,7 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
 
 	//This is a symtab mapping
-	mapping->mapping_type = MAPPING_TYPE_SYMTAB;
+	mapping->mapping_type = MAPPING_TYPE_SYMTAB_TO_SYMTAB;
 
 	//Store the source and dest
 	mapping->source.symtab_variable = source_variable;

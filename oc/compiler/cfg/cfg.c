@@ -12566,6 +12566,8 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * itself
 		 */
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
+			//Return by copy variables are temp vars so we'll do temp to symtab
+			//create_
 
 			printf("TODO RETURN BY COPY\n");
 			exit(0);

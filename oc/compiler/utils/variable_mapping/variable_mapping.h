@@ -21,8 +21,10 @@ typedef struct variable_map_t variable_map_t;
  * have temp-to-temp or symtab-to-symtab
  */
 typedef enum {
-	MAPPING_TYPE_TEMP,
-	MAPPING_TYPE_SYMTAB,
+	MAPPING_TYPE_TEMP_TO_TEMP,
+	MAPPING_TYPE_SYMTAB_TO_SYMTAB,
+	MAPPING_TYPE_TEMP_TO_SYMTAB,
+	MAPPING_TYPE_SYMTAB_TO_TEMP,
 } variable_mapping_type_t;
 
 
