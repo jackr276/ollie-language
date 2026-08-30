@@ -12566,6 +12566,10 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		 * itself
 		 */
 		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
+
+			mapping = get_mapping_for_temporary_variable(jk, symtab_variable_record_t *source_variable)
+
+
 			//Return by copy variables are temp vars so we'll do temp to symtab
 			//create_
 
