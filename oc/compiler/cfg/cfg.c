@@ -12833,8 +12833,9 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_call->is_inlined_call = source_instruction->is_inlined_call;
 			new_call->line_number = source_instruction->line_number;
 
-			//Clone our assignee over
+			//Clone our assignee and error assignee over
 			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map, return_by_copy_variable);
+			new_call->optional_storage.call_storage.error_assignee = clone_variable(source_instruction->optional_storage.call_storage.error_assignee, variable_map, return_by_copy_variable);
 
 			/**
 			 * Remember that indirect calls use operand1 and direct calls use
@@ -12847,12 +12848,30 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			//Allocate a fresh parameter results array so that we can clone over the parameters
 			new_call->parameter_results = parameter_results_array_alloc(source_instruction->parameter_results.current_index);
 
-			
+			/**
+			 * Now we're going to run through and clone all of the parameter results over one
+			 * by one in the same order
+			 */
+			for(int32_t i = 0; i < source_instruction->parameter_results.current_index; i++){
+				//Get the source result
+				parameter_result_t* source_result = get_result_at_index(&(source_instruction->parameter_results), i);
 
-			//TODO WE CAN DO THIS NOW
-			printf("Function calls are not yet implemented for inlining pending changes to their architecture\n");
-			exit(0);
+				//Clone over by type
+				switch(source_result->result_type){
+					case PARAM_RESULT_TYPE_CONST:{
+						add_parameter_result_to_results_array(&(new_call->parameter_results), source_result->param_result.constant_result, PARAM_RESULT_TYPE_CONST);
+						break;
+					}
 
+					case PARAM_RESULT_TYPE_VAR:{
+						add_parameter_result_to_results_array(&(new_call->parameter_results), source_result->param_result.variable_result, PARAM_RESULT_TYPE_VAR);
+						break;
+					}
+				}
+			}
+
+			//Finally add this function call instruction into the block
+			add_statement(cloning_into_block, new_call);
 			break;
 		}
 
