@@ -60,13 +60,15 @@ variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map
 	 * First try: get the mapping using the variable ID here. If we get a mapping and the source
 	 * matches then we are going to skip the linear scan
 	 */
-
-
-	if(variable_map->mappings[source_variable->mapping_id].source.symtab_variable == source_variable){
-		return ;
+	variable_mapping_t* mapping = &(variable_map->mappings[source_variable->mapping_id]);
+	if(mapping != NULL && mapping->source.symtab_variable == source_variable){
+		return mapping;
 	}
 
-
+	/**
+	 * Second try: if that didn't work then we'll just do our regular linear scan over
+	 * every single mapping in here
+	 */
 	for(int32_t i = 0; i < variable_map->current_index; i++){
 		//Get a pointer to the mapping
 		variable_mapping_t* mapping = &(variable_map->mappings[i]);
@@ -89,7 +91,6 @@ variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map
 
 	//If we made it here then we found nothing so bail out
 	return NULL;
-
 }
 
 
