@@ -13245,7 +13245,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 			 * for inlining, so we will only do the actual inlining when this is flagged
 			 * as not being excluded
 			 */
-			if(cursor->exclude_when_inlining == FALSE){
+			if(cursor->exclude_when_inlining == TRUE){
 				cursor = cursor->next_statement;
 				continue;
 			}

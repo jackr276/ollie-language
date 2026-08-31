@@ -972,7 +972,8 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 	record->stack_variable = aliases->stack_variable;
 
 	//Copy over what we're aliasing(return by copy or parameter)
-	record->membership = aliases->membership;
+	//TODO THIS WILL NOT WORK
+	record->membership = FUNCTION_PARAMETER;
 
 	//These are user defined in a way
 	record->is_user_defined = TRUE;
