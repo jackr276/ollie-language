@@ -10811,6 +10811,14 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 																			return_by_copy_address,
 																			variable_symtab,
 																			get_next_variable_id());
+
+		/**
+		 * Flag that the return by copy does have this alias. Note that once we do this, any time
+		 * emit_var() is called on the return by copy, the alias will be used instead so the order
+		 * here is very important. Once this is done - there is no going back
+		 */
+		return_by_copy_address->alias = alias;
+
 		//Now get the aliased variable out
 		three_addr_var_t* alias_var = emit_var(alias);
 
@@ -10819,7 +10827,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * aliased var. This assignment will survive coalescing *if* it's needed and that is
 		 * what stops us from clobbering %rdi
 		 */
-		instruction_t* assignment = emit_assignment_instruction(alias_var, return_by_copy_var, function_record->line_number);
+		instruction_t* assignment = emit_assignment_instruction(alias_var, return_by_copy_var, line_number);
 		add_statement(function_entry_block, assignment);
 	}
 
