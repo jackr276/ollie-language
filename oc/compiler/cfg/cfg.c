@@ -12554,10 +12554,17 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			}
 
 			/**
-			 * We need to go through the entire variable emittal process again to ensure that
-			 * this new symtab variable gets fresh variable references
+			 * If we have a variable that was a return by copy parameter in the original function,
+			 * we should emit a memory address variable in this copy because this return by copy
+			 * variable is really just a memory address that's passed in as a parameter. If it's
+			 * not then just emit a regular variable
 			 */
-			new_variable = emit_var(symtab_variable);
+			if(source_variable->linked_var->membership != RETURN_BY_COPY_PARAMETER){
+				new_variable = emit_var(symtab_variable);
+			} else {
+				new_variable = emit_memory_address_var(symtab_variable);
+			}
+
 			break;
 		}
 
@@ -13142,8 +13149,6 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		/**
 		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
 		 * it to this new return by copy variable
-		 *
-		 * TODO MEMORY ADDRESS THING ON OUR SIDE??
 		 */
 		create_mapping_for_symtab_variable(&variable_map, function_to_clone->return_by_copy_variable, return_by_copy_variable);
 	} 
