@@ -12468,13 +12468,6 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 /**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
- *
- * This is the generic variable cloner rule. There are other specialized rules for
- * special variable types that we don't have here - i.e. return by copy address variables
- *
- * TODO HANDLE RETURN BY COPY
- *
- *
  */
 static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
 	/**
@@ -13128,12 +13121,13 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	 * for them to use internally. For our purposes, we can create a new dummy variable and then
 	 * create a one-to-one mapping of that variable to this new one with an allocated stack region
 	 * for this all to work
-	 *
-	 * TODO IMPLEMENT THIS AS DISCUSSED
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		//Create the SSA variable
-		return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
+		/**
+		 * Create a variable that is SSA compatible - it does not specifically need to be
+		 * return by copy because there are no register allocation rules here
+		 */
+		symtab_variable_record_t* return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
 
 		//Create the stack region
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
@@ -13144,6 +13138,14 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
 		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(return_by_copy_variable), function_to_clone->line_number);
 		add_statement(*function_entry, initialization);
+
+		/**
+		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
+		 * it to this new return by copy variable
+		 *
+		 * TODO MEMORY ADDRESS THING ON OUR SIDE??
+		 */
+		create_mapping_for_symtab_variable(&variable_map, function_to_clone->return_by_copy_variable, return_by_copy_variable);
 	} 
 
 	/**
