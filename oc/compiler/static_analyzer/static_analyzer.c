@@ -1122,6 +1122,14 @@ static void rename_block(basic_block_t* entry){
 	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+
+		/**
+		 * If we have a return by copy variable then it's already been
+		 * assigned, so give it a new name
+		 */
+		if(function_defined_in->return_by_copy_variable != NULL){
+			lhs_new_name_direct(function_defined_in->return_by_copy_variable);
+		}
 		
 		/**
 		 * We store function parameters as symtab variables so we'll need to perform a direct
@@ -1256,6 +1264,11 @@ static void rename_block(basic_block_t* entry){
 	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+		
+		//Unwind the return by copy variable
+		if(function_defined_in->return_by_copy_variable != NULL){
+			lightstack_pop(&(function_defined_in->return_by_copy_variable->counter_stack));
+		}
 		
 		//We need to pop these all only once so that we have parity with what we did up top
 		for(int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
@@ -1943,9 +1956,12 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				 * If the symtab variable is not SSA eligible then this
 				 * is not going to work, we will move on
 				 *
-				 * We also don't bother with function parameters
+				 * We also don't bother with function parameters or return
+				 * by copy parameters for these warnings
 				 */
-				if(is_symtab_variable_ssa_eligible(cursor) == FALSE || cursor->membership == FUNCTION_PARAMETER){
+				if(is_symtab_variable_ssa_eligible(cursor) == FALSE 
+					|| cursor->membership == FUNCTION_PARAMETER
+					|| cursor->membership == RETURN_BY_COPY_PARAMETER){
 					cursor = cursor->next;
 					continue;
 				}
