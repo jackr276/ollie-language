@@ -971,16 +971,66 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 	record->stack_region = aliases->stack_region;
 	record->storage_class = aliases->storage_class;
 
+	//Flag that this is a function parameter alias
+	record->membership = FUNCTION_PARAMETER_ALIAS;
+
+	//These are user defined in a way
+	record->is_user_defined = TRUE;
+
 	/**
-	 * We are either aliasing function parameters or the specialized
-	 * return by copy parameter, flag this variable as either or
-	 * depending on which is appropriate
+	 * Record that this record aliases the given variable so
+	 * that, in the future, if we need to drill down and get
+	 * it we will be able to
 	 */
-	if(aliases->membership == FUNCTION_PARAMETER){
-		record->membership = FUNCTION_PARAMETER_ALIAS;
-	} else {
-		record->membership = RETURN_BY_COPY_PARAMETER_ALIAS;
-	}
+	record->aliases = aliases;
+
+	//Insert this into the variable symtab
+	insert_variable(variable_symtab, record);
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	//And give it back
+	return record;
+}
+
+
+/**
+ * Create a return by copy alias variable record. Since these come directly from the fucntion themselves, we do
+ * not need to pass in the variable that we are aliasing
+ */
+symtab_variable_record_t* create_return_by_copy_alias_variable(symtab_function_record_t* function, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
+	char variable_name[100];
+	sprintf(variable_name, "^t%d", temp_id);
+
+	//Create and set the name here
+	dynamic_string_t string = dynamic_string_alloc();
+	dynamic_string_set(&string, variable_name);
+
+	/**
+	 * Since we are aliasing a return by copy variable we will just grab it
+	 * from the function itslef
+	 */
+	symtab_variable_record_t* aliases = function->return_by_copy_variable;
+
+	//Now create and add the symtab record for this variable
+	symtab_variable_record_t* record = create_variable_record(&string, function, aliases->node_defined_in, aliases->line_number, aliases->token_index_of_definition);
+	//Store the type here
+	record->type_defined_as = aliases->type_defined_as;
+
+	//Copy over the stack info as well - this is important for references
+	record->stack_region = aliases->stack_region;
+	record->storage_class = aliases->storage_class;
+
+	//Flag that this is a return by copy alias
+	record->membership = RETURN_BY_COPY_PARAMETER_ALIAS; 
 
 	//These are user defined in a way
 	record->is_user_defined = TRUE;

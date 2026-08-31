@@ -10807,10 +10807,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		three_addr_var_t* return_by_copy_var = emit_var(return_by_copy_address);
 
 		//Now let's perform the aliasing. Remember this is basically irreversible once we do it
-		symtab_variable_record_t* alias = create_parameter_alias_variable(function_record,
-																			return_by_copy_address,
-																			variable_symtab,
-																			get_next_variable_id());
+		symtab_variable_record_t* alias = create_return_by_copy_alias_variable(function_record, variable_symtab, get_next_variable_id());
 
 		/**
 		 * Flag that the return by copy does have this alias. Note that once we do this, any time

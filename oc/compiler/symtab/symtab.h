@@ -630,6 +630,11 @@ symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_
 symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record_t* function, symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
+ * Create a return by copy alias variable record
+ */
+symtab_variable_record_t* create_return_by_copy_alias_variable(symtab_function_record_t* function, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+
+/**
  * Create a variable for a memory address that is not from an actual var
  */
 symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, stack_region_t* stack_region, u_int32_t temp_id);
