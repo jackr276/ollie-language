@@ -196,6 +196,11 @@ struct instruction_t{
 	void* block_contained_in;
 	//Instruction's line number
 	int32_t line_number;
+	/**
+	 * Is this an instruction that we want to specifically exclude when we are
+	 * inlining a function call?
+	 */
+	u_int8_t exclude_when_inlining;
 	//Is this operation critical?
 	u_int8_t mark;
 	//Is this a regular or inverse branch

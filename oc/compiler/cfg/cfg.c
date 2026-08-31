@@ -10829,6 +10829,13 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 */
 		instruction_t* assignment = emit_assignment_instruction(alias_var, return_by_copy_var, line_number);
 		add_statement(function_entry_block, assignment);
+
+		/**
+		 * When we're inlining, we will replace both the regular return by copy address parameter and the
+		 * alias with references to the same local stack address. As such, the assignment instruction 
+		 * above is useless, and should be specifically excluded when we inline
+		 */
+		assignment->exclude_when_inlining = TRUE;
 	}
 
 	/**
@@ -13233,7 +13240,17 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		 */
 		instruction_t* cursor = reference_block->leader_statement;
 		while(cursor != NULL){
-			//Clone this instruction into the new block
+			/**
+			 * We are able to flag when certain instructions should not be cloned over
+			 * for inlining, so we will only do the actual inlining when this is flagged
+			 * as not being excluded
+			 */
+			if(cursor->exclude_when_inlining == FALSE){
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			//Survived so clone it
 			clone_instruction_into_block(new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
 
 			//Onto the next one
@@ -13605,8 +13622,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
-	//TODO DELETE
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
