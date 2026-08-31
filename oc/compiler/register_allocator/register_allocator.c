@@ -1997,15 +1997,14 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		 * If we have a return by copy variable, we *must*, without any exception ever,
 		 * precolor it to be in %rdi. There is never a case where a variable like this is not in
 		 * %rdi
-		 *
-		 *
-		 * TODO COMPLETELY DEPRECATE THIS
-		 *
-		 * TODO TODO TODO READD
 		 */
+		if(first_variable->linked_var != NULL && first_variable->linked_var->membership == RETURN_BY_COPY_PARAMETER){
+			general_purpose_lr->reg.gen_purpose = RDI;
+			continue;
+		}
 
 		//Extract for neatness
-		u_int16_t general_purpose_parameter_order = general_purpose_lr->class_relative_function_parameter_order;
+		int32_t general_purpose_parameter_order = general_purpose_lr->class_relative_function_parameter_order;
 
 		//If it has a function parameter order, we'll color it appropriately
 		if(general_purpose_parameter_order > 0){
@@ -2019,7 +2018,7 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		live_range_t* sse_lr = dynamic_array_get_at(sse_live_ranges, i);
 
 		//Extract for neatness
-		u_int16_t sse_parameter_order = sse_lr->class_relative_function_parameter_order;
+		int32_t sse_parameter_order = sse_lr->class_relative_function_parameter_order;
 
 		//If it has a function parameter order, we'll color it appropriately
 		if(sse_parameter_order > 0){

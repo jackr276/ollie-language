@@ -13073,6 +13073,11 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		exit(0);
 	}
 
+	if(cloning_signature->returns_by_copy == TRUE){
+		printf("TODO NOW BROKEN\n");
+		exit(0);
+	}
+
 	/**
 	 * Step 1: Clone all function blocks without cloning instructions
 	 *
