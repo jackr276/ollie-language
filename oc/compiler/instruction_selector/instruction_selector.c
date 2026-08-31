@@ -212,8 +212,6 @@ static inline u_int8_t is_memory_address_variable(three_addr_var_t* variable){
 	switch(variable->variable_type){
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-		//TODO WILL BE SCRAPPING
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			return TRUE;
 		default:
 			return FALSE;
@@ -7100,23 +7098,6 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 			break;
 
 		/**
-		 * For a return by copy address, we'll just print out
-		 * RBC<<scope>_<name>_<ssa_generation> if we have an actual
-		 * variable name. Otherwise we just use the temp var
-		 * number
-		 */
-		//Will be scrapping this
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
-			if(variable_record != NULL){
-				sprintf(buffer, "RBC<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
-			} else {
-				sprintf(buffer, "RBC<t%d>", variable->variable_id);
-			}
-
-			dynamic_string_concatenate(output, buffer);
-			break;
-
-		/**
 		 * Local constants are already unique so we can just print them
 		 * out as is
 		 */
@@ -7785,8 +7766,6 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-		//Will be deleting it
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			return;
 		default:
 			break;

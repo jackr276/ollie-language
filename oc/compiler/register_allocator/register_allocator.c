@@ -2000,10 +2000,9 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		 *
 		 *
 		 * TODO COMPLETELY DEPRECATE THIS
+		 *
+		 * TODO TODO TODO READD
 		 */
-		if(first_variable->variable_type == VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS){
-			general_purpose_lr->reg.gen_purpose = RDI;
-		}
 
 		//Extract for neatness
 		u_int16_t general_purpose_parameter_order = general_purpose_lr->class_relative_function_parameter_order;
