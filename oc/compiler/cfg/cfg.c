@@ -1988,9 +1988,12 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				 * copy operation
 				 */
 				} else {
-					//Emit the actual variable that will cause us to return by copy
-					//TODO FIX HERE
-					three_addr_var_t* return_by_copy_address_var = emit_return_by_copy_var(ret_node->inferred_type);
+					/**
+					 * The return by copy variable that we created during setup will always be cached in the current
+					 * function record. It was aliased but that's of no concern to us. All that we need to do now
+					 * emit a variable based on that created return by copy variable
+					 */
+					three_addr_var_t* return_by_copy_address_var = emit_var(current_function->return_by_copy_variable);
 
 					/**
 					 * Now that we have the dummy variable, we will copy from the returned variable over into the return-by-copy
