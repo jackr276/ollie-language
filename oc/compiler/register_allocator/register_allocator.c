@@ -1996,7 +1996,9 @@ static inline void precolor_in_body_function_parameters(dynamic_array_t* general
 		/**
 		 * If we have a return by copy variable, we *must*, without any exception ever,
 		 * precolor it to be in %rdi. There is never a case where a variable like this is not in
-		 * %rdi
+		 * %rdi. However, a RETURN_BY_COPY_PARAMETER_ALIAS *IS* given free reign to be whatever
+		 * value we'd like, specifically to enable us to clobber %rdi and save this value if the
+		 * need arises
 		 */
 		if(first_variable->linked_var != NULL && first_variable->linked_var->membership == RETURN_BY_COPY_PARAMETER){
 			general_purpose_lr->reg.gen_purpose = RDI;

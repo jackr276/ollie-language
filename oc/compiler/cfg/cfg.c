@@ -492,7 +492,7 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
  */
 static inline u_int8_t is_store_assignment_required_for_variable(symtab_variable_record_t* variable){
 	//First check - if it's a stack var we're done
-	if(variable->stack_variable == TRUE){
+	if(variable->storage_class == STORAGE_CLASS_STACK){
 		return TRUE;
 	}
 
@@ -3202,7 +3202,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					 * only exception to this rule are elaborative stack params. Those may never be loaded 
 					 * from memory in any way
 					 */
-					if(variable->stack_variable == TRUE){
+					if(variable->storage_class == STORAGE_CLASS_STACK){
 						//Let the helper emit our load from memory
 						return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
 
@@ -3268,7 +3268,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * If we're on the RHS and we have a special "stack variable", we need to automatically
 				 * load that variable out of memory for use in whatever is happening in the caller
 				 */
-				if(variable->stack_variable == TRUE){
+				if(variable->storage_class == STORAGE_CLASS_STACK){
 					//Let the helper emit our load from memory
 					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
 
@@ -10873,7 +10873,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * 	turns out to not be needed, then the coalescing subsystem inside of the register
 		 * 	allocator will simply knock out the top assignment as if it was never there
 		 */
-		if(parameter->stack_variable == FALSE 
+		if(parameter->storage_class != STORAGE_CLASS_STACK 
 			&& parameter->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 			//Create the aliased variable
 			symtab_variable_record_t* alias = create_parameter_alias_variable(current_function, parameter, variable_symtab, get_next_variable_id());
@@ -11538,7 +11538,7 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 	 * the static analyzer
 	 */
 	if(is_memory_region(variable->type_defined_as) == TRUE
-		|| variable->stack_variable == TRUE){
+		|| variable->storage_class == STORAGE_CLASS_STACK){
 		//Create a stack region for this variable
 		node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
@@ -12075,7 +12075,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * If we have a stack variable we will handle the stack region here and
 			 * emit the synthetic initialization for assignment analysis purposes
 			 */
-			if(node->variable->stack_variable == TRUE){
+			if(node->variable->storage_class == STORAGE_CLASS_STACK){
 				//Create a stack region for this variable and store it in the associated region
 				variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
@@ -12450,7 +12450,7 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 
 	//Clone over some of these important flags
 	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
-	clone->stack_variable = source_variable->stack_variable;
+	clone->storage_class = source_variable->storage_class;
 	clone->passed_by_stack = source_variable->passed_by_stack;
 
 	/**

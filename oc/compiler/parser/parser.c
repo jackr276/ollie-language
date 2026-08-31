@@ -4096,7 +4096,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						&& is_variable_data_segment_variable(cast_expr->variable) == FALSE){
 
 						//IMPORTANT - we need to flag this as a stack variable now
-						cast_expr->variable->stack_variable = TRUE;
+						cast_expr->variable->storage_class = STORAGE_CLASS_STACK;
 					}
 
 					break;
@@ -14419,9 +14419,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * we are looking out for: if we had 6 GP params, now we have 7, and the last one
 	 * is pushed over the edge to be a stack param. We need to make the adjustment for all
 	 * of them, as well as for their function_parameter_order
-	 *
-	 * We will also create an SSA compatible variable that represents the return by copy
-	 * passed parameter internally to the function
 	 */
 	if(function_signature->returns_by_copy == TRUE){
 		remediate_return_by_copy_gp_parameters(function_record, function_signature);

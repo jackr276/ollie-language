@@ -969,7 +969,7 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 
 	//Copy over the stack info as well - this is important for references
 	record->stack_region = aliases->stack_region;
-	record->stack_variable = aliases->stack_variable;
+	record->storage_class = aliases->storage_class;
 
 	/**
 	 * We are either aliasing function parameters or the specialized
@@ -1061,8 +1061,8 @@ static inline void setup_stack_region_for_function_parameter(stack_data_area_t* 
 			break;
 	}
 
-	//This is a stack variable, we need to note it as such
-	parameter->stack_variable = TRUE;
+	//This is storage on the stack and we will note as much
+	parameter->storage_class = STORAGE_CLASS_STACK;
 
 	//Flag that this is passed via the stack
 	parameter->passed_by_stack = TRUE;

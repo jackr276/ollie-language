@@ -1976,7 +1976,8 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				}
 
 				//We do not currently support memory SSA so we have to skip
-				if(is_memory_address_type(cursor->type_defined_as) == TRUE || cursor->stack_variable == TRUE){
+				if(is_memory_address_type(cursor->type_defined_as) == TRUE 
+					|| cursor->storage_class == STORAGE_CLASS_STACK){
 					cursor = cursor->next;
 					continue;
 				}

@@ -106,7 +106,7 @@ typedef enum {
 /**
  * What is the membership that a variable has?
  */
-typedef enum variable_membership_t {
+typedef enum {
 	NO_MEMBERSHIP = 0, //Generic var, no type/function members
 	STRUCT_MEMBER,
 	UNION_MEMBER,
@@ -118,6 +118,18 @@ typedef enum variable_membership_t {
 	RETURN_BY_COPY_PARAMETER,
 	RETURN_BY_COPY_PARAMETER_ALIAS,
 } variable_membership_t;
+
+
+/**
+ * What is the default storage type of this variable? By default Ollie will
+ * try to put everything into a register for speed, but certain variables
+ * that have their address taken or come in as stack passed parameters
+ * will be treated as stack variables
+ */
+typedef enum {
+	STORAGE_CLASS_REGISTER,
+	STORAGE_CLASS_STACK
+} variable_storage_class_t;
 
 
 /**
@@ -281,6 +293,8 @@ struct symtab_variable_record_t{
 	int32_t mapping_id;
 	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
+	//What is the storage class of this variable?
+	variable_storage_class_t storage_class;
 	//The line number
 	u_int32_t line_number;
 	/**
@@ -314,13 +328,7 @@ struct symtab_variable_record_t{
 	 * checking
 	 */
 	u_int8_t is_user_defined;
-	//Where does this variable get stored? By default we assume register, so
-	//this flag will only be set if we have a memory address value
-	//
-	//TODO MAYBE MAKE THIS A STORAGE CLASS?
-	u_int8_t stack_variable;
 	//Is this a function parameter that is passed via stack?
-	//Can we make this a membership??
 	u_int8_t passed_by_stack;
 	//What's the visibility of this(only used for global variables)
 	visibilty_type_t visibility;
