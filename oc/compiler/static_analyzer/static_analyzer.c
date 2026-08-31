@@ -256,6 +256,36 @@ static inline u_int8_t is_symtab_variable_ssa_eligible(symtab_variable_record_t*
 
 
 /**
+ * Is a given symtab variable eligible for mutability warnings?
+ * 
+ * Ineligible:
+ * 	Global variables
+ * 	Static variables
+ * 	Enum variables
+ * 	Struct variables
+ *
+ * These are all ineligible because they are fundamentally differnt than what an actual
+ * SSA variable is. For instance static and global variables are basically equivalent
+ * to variables stored in memory and as such do not count for SSA
+ */
+static inline u_int8_t is_symtab_variable_eligible_for_mutability_warnings(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case ENUM_MEMBER:
+		case STRUCT_MEMBER:
+		case STATIC_VARIABLE:
+		case GLOBAL_VARIABLE:
+		case FUNCTION_PARAMETER:
+		case FUNCTION_PARAMETER_ALIAS:
+		case RETURN_BY_COPY_PARAMETER:
+		case RETURN_BY_COPY_PARAMETER_ALIAS:
+			return FALSE;
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * Is a given variable SSA eligible? We do this by looking at the type of the
  * variable and whether or not the linked var is NULL. If the linked var is NULL
  * we would get segfaults
@@ -1958,9 +1988,7 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				 * We also don't bother with function parameters or return
 				 * by copy parameters for these warnings
 				 */
-				if(is_symtab_variable_ssa_eligible(cursor) == FALSE 
-					|| cursor->membership == FUNCTION_PARAMETER
-					|| cursor->membership == RETURN_BY_COPY_PARAMETER){
+				if(is_symtab_variable_eligible_for_mutability_warnings(cursor) == FALSE){
 					cursor = cursor->next;
 					continue;
 				}

@@ -950,12 +950,12 @@ symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_
  * inserted. It will also not be declared as temp
  */
 symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record_t* function, symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id){
-	//And here is the special part - we'll need to make a symtab record
-	//for this variable and add it in
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
 	char variable_name[100];
-	//Grab a new temp var number from here. We use the
-	//^ because it is illegal for variables typed in by the
-	//user to have that, so we will not have collisions
 	sprintf(variable_name, "^t%d", temp_id);
 
 	//Create and set the name here
@@ -971,9 +971,16 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 	record->stack_region = aliases->stack_region;
 	record->stack_variable = aliases->stack_variable;
 
-	//Copy over what we're aliasing(return by copy or parameter)
-	//TODO THIS WILL NOT WORK
-	record->membership = FUNCTION_PARAMETER;
+	/**
+	 * We are either aliasing function parameters or the specialized
+	 * return by copy parameter, flag this variable as either or
+	 * depending on which is appropriate
+	 */
+	if(aliases->membership == FUNCTION_PARAMETER){
+		record->membership = FUNCTION_PARAMETER_ALIAS;
+	} else {
+		record->membership = RETURN_BY_COPY_PARAMETER_ALIAS;
+	}
 
 	//These are user defined in a way
 	record->is_user_defined = TRUE;

@@ -12566,10 +12566,14 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			 * variable is really just a memory address that's passed in as a parameter. If it's
 			 * not then just emit a regular variable
 			 */
-			if(source_variable->linked_var->membership != RETURN_BY_COPY_PARAMETER){
-				new_variable = emit_var(symtab_variable);
-			} else {
-				new_variable = emit_memory_address_var(symtab_variable);
+			switch(source_variable->linked_var->membership){
+				case RETURN_BY_COPY_PARAMETER:
+				case RETURN_BY_COPY_PARAMETER_ALIAS:
+					new_variable = emit_memory_address_var(symtab_variable);
+					break;
+				default:
+					new_variable = emit_var(symtab_variable);
+					break;
 			}
 
 			break;
