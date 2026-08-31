@@ -114,7 +114,7 @@ typedef enum variable_membership_t {
 	GLOBAL_VARIABLE,
 	STATIC_VARIABLE,
 	FUNCTION_PARAMETER,
-	//TODO NEW RETURN_BY_COPY_MEMBER
+	RETURN_BY_COPY_PARAMETER,
 } variable_membership_t;
 
 

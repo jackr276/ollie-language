@@ -1989,6 +1989,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				 */
 				} else {
 					//Emit the actual variable that will cause us to return by copy
+					//TODO FIX HERE
 					three_addr_var_t* return_by_copy_address_var = emit_return_by_copy_var(ret_node->inferred_type);
 
 					/**
@@ -12435,6 +12436,10 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
  *
  * This is the generic variable cloner rule. There are other specialized rules for
  * special variable types that we don't have here - i.e. return by copy address variables
+ *
+ * TODO HANDLE RETURN BY COPY
+ *
+ *
  */
 static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map, symtab_variable_record_t* return_by_copy_variable){
 	/**
@@ -12572,29 +12577,6 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 				exit(0);
 			}
 
-			break;
-		}
-
-		/**
-		 * For all return by copy address variables, we know for a fact that they can only ever
-		 * go into the one stack region allocated for the return by copy. Since we know what that
-		 * region is by now, we can replace all of these with references to the return by copy
-		 * variable itself
-		 */
-
-
-		// TODO We will be scrapping this entirely as a variable type
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
-			//Let's see if this mapping already exists
-			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
-
-			//If it doesn't already exist we'll make it now with the given return by copy variable
-			if(mapping == NULL){
-				create_mapping_for_temp_to_symtab_variable(variable_map, source_variable->variable_id, return_by_copy_variable);
-			}
-
-			//Emit a memory address variable using the return by copy variable
-			new_variable = emit_memory_address_var(return_by_copy_variable);
 			break;
 		}
 

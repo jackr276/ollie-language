@@ -898,11 +898,48 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 
 
 /**
- * Create a return by copy variable record
+ * Create a return by copy variable record. This will simply be a variable that is a temporary variable with a return by copy
+ * membership
  */
 symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
-	//TODO
+	/**
+	 * And here is the special part - we'll need to make a symtab record
+	 * for this variable and add it in
+	 */
+	char variable_name[100];
 
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
+	sprintf(variable_name, "^t%d", temp_id);
+
+	//Create and set the name here
+	dynamic_string_t string = dynamic_string_alloc();
+	dynamic_string_set(&string, variable_name);
+
+	//Now create and add the symtab record for this variable
+	symtab_variable_record_t* record = create_variable_record(&string, function, NULL, 0, 0);
+	//Store the type here
+	record->type_defined_as = type;
+
+	//Insert this into the variable symtab
+	insert_variable(variable_symtab, record);
+
+	//These are not user defined
+	record->is_user_defined = FALSE;
+
+	//The membership is a return by copy var - special kind
+	record->membership = RETURN_BY_COPY_PARAMETER;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	//And give it back
+	return record;
 }
 
 
