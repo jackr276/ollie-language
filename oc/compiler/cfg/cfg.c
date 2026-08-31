@@ -492,7 +492,7 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
  */
 static inline u_int8_t is_store_assignment_required_for_variable(symtab_variable_record_t* variable){
 	//First check - if it's a stack var we're done
-	if(variable->stack_variable == TRUE){
+	if(variable->storage_class == STORAGE_CLASS_STACK){
 		return TRUE;
 	}
 
@@ -1988,8 +1988,12 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				 * copy operation
 				 */
 				} else {
-					//Emit the actual variable that will cause us to return by copy
-					three_addr_var_t* return_by_copy_address_var = emit_return_by_copy_var(ret_node->inferred_type);
+					/**
+					 * The return by copy variable that we created during setup will always be cached in the current
+					 * function record. It was aliased but that's of no concern to us. All that we need to do now
+					 * emit a variable based on that created return by copy variable
+					 */
+					three_addr_var_t* return_by_copy_address_var = emit_var(current_function->return_by_copy_variable);
 
 					/**
 					 * Now that we have the dummy variable, we will copy from the returned variable over into the return-by-copy
@@ -3198,7 +3202,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					 * only exception to this rule are elaborative stack params. Those may never be loaded 
 					 * from memory in any way
 					 */
-					if(variable->stack_variable == TRUE){
+					if(variable->storage_class == STORAGE_CLASS_STACK){
 						//Let the helper emit our load from memory
 						return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
 
@@ -3264,7 +3268,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * If we're on the RHS and we have a special "stack variable", we need to automatically
 				 * load that variable out of memory for use in whatever is happening in the caller
 				 */
-				if(variable->stack_variable == TRUE){
+				if(variable->storage_class == STORAGE_CLASS_STACK){
 					//Let the helper emit our load from memory
 					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
 
@@ -10778,14 +10782,63 @@ static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* us
  * take, this is going to be a different story
  */
 static inline void setup_function_parameters(symtab_function_record_t* function_record, basic_block_t* function_entry_block, u_int32_t line_number){
+	//Extract the signature function type for convenience
+	function_type_t* signature = function_record->signature->internal_types.function_type;
+
+	/**
+	 * If we return by copy, we will have a special variable to be used on the function side that
+	 * represents the return by copy address passed to us in %rdi. This will be treated like any
+	 * other function parameter, meaning that it will be aliased so that we don't accidentally
+	 * clobber its register
+	 */
+	if(signature->returns_by_copy == TRUE){
+		//Create it in the symtab
+		symtab_variable_record_t* return_by_copy_address = create_return_by_copy_variable(function_record, 
+																							signature->return_type,
+																							variable_symtab,
+																							get_next_variable_id());
+		//Flag that this was "declared" in the entry block
+		return_by_copy_address->block_declared_in = function_entry_block;
+
+		//Store this inside of the function so that we have it on hand for later
+		function_record->return_by_copy_variable = return_by_copy_address;
+
+		//Create the original variable *BEFORE* we alias this
+		three_addr_var_t* return_by_copy_var = emit_var(return_by_copy_address);
+
+		//Now let's perform the aliasing. Remember this is basically irreversible once we do it
+		symtab_variable_record_t* alias = create_return_by_copy_alias_variable(function_record, variable_symtab, get_next_variable_id());
+
+		/**
+		 * Flag that the return by copy does have this alias. Note that once we do this, any time
+		 * emit_var() is called on the return by copy, the alias will be used instead so the order
+		 * here is very important. Once this is done - there is no going back
+		 */
+		return_by_copy_address->alias = alias;
+
+		//Now get the aliased variable out
+		three_addr_var_t* alias_var = emit_var(alias);
+
+		/**
+		 * Finally let's emit an assignment from the original return by copy address over to the 
+		 * aliased var. This assignment will survive coalescing *if* it's needed and that is
+		 * what stops us from clobbering %rdi
+		 */
+		instruction_t* assignment = emit_assignment_instruction(alias_var, return_by_copy_var, line_number);
+		add_statement(function_entry_block, assignment);
+
+		/**
+		 * When we're inlining, we will replace both the regular return by copy address parameter and the
+		 * alias with references to the same local stack address. As such, the assignment instruction 
+		 * above is useless, and should be specifically excluded when we inline
+		 */
+		assignment->exclude_when_inlining = TRUE;
+	}
+
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
 	 * at some point want to take the memory address of them), then we need to load
 	 * these variables into the stack preemptively
-	 */
-	/**
-	 * Now we are going to process all of our normal function parameters. There is a special
-	 * case that we need to account for: if the user takes that address of a *non stack-passed*
 	 */
 	for(int32_t i = 0; i < function_record->function_parameters.current_index; i++){
 		//Extract the parameter
@@ -10817,7 +10870,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * 	turns out to not be needed, then the coalescing subsystem inside of the register
 		 * 	allocator will simply knock out the top assignment as if it was never there
 		 */
-		if(parameter->stack_variable == FALSE 
+		if(parameter->storage_class != STORAGE_CLASS_STACK 
 			&& parameter->type_defined_as->type_class != TYPE_CLASS_ELABORATIVE){
 			//Create the aliased variable
 			symtab_variable_record_t* alias = create_parameter_alias_variable(current_function, parameter, variable_symtab, get_next_variable_id());
@@ -11482,7 +11535,7 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 	 * the static analyzer
 	 */
 	if(is_memory_region(variable->type_defined_as) == TRUE
-		|| variable->stack_variable == TRUE){
+		|| variable->storage_class == STORAGE_CLASS_STACK){
 		//Create a stack region for this variable
 		node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
@@ -12019,7 +12072,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * If we have a stack variable we will handle the stack region here and
 			 * emit the synthetic initialization for assignment analysis purposes
 			 */
-			if(node->variable->stack_variable == TRUE){
+			if(node->variable->storage_class == STORAGE_CLASS_STACK){
 				//Create a stack region for this variable and store it in the associated region
 				variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
@@ -12394,7 +12447,7 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 
 	//Clone over some of these important flags
 	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
-	clone->stack_variable = source_variable->stack_variable;
+	clone->storage_class = source_variable->storage_class;
 	clone->passed_by_stack = source_variable->passed_by_stack;
 
 	/**
@@ -12419,11 +12472,8 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 /**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
- *
- * This is the generic variable cloner rule. There are other specialized rules for
- * special variable types that we don't have here - i.e. return by copy address variables
  */
-static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map, symtab_variable_record_t* return_by_copy_variable){
+static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
 	/**
 	 * This is a completely valid and frequent case. In this case, just leave
 	 */
@@ -12508,10 +12558,21 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			}
 
 			/**
-			 * We need to go through the entire variable emittal process again to ensure that
-			 * this new symtab variable gets fresh variable references
+			 * If we have a variable that was a return by copy parameter in the original function,
+			 * we should emit a memory address variable in this copy because this return by copy
+			 * variable is really just a memory address that's passed in as a parameter. If it's
+			 * not then just emit a regular variable
 			 */
-			new_variable = emit_var(symtab_variable);
+			switch(source_variable->linked_var->membership){
+				case RETURN_BY_COPY_PARAMETER:
+				case RETURN_BY_COPY_PARAMETER_ALIAS:
+					new_variable = emit_memory_address_var(symtab_variable);
+					break;
+				default:
+					new_variable = emit_var(symtab_variable);
+					break;
+			}
+
 			break;
 		}
 
@@ -12559,26 +12620,6 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 				exit(0);
 			}
 
-			break;
-		}
-
-		/**
-		 * For all return by copy address variables, we know for a fact that they can only ever
-		 * go into the one stack region allocated for the return by copy. Since we know what that
-		 * region is by now, we can replace all of these with references to the return by copy
-		 * variable itself
-		 */
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS: {
-			//Let's see if this mapping already exists
-			mapping = get_mapping_for_temporary_variable(variable_map, source_variable->variable_id);
-
-			//If it doesn't already exist we'll make it now with the given return by copy variable
-			if(mapping == NULL){
-				create_mapping_for_temp_to_symtab_variable(variable_map, source_variable->variable_id, return_by_copy_variable);
-			}
-
-			//Emit a memory address variable using the return by copy variable
-			new_variable = emit_memory_address_var(return_by_copy_variable);
 			break;
 		}
 
@@ -12663,7 +12704,7 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  */
 static inline void clone_instruction_into_block(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map,
 											   	symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
-												symtab_variable_record_t* return_by_copy_variable, basic_block_t* inlined_exit_block){
+												basic_block_t* inlined_exit_block){
 	/**
 	 * Now certain instruction types may require special treatment due to blocks,
 	 * special variables like returned variables, etc. We'll account for this
@@ -12681,7 +12722,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			 */
 			if(source_instruction->operands.oir.operand1 != NULL){
 				instruction_t* simulated_return_assignment = emit_assignment_instruction(emit_var(return_variable),
-																		clone_variable(source_instruction->operands.oir.operand1, variable_map, return_by_copy_variable),
+																		clone_variable(source_instruction->operands.oir.operand1, variable_map),
 																		source_instruction->line_number);
 				add_statement(cloning_into_block, simulated_return_assignment);
 			}
@@ -12709,7 +12750,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		case THREE_ADDR_CODE_RAISE_STMT: {
 			//Raise always has an assignee unlike return
 			instruction_t* simulated_raise_assignment = emit_assignment_instruction(emit_var(raise_variable),
-																	clone_variable(source_instruction->operands.oir.operand1, variable_map, return_by_copy_variable),
+																	clone_variable(source_instruction->operands.oir.operand1, variable_map),
 																	source_instruction->line_number);
 			add_statement(cloning_into_block, simulated_raise_assignment);
 
@@ -12758,7 +12799,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			branch_stmt->inverse_branch = source_instruction->inverse_branch;
 
 			//Branch statements *need* to have the "relies_on" field populated properly
-			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_by_copy_variable);
+			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
 			 * Populate the if and else block with what they directly map to
@@ -12808,9 +12849,9 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_jump->if_block = cloning_into_block->jump_table; 
 
 			//Indirect jump statements have address operands and a multiplier
-			new_jump->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_by_copy_variable);
-			new_jump->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_by_copy_variable);
-			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_by_copy_variable);
+			new_jump->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_jump->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 			new_jump->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
 			new_jump->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
 
@@ -12834,8 +12875,8 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_call->line_number = source_instruction->line_number;
 
 			//Clone our assignee and error assignee over
-			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map, return_by_copy_variable);
-			new_call->optional_storage.call_storage.error_assignee = clone_variable(source_instruction->optional_storage.call_storage.error_assignee, variable_map, return_by_copy_variable);
+			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_call->optional_storage.call_storage.error_assignee = clone_variable(source_instruction->optional_storage.call_storage.error_assignee, variable_map);
 
 			/**
 			 * Remember that indirect calls use operand1 and direct calls use
@@ -12843,7 +12884,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			 * them both
 			 */
 			new_call->called_function = source_instruction->called_function;
-			new_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map, return_by_copy_variable);
+			new_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 
 			//Allocate a fresh parameter results array so that we can clone over the parameters
 			new_call->parameter_results = parameter_results_array_alloc(source_instruction->parameter_results.current_index);
@@ -12870,7 +12911,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 					case PARAM_RESULT_TYPE_VAR:{
 						//Clone the parameter variable and add it in
-						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map, return_by_copy_variable);
+						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map);
 						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
 						break;
 					}
@@ -12897,8 +12938,8 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_instruction->line_number = source_instruction->line_number;
 
 			//We only need these two variables
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_by_copy_variable);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
 
 			//We need to know how much copying must be done
 			new_instruction->optional_storage.byte_amount_to_copy = source_instruction->optional_storage.byte_amount_to_copy;
@@ -12919,13 +12960,13 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			/**
 			 * First clone every single variable using our mapping strategy
 			 */
-			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map, return_by_copy_variable);
-			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_by_copy_variable);
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
 			 * Then clone all of the constants - there's no mapping for this we just do a complete
@@ -12962,13 +13003,13 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			/**
 			 * First clone every single variable using our mapping strategy
 			 */
-			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map, return_by_copy_variable);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map, return_by_copy_variable);
-			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map, return_by_copy_variable);
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
 			 * Then clone all of the constants - there's no mapping for this we just do a complete
@@ -13091,27 +13132,43 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	/**
 	 * Step 2: return by copy handling
 	 *
-	 * If we have a function that returns by copy, we will need to create a stack region
-	 * to clone into and associate it with a given return by copy variable
+	 * All functions that do return by copy already have a special return by copy variable created
+	 * for them to use internally. For our purposes, we can create a new dummy variable and then
+	 * create a one-to-one mapping of that variable to this new one with an allocated stack region
+	 * for this all to work
 	 *
-	 * We will need to maintain separation between the actual return variable and the return by copy
-	 * variable in the event that there is one, which is why we have a separate symtab variable for
-	 * it
+	 * Since we're replacing parameters and parameter aliases with memory address variables, we are
+	 * able to replace both the original return by copy variable and the variable that aliases it
+	 * with our memory address variable to avoid the need for extra interference
 	 */
-	symtab_variable_record_t* return_by_copy_variable = NULL;
 	if(cloning_signature->returns_by_copy == TRUE){
-		//Create the SSA variable
-		return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
+		//Get both the original return by copy variable and the alias variable
+		symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
+		symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
+
+		/**
+		 * Create a variable that is SSA compatible - it does not specifically need to be
+		 * return by copy because there are no register allocation rules here
+		 */
+		symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
 
 		//Create the stack region
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
 
 		//Associate it with our return by copy variable
-		return_by_copy_variable->stack_region = return_by_copy_region;
+		new_return_by_copy_variable->stack_region = return_by_copy_region;
 
 		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
-		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(return_by_copy_variable), function_to_clone->line_number);
+		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
 		add_statement(*function_entry, initialization);
+
+		/**
+		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
+		 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
+		 * about register clobbering once we inline
+		 */
+		create_mapping_for_symtab_variable(&variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
+		create_mapping_for_symtab_variable(&variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
 	} 
 
 	/**
@@ -13145,7 +13202,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
 
 		//We'll now leverage the copy system to get the equivalent of the parameter
-		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map, return_by_copy_variable);
+		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map);
 
 		//Get the result to process - should be a one-to-one mapping for now
 		parameter_result_t* result = get_result_at_index(parameter_results, i);
@@ -13184,8 +13241,18 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		 */
 		instruction_t* cursor = reference_block->leader_statement;
 		while(cursor != NULL){
-			//Clone this instruction into the new block
-			clone_instruction_into_block(new_block, cursor, &variable_map, return_variable, raise_variable, return_by_copy_variable, *function_exit);
+			/**
+			 * We are able to flag when certain instructions should not be cloned over
+			 * for inlining, so we will only do the actual inlining when this is flagged
+			 * as not being excluded
+			 */
+			if(cursor->exclude_when_inlining == TRUE){
+				cursor = cursor->next_statement;
+				continue;
+			}
+
+			//Survived so clone it
+			clone_instruction_into_block(new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
 
 			//Onto the next one
 			cursor = cursor->next_statement;
