@@ -10783,18 +10783,42 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 	function_type_t* signature = function_record->signature->internal_types.function_type;
 
 	/**
-	 * If we return by copy, we'll need to create a special SSA variable that represents
-	 * the return by copy parameter that we're passing in
+	 * If we return by copy, we will have a special variable to be used on the function side that
+	 * represents the return by copy address passed to us in %rdi. This will be treated like any
+	 * other function parameter, meaning that it will be aliased so that we don't accidentally
+	 * clobber its register
 	 */
 	if(signature->returns_by_copy == TRUE){
 		//Create it in the symtab
-		symtab_variable_record_t* return_by_copy_address = create_ssa_compatible_temp_var(current_function, signature->return_type, variable_symtab, get_next_variable_id());
+		symtab_variable_record_t* return_by_copy_address = create_return_by_copy_variable(function_record, 
+																							signature->return_type,
+																							variable_symtab,
+																							get_next_variable_id());
+		//Flag that this was "declared" in the entry block
+		return_by_copy_address->block_declared_in = function_entry_block;
 
 		//Store this inside of the function so that we have it on hand for later
 		function_record->return_by_copy_variable = return_by_copy_address;
-	}
 
-	//TODO WE NEED TO SET UP RETURN BY COPY VARS HERE TO MAKE THIS WORK
+		//Create the original variable *BEFORE* we alias this
+		three_addr_var_t* return_by_copy_var = emit_var(return_by_copy_address);
+
+		//Now let's perform the aliasing. Remember this is basically irreversible once we do it
+		symtab_variable_record_t* alias = create_parameter_alias_variable(function_record,
+																			return_by_copy_address,
+																			variable_symtab,
+																			get_next_variable_id());
+		//Now get the aliased variable out
+		three_addr_var_t* alias_var = emit_var(alias);
+
+		/**
+		 * Finally let's emit an assignment from the original return by copy address over to the 
+		 * aliased var. This assignment will survive coalescing *if* it's needed and that is
+		 * what stops us from clobbering %rdi
+		 */
+		instruction_t* assignment = emit_assignment_instruction(alias_var, return_by_copy_var, function_record->line_number);
+		add_statement(function_entry_block, assignment);
+	}
 
 	/**
 	 * If we have function parameters that are *also* stack variables(meaning the user will
