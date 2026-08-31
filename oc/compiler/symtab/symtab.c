@@ -971,8 +971,8 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 	record->stack_region = aliases->stack_region;
 	record->stack_variable = aliases->stack_variable;
 
-	//This is still a function parameter at heart
-	record->membership = FUNCTION_PARAMETER;
+	//Copy over what we're aliasing(return by copy or parameter)
+	record->membership = aliases->membership;
 
 	//These are user defined in a way
 	record->is_user_defined = TRUE;

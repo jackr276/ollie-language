@@ -13128,29 +13128,39 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	 * for them to use internally. For our purposes, we can create a new dummy variable and then
 	 * create a one-to-one mapping of that variable to this new one with an allocated stack region
 	 * for this all to work
+	 *
+	 * Since we're replacing parameters and parameter aliases with memory address variables, we are
+	 * able to replace both the original return by copy variable and the variable that aliases it
+	 * with our memory address variable to avoid the need for extra interference
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
+		//Get both the original return by copy variable and the alias variable
+		symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
+		symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
+
 		/**
 		 * Create a variable that is SSA compatible - it does not specifically need to be
 		 * return by copy because there are no register allocation rules here
 		 */
-		symtab_variable_record_t* return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
+		symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
 
 		//Create the stack region
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
 
 		//Associate it with our return by copy variable
-		return_by_copy_variable->stack_region = return_by_copy_region;
+		new_return_by_copy_variable->stack_region = return_by_copy_region;
 
 		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
-		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(return_by_copy_variable), function_to_clone->line_number);
+		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
 		add_statement(*function_entry, initialization);
 
 		/**
 		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
-		 * it to this new return by copy variable
+		 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
+		 * about register clobbering once we inline
 		 */
-		create_mapping_for_symtab_variable(&variable_map, function_to_clone->return_by_copy_variable, return_by_copy_variable);
+		create_mapping_for_symtab_variable(&variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
+		create_mapping_for_symtab_variable(&variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
 	} 
 
 	/**
@@ -13595,6 +13605,8 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+	//TODO DELETE
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
