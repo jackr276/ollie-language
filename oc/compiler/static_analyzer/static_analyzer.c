@@ -1420,7 +1420,6 @@ static inline void populate_all_initialization_states(symtab_function_record_t* 
 	 * time we entered the function. As such we'll grab it out and populate the state at 1 now
 	 */
 	if(function->return_by_copy_variable != NULL){
-		printf("HERE\n\n");
 		function->return_by_copy_variable->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
 	}
 
