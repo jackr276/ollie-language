@@ -278,14 +278,6 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 			} else {
 				return FALSE;
 			}
-		
-		/**
-		 * Return by copy addresses are *never* SSA eligible. This
-		 * would actually case the SSA system to crash because there
-		 * is no real assignment for this kind of variable
-		 */
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
-			return FALSE;
 
 		default:
 			return FALSE;
@@ -1410,6 +1402,14 @@ static inline void set_variable_initialization_state(three_addr_var_t* variable,
  * analysis
  */
 static inline void populate_all_initialization_states(symtab_function_record_t* function, dynamic_array_t* postorder_traversal){
+	/**
+	 * If we have a return by copy variable, then we know that it must have been initialized by the
+	 * time we entered the function. As such we'll grab it out and populate the state at 1 now
+	 */
+	if(function->return_by_copy_variable != NULL){
+		function->return_by_copy_variable->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+	}
+
 	/**
 	 * Function parameters are a unique case because we know that by the time we hit the function
 	 * entry they are initialized. This preparatory step will acknowledge that fact by populating
