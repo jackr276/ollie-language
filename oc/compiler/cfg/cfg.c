@@ -12645,7 +12645,8 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			 * What used to be a stack param memory address is now simply a local memory
 			 * address because we're referencing a local memory address region
 			 */
-			emit_memory_address_var(symtab_variable);
+			new_variable = emit_memory_address_var(symtab_variable);
+			break;
 		}
 
 		/**
@@ -13260,7 +13261,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 				 * Once we've created the new stack region and initialized it, we can emit the store statement. Note
 				 * that we will clone the variable again to maintain 100% memory separation between functions
 				 */
-				emit_stack_parameter_result_store(function_entry, emit_var(cloned_parameter), result, region_type, current_function->line_number);
+				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, region_type, current_function->line_number);
 			}
 
 			//Bump this for the next go around
