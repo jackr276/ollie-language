@@ -12618,9 +12618,34 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			break;
 		}
 
+		/**
+		 * TODO DOC ME
+		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS: {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(0);
+			//Get the mapping
+			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
+
+			/**
+			 * If we found it we can just create a new variable from this linked one. If not,
+			 * then we'll need to create an entirely new symtab variable while guaranteeing that
+			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+			 * in the same function
+			 *
+			 * NOTE: this relies on us having already created the local stack region and mapping
+			 * the parameter region to it before ever calling this
+			 */
+			symtab_variable_record_t* symtab_variable;
+			if(mapping != NULL){
+				symtab_variable = mapping->destination.symtab_variable;
+			} else {
+				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
+			}
+
+			/**
+			 * What used to be a stack param memory address is now simply a local memory
+			 * address because we're referencing a local memory address region
+			 */
+			emit_memory_address_var(symtab_variable);
 		}
 
 		/**
@@ -13168,7 +13193,23 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
 				emit_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
 
+			/**
+			 * If a function parameter is stack passed, then it will have a stack region associated with it. We 
+			 * will create a mapping from that parameter passed stack region to our new local stack region and
+			 * let the variable cloning system take it from there
+			 */
 			} else {
+				//TODO EQUIVALENT ARRAY HANDLING
+
+				//First create the stack region
+				stack_region_t* new_region = create_stack_region_for_type(&(current_function->local_stack), parameter_assignee->type);
+
+				//Associate this new region with the old parameter region for cloning
+				parameter_variable->stack_region->maps_to = new_region;
+
+				//Now we can clone the symtab variable itself - we will auto handle this association
+				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+
 				printf("TODO NOT DONE\n");
 				exit(1);
 			}
