@@ -13185,9 +13185,9 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 															  int32_t current_gp_parameter_order, int32_t current_sse_parameter_order){
 	//Run through all of our function parameters
 	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
-		//Extract the symtab parameter that we're using for this
+		//Extract the symtab variable and clone it off the bat
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
-		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
+		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 
 		/**
 		 * Elaborative parameters are something entirely different that need to be
@@ -13206,6 +13206,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 * This will be split down the lines of floating point and non floating
 		 * point variables as they belong to different register classes
 		 */
+
+		//TODO CAN probably refactor this entire split to make it cleaner and less repetitive
 		if(IS_FLOATING_POINT(parameter_variable->type_defined_as) == FALSE){
 			/**
 			 * If we are at or below our GP parameter max, we will treat this
@@ -13214,7 +13216,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 * the result over to it
 			 */
 			if(current_gp_parameter_order <= MAX_GP_REGISTER_PASSED_PARAMS){
-				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+				three_addr_var_t* parameter_assignee_clone = emit_var(cloned_parameter);
 				emit_register_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
 
 			/**
@@ -13222,9 +13224,14 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 * will create a mapping from that parameter passed stack region to our new local stack region and
 			 * let the variable cloning system take it from there
 			 */
+
+			//TODO TEST CASE WITH ARRAY TYPE TO MAKE SURE IT WORKS
+			//
+			//
+			//
 			} else {
 				//Extract the type
-				generic_type_t* region_type = parameter_assignee->type;
+				generic_type_t* region_type = parameter_variable->type_defined_as;
 
 				/**
 				 * Since we never pass array types by copy, we don't want the size of the array
@@ -13235,19 +13242,25 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 					region_type = convert_array_type_to_equivalent_pointer(region_type);
 				}
 
-				//TODO TEST CASE WITH ARRAY
-
 				//First create the stack region
-				stack_region_t* new_region = create_stack_region_for_type(&(current_function->local_stack), parameter_assignee->type);
+				stack_region_t* new_region = create_stack_region_for_type(&(current_function->local_stack), region_type);
 
-				//Associate this new region with the old parameter region for cloning
+				/**
+				 * Associate this new stack region with what the old region
+				 * maps to *and* what the cloned parameter has
+				 */
 				parameter_variable->stack_region->maps_to = new_region;
+				cloned_parameter->stack_region = new_region;
 
-				//Now we can clone the symtab variable itself - we will auto handle this association
-				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+				//Emit the synthetic initialization so that the static analyzer is happy
+				instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(cloned_parameter), current_function->line_number);
+				add_statement(function_entry, synthetic_initialization);
 
-				//Once we've cloned this we can emit the needed store statement
-				emit_stack_parameter_result_store(function_entry, parameter_assignee_clone, result, region_type, current_function->line_number);
+				/**
+				 * Once we've created the new stack region and initialized it, we can emit the store statement. Note
+				 * that we will clone the variable again to maintain 100% memory separation between functions
+				 */
+				emit_stack_parameter_result_store(function_entry, emit_var(cloned_parameter), result, region_type, current_function->line_number);
 			}
 
 			//Bump this for the next go around
@@ -13261,7 +13274,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 * the result over to it
 			 */
 			if(current_sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
-				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+				three_addr_var_t* parameter_assignee_clone = emit_var(cloned_parameter);
 				emit_register_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
 
 			} else {
