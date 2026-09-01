@@ -21,8 +21,10 @@ typedef struct variable_map_t variable_map_t;
  * have temp-to-temp or symtab-to-symtab
  */
 typedef enum {
-	MAPPING_TYPE_TEMP,
-	MAPPING_TYPE_SYMTAB,
+	MAPPING_TYPE_TEMP_TO_TEMP,
+	MAPPING_TYPE_SYMTAB_TO_SYMTAB,
+	MAPPING_TYPE_TEMP_TO_SYMTAB,
+	MAPPING_TYPE_SYMTAB_TO_TEMP,
 } variable_mapping_type_t;
 
 
@@ -91,6 +93,14 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
  * that is on you
  */
 void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable);
+
+/**
+ * Create a new mapping that goes from a temp var to a symtab variable
+ *
+ * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
+ * that is on you
+ */
+void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
 
 /**
  * Allocate a variable map with the default size

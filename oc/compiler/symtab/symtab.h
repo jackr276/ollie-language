@@ -106,7 +106,7 @@ typedef enum {
 /**
  * What is the membership that a variable has?
  */
-typedef enum variable_membership_t {
+typedef enum {
 	NO_MEMBERSHIP = 0, //Generic var, no type/function members
 	STRUCT_MEMBER,
 	UNION_MEMBER,
@@ -114,8 +114,22 @@ typedef enum variable_membership_t {
 	GLOBAL_VARIABLE,
 	STATIC_VARIABLE,
 	FUNCTION_PARAMETER,
-	RETURNED_VARIABLE, //Is this returned by a function?
+	FUNCTION_PARAMETER_ALIAS,
+	RETURN_BY_COPY_PARAMETER,
+	RETURN_BY_COPY_PARAMETER_ALIAS,
 } variable_membership_t;
+
+
+/**
+ * What is the default storage type of this variable? By default Ollie will
+ * try to put everything into a register for speed, but certain variables
+ * that have their address taken or come in as stack passed parameters
+ * will be treated as stack variables
+ */
+typedef enum {
+	STORAGE_CLASS_REGISTER,
+	STORAGE_CLASS_STACK
+} variable_storage_class_t;
 
 
 /**
@@ -151,13 +165,16 @@ struct symtab_function_record_t{
 	dynamic_set_t called_functions;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
+	/**
+	 * Functions that return by copy will have their own special return
+	 * by copy variable for use internally
+	 */
+	symtab_variable_record_t* return_by_copy_variable;
 	//What dependency graph node does this function come from?
 	dependency_graph_node_t* dependency_graph_node;
 	//Maintain a reference to the entry block
 	void* function_entry_block;
-	/**
-	 * Store the top level scope for this function
-	 */
+	//Store the top level scope for this function
 	symtab_variable_sheaf_t* top_level_scope;
 	//The line number
 	u_int32_t line_number;
@@ -232,6 +249,8 @@ struct symtab_variable_record_t{
 	symtab_function_record_t* function_declared_in;
 	//What type is it?
 	generic_type_t* type_defined_as;
+	//FREQUENTLY ACCESSED - What type structure or language concept does this variable belong to?
+	variable_membership_t membership;
 	/**
 	 * We are able to alias variables as other variables. This is
 	 * typically only used for function parameters in the presaving step
@@ -266,8 +285,16 @@ struct symtab_variable_record_t{
 	 * inside of the SSA renamer
 	 */
 	dynamic_integer_array_t ssa_overwritten_generation_map;
+	/**
+	 * Store the ID for the mapping where this symtab
+	 * variable is the *SOURCE*. This is used for O(1)
+	 * retrieval in inlining
+	 */
+	int32_t mapping_id;
 	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
+	//What is the storage class of this variable?
+	variable_storage_class_t storage_class;
 	//The line number
 	u_int32_t line_number;
 	/**
@@ -301,11 +328,6 @@ struct symtab_variable_record_t{
 	 * checking
 	 */
 	u_int8_t is_user_defined;
-	//What type structure or language concept does this variable belong to?
-	variable_membership_t membership;
-	//Where does this variable get stored? By default we assume register, so
-	//this flag will only be set if we have a memory address value
-	u_int8_t stack_variable;
 	//Is this a function parameter that is passed via stack?
 	u_int8_t passed_by_stack;
 	//What's the visibility of this(only used for global variables)
@@ -598,9 +620,19 @@ symtab_variable_record_t* create_static_variable_record(dynamic_string_t* name, 
 symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
+ * Create a return by copy variable record
+ */
+symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+
+/**
  * Create a parameter alias variable record
  */
 symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record_t* function, symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id);
+
+/**
+ * Create a return by copy alias variable record
+ */
+symtab_variable_record_t* create_return_by_copy_alias_variable(symtab_function_record_t* function, variable_symtab_t* variable_symtab, u_int32_t temp_id);
 
 /**
  * Create a variable for a memory address that is not from an actual var
@@ -620,7 +652,7 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * is pushed over the edge to be a stack param. We need to make the adjustment for all
  * of them, as well as for their function_parameter_order
  */
-void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature);
+void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, function_type_t* signature);
 
 /**
  * Make a function record

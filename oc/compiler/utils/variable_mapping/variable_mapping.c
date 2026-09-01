@@ -27,19 +27,22 @@ variable_map_t variable_map_alloc(){
  */
 variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id){
 	for(int32_t i = 0; i < variable_map->current_index; i++){
+		//Get a pointer to the mapping
+		variable_mapping_t* mapping = &(variable_map->mappings[i]);
+
 		/**
 		 * We only care to look for temp var mappings here - if it's not
 		 * that then skip
 		 */
-		if(variable_map->mappings[i].mapping_type != MAPPING_TYPE_TEMP){
+		if(mapping->mapping_type != MAPPING_TYPE_TEMP_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_TEMP_TO_TEMP){
 			continue;
 		}
 
 		/**
 		 * We have a hit - return the address of this mapping to avoid copying
 		 */
-		if(variable_map->mappings[i].source.temporary_id == source_temp_var_id){
-			return &(variable_map->mappings[i]);
+		if(mapping->source.temporary_id == source_temp_var_id){
+			return mapping;
 		}
 	}
 
@@ -53,26 +56,41 @@ variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_
  * that has the given source symtab variable. We return NULL if none is found
  */
 variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
+	/**
+	 * First try: get the mapping using the variable ID here. If we get a mapping and the source
+	 * matches then we are going to skip the linear scan
+	 */
+	variable_mapping_t* mapping = &(variable_map->mappings[source_variable->mapping_id]);
+	if(mapping != NULL && mapping->source.symtab_variable == source_variable){
+		return mapping;
+	}
+
+	/**
+	 * Second try: if that didn't work then we'll just do our regular linear scan over
+	 * every single mapping in here
+	 */
 	for(int32_t i = 0; i < variable_map->current_index; i++){
+		//Get a pointer to the mapping
+		variable_mapping_t* mapping = &(variable_map->mappings[i]);
+
 		/**
 		 * We only care to look for symtab mappings here - if it's not
 		 * that then skip
 		 */
-		if(variable_map->mappings[i].mapping_type != MAPPING_TYPE_SYMTAB){
+		if(mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_TEMP){
 			continue;
 		}
 
 		/**
 		 * We have a hit - return the address of this mapping to avoid copying
 		 */
-		if(variable_map->mappings[i].source.symtab_variable == source_variable){
-			return &(variable_map->mappings[i]);
+		if(mapping->source.symtab_variable == source_variable){
+			return mapping;
 		}
 	}
 
 	//If we made it here then we found nothing so bail out
 	return NULL;
-
 }
 
 
@@ -105,7 +123,7 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
 	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
 
 	//This is a temp mapping
-	mapping->mapping_type = MAPPING_TYPE_TEMP;
+	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_TEMP;
 
 	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
@@ -133,10 +151,41 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
 
 	//This is a symtab mapping
-	mapping->mapping_type = MAPPING_TYPE_SYMTAB;
+	mapping->mapping_type = MAPPING_TYPE_SYMTAB_TO_SYMTAB;
 
 	//Store the source and dest
 	mapping->source.symtab_variable = source_variable;
+	mapping->destination.symtab_variable = destination_variable;
+
+	//The mapping ID is the index where it exists
+	mapping->mapping_id = variable_map->current_index;
+
+	//Store on the symtab variable the mapping that we correspond to
+	source_variable->mapping_id = mapping->mapping_id;
+
+	//Bump this up for the next go around
+	(variable_map->current_index)++;
+}
+
+
+/**
+ * Create a new mapping that goes from a temp var to a symtab variable
+ *
+ * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
+ * that is on you
+ */
+void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, symtab_variable_record_t* destination_variable){
+	//Perform the resize if needed
+	dynamically_resize_if_needed(variable_map);
+
+	//Grab a reference to the region to make this easier
+	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+
+	//This is a symtab mapping
+	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_SYMTAB;
+
+	//Store the source and dest
+	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.symtab_variable = destination_variable;
 
 	//The mapping ID is the index where it exists

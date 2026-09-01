@@ -4096,7 +4096,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						&& is_variable_data_segment_variable(cast_expr->variable) == FALSE){
 
 						//IMPORTANT - we need to flag this as a stack variable now
-						cast_expr->variable->stack_variable = TRUE;
+						cast_expr->variable->storage_class = STORAGE_CLASS_STACK;
 					}
 
 					break;
@@ -14410,7 +14410,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * of them, as well as for their function_parameter_order
 	 */
 	if(function_signature->returns_by_copy == TRUE){
-		remediate_return_by_copy_gp_parameter_order(function_record, function_signature);
+		remediate_return_by_copy_gp_parameters(function_record, function_signature);
 	}
 
 	//We can optionally see the raises keyword here

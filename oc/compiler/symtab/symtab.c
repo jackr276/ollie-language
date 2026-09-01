@@ -859,12 +859,17 @@ symtab_variable_record_t* create_temp_memory_address_variable(symtab_function_re
  * inserted. It will also not be declared as temp
  */
 symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
-	//And here is the special part - we'll need to make a symtab record
-	//for this variable and add it in
+	/**
+	 * And here is the special part - we'll need to make a symtab record
+	 * for this variable and add it in
+	 */
 	char variable_name[100];
-	//Grab a new temp var number from here. We use the
-	//^ because it is illegal for variables typed in by the
-	//user to have that, so we will not have collisions
+
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
 	sprintf(variable_name, "^t%d", temp_id);
 
 	//Create and set the name here
@@ -893,18 +898,64 @@ symtab_variable_record_t* create_ssa_compatible_temp_var(symtab_function_record_
 
 
 /**
+ * Create a return by copy variable record. This will simply be a variable that is a temporary variable with a return by copy
+ * membership
+ */
+symtab_variable_record_t* create_return_by_copy_variable(symtab_function_record_t* function, generic_type_t* type, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+	/**
+	 * And here is the special part - we'll need to make a symtab record
+	 * for this variable and add it in
+	 */
+	char variable_name[100];
+
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
+	sprintf(variable_name, "^t%d", temp_id);
+
+	//Create and set the name here
+	dynamic_string_t string = dynamic_string_alloc();
+	dynamic_string_set(&string, variable_name);
+
+	//Now create and add the symtab record for this variable
+	symtab_variable_record_t* record = create_variable_record(&string, function, NULL, 0, 0);
+	//Store the type here
+	record->type_defined_as = type;
+
+	//Insert this into the variable symtab
+	insert_variable(variable_symtab, record);
+
+	//These are not user defined
+	record->is_user_defined = FALSE;
+
+	//The membership is a return by copy var - special kind
+	record->membership = RETURN_BY_COPY_PARAMETER;
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	//And give it back
+	return record;
+}
+
+
+/**
  * Create and return a function parameter alis variable. A parameter alias variable is halfway
  * between a temp and a full fledged non-temp variable. It will have a 
  * symtab record, and as such will be picked up by the phi function
  * inserted. It will also not be declared as temp
  */
 symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record_t* function, symtab_variable_record_t* aliases, variable_symtab_t* variable_symtab, u_int32_t temp_id){
-	//And here is the special part - we'll need to make a symtab record
-	//for this variable and add it in
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
 	char variable_name[100];
-	//Grab a new temp var number from here. We use the
-	//^ because it is illegal for variables typed in by the
-	//user to have that, so we will not have collisions
 	sprintf(variable_name, "^t%d", temp_id);
 
 	//Create and set the name here
@@ -918,10 +969,68 @@ symtab_variable_record_t* create_parameter_alias_variable(symtab_function_record
 
 	//Copy over the stack info as well - this is important for references
 	record->stack_region = aliases->stack_region;
-	record->stack_variable = aliases->stack_variable;
+	record->storage_class = aliases->storage_class;
 
-	//This is still a function parameter at heart
-	record->membership = FUNCTION_PARAMETER;
+	//Flag that this is a function parameter alias
+	record->membership = FUNCTION_PARAMETER_ALIAS;
+
+	//These are user defined in a way
+	record->is_user_defined = TRUE;
+
+	/**
+	 * Record that this record aliases the given variable so
+	 * that, in the future, if we need to drill down and get
+	 * it we will be able to
+	 */
+	record->aliases = aliases;
+
+	//Insert this into the variable symtab
+	insert_variable(variable_symtab, record);
+
+	//For eventual SSA generation
+	record->counter_stack.stack = NULL;
+	record->counter_stack.top_index = 0;
+	record->counter_stack.current_size = 0;
+
+	//And give it back
+	return record;
+}
+
+
+/**
+ * Create a return by copy alias variable record. Since these come directly from the fucntion themselves, we do
+ * not need to pass in the variable that we are aliasing
+ */
+symtab_variable_record_t* create_return_by_copy_alias_variable(symtab_function_record_t* function, variable_symtab_t* variable_symtab, u_int32_t temp_id){
+	/**
+	 * Grab a new temp var number from here. We use the
+	 * ^ because it is illegal for variables typed in by the
+	 * user to have that, so we will not have collisions
+	 */
+	char variable_name[100];
+	sprintf(variable_name, "^t%d", temp_id);
+
+	//Create and set the name here
+	dynamic_string_t string = dynamic_string_alloc();
+	dynamic_string_set(&string, variable_name);
+
+	/**
+	 * Since we are aliasing a return by copy variable we will just grab it
+	 * from the function itslef
+	 */
+	symtab_variable_record_t* aliases = function->return_by_copy_variable;
+
+	//Now create and add the symtab record for this variable
+	symtab_variable_record_t* record = create_variable_record(&string, function, aliases->node_defined_in, aliases->line_number, aliases->token_index_of_definition);
+	//Store the type here
+	record->type_defined_as = aliases->type_defined_as;
+
+	//Copy over the stack info as well - this is important for references
+	record->stack_region = aliases->stack_region;
+	record->storage_class = aliases->storage_class;
+
+	//Flag that this is a return by copy alias
+	record->membership = RETURN_BY_COPY_PARAMETER_ALIAS; 
 
 	//These are user defined in a way
 	record->is_user_defined = TRUE;
@@ -1002,8 +1111,8 @@ static inline void setup_stack_region_for_function_parameter(stack_data_area_t* 
 			break;
 	}
 
-	//This is a stack variable, we need to note it as such
-	parameter->stack_variable = TRUE;
+	//This is storage on the stack and we will note as much
+	parameter->storage_class = STORAGE_CLASS_STACK;
 
 	//Flag that this is passed via the stack
 	parameter->passed_by_stack = TRUE;
@@ -1085,7 +1194,7 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * is pushed over the edge to be a stack param. We need to make the adjustment for all
  * of them, as well as for their function_parameter_order
  */
-void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* record, function_type_t* signature){
+void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, function_type_t* signature){
 	for(int32_t i = 0; i < record->function_parameters.current_index; i++){
 		//Grab the parameter out
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
@@ -1118,7 +1227,6 @@ void remediate_return_by_copy_gp_parameter_order(symtab_function_record_t* recor
 			}
 
 			setup_stack_region_for_function_parameter(&(record->stack_passed_parameters), parameter);
-
 		}
 
 		//Regardless of what happened, bump the class relative function parameter order

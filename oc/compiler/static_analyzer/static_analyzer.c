@@ -256,6 +256,36 @@ static inline u_int8_t is_symtab_variable_ssa_eligible(symtab_variable_record_t*
 
 
 /**
+ * Is a given symtab variable eligible for mutability warnings?
+ * 
+ * Ineligible:
+ * 	Global variables
+ * 	Static variables
+ * 	Enum variables
+ * 	Struct variables
+ *
+ * These are all ineligible because they are fundamentally differnt than what an actual
+ * SSA variable is. For instance static and global variables are basically equivalent
+ * to variables stored in memory and as such do not count for SSA
+ */
+static inline u_int8_t is_symtab_variable_eligible_for_mutability_warnings(symtab_variable_record_t* variable){
+	switch(variable->membership){
+		case ENUM_MEMBER:
+		case STRUCT_MEMBER:
+		case STATIC_VARIABLE:
+		case GLOBAL_VARIABLE:
+		case FUNCTION_PARAMETER:
+		case FUNCTION_PARAMETER_ALIAS:
+		case RETURN_BY_COPY_PARAMETER:
+		case RETURN_BY_COPY_PARAMETER_ALIAS:
+			return FALSE;
+		default:
+			return TRUE;
+	}
+}
+
+
+/**
  * Is a given variable SSA eligible? We do this by looking at the type of the
  * variable and whether or not the linked var is NULL. If the linked var is NULL
  * we would get segfaults
@@ -278,14 +308,6 @@ static inline u_int8_t is_variable_ssa_eligible(three_addr_var_t* variable){
 			} else {
 				return FALSE;
 			}
-		
-		/**
-		 * Return by copy addresses are *never* SSA eligible. This
-		 * would actually case the SSA system to crash because there
-		 * is no real assignment for this kind of variable
-		 */
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
-			return FALSE;
 
 		default:
 			return FALSE;
@@ -1130,6 +1152,14 @@ static void rename_block(basic_block_t* entry){
 	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+
+		/**
+		 * If we have a return by copy variable then it's already been
+		 * assigned, so give it a new name
+		 */
+		if(function_defined_in->return_by_copy_variable != NULL){
+			lhs_new_name_direct(function_defined_in->return_by_copy_variable);
+		}
 		
 		/**
 		 * We store function parameters as symtab variables so we'll need to perform a direct
@@ -1264,6 +1294,11 @@ static void rename_block(basic_block_t* entry){
 	 */
 	if(entry->block_type == BLOCK_TYPE_FUNC_ENTRY){
 		symtab_function_record_t* function_defined_in = entry->function_defined_in;
+		
+		//Unwind the return by copy variable
+		if(function_defined_in->return_by_copy_variable != NULL){
+			lightstack_pop(&(function_defined_in->return_by_copy_variable->counter_stack));
+		}
 		
 		//We need to pop these all only once so that we have parity with what we did up top
 		for(int32_t i = 0; i < function_defined_in->function_parameters.current_index; i++){
@@ -1410,6 +1445,14 @@ static inline void set_variable_initialization_state(three_addr_var_t* variable,
  * analysis
  */
 static inline void populate_all_initialization_states(symtab_function_record_t* function, dynamic_array_t* postorder_traversal){
+	/**
+	 * If we have a return by copy variable, then we know that it must have been initialized by the
+	 * time we entered the function. As such we'll grab it out and populate the state at 1 now
+	 */
+	if(function->return_by_copy_variable != NULL){
+		function->return_by_copy_variable->initialization_state_map[1] = VARIABLE_STATE_DEFINITELY_INITIALIZED;
+	}
+
 	/**
 	 * Function parameters are a unique case because we know that by the time we hit the function
 	 * entry they are initialized. This preparatory step will acknowledge that fact by populating
@@ -1933,7 +1976,8 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				}
 
 				//We do not currently support memory SSA so we have to skip
-				if(is_memory_address_type(cursor->type_defined_as) == TRUE || cursor->stack_variable == TRUE){
+				if(is_memory_address_type(cursor->type_defined_as) == TRUE 
+					|| cursor->storage_class == STORAGE_CLASS_STACK){
 					cursor = cursor->next;
 					continue;
 				}
@@ -1942,9 +1986,10 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 				 * If the symtab variable is not SSA eligible then this
 				 * is not going to work, we will move on
 				 *
-				 * We also don't bother with function parameters
+				 * We also don't bother with function parameters or return
+				 * by copy parameters for these warnings
 				 */
-				if(is_symtab_variable_ssa_eligible(cursor) == FALSE || cursor->membership == FUNCTION_PARAMETER){
+				if(is_symtab_variable_eligible_for_mutability_warnings(cursor) == FALSE){
 					cursor = cursor->next;
 					continue;
 				}

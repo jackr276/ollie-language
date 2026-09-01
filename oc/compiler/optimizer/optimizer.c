@@ -301,7 +301,6 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			return;
 		default:
 			break;
@@ -1059,7 +1058,6 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-		case VARIABLE_TYPE_RETURN_BY_COPY_ADDRESS:
 			return;
 		default:
 			break;
