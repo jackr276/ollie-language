@@ -223,10 +223,14 @@ void add_sibling_node(generic_ast_node_t* node, generic_ast_node_t* new_sibling)
 void ast_dealloc();
 
 /**
- * Is the value of an ast_constant_node 0? Returns true if yes and false
- * if not
+ * Is the value of an ast_constant_node 0? Returns true if yes and false if not
  */
 u_int8_t is_constant_node_value_0(generic_ast_node_t* constant_node);
+
+/**
+ * Is the value of an ast_constant_node 1? Returns true if yes and false if not
+ */
+u_int8_t is_constant_node_value_1(generic_ast_node_t* constant_node);
 
 /**
  * Is the value of ast_constant_node negative?

@@ -5189,27 +5189,16 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		}
 
 		/**
-		 * If we discover that the user is just trying to add/subtract two constants together, then we can do a preemptive
-		 * optimization by adding them together right now and just giving back a constant node. The node that we give back
-		 * will always
+		 * If both nodes are constants we can perform the addition right
+		 * here and now to avoid sending the work to the CFG builder
 		 */
 		if(temp_holder_is_constant == TRUE && right_child_is_constant == TRUE){
-			//Go based on the token
-			switch(op.tok){
-				//Add the two constants
-				case PLUS:
-					//Add them, result is in temp-holder
-					add_constant_nodes(temp_holder, right_child);
-					break;
-
-				case MINUS:
-					//Subtract them, result is in temp-holder
-					subtract_constant_nodes(temp_holder, right_child);
-					break;
-
-				//Unreachable
-				default:
-					break;
+			if(op.tok == PLUS){
+				//Add them, result is in temp-holder
+				add_constant_nodes(temp_holder, right_child);
+			} else {
+				//Subtract them, result is in temp-holder
+				subtract_constant_nodes(temp_holder, right_child);
 			}
 
 			//The right child is now useless, so we can scrap it. The temp holder is the sub-tree-root
