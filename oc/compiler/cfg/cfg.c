@@ -5835,10 +5835,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Left first
 	cfg_result_package_t left_side = emit_binary_expression(current_block, left_expression);
 
-	if(left_side.type == CFG_RESULT_TYPE_CONST && is_constant_value_zero(left_side.result_value.result_const) == TRUE){
-		printf("LEFT IS 0\n");
-	}
-
 	//Advance it and update the block pointer
 	current_block = left_side.final_block;
 
@@ -5855,10 +5851,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	cfg_result_package_t right_side = emit_binary_expression(current_block, right_expression);
 	//Update the block pointer
 	current_block = right_side.final_block;
-
-	if(right_side.type == CFG_RESULT_TYPE_CONST && is_constant_value_zero(right_side.result_value.result_const) == TRUE){
-		printf("RIGHT IS 0\n");
-	}
 
 	//The assignee is always the same type as the expression
 	assignee = emit_temp_var(logical_or_expr->inferred_type);
