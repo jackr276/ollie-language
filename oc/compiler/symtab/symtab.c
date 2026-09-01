@@ -1113,9 +1113,6 @@ static inline void setup_stack_region_for_function_parameter(stack_data_area_t* 
 
 	//This is storage on the stack and we will note as much
 	parameter->storage_class = STORAGE_CLASS_STACK;
-
-	//Flag that this is passed via the stack
-	parameter->passed_by_stack = TRUE;
 }
 
 
@@ -1160,8 +1157,8 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 		//Create the special stack region for our elaborative param type
 		variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
 
-		//This is passed via the stack
-		variable_record->passed_by_stack = TRUE;
+		//Flag that this is a stack passed function parameter
+		variable_record->membership = STACK_PASSED_FUNCTION_PARAMETER;
 
 		//This function does contain stack variables
 		function_signature->contains_stack_params = TRUE;
@@ -1179,6 +1176,9 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 
 		//Let the helper deal with the setup
 		setup_stack_region_for_function_parameter(&(function_record->stack_passed_parameters), variable_record);
+
+		//Flag that this is a stack passed function parameter
+		variable_record->membership = STACK_PASSED_FUNCTION_PARAMETER;
 
 		//Flag that this function contains stack params
 		function_signature->contains_stack_params = TRUE;

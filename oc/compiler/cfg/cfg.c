@@ -4017,9 +4017,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		 * that these types(arrays and pointers) live on the stack as references to other
 		 * areas in memory. The array itself is not on the stack
 		 */
-		if(base_address_variable != NULL 
-			&& base_address_variable->passed_by_stack == TRUE){
-
+		if(base_address_variable != NULL && base_address_variable->membership == STACK_PASSED_FUNCTION_PARAMETER){
 			/**
 			 * Is this an elaborative param type? If so, we'll need to add on the automatic
 			 * 4 byte offset to this base address that all stack passed parameters have to account
@@ -12448,7 +12446,6 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 	//Clone over some of these important flags
 	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
 	clone->storage_class = source_variable->storage_class;
-	clone->passed_by_stack = source_variable->passed_by_stack;
 
 	/**
 	 * If there is a stack region, we'll assign it to be what the source's stack
