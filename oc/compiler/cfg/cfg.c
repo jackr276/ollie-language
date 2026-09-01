@@ -12580,47 +12580,41 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		/**
 		 * For memory addresses, we're going to have to account for the stack regions that
 		 * are stored on the variable and/or the symtab variable as we copy it
+		 *
+		 * NOTE: in the CFG, all memory address variables will have a linked var. It is not
+		 * until we reach the instruction selector that the concept of a "memory address temp
+		 * var" appears, so we do not need to worry about that here
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS: {
-			if(source_variable->linked_var != NULL){
-				/**
-				 * For static and global variables, we do not need to worry about cloning memory
-				 * regions because the memory region is just in the data segment itself. Instead of
-				 * doing that we'll just emit a straight copy
-				 */
-				if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
-					return emit_var_copy(source_variable);
-				}
-				
-				mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
-
-				/**
-				 * If we found it we can just create a new variable from this linked one. If not,
-				 * then we'll need to create an entirely new symtab variable while guaranteeing that
-				 * it is 100% unique not just in this inlined call but in every inlined call, even ones
-				 * in the same function
-				 */
-				symtab_variable_record_t* symtab_variable;
-				if(mapping != NULL){
-					symtab_variable = mapping->destination.symtab_variable;
-				} else {
-					symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
-				}
-				
-				/**
-				 * Go through the process of emitting this variable fresh to ensure that we have
-				 * all of the variable ID linking in
-				 */
-				new_variable = emit_memory_address_var(symtab_variable);
+			/**
+			 * For static and global variables, we do not need to worry about cloning memory
+			 * regions because the memory region is just in the data segment itself. Instead of
+			 * doing that we'll just emit a straight copy
+			 */
+			if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+				return emit_var_copy(source_variable);
+			}
+			
+			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
 
 			/**
-			 * Will be done at a later time
+			 * If we found it we can just create a new variable from this linked one. If not,
+			 * then we'll need to create an entirely new symtab variable while guaranteeing that
+			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+			 * in the same function
 			 */
+			symtab_variable_record_t* symtab_variable;
+			if(mapping != NULL){
+				symtab_variable = mapping->destination.symtab_variable;
 			} else {
-				printf("Function inlining has not yet implemented memory address temporary variables\n");
-				exit(0);
+				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
 			}
-
+			
+			/**
+			 * Go through the process of emitting this variable fresh to ensure that we have
+			 * all of the variable ID linking in
+			 */
+			new_variable = emit_memory_address_var(symtab_variable);
 			break;
 		}
 
