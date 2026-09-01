@@ -13052,6 +13052,101 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 
 /**
+ * Perform all needed setup for an inlined function that will return by copy
+ *
+ * All functions that do return by copy already have a special return by copy variable created
+ * for them to use internally. For our purposes, we can create a new dummy variable and then
+ * create a one-to-one mapping of that variable to this new one with an allocated stack region
+ * for this all to work
+ *
+ * Since we're replacing parameters and parameter aliases with memory address variables, we are
+ * able to replace both the original return by copy variable and the variable that aliases it
+ * with our memory address variable to avoid the need for extra interference
+ */
+static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
+															variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+	//Extract the cloning signature from the function
+	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
+
+	//Get both the original return by copy variable and the alias variable
+	symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
+	symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
+
+	/**
+	 * Create a variable that is SSA compatible - it does not specifically need to be
+	 * return by copy because there are no register allocation rules here
+	 */
+	symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
+
+	//Create the stack region
+	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
+
+	//Associate it with our return by copy variable
+	new_return_by_copy_variable->stack_region = return_by_copy_region;
+
+	//We will also need a synthetic initialization for this to not be flagged by the static analyzer
+	instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
+	add_statement(function_entry, initialization);
+
+	/**
+	 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
+	 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
+	 * about register clobbering once we inline
+	 */
+	create_mapping_for_symtab_variable(variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
+	create_mapping_for_symtab_variable(variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
+
+	/**
+	 * Since, for regular functions, this is passed in via %rdi, we will bump up the GP parameter order
+	 * to represent symbolically that we've added this
+	 */
+	(*current_gp_parameter_order)++;
+}
+
+
+static inline void setup_function_parameters_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
+															  variable_map_t* variable_map, parameter_results_array_t* parameter_results,
+															  int32_t current_gp_parameter_order, int32_t current_sse_parameter_order){
+	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
+		//Extract the symtab parameter that we're using for this
+		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
+		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
+
+		/**
+		 * If this is not a stack passed by copy type(struct/union), we will handle it
+		 * normally and only use the stack if needed(if we run over the MAX register count
+		 * for GP/SSE)
+		 */
+		if(is_type_stack_passed_by_copy(parameter_variable->type_defined_as) == FALSE){
+
+		} else {
+			printf("PASSED BY COPY NOT WORKING YET\n");
+			exit(1);
+		}
+
+		//We'll now leverage the copy system to get the equivalent of the parameter
+		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+
+		//Get the result to process - should be a one-to-one mapping for now
+		parameter_result_t* result = get_result_at_index(parameter_results, i);
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR:{
+				instruction_t* assignment = emit_assignment_instruction(parameter_assignee_clone, result->param_result.variable_result, function_to_clone->line_number);
+				add_statement(function_entry, assignment);
+				break;
+			}
+
+			case PARAM_RESULT_TYPE_CONST:{
+				instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee_clone, result->param_result.constant_result, function_to_clone->line_number);
+				add_statement(function_entry, assignment);
+				break;
+			}
+		}
+	}
+}
+
+
+/**
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
@@ -13088,6 +13183,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		printf("Function inlining with elaborative stack is currently unimplemented\n");
 		exit(0);
 	}
+
 
 	/**
 	 * Step 1: Clone all function blocks without cloning instructions
@@ -13140,49 +13236,11 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	/**
 	 * Step 2: return by copy handling
 	 *
-	 * All functions that do return by copy already have a special return by copy variable created
-	 * for them to use internally. For our purposes, we can create a new dummy variable and then
-	 * create a one-to-one mapping of that variable to this new one with an allocated stack region
-	 * for this all to work
-	 *
-	 * Since we're replacing parameters and parameter aliases with memory address variables, we are
-	 * able to replace both the original return by copy variable and the variable that aliases it
-	 * with our memory address variable to avoid the need for extra interference
+	 * This has enough complexity to warrant a helper function, more documentation in that
+	 * function itself
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		//Get both the original return by copy variable and the alias variable
-		symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
-		symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
-
-		/**
-		 * Create a variable that is SSA compatible - it does not specifically need to be
-		 * return by copy because there are no register allocation rules here
-		 */
-		symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
-
-		//Create the stack region
-		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
-
-		//Associate it with our return by copy variable
-		new_return_by_copy_variable->stack_region = return_by_copy_region;
-
-		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
-		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
-		add_statement(*function_entry, initialization);
-
-		/**
-		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
-		 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
-		 * about register clobbering once we inline
-		 */
-		create_mapping_for_symtab_variable(&variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
-		create_mapping_for_symtab_variable(&variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
-
-		/**
-		 * Since, for regular functions, this is passed in via %rdi, we will bump up the GP parameter order
-		 * to represent symbolically that we've added this
-		 */
-		current_gp_parameter_order++;
+		setup_return_by_copy_for_inlined_call(function_to_clone, *function_entry, &variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
@@ -13200,44 +13258,10 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	/**
 	 * Step 4: function parameter management
 	 *
-	 * TODO DOCUMENT ME
-	 *
+	 * This has enough complexity to warrant a helper function, more documentation in that
+	 * function itself
 	 */
-	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
-		//Extract the symtab parameter that we're using for this
-		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
-		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
-
-		/**
-		 * If this is not a stack passed by copy type(struct/union), we will handle it
-		 * normally and only use the stack if needed
-		 */
-		if(is_type_stack_passed_by_copy(parameter_variable->type_defined_as) == FALSE){
-
-		} else {
-			printf("PASSED BY COPY NOT WORKING YET\n");
-			exit(1);
-		}
-
-		//We'll now leverage the copy system to get the equivalent of the parameter
-		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map);
-
-		//Get the result to process - should be a one-to-one mapping for now
-		parameter_result_t* result = get_result_at_index(parameter_results, i);
-		switch(result->result_type){
-			case PARAM_RESULT_TYPE_VAR:{
-				instruction_t* assignment = emit_assignment_instruction(parameter_assignee_clone, result->param_result.variable_result, function_to_clone->line_number);
-				add_statement(*function_entry, assignment);
-				break;
-			}
-
-			case PARAM_RESULT_TYPE_CONST:{
-				instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee_clone, result->param_result.constant_result, function_to_clone->line_number);
-				add_statement(*function_entry, assignment);
-				break;
-			}
-		}
-	}
+	setup_function_parameters_for_inlined_call(function_to_clone, *function_entry, &variable_map, parameter_results, current_gp_parameter_order, current_sse_parameter_order);
 
 	/**
 	 * Step 5: clone all instructions over
