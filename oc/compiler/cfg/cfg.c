@@ -3119,15 +3119,16 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//Go based on it's membership
 	switch(variable->membership){
 		//For an enum just turn it into a constant
-		case ENUM_MEMBER:
+		case ENUM_MEMBER: {
 			return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(variable->enum_member_value, variable->type_defined_as), variable->type_defined_as, ident_node->line_number);
+		}
 
 		/**
 		 * For a global variable, if we are on the RHS of an equation and we're trying to
 		 * use this, we really are looking to load it out of memory. So, we will
 		 * help out here by emitting a load to get this out
 		 */
-		case GLOBAL_VARIABLE:
+		case GLOBAL_VARIABLE: {
 			/**
 			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
 			 * not anything else with it
@@ -3149,13 +3150,14 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			} else {
 				return emit_var(variable);
 			}
+		}
 
 		/**
 		 * For a static variable, if we are on the RHS of an equation and we're trying to
 		 * use this, we really are looking to load it out of memory. So, we will
 		 * help out here by emitting a load to get this out
 		 */
-		case STATIC_VARIABLE:
+		case STATIC_VARIABLE: {
 			/**
 			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
 			 * not anything else with it
@@ -3177,83 +3179,84 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			} else {
 				return emit_var(variable);
 			}
+		}
 
 		/**
-		 * Most function parameters are simple variable emittals. We do need to account for the case where
-		 * we have function parameters that are passed in via the stack however
+		 * Function parameters(note these are not stack passed) are regular variable emittals
 		 */
-		case FUNCTION_PARAMETER:
+		case FUNCTION_PARAMETER: {
+			//RHS can have special rules
+			if(side == SIDE_TYPE_RIGHT){
+				/**
+				 * If we're on the RHS and we have a special "stack variable", we need to automatically
+				 * load that variable out of memory for use in whatever is happening in the caller. The
+				 * only exception to this rule are elaborative stack params. Those may never be loaded 
+				 * from memory in any way
+				 */
+				if(variable->storage_class == STORAGE_CLASS_STACK){
+					//Let the helper emit our load from memory
+					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+
+				//Otherwise again just emit the variable
+				} else {
+					return emit_var(variable);
+				}
+
+			//Otherwise we're just emitting the variable
+			} else {
+				return emit_var(variable);
+			}
+		}
+
+		/**
+		 * Stack passed function parameters are a different case entirely and will require
+		 * some special handling
+		 */
+		case STACK_PASSED_FUNCTION_PARAMETER: {
 			/**
-			 * Elaborative param types are special - there is no circumstance where an elaborative
-			 * param is not a memory address variable ever. We can skip all of the fluff and just
-			 * emit it as such now
+			 * Elaborative stack parameters are always memory address variables because
+			 * we can't dereference them outside of an array accessor
 			 */
 			if(variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
 				return emit_memory_address_var(variable);
 			}
 
-			//Most common case - not passed by stack
-			if(variable->passed_by_stack == FALSE){
-				//RHS can have special rules
-				if(side == SIDE_TYPE_RIGHT){
-					/**
-					 * If we're on the RHS and we have a special "stack variable", we need to automatically
-					 * load that variable out of memory for use in whatever is happening in the caller. The
-					 * only exception to this rule are elaborative stack params. Those may never be loaded 
-					 * from memory in any way
-					 */
-					if(variable->storage_class == STORAGE_CLASS_STACK){
-						//Let the helper emit our load from memory
-						return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
-
-					//Otherwise again just emit the variable
-					} else {
-						return emit_var(variable);
-					}
-
-				//Otherwise we're just emitting the variable
+			/**
+			 * If we're here then we need to emit an automatic dereference for the caller.
+			 * The only exception to this is stack passed parameters. Those may never have an automatic
+			 * dereference emitted because they can only be accessed via the array accessor
+			 */
+			if(side == SIDE_TYPE_RIGHT){
+				/**
+				 * If the given type is a struct or union, we expect it to be passed
+				 * via copy. As such, we do not need to do any kind of automatic
+				 * loading/unloading from memory, we can instead just emit the memory
+				 * address
+				 */
+				if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
+					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
 				} else {
-					return emit_var(variable);
+					return emit_memory_address_var(variable);
 				}
 
-			//Otherwise we are passed via stack so we'll need some special rules
 			} else {
 				/**
-				 * If we're here then we need to emit an automatic dereference for the caller.
-				 * The only exception to this is stack passed parameters. Those may never have an automatic
-				 * dereference emitted because they can only be accessed via the array accessor
+				 * If we have a stack passed by copy variable, we need the memory address. This
+				 * will only happen for structs and unions. Otherwise we just have a regular 
+				 * variable(most common)
 				 */
-				if(side == SIDE_TYPE_RIGHT){
-					/**
-					 * If the given type is a struct or union, we expect it to be passed
-					 * via copy. As such, we do not need to do any kind of automatic
-					 * loading/unloading from memory, we can instead just emit the memory
-					 * address
-					 */
-					if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
-						return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
-					} else {
-						return emit_memory_address_var(variable);
-					}
-
+				if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
+					return emit_var(variable);
 				} else {
-					/**
-					 * If we have a stack passed by copy variable, we need the memory address. This
-					 * will only happen for structs and unions. Otherwise we just have a regular 
-					 * variable(most common)
-					 */
-					if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
-						return emit_var(variable);
-					} else {
-						return emit_memory_address_var(variable);
-					}
+					return emit_memory_address_var(variable);
 				}
 			}
+		}
 
 		/**
 		 * Handle all of our other cases. These follow mostly the same rules as the other variables
 		 */
-		default:
+		default: {
 			/**
 			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
 			 * not anything else with it
@@ -3281,6 +3284,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			} else {
 				return emit_var(variable);
 			}
+		}
 	}
 }
 
@@ -10906,7 +10910,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * along by the stack, we need to create a stack region for it. It is critical
 		 * that we only do this if this is *not* passed via the stack
 		 */
-		} else if(parameter->passed_by_stack == FALSE){
+		} else if(parameter->membership != STACK_PASSED_FUNCTION_PARAMETER){
 			//Add this variable onto the stack now, since we know it is not already on it
 			parameter->stack_region = create_stack_region_for_type(&(current_function->local_stack), parameter->type_defined_as);
 
