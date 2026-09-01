@@ -13205,20 +13205,24 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	/**
 	 * Step 4: function parameter management
 	 *
-	 * Run through all of our parameters and get them assigned over to their
-	 * actual symtab variables in the inlined function. This step bridges the
-	 * gap between what we see when we call a function and what we have here
+	 * TODO DOCUMENT ME
 	 *
-	 * We have a one-to-one mapping now. Once we implement return by copy, stack param
-	 * and elaborative it won't be this easy
-	 *
-	 * NOTE: this is not in a working state for pass by copy or stack parameters. That is going
-	 * to be fully implemented later on
 	 */
 	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
-		//Extract the parameter and emit a dummy variable that we'll use for the mapping
+		//Extract the symtab parameter that we're using for this
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
 		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
+
+		/**
+		 * If this is not a stack passed by copy type(struct/union), we will handle it
+		 * normally and only use the stack if needed
+		 */
+		if(is_type_stack_passed_by_copy(parameter_variable->type_defined_as) == FALSE){
+
+		} else {
+			printf("PASSED BY COPY NOT WORKING YET\n");
+			exit(1);
+		}
 
 		//We'll now leverage the copy system to get the equivalent of the parameter
 		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map);
