@@ -13104,31 +13104,80 @@ static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_
 }
 
 
+static inline void emit_parameter_result_assignment(){
+
+}
+
+
+/**
+ * Setup all of our function parameters for the inlined call. With the current implementation, it is important that anything
+ * that is a stack variable in the original non-inlined call is a stack variable here as well. All stack passed variables
+ * will have their stack regions setup in the callee's local stack instead of a separate stack region as is usually done
+ */
 static inline void setup_function_parameters_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
 															  variable_map_t* variable_map, parameter_results_array_t* parameter_results,
 															  int32_t current_gp_parameter_order, int32_t current_sse_parameter_order){
+	//Run through all of our function parameters
 	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
 		//Extract the symtab parameter that we're using for this
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
 		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
 
 		/**
-		 * If this is not a stack passed by copy type(struct/union), we will handle it
-		 * normally and only use the stack if needed(if we run over the MAX register count
-		 * for GP/SSE)
+		 * Elaborative parameters are something entirely different that need to be
+		 * handled separately - get out if we encounter one as we know that it will
+		 * always be the last parameter in the list
 		 */
-		if(is_type_stack_passed_by_copy(parameter_variable->type_defined_as) == FALSE){
-
-		} else {
-			printf("PASSED BY COPY NOT WORKING YET\n");
-			exit(1);
+		if(parameter_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+			printf("Elaborative parameters are not yet supported\n");
+			exit(0);
 		}
-
-		//We'll now leverage the copy system to get the equivalent of the parameter
-		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
 
 		//Get the result to process - should be a one-to-one mapping for now
 		parameter_result_t* result = get_result_at_index(parameter_results, i);
+
+		/**
+		 * This will be split down the lines of floating point and non floating
+		 * point variables as they belong to different register classes
+		 */
+		if(IS_FLOATING_POINT(parameter_variable->type_defined_as) == FALSE){
+			/**
+			 * If we are at or below our GP parameter max, we will treat this
+			 * as a regular assignment expression because there is no stack
+			 * involvement
+			 */
+			if(current_gp_parameter_order <= MAX_GP_REGISTER_PASSED_PARAMS){
+				//We'll now leverage the copy system to get the equivalent of the parameter
+				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+
+			} else {
+				printf("TODO NOT DONE\n");
+				exit(1);
+			}
+
+			//Bump this for the next go around
+			current_gp_parameter_order++;
+
+		} else {
+			/**
+			 * If we are at or below our SSE parameter max, we will treat this
+			 * as a regular assignment expression because there is no stack
+			 * involvement
+			 */
+			if(current_sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
+				//We'll now leverage the copy system to get the equivalent of the parameter
+				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+
+
+			} else {
+				printf("TODO NOT DONE\n");
+				exit(1);
+			}
+
+			//Bump this for the next go around
+			current_sse_parameter_order++;
+		}
+
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR:{
 				instruction_t* assignment = emit_assignment_instruction(parameter_assignee_clone, result->param_result.variable_result, function_to_clone->line_number);
