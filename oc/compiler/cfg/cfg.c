@@ -13133,8 +13133,8 @@ static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_
  * Unpack a parameter result and emit a simple assignment. This is only meant to be used for parameters that
  * are passed via register. This should not be used for stack variables
  */
-static inline void emit_parameter_result_assignment(basic_block_t* function_entry, three_addr_var_t* parameter_assignee,
-													parameter_result_t* result, u_int32_t line_number){
+static inline void emit_register_parameter_result_assignment(basic_block_t* function_entry, three_addr_var_t* parameter_assignee,
+																parameter_result_t* result, u_int32_t line_number){
 	switch(result->result_type){
 		case PARAM_RESULT_TYPE_VAR:{
 			instruction_t* assignment = emit_assignment_instruction(parameter_assignee, result->param_result.variable_result, line_number);
@@ -13145,6 +13145,30 @@ static inline void emit_parameter_result_assignment(basic_block_t* function_entr
 		case PARAM_RESULT_TYPE_CONST:{
 			instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee, result->param_result.constant_result, line_number);
 			add_statement(function_entry, assignment);
+			break;
+		}
+	}
+}
+
+
+/**
+ * Unpack a parameter result and emit a  assignment. This is only meant to be used for parameters that
+ * are passed via stack because we will be emitting a store statement. We are going to assume that the
+ * parameter assignee is a memory address variable here
+ */
+static inline void emit_stack_parameter_result_store(basic_block_t* function_entry, three_addr_var_t* parameter_stack_address,
+																parameter_result_t* result, generic_type_t* memory_write_type,
+															   	u_int32_t line_number){
+	switch(result->result_type){
+		case PARAM_RESULT_TYPE_VAR:{
+			instruction_t* store_stmt = emit_store_base_address_only(parameter_stack_address, result->param_result.variable_result, memory_write_type, line_number);
+			add_statement(function_entry, store_stmt);
+			break;
+		}
+
+		case PARAM_RESULT_TYPE_CONST:{
+			instruction_t* store_stmt = emit_constant_store_base_address_only(parameter_stack_address, result->param_result.constant_result, memory_write_type, line_number);
+			add_statement(function_entry, store_stmt);
 			break;
 		}
 	}
@@ -13191,7 +13215,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 */
 			if(current_gp_parameter_order <= MAX_GP_REGISTER_PASSED_PARAMS){
 				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
-				emit_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
+				emit_register_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
 
 			/**
 			 * If a function parameter is stack passed, then it will have a stack region associated with it. We 
@@ -13199,7 +13223,19 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 * let the variable cloning system take it from there
 			 */
 			} else {
-				//TODO EQUIVALENT ARRAY HANDLING
+				//Extract the type
+				generic_type_t* region_type = parameter_assignee->type;
+
+				/**
+				 * Since we never pass array types by copy, we don't want the size of the array
+				 * locally to distort the size of it here. Instead we'll convert it to an
+				 * equivalent pointer type
+				 */
+				if(region_type->type_class == TYPE_CLASS_ARRAY){
+					region_type = convert_array_type_to_equivalent_pointer(region_type);
+				}
+
+				//TODO TEST CASE WITH ARRAY
 
 				//First create the stack region
 				stack_region_t* new_region = create_stack_region_for_type(&(current_function->local_stack), parameter_assignee->type);
@@ -13210,8 +13246,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 				//Now we can clone the symtab variable itself - we will auto handle this association
 				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
 
-				printf("TODO NOT DONE\n");
-				exit(1);
+				//Once we've cloned this we can emit the needed store statement
+				emit_stack_parameter_result_store(function_entry, parameter_assignee_clone, result, region_type, current_function->line_number);
 			}
 
 			//Bump this for the next go around
@@ -13226,7 +13262,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 */
 			if(current_sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
 				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
-				emit_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
+				emit_register_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
 
 			} else {
 				printf("TODO NOT DONE\n");
