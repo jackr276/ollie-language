@@ -12623,6 +12623,11 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 			break;
 		}
 
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS: {
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(0);
+		}
+
 		/**
 		 * Function addresses work like any other variable in the way that they're cloned
 		 * and passed around
@@ -13074,10 +13079,18 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	int32_t inlined_in_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
 	/**
+	 * Maintain the parameter order for our GP and SSE parameters. Even though it doesn't
+	 * really matter for inlining, we need to mimic the stack parameter passing behavior
+	 * of the original function, and that behavior relies entirely on this order
+	 */
+	int32_t current_gp_parameter_order = 1;
+	int32_t current_sse_parameter_order = 1;
+
+	/**
 	 * We currently haven't done this yet but will be doing it in the future
 	 */
-	if(cloning_signature->contains_elaborative_stack_param || cloning_signature->contains_stack_params){
-		printf("Function inlining with stack usage is currently unimplemented\n");
+	if(cloning_signature->contains_elaborative_stack_param){
+		printf("Function inlining with elaborative stack is currently unimplemented\n");
 		exit(0);
 	}
 
@@ -13169,6 +13182,12 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 		 */
 		create_mapping_for_symtab_variable(&variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
 		create_mapping_for_symtab_variable(&variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
+
+		/**
+		 * Since, for regular functions, this is passed in via %rdi, we will bump up the GP parameter order
+		 * to represent symbolically that we've added this
+		 */
+		current_gp_parameter_order++;
 	} 
 
 	/**

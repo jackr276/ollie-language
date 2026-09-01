@@ -1038,6 +1038,8 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 /**
  * Create and return a three address var from an existing variable. These special
  * "memory address vars" will represent the memory address of the variable in question
+ *
+ * TODO WHAT WAS THIS FOR?
 */
 three_addr_var_t* emit_memory_address_temp_var(generic_type_t* type, stack_region_t* region){
 	//Let's first create the non-temp variable
