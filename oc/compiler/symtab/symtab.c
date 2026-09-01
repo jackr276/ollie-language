@@ -1226,7 +1226,14 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, fu
 				stack_data_area_alloc(&(record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
 			}
 
+			//Let the helper build our stack region
 			setup_stack_region_for_function_parameter(&(record->stack_passed_parameters), parameter);
+
+			/**
+			 * IMPORTANT - we need to change the membership of this variable from a regular function
+			 * parameter to one that is specifically passed over the stack
+			 */
+			parameter->membership = STACK_PASSED_FUNCTION_PARAMETER; 
 		}
 
 		//Regardless of what happened, bump the class relative function parameter order

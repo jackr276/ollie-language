@@ -4020,6 +4020,8 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		 * need to automatically get this out of the stack for our uses here. Remember
 		 * that these types(arrays and pointers) live on the stack as references to other
 		 * areas in memory. The array itself is not on the stack
+		 *
+		 * TODO CAN WE REFACTOR?
 		 */
 		if(base_address_variable != NULL && base_address_variable->membership == STACK_PASSED_FUNCTION_PARAMETER){
 			/**
