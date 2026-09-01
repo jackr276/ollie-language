@@ -13104,8 +13104,25 @@ static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_
 }
 
 
-static inline void emit_parameter_result_assignment(){
+/**
+ * Unpack a parameter result and emit a simple assignment. This is only meant to be used for parameters that
+ * are passed via register. This should not be used for stack variables
+ */
+static inline void emit_parameter_result_assignment(basic_block_t* function_entry, three_addr_var_t* parameter_assignee,
+													parameter_result_t* result, u_int32_t line_number){
+	switch(result->result_type){
+		case PARAM_RESULT_TYPE_VAR:{
+			instruction_t* assignment = emit_assignment_instruction(parameter_assignee, result->param_result.variable_result, line_number);
+			add_statement(function_entry, assignment);
+			break;
+		}
 
+		case PARAM_RESULT_TYPE_CONST:{
+			instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee, result->param_result.constant_result, line_number);
+			add_statement(function_entry, assignment);
+			break;
+		}
+	}
 }
 
 
@@ -13144,11 +13161,12 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			/**
 			 * If we are at or below our GP parameter max, we will treat this
 			 * as a regular assignment expression because there is no stack
-			 * involvement
+			 * involvement. We only need to emit the assignee clone and then assign
+			 * the result over to it
 			 */
 			if(current_gp_parameter_order <= MAX_GP_REGISTER_PASSED_PARAMS){
-				//We'll now leverage the copy system to get the equivalent of the parameter
 				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
+				emit_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
 
 			} else {
 				printf("TODO NOT DONE\n");
@@ -13162,12 +13180,12 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			/**
 			 * If we are at or below our SSE parameter max, we will treat this
 			 * as a regular assignment expression because there is no stack
-			 * involvement
+			 * involvement. We only need to emit the assignee clone and then assign
+			 * the result over to it
 			 */
 			if(current_sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
-				//We'll now leverage the copy system to get the equivalent of the parameter
 				three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, variable_map);
-
+				emit_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
 
 			} else {
 				printf("TODO NOT DONE\n");
@@ -13178,19 +13196,6 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			current_sse_parameter_order++;
 		}
 
-		switch(result->result_type){
-			case PARAM_RESULT_TYPE_VAR:{
-				instruction_t* assignment = emit_assignment_instruction(parameter_assignee_clone, result->param_result.variable_result, function_to_clone->line_number);
-				add_statement(function_entry, assignment);
-				break;
-			}
-
-			case PARAM_RESULT_TYPE_CONST:{
-				instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee_clone, result->param_result.constant_result, function_to_clone->line_number);
-				add_statement(function_entry, assignment);
-				break;
-			}
-		}
 	}
 }
 
