@@ -2530,10 +2530,12 @@ static inline u_int8_t do_neighbors_use_sse_register(live_range_t* target, sse_r
 static u_int8_t does_general_purpose_register_allocation_interference_exist(live_range_t* source, live_range_t* destination){
 	switch(source->reg.gen_purpose){
 		case NO_REG_GEN_PURPOSE:
-			//If the destination has a register, we need
-			//to check if any *neighbors* of the source
-			//are colored the same. If they are, that would
-			//lead to interference
+			/**
+			 * If the destination has a register, we need
+			 * to check if any *neighbors* of the source
+			 * are colored the same. If they are, that would
+			 * lead to interference
+			 */
 			if(destination->reg.gen_purpose != NO_REG_GEN_PURPOSE){
 				//Whatever this is is our answer
 				return do_neighbors_use_general_purpose_register(source, destination->reg.gen_purpose);
@@ -2553,6 +2555,7 @@ static u_int8_t does_general_purpose_register_allocation_interference_exist(live
 		case RSP:
 			//We *cannot* combine these two
 			if(destination->assignment_count > 1){
+				printf("HERE FOR LR%d\n", destination->live_range_id);
 				return TRUE;
 			}
 
@@ -2662,8 +2665,7 @@ static void perform_block_level_coalescence(basic_block_t* block, interference_g
 	//Now run through all of these
 	while(instruction != NULL){
 		//If it's not a pure copy *or* it's marked as non-combinable, just move along
-		if(is_instruction_pure_copy(instruction) == FALSE
-			|| instruction->cannot_be_combined == TRUE){
+		if(is_instruction_pure_copy(instruction) == FALSE || instruction->cannot_be_combined == TRUE){
 			instruction = instruction->next_statement;
 			continue;
 		}
@@ -2672,8 +2674,7 @@ static void perform_block_level_coalescence(basic_block_t* block, interference_g
 		live_range_t* source_live_range = instruction->operands.x86.source_register1->associated_live_range;
 		live_range_t* destination_live_range = instruction->operands.x86.destination_register->associated_live_range;
 
-		//These cannot possible coalesce since we have a mismatch, we will continue if that is
-		//the case
+		//These cannot possible coalesce since we have a mismatch, we will continue if that is the case
 		if(source_live_range->live_range_class != destination_live_range->live_range_class){
 			instruction = instruction->next_statement;
 			continue;
