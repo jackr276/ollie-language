@@ -2553,14 +2553,18 @@ static u_int8_t does_general_purpose_register_allocation_interference_exist(live
 		 * is a big issue
 		 */
 		case RSP:
-			//We *cannot* combine these two
+			/**
+			 * If the destination LR is assigned more than once then we cannot
+			 * ever coalesce these because we'd end up clobbering %rdi
+			 */
 			if(destination->assignment_count > 1){
-				printf("HERE FOR LR%d\n", destination->live_range_id);
 				return TRUE;
 			}
 
-			//Even if the destination has no register, it's neighbors 
-			//could. We'll use the helper to get our answer
+			/**
+			 * Even if the destination has no register, its neighbors
+			 * could. We'll use the helper to get our answer
+			 */
 			if(destination->reg.gen_purpose == NO_REG_GEN_PURPOSE){
 				return do_neighbors_use_general_purpose_register(destination, source->reg.gen_purpose);
 			}
