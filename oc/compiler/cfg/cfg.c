@@ -12446,7 +12446,16 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 	symtab_variable_record_t* clone = create_ssa_compatible_temp_var(current_function, source_variable->type_defined_as, variable_symtab, get_next_variable_id());
 
 	//Clone over some of these important flags
-	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
+	//
+	//TODO HERE 
+	//
+	//Why would we copy this over? In theory this wouldn't matter because we're inlining so who cares
+	//about the parameter order? This is getting picked up all the way at the precolorer and causing
+	//us to have weird things like %rdi instead of %rax as it was precolored. This caused a lot of
+	//changes so I wouldn't want to merge it until after the rest of inlining but this would be a big
+	//improvement
+	//
+	//clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
 	clone->storage_class = source_variable->storage_class;
 	clone->passed_by_stack = source_variable->passed_by_stack;
 
