@@ -31,26 +31,13 @@ typedef struct stack_region_t stack_region_t;
 typedef enum {
 	//Default is none
 	STACK_TYPE_NONE,
-	//For temp use
-	STACK_TYPE_TEMP_USE,
 	//For a function's local stack
 	STACK_TYPE_FUNCTION_LOCAL,
 	//For parameter passing
-	STACK_TYPE_PARAMETER_PASSING
+	STACK_TYPE_PARAMETER_PASSING,
+	//Temporary use for parameter passing to function calls
+	STACK_TYPE_TEMP_USE
 } stack_data_area_type_t;
-
-
-/**
- * Is a given stack data area statically sized or not? The only
- * time that this would not be true is when we have an elaborative
- * param. In that case, the stack data area needs to be dynamically sized
- * for every single type
- */
-typedef enum {
-	STACK_DATA_AREA_SIZE_TYPE_STATIC,
-	//Changes upon every instance - this is specifically used for elaborative params
-	STACK_DATA_AREA_SIZE_TYPE_DYNAMIC,
-} stack_data_area_size_type_t;
 
 
 /**
@@ -114,8 +101,6 @@ struct stack_data_area_t {
 	u_int32_t total_size;
 	//What kind of stack do we have?
 	stack_data_area_type_t stack_type;
-	//What is the size type of our stack
-	stack_data_area_size_type_t size_type;
 };
 
 

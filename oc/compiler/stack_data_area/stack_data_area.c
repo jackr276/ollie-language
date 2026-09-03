@@ -31,7 +31,7 @@ static u_int32_t increment_and_get_stack_region_id(){
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type, stack_data_area_size_type_t size_type){
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type){
 	//Allocate the regions array
 	area->stack_regions = dynamic_array_alloc();
 
@@ -40,9 +40,6 @@ void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type,
 
 	//Save what kind of type this is - this will become important
 	area->stack_type = type;
-
-	//Save the size type here as well
-	area->size_type = size_type;
 }
 
 
@@ -115,6 +112,56 @@ void mark_stack_region(stack_region_t* region){
 
 
 /**
+ * Create an elaborative param base region. Note that all other regions will be up and above this region and not contained
+ * within here, but this is the region that will be associated with the elaborative parameter variable and it will be our starting
+ * point for every array access into the elaborative param "region", even though they're physically separate regions in our
+ * memory layout here
+ */
+stack_region_t* create_elaborative_stack_param_base_region(stack_data_area_t* area, generic_type_t* elaborative_type){
+	/**
+	 * Use the special rules to get our alignment size
+	 */
+	int64_t base_alignment_size = get_alignment_size_for_elaborative_param(elaborative_type);
+
+	/**
+	 * NOTE: The alignable type size is either the base alignment type of what we elaborate
+	 * or 4, whichever is higher. We do this because every elaborative parameter will always
+	 * have a 4 byte integer as the first element representing the paramcount
+	 */
+	int64_t alignable_size = base_alignment_size > 4 ? base_alignment_size : 4;
+
+	//Get the padding that we're going to need
+	u_int32_t needed_padding = 0;
+	if(area->total_size % alignable_size != 0){
+		needed_padding = area->total_size % alignable_size;
+	}
+
+	/**
+	 * NOTE: our starting region size is currently 4 because for all
+	 * that we currently know, we have 4 bytes to hold the size
+	 * and nothing else here.
+	 */
+	u_int32_t starting_region_size = 4;
+
+	/**
+	 * Create a new stack region. The base address of this stack region must be the total area plus
+	 * the needed padding
+	 */
+	stack_region_t* region = create_stack_region(area->total_size + needed_padding, starting_region_size);
+
+	//Store the type in here - we'll need it for later on
+	region->type = elaborative_type;
+
+	//Add this to our total size. Rembmer that this is just for the base region not anything on top of it
+	area->total_size = area->total_size + needed_padding + starting_region_size;
+
+	//Add the region into the stack data area and give back the region
+	dynamic_array_add(&(area->stack_regions), region);
+	return region;
+}
+
+
+/**
  * Create a stack region for the type provided. This will handle alignment and addition
  * of this stack region
  *
@@ -136,49 +183,12 @@ stack_region_t* create_stack_region_for_type(stack_data_area_t* area, generic_ty
 	 */
 	switch(type->type_class){
 		/**
-		 * If we have an elaborative type inside of our stack, then we'll need to add everything
-		 * in and flag that the stack size is now dynamic and cannot simply be relied 
+		 * We should never be creating raw regions for elaborative params, there is a special
+		 * helper to be used instead
 		 */
 		case TYPE_CLASS_ELABORATIVE:
-			//First we'll need the type that we can align by
-			base_alignment_type = get_base_alignment_type(type);
-
-			//Get the alignment size
-			alignable_size = base_alignment_type->type_size;
-
-			//How much padding do we need? Initially we assume none
-			needed_padding = 0;
-
-			//We can just use the overall data area size for this
-			if(area->total_size % alignable_size != 0){
-				//Grab the needed padding
-				needed_padding = area->total_size % alignable_size;
-			}
-
-			/**
-			 * NOTE: our type size is currently 4 because for all
-			 * that we currently know, we have 4 bytes to hold the size
-			 * and nothing else here.
-			 */
-			u_int32_t type_size = 4;
-
-			/**
-			 * Create a new stack region. The base address of this stack region must be the total area plus
-			 * the needed padding
-			 */
-			region = create_stack_region(area->total_size + needed_padding, type_size);
-
-			//Store the type in here - we'll need it for later on
-			region->type = type;
-
-			//Total size here is again deceptive as we don't know what the total size is at all
-			area->total_size = area->total_size + needed_padding + type_size;
-
-			//Add the region into the stack data area
-			dynamic_array_add(&(area->stack_regions), region);
-
-			//Give back the allocated region
-			return region;
+			fprintf(stderr, "Fatal internal compiler error: you may never create raw stack regions for elaborative params\n");
+			exit(1);
 
 		/**
 		 * For struct/union types, we need to guarantee that their starting addresses are
