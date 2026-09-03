@@ -20,7 +20,7 @@
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type, stack_data_area_size_type_t size_type);
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type);
 
 /**
  * Create an elaborative param base region. Note that all other regions will be up and above this region and not contained

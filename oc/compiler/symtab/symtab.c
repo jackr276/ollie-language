@@ -1147,14 +1147,11 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 	 * dynamic stack type
 	 */
 	if(variable_record->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
-		//If we don't have a stack, let's allocate it
+		/**
+		 * If we don't already have a stack passed parameter region then allocate it
+		 */
 		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
-			//This is specifically a parameter passing stack region. We must be sure to mention that
-			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_DYNAMIC);
-
-		//If it's not NULL, we need to convert the size type to dynamic because this is a dynamic stack now
-		} else {
-			function_record->stack_passed_parameters.size_type = STACK_DATA_AREA_SIZE_TYPE_DYNAMIC;
+			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
 		}
 
 		/**
@@ -1171,10 +1168,11 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 
 	//Do we need to pass via stack? If so add it here
 	} else if(is_parameter_stack_passed(variable_record) == TRUE){
-		//Allocate it if need be
+		/**
+		 * If we don't already have a stack passed parameter region then add it
+		 */
 		if(function_record->stack_passed_parameters.stack_regions.internal_array == NULL){
-			//This is specifically a parameter passing stack region. We must be sure to mention that
-			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
 		}
 
 		//Let the helper deal with the setup
@@ -1223,7 +1221,7 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, fu
 			 * one now
 			 */
 			if(record->stack_passed_parameters.stack_regions.internal_array == NULL){
-				stack_data_area_alloc(&(record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+				stack_data_area_alloc(&(record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
 			}
 
 			setup_stack_region_for_function_parameter(&(record->stack_passed_parameters), parameter);
@@ -1243,7 +1241,7 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
 	//Allocate the data area internally
-	stack_data_area_alloc(&(record->local_stack), STACK_TYPE_FUNCTION_LOCAL, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+	stack_data_area_alloc(&(record->local_stack), STACK_TYPE_FUNCTION_LOCAL);
 
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();

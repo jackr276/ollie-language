@@ -1643,7 +1643,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 */
 	stack_data_area_t* stack_passed_param_region = &(call_statement->optional_storage.call_storage.stack_parameter_area);
 	if(called_function_signature->contains_stack_params == TRUE){
-		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE);
 	}
 
 	/**
