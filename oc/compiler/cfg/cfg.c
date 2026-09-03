@@ -13184,6 +13184,9 @@ static inline void emit_stack_parameter_result_store(basic_block_t* function_ent
 static inline void setup_function_parameters_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
 															  variable_map_t* variable_map, parameter_results_array_t* parameter_results,
 															  int32_t current_gp_parameter_order, int32_t current_sse_parameter_order){
+	//We will base the line number off of what we're cloning, not where it's inlined
+	u_int32_t line_number = function_to_clone->line_number;
+
 	//Run through all of our function parameters
 	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
 		//Extract the parameter variable and the type
@@ -13235,7 +13238,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 */
 			if(*class_parameter_order <= max_class_register_params){
 				three_addr_var_t* parameter_assignee = emit_var(cloned_parameter);
-				emit_register_parameter_result_assignment(function_entry, parameter_assignee, result, current_function->line_number);
+				emit_register_parameter_result_assignment(function_entry, parameter_assignee, result, line_number);
 
 			/**
 			 * Otherwise we are over the limit, so the function body is expecting that
@@ -13262,11 +13265,11 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 				cloned_parameter->stack_region = region;
 
 				//We'll need a synthetic initialization to satisfy the static analyzer
-				instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), current_function->line_number);
+				instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), line_number);
 				add_statement(function_entry, synthetic_init);
 
 				//Once we have that we can emit the store instruction
-				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, parameter_type, current_function->line_number);
+				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, parameter_type, line_number);
 			}
 
 			//Regardless of how we stored it, we need to bump the parameter order
@@ -13286,7 +13289,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			cloned_parameter->stack_region = region;
 
 			//Emit the synthetic memory initialization
-			instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), current_function->line_number);
+			instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), line_number);
 			add_statement(function_entry, synthetic_init);
 
 			/**
@@ -13296,7 +13299,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			instruction_t* memory_copy = emit_memory_copy_instruction(emit_memory_address_var(cloned_parameter), 
 															 			result->param_result.variable_result, 
 															 			parameter_type->type_size,
-															 			current_function->line_number);
+															 			line_number);
 			add_statement(function_entry, memory_copy);
 		}
 	}
