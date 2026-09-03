@@ -13217,15 +13217,32 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 * number of register passed params for this given class now based
 			 * on whether or not this is or is not a floating point param
 			 */
-			int32_t class_parameter_order;
+			int32_t* class_parameter_order;
 			int32_t max_class_register_params;
 
 			if(IS_FLOATING_POINT(parameter_type) == FALSE){
-				class_parameter_order = current_gp_parameter_order;
+				class_parameter_order = &current_gp_parameter_order;
 				max_class_register_params = MAX_GP_REGISTER_PASSED_PARAMS;
 			} else {
-				class_parameter_order = current_sse_parameter_order;
+				class_parameter_order = &current_sse_parameter_order;
 				max_class_register_params = MAX_SSE_REGISTER_PASSED_PARAMS;
+			}
+
+			/**
+			 * If the current parameter order is less than or equal to the
+			 * maximum that we allow for this class, we will do a regular assignment
+			 */
+			if(*class_parameter_order <= max_class_register_params){
+				three_addr_var_t* parameter_assignee = emit_var(cloned_parameter);
+				emit_register_parameter_result_assignment(function_entry, parameter_assignee, result, current_function->line_number);
+
+			/**
+			 * Otherwise we are over the limit, so the function body is expecting that
+			 * we send stack parameters in. This will require us to create, initialize
+			 * and use a new stack region for this parameter
+			 */
+			} else {
+
 			}
 
 
@@ -13300,25 +13317,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			current_gp_parameter_order++;
 
 		} else {
-			/**
-			 * If we are at or below our SSE parameter max, we will treat this
-			 * as a regular assignment expression because there is no stack
-			 * involvement. We only need to emit the assignee clone and then assign
-			 * the result over to it
-			 */
-			if(current_sse_parameter_order <= MAX_SSE_REGISTER_PASSED_PARAMS){
-				three_addr_var_t* parameter_assignee_clone = emit_var(cloned_parameter);
-				emit_register_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
-
-			} else {
-				printf("TODO NOT DONE\n");
-				exit(1);
-			}
-
-			//Bump this for the next go around
-			current_sse_parameter_order++;
 		}
-
 	}
 }
 
