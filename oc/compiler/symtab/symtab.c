@@ -1157,16 +1157,16 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 			function_record->stack_passed_parameters.size_type = STACK_DATA_AREA_SIZE_TYPE_DYNAMIC;
 		}
 
-		//Create the special stack region for our elaborative param type
-		variable_record->stack_region = create_stack_region_for_type(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
-
-		//This is passed via the stack
+		/**
+		 * Use the special helper to create the base region for our elaborative parameter type. Note that
+		 * this is just the base region that we'll be using to index into and off of to get the real
+		 * elaborative parameters which is why we require special helpers here
+		 */
+		variable_record->stack_region = create_elaborative_stack_param_base_region(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
 		variable_record->passed_by_stack = TRUE;
 
-		//This function does contain stack variables
+		//Flag that this function has stack/elaborative params
 		function_signature->contains_stack_params = TRUE;
-
-		//Flag that this contains the special elaborative stack param
 		function_signature->contains_elaborative_stack_param = TRUE;
 
 	//Do we need to pass via stack? If so add it here
