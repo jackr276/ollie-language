@@ -13197,7 +13197,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 */
 		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
 			printf("Elaborative parameters are not yet supported\n");
-			exit(0);
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 		}
 
 		
@@ -13268,13 +13269,35 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, parameter_type, current_function->line_number);
 			}
 
-			//However we stored it we need to bump the parameter order
+			//Regardless of how we stored it, we need to bump the parameter order
 			(*class_parameter_order)++;
 
+		/**
+		 * Struct and unions are always passed by copy. This will involve creating a new memory region
+		 * and copying the quantity over using a memory copy statement
+		 */
 		} else {
-			//TODO STACK PASSED BY COPY
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(0);
+			/**
+			 * Create the new stack region and make an association between it and the cloned parameter
+			 * variable for when we do cloning
+			 */
+			stack_region_t* region = create_stack_region_for_type(&(current_function->local_stack), parameter_type);
+			parameter_variable->stack_region->maps_to = region;
+			cloned_parameter->stack_region = region;
+
+			//Emit the synthetic memory initialization
+			instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), current_function->line_number);
+			add_statement(function_entry, synthetic_init);
+
+			/**
+			 * Once we've initialized we can do the memory copy. Note that this is always
+			 * going to be a variable so we don't need to worry about constants
+			 */
+			instruction_t* memory_copy = emit_memory_copy_instruction(emit_memory_address_var(cloned_parameter), 
+															 			result->param_result.variable_result, 
+															 			parameter_type->type_size,
+															 			current_function->line_number);
+			add_statement(function_entry, memory_copy);
 		}
 	}
 }
