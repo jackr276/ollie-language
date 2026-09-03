@@ -13186,9 +13186,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 															  int32_t current_gp_parameter_order, int32_t current_sse_parameter_order){
 	//Run through all of our function parameters
 	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
-		//Extract the symtab variable and clone it off the bat
+		//Extract what thsi parameter variable is
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
-		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 
 		/**
 		 * Elaborative parameters are something entirely different that need to be
@@ -13199,9 +13198,27 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			printf("Elaborative parameters are not yet supported\n");
 			exit(0);
 		}
-
-		//Get the result to process - should be a one-to-one mapping for now
+		
+		//We know that we're safe to clone the parameter and get the results
+		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 		parameter_result_t* result = get_result_at_index(parameter_results, i);
+
+		/**
+		 * If we have a regular, register sized quantity that we do not pass by
+		 * doing memory copying, we will handle it here. There could still be stack
+		 * storage here if we exceed the maximum number of parameter passing variables
+		 * for either floats/general purpose, but this will handle all of that
+		 */
+		if(is_type_stack_passed_by_copy(cloned_parameter->type_defined_as) == FALSE){
+
+
+
+		} else {
+			//TODO STACK PASSED BY COPY
+
+		}
+
+
 
 		/**
 		 * This will be split down the lines of floating point and non floating
