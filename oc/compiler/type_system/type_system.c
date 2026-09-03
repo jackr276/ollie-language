@@ -113,6 +113,10 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 /**
  * Get the base alignment size for an elaborative param. This has special rules around
  * structs/unions for memory copying and for arrays
+ *
+ * This alignment is specifically where the very first real element after the paramcount
+ * is stored. The individual elements inbetween(say all chars) will often have different
+ * per element alignments than this
  */
 int64_t get_alignment_size_for_elaborative_param(generic_type_t* elaborative_type){
 	//Extract what we're elaborating

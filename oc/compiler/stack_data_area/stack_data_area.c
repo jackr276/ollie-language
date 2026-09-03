@@ -114,7 +114,8 @@ void mark_stack_region(stack_region_t* region){
 /**
  * Create an elaborative param base region. Note that all other regions will be up and above this region and not contained
  * within here, but this is the region that will be associated with the elaborative parameter variable and it will be our starting
- * point to offset into for every elaborative param grab
+ * point for every array access into the elaborative param "region", even though they're physically separate regions in our
+ * memory layout here
  */
 stack_region_t* create_elaborative_stack_param_base_region(stack_data_area_t* area, generic_type_t* elaborative_type){
 	/**

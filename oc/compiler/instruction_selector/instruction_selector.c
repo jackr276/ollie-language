@@ -3021,10 +3021,8 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
  *
  * 	So if we were doing "param[0]", we'd actually need to start by adding 16 bytes on to account 
  *  for the counter and the padding
- *
- *  TODO HERE
  */
-static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t* elaborative_type){
+static inline int64_t get_initial_padding_for_elaborative_type(generic_type_t* elaborative_type){
 	//We always start off with 4 bytes of padding
 	int64_t padding_before_first_element = 4;
 
@@ -3048,27 +3046,22 @@ static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t*
 /**
  * Convert a three_addr_code_elaborative_param_offset expression into a constant assignment for later optimizations. This
  * only exists in the IR for clarity and prior work
- *
- * TODO HERE
  */
 static void convert_elaborative_param_offset_to_constant_assignment(instruction_t* elaborative_param_offset){
-	//The base address comes from op1
-	three_addr_var_t* base_address_variable = elaborative_param_offset->operands.oir.operand1;
-
-	//We won't need it for later so wipe it out
-	elaborative_param_offset->operands.oir.operand1 = NULL;
-
 	//Get the starting alignment that we need to add
-	u_int64_t initial_padding = get_initial_padding_for_elaborative_type(base_address_variable->type);
+	three_addr_var_t* base_address_variable = elaborative_param_offset->operands.oir.operand1;
+	int64_t padding_before_first_element = get_initial_padding_for_elaborative_type(base_address_variable->type);
 
-	//Emit the offset constant here
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(initial_padding, u64);
+	//Emit the offset constant for our padding before the first element
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(padding_before_first_element, u64);
 	
-	//We can convert this into a constant assignment now
+	/**
+	 * Now convert this into a constant assignment. Be sure to also wipe out operand1
+	 * as it's not longer needed
+	 */
 	elaborative_param_offset->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-	//And assign the constant in
 	elaborative_param_offset->operands.oir.constant_operand = offset_constant;
+	elaborative_param_offset->operands.oir.operand1 = NULL;
 }
 
 
