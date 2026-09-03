@@ -1,10 +1,12 @@
 /**
 * Author: Jack Robbins
 * Test the ability of the system to handle a stack passed array param - both stores and loads
+* when we have an inlined function that is using it. This is a very contrived case but
+* it illustrates a point
 */
 
 
-pub fn array_as_stack_param(x:i32, y:i32, z:i32, a:char, b:char, c:char, arr:mut i32[5]) -> i32 {
+pub inline fn array_as_stack_param(x:i32, y:i32, z:i32, a:char, b:char, c:char, arr:mut i32[5]) -> i32 {
 	if(a + b + c > 0){
 		arr[1] = 5;
 	} else {
