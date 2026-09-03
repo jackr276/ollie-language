@@ -117,15 +117,17 @@ void mark_stack_region(stack_region_t* region){
  * point to offset into for every elaborative param grab
  */
 stack_region_t* create_elaborative_stack_param_base_region(stack_data_area_t* area, generic_type_t* elaborative_type){
-	//First we'll need the type that we can align by
-	generic_type_t* base_alignment_type = get_base_alignment_type(elaborative_type);
+	/**
+	 * Use the special rules to get our alignment size
+	 */
+	int64_t base_alignment_size = get_alignment_size_for_elaborative_param(elaborative_type);
 
 	/**
 	 * NOTE: The alignable type size is either the base alignment type of what we elaborate
 	 * or 4, whichever is higher. We do this because every elaborative parameter will always
 	 * have a 4 byte integer as the first element representing the paramcount
 	 */
-	u_int32_t alignable_size = base_alignment_type->type_size > 4 ? base_alignment_type->type_size : 4;
+	int64_t alignable_size = base_alignment_size > 4 ? base_alignment_size : 4;
 
 	//Get the padding that we're going to need
 	u_int32_t needed_padding = 0;

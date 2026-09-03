@@ -3010,35 +3010,6 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 
 
 /**
- * Get the base alignment type for an elaborative param. We have special rules for
- * this to enable efficient struct copying
- *
- * TODO HERE
- */
-static inline u_int64_t get_base_alignment_size_for_elaborative_param(generic_type_t* type_being_elaborated){
-	switch(type_being_elaborated->type_class){
-		/**
-		 * To enable aligned copying, all structs and unions for elaborative params are
-		 * aligned to 16 byte boundaries
-		 */
-		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_UNION:
-			return 16;
-
-		/**
-		 * For arrays, we always pass by pointer so in reality we always
-		 * have 8 bytes to align by here
-		 */
-		case TYPE_CLASS_ARRAY:
-			return 8;
-
-		default:
-			return get_base_alignment_type(type_being_elaborated)->type_size;
-	}
-}
-
-
-/**
  * Fetch the initial padding for an elaborative parameter type. Remember that elaborative
  * parameter types always have a 4 byte counter as the first element, followed by any needed 
  * padding, which is then followed by anything else that needs to be added on
@@ -3055,21 +3026,18 @@ static inline u_int64_t get_base_alignment_size_for_elaborative_param(generic_ty
  */
 static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t* elaborative_type){
 	//We always start off with 4 bytes of padding
-	u_int64_t padding_before_first_element = 4;
+	int64_t padding_before_first_element = 4;
 
-	//Get what type we are elaborating
-	generic_type_t* type_being_elaborated = elaborative_type->internal_types.elaborates;
-
-	//Get what we need to align by
-	u_int64_t alignment = get_base_alignment_size_for_elaborative_param(type_being_elaborated);
+	//Get what we need to align by using our special rules
+	int64_t alignment_size = get_alignment_size_for_elaborative_param(elaborative_type);
 
 	/**
 	 * If we don't have any additional padding needed, then that is fine. Otherwise, we will get
 	 * the padding that is needed and add it on here. Realistically that would mean that it has
 	 * to be 8 or 16 byte aligned, so we can actually just reassign what the first element padding is here
 	 */
-	if(padding_before_first_element % alignment != 0){
-		padding_before_first_element = alignment;
+	if(padding_before_first_element % alignment_size != 0){
+		padding_before_first_element = alignment_size;
 	}
 
 	//Give back what we have before the first element

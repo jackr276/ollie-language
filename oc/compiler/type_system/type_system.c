@@ -111,6 +111,37 @@ generic_type_t* get_base_alignment_type(generic_type_t* type){
 
 
 /**
+ * Get the base alignment size for an elaborative param. This has special rules around
+ * structs/unions for memory copying and for arrays
+ */
+int64_t get_alignment_size_for_elaborative_param(generic_type_t* elaborative_type){
+	//Extract what we're elaborating
+	generic_type_t* type_being_elaborated = elaborative_type->internal_types.elaborates;
+
+	//Now handle special cases based on that
+	switch(type_being_elaborated->type_class){
+		/**
+		 * To enable aligned copying, all structs and unions for elaborative params are
+		 * aligned to 16 byte boundaries
+		 */
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION:
+			return 16;
+
+		/**
+		 * For arrays, we always pass by pointer so in reality we always
+		 * have 8 bytes to align by here
+		 */
+		case TYPE_CLASS_ARRAY:
+			return 8;
+
+		default:
+			return get_base_alignment_type(type_being_elaborated)->type_size;
+	}
+}
+
+
+/**
  * Get the alignment that will be used in the .data section for
  * a global variable. For basic types, their type size is simply used.
  * For all non_basic types, their alignment is rounded down to the nearest
