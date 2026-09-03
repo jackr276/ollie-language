@@ -13242,11 +13242,6 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 * and use a new stack region for this parameter
 			 */
 			} else {
-
-			//TODO TEST CASE WITH ARRAY TYPE TO MAKE SURE IT WORKS
-			//
-			//
-			//
 				/**
 				 * Since we never pass array types by copy, we don't want the size of the array
 				 * locally to distort the size of it here. Instead we'll convert it to an
