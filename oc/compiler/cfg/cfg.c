@@ -13243,80 +13243,43 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 */
 			} else {
 
-			}
-
-
-		} else {
-			//TODO STACK PASSED BY COPY
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(0);
-		}
-
-		/**
-		 * This will be split down the lines of floating point and non floating
-		 * point variables as they belong to different register classes
-		 */
-
-		//TODO CAN probably refactor this entire split to make it cleaner and less repetitive
-		if(IS_FLOATING_POINT(parameter_variable->type_defined_as) == FALSE){
-			/**
-			 * If we are at or below our GP parameter max, we will treat this
-			 * as a regular assignment expression because there is no stack
-			 * involvement. We only need to emit the assignee clone and then assign
-			 * the result over to it
-			 */
-			if(current_gp_parameter_order <= MAX_GP_REGISTER_PASSED_PARAMS){
-				three_addr_var_t* parameter_assignee_clone = emit_var(cloned_parameter);
-				emit_register_parameter_result_assignment(function_entry, parameter_assignee_clone, result, current_function->line_number);
-
-			/**
-			 * If a function parameter is stack passed, then it will have a stack region associated with it. We 
-			 * will create a mapping from that parameter passed stack region to our new local stack region and
-			 * let the variable cloning system take it from there
-			 */
-
 			//TODO TEST CASE WITH ARRAY TYPE TO MAKE SURE IT WORKS
 			//
 			//
 			//
-			} else {
-				//Extract the type
-				generic_type_t* region_type = parameter_variable->type_defined_as;
-
 				/**
 				 * Since we never pass array types by copy, we don't want the size of the array
 				 * locally to distort the size of it here. Instead we'll convert it to an
 				 * equivalent pointer type
 				 */
-				if(region_type->type_class == TYPE_CLASS_ARRAY){
-					region_type = convert_array_type_to_equivalent_pointer(region_type);
+				if(parameter_type->type_class == TYPE_CLASS_ARRAY){
+					parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
 				}
 
-				//First create the stack region
-				stack_region_t* new_region = create_stack_region_for_type(&(current_function->local_stack), region_type);
-
 				/**
-				 * Associate this new stack region with what the old region
-				 * maps to *and* what the cloned parameter has
+				 * Create the stack region for our type. We are going to associate this with the old
+				 * parameter variable by saying that it's stack region maps to this, and we'll flag
+				 * this as the new cloned variable's stack region
 				 */
-				parameter_variable->stack_region->maps_to = new_region;
-				cloned_parameter->stack_region = new_region;
+				stack_region_t* region = create_stack_region_for_type(&(current_function->local_stack), parameter_type);
+				parameter_variable->stack_region->maps_to = region;
+				cloned_parameter->stack_region = region;
 
-				//Emit the synthetic initialization so that the static analyzer is happy
-				instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(cloned_parameter), current_function->line_number);
-				add_statement(function_entry, synthetic_initialization);
+				//We'll need a synthetic initialization to satisfy the static analyzer
+				instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), current_function->line_number);
+				add_statement(function_entry, synthetic_init);
 
-				/**
-				 * Once we've created the new stack region and initialized it, we can emit the store statement. Note
-				 * that we will clone the variable again to maintain 100% memory separation between functions
-				 */
-				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, region_type, current_function->line_number);
+				//Once we have that we can emit the store instruction
+				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, parameter_type, current_function->line_number);
 			}
 
-			//Bump this for the next go around
-			current_gp_parameter_order++;
+			//However we stored it we need to bump the parameter order
+			(*class_parameter_order)++;
 
 		} else {
+			//TODO STACK PASSED BY COPY
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(0);
 		}
 	}
 }
