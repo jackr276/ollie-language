@@ -13186,18 +13186,20 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 															  int32_t current_gp_parameter_order, int32_t current_sse_parameter_order){
 	//Run through all of our function parameters
 	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
-		//Extract what thsi parameter variable is
+		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
+		generic_type_t* parameter_type = parameter_variable->type_defined_as;
 
 		/**
 		 * Elaborative parameters are something entirely different that need to be
 		 * handled separately - get out if we encounter one as we know that it will
 		 * always be the last parameter in the list
 		 */
-		if(parameter_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
+		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
 			printf("Elaborative parameters are not yet supported\n");
 			exit(0);
 		}
+
 		
 		//We know that we're safe to clone the parameter and get the results
 		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
@@ -13209,16 +13211,29 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 * storage here if we exceed the maximum number of parameter passing variables
 		 * for either floats/general purpose, but this will handle all of that
 		 */
-		if(is_type_stack_passed_by_copy(cloned_parameter->type_defined_as) == FALSE){
+		if(is_type_stack_passed_by_copy(parameter_type) == FALSE){
+			/**
+			 * Let's get the current class parameter order and the maximum
+			 * number of register passed params for this given class now based
+			 * on whether or not this is or is not a floating point param
+			 */
+			int32_t class_parameter_order;
+			int32_t max_class_register_params;
 
+			if(IS_FLOATING_POINT(parameter_type) == FALSE){
+				class_parameter_order = current_gp_parameter_order;
+				max_class_register_params = MAX_GP_REGISTER_PASSED_PARAMS;
+			} else {
+				class_parameter_order = current_sse_parameter_order;
+				max_class_register_params = MAX_SSE_REGISTER_PASSED_PARAMS;
+			}
 
 
 		} else {
 			//TODO STACK PASSED BY COPY
-
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(0);
 		}
-
-
 
 		/**
 		 * This will be split down the lines of floating point and non floating
