@@ -1177,9 +1177,9 @@ static inline int32_t get_use_count_for_variable(three_addr_var_t* variable){
  * Determine the number of parameters that do not count as elaborative. This will not
  * include any return by copy variables
  */
-static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
+static inline int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
 	//Get the initial count here
-	u_int32_t count = function_type->function_parameters.current_index;
+	int32_t count = function_type->function_parameters.current_index;
 
 	//Count is more than 0 - we need to check for elaborative params and update the count
 	if(count != 0){

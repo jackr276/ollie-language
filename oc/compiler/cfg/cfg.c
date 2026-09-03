@@ -602,15 +602,18 @@ static inline void delete_block(basic_block_t* block){
 
 /**
  * Determine the number of parameters that do not count as elaborative
+ *
+ * NOTE: this purely takes into account symtab variables that you would see
+ * inside of the function call itself. We do not care about return by copy here
  */
-static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
+static inline int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
 	//Get the initial count here
 	u_int32_t count = function_type->function_parameters.current_index;
 
 	//Count is more than 0 - we need to check for elaborative params and update the count
 	if(count != 0){
 		//The last index is where an elaborative param would be
-		u_int32_t last_index = function_type->function_parameters.current_index - 1;
+		int32_t last_index = function_type->function_parameters.current_index - 1;
 
 		//Extract the type at the very last index
 		generic_type_t* parameter_type = dynamic_array_get_at(&(function_type->function_parameters), last_index);
@@ -619,14 +622,6 @@ static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* fun
 		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
 			count--;
 		}
-	}
-
-	/**
-	 * If we return by copy, the address for the callee to coyp into will
-	 * be stored in %rdi. We need to bump the GP param count here for that
-	 */
-	if(function_type->returns_by_copy == TRUE){
-		count++;
 	}
 
 	return count;
@@ -13176,14 +13171,6 @@ static inline void emit_stack_parameter_result_store(basic_block_t* function_ent
 }
 
 
-//TODO
-static inline void handle_inlined_elaborative_param_setup(int32_t results_index){
-	printf("Elaborative parameters are not yet supported\n");
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-}
-
-
 /**
  * Setup all of our function parameters for the inlined call. With the current implementation, it is important that anything
  * that is a stack variable in the original non-inlined call is a stack variable here as well. All stack passed variables
@@ -13195,28 +13182,23 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 	//We will base the line number off of what we're cloning, not where it's inlined
 	u_int32_t line_number = function_to_clone->line_number;
 
+	//Extract the signature of what we're cloning
+	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
+
+	//Use this to get our non-elaborative parameter count
+	int32_t non_elaborative_parameter_count = get_non_elaborative_parameter_count(cloning_signature);
+
 	/**
-	 * Run through all of our function parameters. Maintain a result index and a parameter index.
-	 * Remember that with the concept of elaborative parameters these may diverge
+	 * Step 1: perform the setup for all of the non-elaborative parameters that we have
+	 * in the parameter result array. We will maintain a results_index to know where we've
+	 * ended at for future elaborative param handling
 	 */
 	int32_t parameter_index = 0;
 	int32_t results_index = 0;
-	for(; parameter_index < function_to_clone->function_parameters.current_index; parameter_index++, results_index++){
+	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
 		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
 		generic_type_t* parameter_type = parameter_variable->type_defined_as;
-
-		/**
-		 * Elaborative parameters are something entirely different that need to be
-		 * handled separately - get out if we encounter one as we know that it will
-		 * always be the last parameter in the list
-		 */
-		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
-			handle_inlined_elaborative_param_setup(results_index);
-
-			//Without exception this always the last parameter
-			break;
-		}
 
 		//We know that we're safe to clone the parameter and get the results
 		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
@@ -13314,6 +13296,13 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 															 			parameter_type->type_size,
 															 			line_number);
 			add_statement(function_entry, memory_copy);
+		}
+
+
+		if(cloning_signature->contains_elaborative_stack_param == TRUE){
+			printf("Elaborative parameters are not yet supported\n");
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 		}
 	}
 }
