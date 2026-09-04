@@ -13299,8 +13299,43 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			add_statement(function_entry, memory_copy);
 		}
 
-
+		/**
+		 * Handle an elaborative stack param if we have it. Remember that we are able to have 
+		 * elaborative stack params that have no values passed into them
+		 *
+		 * elaborative param structure:
+		 * 		
+		 * 		member n
+		 * 		...
+		 * 		member 2
+		 * 		member 1
+		 * 		member 0
+		 * 		paramcount 4 bytes
+		 */
 		if(cloning_signature->contains_elaborative_stack_param == TRUE){
+			//Extract this for convenience - it always comes from the back
+			symtab_variable_record_t* elaborative_parameter = dynamic_array_get_from_back(&(function_to_clone->function_parameters));
+			generic_type_t* elaborative_param_type = elaborative_parameter->type_defined_as;
+
+
+			/**
+			 * Step 0: clone the elaborative parameter variable and create a new stack
+			 * region for it. Remember that this acts as our "base" or "reference" stack
+			 * region inside of the function, even though it is only 4 bytes
+			 */
+			symtab_variable_record_t* cloned_elaborative = clone_symtab_variable(elaborative_parameter, variable_map);
+			stack_region_t* base_region = create_elaborative_stack_param_base_region(&(current_function->local_stack), elaborative_param_type);
+
+			//Create this association between regions
+			elaborative_parameter->stack_region->maps_to = base_region;
+			cloned_elaborative->stack_region = base_region;
+
+
+			/**
+			 * Step 1: we first need to create and package up the paramcount 
+			 */
+			int32_t elaborative_parameter_count = parameter_results->current_index - results_index;
+
 			printf("Elaborative parameters are not yet supported\n");
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(1);
