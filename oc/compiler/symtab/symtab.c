@@ -1113,9 +1113,6 @@ static inline void setup_stack_region_for_function_parameter(stack_data_area_t* 
 
 	//This is storage on the stack and we will note as much
 	parameter->storage_class = STORAGE_CLASS_STACK;
-
-	//Flag that this is passed via the stack
-	parameter->passed_by_stack = TRUE;
 }
 
 
@@ -1154,13 +1151,15 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 			stack_data_area_alloc(&(function_record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
 		}
 
+		//Flag that this is a stack passed function parameter
+		variable_record->membership = STACK_PASSED_FUNCTION_PARAMETER;
+
 		/**
 		 * Use the special helper to create the base region for our elaborative parameter type. Note that
 		 * this is just the base region that we'll be using to index into and off of to get the real
 		 * elaborative parameters which is why we require special helpers here
 		 */
 		variable_record->stack_region = create_elaborative_stack_param_base_region(&(function_record->stack_passed_parameters), variable_record->type_defined_as);
-		variable_record->passed_by_stack = TRUE;
 
 		//Flag that this function has stack/elaborative params
 		function_signature->contains_stack_params = TRUE;
@@ -1177,6 +1176,9 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
 
 		//Let the helper deal with the setup
 		setup_stack_region_for_function_parameter(&(function_record->stack_passed_parameters), variable_record);
+
+		//Flag that this is a stack passed function parameter
+		variable_record->membership = STACK_PASSED_FUNCTION_PARAMETER;
 
 		//Flag that this function contains stack params
 		function_signature->contains_stack_params = TRUE;
@@ -1224,7 +1226,14 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, fu
 				stack_data_area_alloc(&(record->stack_passed_parameters), STACK_TYPE_PARAMETER_PASSING);
 			}
 
+			//Let the helper build our stack region
 			setup_stack_region_for_function_parameter(&(record->stack_passed_parameters), parameter);
+
+			/**
+			 * IMPORTANT - we need to change the membership of this variable from a regular function
+			 * parameter to one that is specifically passed over the stack
+			 */
+			parameter->membership = STACK_PASSED_FUNCTION_PARAMETER; 
 		}
 
 		//Regardless of what happened, bump the class relative function parameter order

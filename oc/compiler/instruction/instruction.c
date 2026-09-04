@@ -1004,7 +1004,7 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	 * is passed via a parameter stack or not. If it is, then we need to 
 	 * flag this as a special kind of variable
 	 */
-	if(var->passed_by_stack == FALSE){
+	if(var->membership != STACK_PASSED_FUNCTION_PARAMETER){
 		//This is a memory address variable. We will flag this for special printing
 		emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
 

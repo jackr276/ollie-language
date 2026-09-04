@@ -602,31 +602,23 @@ static inline void delete_block(basic_block_t* block){
 
 /**
  * Determine the number of parameters that do not count as elaborative
+ *
+ * NOTE: this purely takes into account symtab variables that you would see
+ * inside of the function call itself. We do not care about return by copy here
  */
-static inline u_int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
+static inline int32_t get_non_elaborative_parameter_count(function_type_t* function_type){
 	//Get the initial count here
 	u_int32_t count = function_type->function_parameters.current_index;
 
 	//Count is more than 0 - we need to check for elaborative params and update the count
 	if(count != 0){
-		//The last index is where an elaborative param would be
-		u_int32_t last_index = function_type->function_parameters.current_index - 1;
-
 		//Extract the type at the very last index
-		generic_type_t* parameter_type = dynamic_array_get_at(&(function_type->function_parameters), last_index);
+		generic_type_t* parameter_type = dynamic_array_get_from_back(&(function_type->function_parameters));
 
 		//Bump the count down by one if this is the case
 		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
 			count--;
 		}
-	}
-
-	/**
-	 * If we return by copy, the address for the callee to coyp into will
-	 * be stored in %rdi. We need to bump the GP param count here for that
-	 */
-	if(function_type->returns_by_copy == TRUE){
-		count++;
 	}
 
 	return count;
@@ -3119,15 +3111,16 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	//Go based on it's membership
 	switch(variable->membership){
 		//For an enum just turn it into a constant
-		case ENUM_MEMBER:
+		case ENUM_MEMBER: {
 			return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(variable->enum_member_value, variable->type_defined_as), variable->type_defined_as, ident_node->line_number);
+		}
 
 		/**
 		 * For a global variable, if we are on the RHS of an equation and we're trying to
 		 * use this, we really are looking to load it out of memory. So, we will
 		 * help out here by emitting a load to get this out
 		 */
-		case GLOBAL_VARIABLE:
+		case GLOBAL_VARIABLE: {
 			/**
 			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
 			 * not anything else with it
@@ -3149,13 +3142,14 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			} else {
 				return emit_var(variable);
 			}
+		}
 
 		/**
 		 * For a static variable, if we are on the RHS of an equation and we're trying to
 		 * use this, we really are looking to load it out of memory. So, we will
 		 * help out here by emitting a load to get this out
 		 */
-		case STATIC_VARIABLE:
+		case STATIC_VARIABLE: {
 			/**
 			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
 			 * not anything else with it
@@ -3177,83 +3171,84 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			} else {
 				return emit_var(variable);
 			}
+		}
 
 		/**
-		 * Most function parameters are simple variable emittals. We do need to account for the case where
-		 * we have function parameters that are passed in via the stack however
+		 * Function parameters(note these are not stack passed) are regular variable emittals
 		 */
-		case FUNCTION_PARAMETER:
+		case FUNCTION_PARAMETER: {
+			//RHS can have special rules
+			if(side == SIDE_TYPE_RIGHT){
+				/**
+				 * If we're on the RHS and we have a special "stack variable", we need to automatically
+				 * load that variable out of memory for use in whatever is happening in the caller. The
+				 * only exception to this rule are elaborative stack params. Those may never be loaded 
+				 * from memory in any way
+				 */
+				if(variable->storage_class == STORAGE_CLASS_STACK){
+					//Let the helper emit our load from memory
+					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+
+				//Otherwise again just emit the variable
+				} else {
+					return emit_var(variable);
+				}
+
+			//Otherwise we're just emitting the variable
+			} else {
+				return emit_var(variable);
+			}
+		}
+
+		/**
+		 * Stack passed function parameters are a different case entirely and will require
+		 * some special handling
+		 */
+		case STACK_PASSED_FUNCTION_PARAMETER: {
 			/**
-			 * Elaborative param types are special - there is no circumstance where an elaborative
-			 * param is not a memory address variable ever. We can skip all of the fluff and just
-			 * emit it as such now
+			 * Elaborative stack parameters are always memory address variables because
+			 * we can't dereference them outside of an array accessor
 			 */
 			if(variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
 				return emit_memory_address_var(variable);
 			}
 
-			//Most common case - not passed by stack
-			if(variable->passed_by_stack == FALSE){
-				//RHS can have special rules
-				if(side == SIDE_TYPE_RIGHT){
-					/**
-					 * If we're on the RHS and we have a special "stack variable", we need to automatically
-					 * load that variable out of memory for use in whatever is happening in the caller. The
-					 * only exception to this rule are elaborative stack params. Those may never be loaded 
-					 * from memory in any way
-					 */
-					if(variable->storage_class == STORAGE_CLASS_STACK){
-						//Let the helper emit our load from memory
-						return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
-
-					//Otherwise again just emit the variable
-					} else {
-						return emit_var(variable);
-					}
-
-				//Otherwise we're just emitting the variable
+			/**
+			 * If we're here then we need to emit an automatic dereference for the caller.
+			 * The only exception to this is stack passed parameters. Those may never have an automatic
+			 * dereference emitted because they can only be accessed via the array accessor
+			 */
+			if(side == SIDE_TYPE_RIGHT){
+				/**
+				 * If the given type is a struct or union, we expect it to be passed
+				 * via copy. As such, we do not need to do any kind of automatic
+				 * loading/unloading from memory, we can instead just emit the memory
+				 * address
+				 */
+				if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
+					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
 				} else {
-					return emit_var(variable);
+					return emit_memory_address_var(variable);
 				}
 
-			//Otherwise we are passed via stack so we'll need some special rules
 			} else {
 				/**
-				 * If we're here then we need to emit an automatic dereference for the caller.
-				 * The only exception to this is stack passed parameters. Those may never have an automatic
-				 * dereference emitted because they can only be accessed via the array accessor
+				 * If we have a stack passed by copy variable, we need the memory address. This
+				 * will only happen for structs and unions. Otherwise we just have a regular 
+				 * variable(most common)
 				 */
-				if(side == SIDE_TYPE_RIGHT){
-					/**
-					 * If the given type is a struct or union, we expect it to be passed
-					 * via copy. As such, we do not need to do any kind of automatic
-					 * loading/unloading from memory, we can instead just emit the memory
-					 * address
-					 */
-					if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
-						return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
-					} else {
-						return emit_memory_address_var(variable);
-					}
-
+				if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
+					return emit_var(variable);
 				} else {
-					/**
-					 * If we have a stack passed by copy variable, we need the memory address. This
-					 * will only happen for structs and unions. Otherwise we just have a regular 
-					 * variable(most common)
-					 */
-					if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
-						return emit_var(variable);
-					} else {
-						return emit_memory_address_var(variable);
-					}
+					return emit_memory_address_var(variable);
 				}
 			}
+		}
 
 		/**
 		 * Handle all of our other cases. These follow mostly the same rules as the other variables
 		 */
-		default:
+		default: {
 			/**
 			 * Emit a special variable that denotes that we are seeking the memory address of this variable,
 			 * not anything else with it
@@ -3281,6 +3276,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			} else {
 				return emit_var(variable);
 			}
+		}
 	}
 }
 
@@ -4017,9 +4013,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 		 * that these types(arrays and pointers) live on the stack as references to other
 		 * areas in memory. The array itself is not on the stack
 		 */
-		if(base_address_variable != NULL 
-			&& base_address_variable->passed_by_stack == TRUE){
-
+		if(base_address_variable != NULL && base_address_variable->membership == STACK_PASSED_FUNCTION_PARAMETER){
 			/**
 			 * Is this an elaborative param type? If so, we'll need to add on the automatic
 			 * 4 byte offset to this base address that all stack passed parameters have to account
@@ -10909,7 +10903,7 @@ static inline void setup_function_parameters(symtab_function_record_t* function_
 		 * along by the stack, we need to create a stack region for it. It is critical
 		 * that we only do this if this is *not* passed via the stack
 		 */
-		} else if(parameter->passed_by_stack == FALSE){
+		} else if(parameter->membership != STACK_PASSED_FUNCTION_PARAMETER){
 			//Add this variable onto the stack now, since we know it is not already on it
 			parameter->stack_region = create_stack_region_for_type(&(current_function->local_stack), parameter->type_defined_as);
 
@@ -12449,7 +12443,6 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 	//Clone over some of these important flags
 	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
 	clone->storage_class = source_variable->storage_class;
-	clone->passed_by_stack = source_variable->passed_by_stack;
 
 	/**
 	 * If there is a stack region, we'll assign it to be what the source's stack
@@ -12580,47 +12573,76 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		/**
 		 * For memory addresses, we're going to have to account for the stack regions that
 		 * are stored on the variable and/or the symtab variable as we copy it
+		 *
+		 * NOTE: in the CFG, all memory address variables will have a linked var. It is not
+		 * until we reach the instruction selector that the concept of a "memory address temp
+		 * var" appears, so we do not need to worry about that here
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS: {
-			if(source_variable->linked_var != NULL){
-				/**
-				 * For static and global variables, we do not need to worry about cloning memory
-				 * regions because the memory region is just in the data segment itself. Instead of
-				 * doing that we'll just emit a straight copy
-				 */
-				if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
-					return emit_var_copy(source_variable);
-				}
-				
-				mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
-
-				/**
-				 * If we found it we can just create a new variable from this linked one. If not,
-				 * then we'll need to create an entirely new symtab variable while guaranteeing that
-				 * it is 100% unique not just in this inlined call but in every inlined call, even ones
-				 * in the same function
-				 */
-				symtab_variable_record_t* symtab_variable;
-				if(mapping != NULL){
-					symtab_variable = mapping->destination.symtab_variable;
-				} else {
-					symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
-				}
-				
-				/**
-				 * Go through the process of emitting this variable fresh to ensure that we have
-				 * all of the variable ID linking in
-				 */
-				new_variable = emit_memory_address_var(symtab_variable);
+			/**
+			 * For static and global variables, we do not need to worry about cloning memory
+			 * regions because the memory region is just in the data segment itself. Instead of
+			 * doing that we'll just emit a straight copy
+			 */
+			if(is_symtab_variable_excluded_from_cloning(source_variable->linked_var) == TRUE){
+				return emit_var_copy(source_variable);
+			}
+			
+			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
 
 			/**
-			 * Will be done at a later time
+			 * If we found it we can just create a new variable from this linked one. If not,
+			 * then we'll need to create an entirely new symtab variable while guaranteeing that
+			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+			 * in the same function
 			 */
+			symtab_variable_record_t* symtab_variable;
+			if(mapping != NULL){
+				symtab_variable = mapping->destination.symtab_variable;
 			} else {
-				printf("Function inlining has not yet implemented memory address temporary variables\n");
-				exit(0);
+				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
+			}
+			
+			/**
+			 * Go through the process of emitting this variable fresh to ensure that we have
+			 * all of the variable ID linking in
+			 */
+			new_variable = emit_memory_address_var(symtab_variable);
+			break;
+		}
+
+		/**
+		 * For variables that are stack param memory addressses, we will always have them
+		 * created as regular memory addresses when they're copied. This is because, when
+		 * we inline, the stack passed parameters go onto the function local stack, so we
+		 * only need to reference them on the local stack using the regular memory address 
+		 * variable type
+		 */
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS: {
+			//Get the mapping
+			mapping = get_mapping_for_symtab_variable(variable_map, source_variable->linked_var);
+
+			/**
+			 * If we found it we can just create a new variable from this linked one. If not,
+			 * then we'll need to create an entirely new symtab variable while guaranteeing that
+			 * it is 100% unique not just in this inlined call but in every inlined call, even ones
+			 * in the same function
+			 *
+			 * NOTE: this relies on us having already created the local stack region and mapping
+			 * the parameter region to it before ever calling this
+			 */
+			symtab_variable_record_t* symtab_variable;
+			if(mapping != NULL){
+				symtab_variable = mapping->destination.symtab_variable;
+			} else {
+				symtab_variable = clone_symtab_variable(source_variable->linked_var, variable_map);
 			}
 
+			/**
+			 * What used to be a stack param memory address is now simply a local memory
+			 * address because we're referencing a local memory address region
+			 */
+			new_variable = emit_memory_address_var(symtab_variable);
 			break;
 		}
 
@@ -13053,6 +13075,347 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 
 
 /**
+ * Perform all needed setup for an inlined function that will return by copy
+ *
+ * All functions that do return by copy already have a special return by copy variable created
+ * for them to use internally. For our purposes, we can create a new dummy variable and then
+ * create a one-to-one mapping of that variable to this new one with an allocated stack region
+ * for this all to work
+ *
+ * Since we're replacing parameters and parameter aliases with memory address variables, we are
+ * able to replace both the original return by copy variable and the variable that aliases it
+ * with our memory address variable to avoid the need for extra interference
+ */
+static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
+															variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+	//Extract the cloning signature from the function
+	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
+
+	//Get both the original return by copy variable and the alias variable
+	symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
+	symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
+
+	/**
+	 * Create a variable that is SSA compatible - it does not specifically need to be
+	 * return by copy because there are no register allocation rules here
+	 */
+	symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
+
+	//Create the stack region
+	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
+
+	//Associate it with our return by copy variable
+	new_return_by_copy_variable->stack_region = return_by_copy_region;
+
+	//We will also need a synthetic initialization for this to not be flagged by the static analyzer
+	instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
+	add_statement(function_entry, initialization);
+
+	/**
+	 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
+	 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
+	 * about register clobbering once we inline
+	 */
+	create_mapping_for_symtab_variable(variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
+	create_mapping_for_symtab_variable(variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
+
+	/**
+	 * Since, for regular functions, this is passed in via %rdi, we will bump up the GP parameter order
+	 * to represent symbolically that we've added this
+	 */
+	(*current_gp_parameter_order)++;
+}
+
+
+/**
+ * Unpack a parameter result and emit a simple assignment. This is only meant to be used for parameters that
+ * are passed via register. This should not be used for stack variables
+ */
+static inline void emit_register_parameter_result_assignment(basic_block_t* function_entry, three_addr_var_t* parameter_assignee,
+																parameter_result_t* result, u_int32_t line_number){
+	switch(result->result_type){
+		case PARAM_RESULT_TYPE_VAR:{
+			instruction_t* assignment = emit_assignment_instruction(parameter_assignee, result->param_result.variable_result, line_number);
+			add_statement(function_entry, assignment);
+			break;
+		}
+
+		case PARAM_RESULT_TYPE_CONST:{
+			instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee, result->param_result.constant_result, line_number);
+			add_statement(function_entry, assignment);
+			break;
+		}
+	}
+}
+
+
+/**
+ * Unpack a parameter result and emit a  assignment. This is only meant to be used for parameters that
+ * are passed via stack because we will be emitting a store statement. We are going to assume that the
+ * parameter assignee is a memory address variable here
+ */
+static inline void emit_stack_parameter_result_store(basic_block_t* function_entry, three_addr_var_t* parameter_stack_address,
+																parameter_result_t* result, generic_type_t* memory_write_type,
+															   	u_int32_t line_number){
+	switch(result->result_type){
+		case PARAM_RESULT_TYPE_VAR:{
+			instruction_t* store_stmt = emit_store_base_address_only(parameter_stack_address, result->param_result.variable_result, memory_write_type, line_number);
+			add_statement(function_entry, store_stmt);
+			break;
+		}
+
+		case PARAM_RESULT_TYPE_CONST:{
+			instruction_t* store_stmt = emit_constant_store_base_address_only(parameter_stack_address, result->param_result.constant_result, memory_write_type, line_number);
+			add_statement(function_entry, store_stmt);
+			break;
+		}
+	}
+}
+
+
+/**
+ * Do all of the setup for an elaborative param which includes storing the paramcount and any
+ * of the results. This will clone the parameter variable so we should have a basis for when
+ * we encounter elaborative param references inside of the function body
+ *
+ * Remember that we are able to have elaborative stack params that have no values passed into them
+ *
+ * elaborative param structure:
+ *
+ * 		member n -> x bytes + padding
+ * 		...
+ * 		member 2 -> x bytes + padding
+ * 		member 1 -> x bytes + padding
+ * 		member 0 -> x bytes + padding
+ * 		paramcount -> 4 bytes
+ */
+static inline void handle_inlined_elaborative_param_setup(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
+															variable_map_t* variable_map, parameter_results_array_t* parameter_results,
+															int32_t results_index){
+	//Extract the line number for convenience
+	u_int32_t line_number = function_to_clone->line_number;
+
+	//Extract this for convenience - it always comes from the back
+	symtab_variable_record_t* elaborative_parameter = dynamic_array_get_from_back(&(function_to_clone->function_parameters));
+	generic_type_t* elaborative_param_type = elaborative_parameter->type_defined_as;
+
+	//Also keep whatever it "elaborates" on hand
+	generic_type_t* elaborated_type = elaborative_param_type->internal_types.elaborates;
+
+	/**
+	 * Since array types are always passed by reference, we need to trick the
+	 * compiler here into providing the correct size for the array by turning
+	 * it into an equivalent pointer
+	 */
+	if(elaborated_type->type_class == TYPE_CLASS_ARRAY){
+		elaborated_type = convert_array_type_to_equivalent_pointer(elaborated_type);
+	}
+
+	/**
+	 * Step 1: clone the elaborative parameter variable and create a new stack
+	 * region for it. Remember that this acts as our "base" or "reference" stack
+	 * region inside of the function, even though it is only 4 bytes, so every
+	 * successive parameter that we store is going to get it's own stack region
+	 * here
+	 */
+	symtab_variable_record_t* cloned_elaborative = clone_symtab_variable(elaborative_parameter, variable_map);
+	stack_region_t* base_region = create_elaborative_stack_param_base_region(&(current_function->local_stack), elaborative_param_type);
+
+	//Create this association between regions
+	elaborative_parameter->stack_region->maps_to = base_region;
+	cloned_elaborative->stack_region = base_region;
+
+	//Emit the synthetic initialization that we'll need to make the static analyzer happy
+	instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(cloned_elaborative), line_number);
+	add_statement(function_entry, synthetic_initialization);
+
+	/**
+	 * Step 2: let's package up and add in the parameter count(paramcount). This is always
+	 * the first 4 bytes of any elaborative parameter
+	 */
+	int32_t elaborative_parameter_count = parameter_results->current_index - results_index;
+	three_addr_const_t* paramcount_const = emit_direct_integer_or_char_constant(elaborative_parameter_count, i32);
+
+	//Emit the store instruction and add it into the block
+	instruction_t* store_paramcount = emit_constant_store_base_address_only(emit_memory_address_var(cloned_elaborative), paramcount_const, i32, line_number);
+	add_statement(function_entry, store_paramcount);
+
+	/**
+	 * Step 3: go through and store every parameter left in the results array. These count
+	 * as our elaborative parameters. Remember that these could be constants, variables
+	 * or pass by copy variables, so we must account for all cases
+	 */
+	for(; results_index < parameter_results->current_index; results_index++){
+		//Create a temp var that we can give a memory region
+		symtab_variable_record_t* temp_var = create_ssa_compatible_temp_var(current_function, elaborated_type, variable_symtab, get_next_variable_id());
+
+		//Create the stack region for it and associate that with the region
+		stack_region_t* copy_region = create_stack_region_for_type(&(current_function->local_stack), elaborated_type);
+		temp_var->stack_region = copy_region;
+
+		//Emit the synthetic initialization for this
+		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(temp_var), line_number);
+		add_statement(function_entry, synthetic_initialization);
+
+		//Extract the result and store it
+		parameter_result_t* result = get_result_at_index(parameter_results, results_index);
+
+		/**
+		 * If we're not passed by copy, then we'll just use the normal helper
+		 * to facilitate this. If we are passed by copy then we need to do
+		 * a memory copy assignment
+		 */
+		if(is_type_stack_passed_by_copy(elaborated_type) == FALSE){
+			emit_stack_parameter_result_store(function_entry, emit_memory_address_var(temp_var), result, elaborated_type, line_number);
+
+		} else {
+			//This is as easy as memory copying and adding it in
+			instruction_t* memory_copy = emit_memory_copy_instruction(emit_memory_address_var(temp_var), 
+																		result->param_result.variable_result,
+																		elaborated_type->type_size,
+																		line_number);
+			add_statement(function_entry, memory_copy);
+		}
+	}
+}
+
+
+/**
+ * Setup all of our function parameters for the inlined call. With the current implementation, it is important that anything
+ * that is a stack variable in the original non-inlined call is a stack variable here as well. All stack passed variables
+ * will have their stack regions setup in the callee's local stack instead of a separate stack region as is usually done
+ */
+static inline void setup_function_parameters_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
+															  variable_map_t* variable_map, parameter_results_array_t* parameter_results,
+															  int32_t current_gp_parameter_order, int32_t current_sse_parameter_order){
+	//We will base the line number off of what we're cloning, not where it's inlined
+	u_int32_t line_number = function_to_clone->line_number;
+
+	//Extract the signature of what we're cloning
+	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
+
+	//Use this to get our non-elaborative parameter count
+	int32_t non_elaborative_parameter_count = get_non_elaborative_parameter_count(cloning_signature);
+
+	/**
+	 * Perform the setup for all of the non-elaborative parameters that we have
+	 * in the parameter result array. We will maintain a results_index to know where we've
+	 * ended at for future elaborative param handling
+	 */
+	int32_t parameter_index = 0;
+	int32_t results_index = 0;
+	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
+		//Extract the parameter variable and the type
+		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
+		generic_type_t* parameter_type = parameter_variable->type_defined_as;
+
+		//We know that we're safe to clone the parameter and get the results
+		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
+		parameter_result_t* result = get_result_at_index(parameter_results, results_index);
+
+		/**
+		 * If we have a regular, register sized quantity that we do not pass by
+		 * doing memory copying, we will handle it here. There could still be stack
+		 * storage here if we exceed the maximum number of parameter passing variables
+		 * for either floats/general purpose, but this will handle all of that
+		 */
+		if(is_type_stack_passed_by_copy(parameter_type) == FALSE){
+			/**
+			 * Let's get the current class parameter order and the maximum
+			 * number of register passed params for this given class now based
+			 * on whether or not this is or is not a floating point param
+			 */
+			int32_t* class_parameter_order;
+			int32_t max_class_register_params;
+
+			if(IS_FLOATING_POINT(parameter_type) == FALSE){
+				class_parameter_order = &current_gp_parameter_order;
+				max_class_register_params = MAX_GP_REGISTER_PASSED_PARAMS;
+			} else {
+				class_parameter_order = &current_sse_parameter_order;
+				max_class_register_params = MAX_SSE_REGISTER_PASSED_PARAMS;
+			}
+
+			/**
+			 * If the current parameter order is less than or equal to the
+			 * maximum that we allow for this class, we will do a regular assignment
+			 */
+			if(*class_parameter_order <= max_class_register_params){
+				three_addr_var_t* parameter_assignee = emit_var(cloned_parameter);
+				emit_register_parameter_result_assignment(function_entry, parameter_assignee, result, line_number);
+
+			/**
+			 * Otherwise we are over the limit, so the function body is expecting that
+			 * we send stack parameters in. This will require us to create, initialize
+			 * and use a new stack region for this parameter
+			 */
+			} else {
+				/**
+				 * Since we never pass array types by copy, we don't want the size of the array
+				 * locally to distort the size of it here. Instead we'll convert it to an
+				 * equivalent pointer type
+				 */
+				if(parameter_type->type_class == TYPE_CLASS_ARRAY){
+					parameter_type = convert_array_type_to_equivalent_pointer(parameter_type);
+				}
+
+				/**
+				 * Create the stack region for our type. We are going to associate this with the old
+				 * parameter variable by saying that it's stack region maps to this, and we'll flag
+				 * this as the new cloned variable's stack region
+				 */
+				stack_region_t* region = create_stack_region_for_type(&(current_function->local_stack), parameter_type);
+				parameter_variable->stack_region->maps_to = region;
+				cloned_parameter->stack_region = region;
+
+				//We'll need a synthetic initialization to satisfy the static analyzer
+				instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), line_number);
+				add_statement(function_entry, synthetic_init);
+
+				//Once we have that we can emit the store instruction
+				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, parameter_type, line_number);
+			}
+
+			//Regardless of how we stored it, we need to bump the parameter order
+			(*class_parameter_order)++;
+
+		/**
+		 * Struct and unions are always passed by copy. This will involve creating a new memory region
+		 * and copying the quantity over using a memory copy statement
+		 */
+		} else {
+			/**
+			 * Create the new stack region and make an association between it and the cloned parameter
+			 * variable for when we do cloning
+			 */
+			stack_region_t* region = create_stack_region_for_type(&(current_function->local_stack), parameter_type);
+			parameter_variable->stack_region->maps_to = region;
+			cloned_parameter->stack_region = region;
+
+			//Emit the synthetic memory initialization
+			instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), line_number);
+			add_statement(function_entry, synthetic_init);
+
+			/**
+			 * Once we've initialized we can do the memory copy. Note that this is always
+			 * going to be a variable so we don't need to worry about constants
+			 */
+			instruction_t* memory_copy = emit_memory_copy_instruction(emit_memory_address_var(cloned_parameter), 
+															 			result->param_result.variable_result, 
+															 			parameter_type->type_size,
+															 			line_number);
+			add_statement(function_entry, memory_copy);
+		}
+	}
+
+	//If we have an elaborative stack param handle it now
+	if(cloning_signature->contains_elaborative_stack_param == TRUE){
+		handle_inlined_elaborative_param_setup(function_to_clone, function_entry, variable_map, parameter_results, results_index);
+	}
+}
+
+
+/**
  * Take a function that we want to inline and perform a 100% clone of it. This means that literally
  * everything has to be fresh including the blocks, variables, instructions, successors, predecessors, all
  * of it
@@ -13075,12 +13438,12 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	int32_t inlined_in_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
 	/**
-	 * We currently haven't done this yet but will be doing it in the future
+	 * Maintain the parameter order for our GP and SSE parameters. Even though it doesn't
+	 * really matter for inlining, we need to mimic the stack parameter passing behavior
+	 * of the original function, and that behavior relies entirely on this order
 	 */
-	if(cloning_signature->contains_elaborative_stack_param || cloning_signature->contains_stack_params){
-		printf("Function inlining with stack usage is currently unimplemented\n");
-		exit(0);
-	}
+	int32_t current_gp_parameter_order = 1;
+	int32_t current_sse_parameter_order = 1;
 
 	/**
 	 * Step 1: Clone all function blocks without cloning instructions
@@ -13133,43 +13496,11 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	/**
 	 * Step 2: return by copy handling
 	 *
-	 * All functions that do return by copy already have a special return by copy variable created
-	 * for them to use internally. For our purposes, we can create a new dummy variable and then
-	 * create a one-to-one mapping of that variable to this new one with an allocated stack region
-	 * for this all to work
-	 *
-	 * Since we're replacing parameters and parameter aliases with memory address variables, we are
-	 * able to replace both the original return by copy variable and the variable that aliases it
-	 * with our memory address variable to avoid the need for extra interference
+	 * This has enough complexity to warrant a helper function, more documentation in that
+	 * function itself
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		//Get both the original return by copy variable and the alias variable
-		symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
-		symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
-
-		/**
-		 * Create a variable that is SSA compatible - it does not specifically need to be
-		 * return by copy because there are no register allocation rules here
-		 */
-		symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
-
-		//Create the stack region
-		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
-
-		//Associate it with our return by copy variable
-		new_return_by_copy_variable->stack_region = return_by_copy_region;
-
-		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
-		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
-		add_statement(*function_entry, initialization);
-
-		/**
-		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
-		 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
-		 * about register clobbering once we inline
-		 */
-		create_mapping_for_symtab_variable(&variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
-		create_mapping_for_symtab_variable(&variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
+		setup_return_by_copy_for_inlined_call(function_to_clone, *function_entry, &variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
@@ -13187,40 +13518,10 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	/**
 	 * Step 4: function parameter management
 	 *
-	 * Run through all of our parameters and get them assigned over to their
-	 * actual symtab variables in the inlined function. This step bridges the
-	 * gap between what we see when we call a function and what we have here
-	 *
-	 * We have a one-to-one mapping now. Once we implement return by copy, stack param
-	 * and elaborative it won't be this easy
-	 *
-	 * NOTE: this is not in a working state for pass by copy or stack parameters. That is going
-	 * to be fully implemented later on
+	 * This has enough complexity to warrant a helper function, more documentation in that
+	 * function itself
 	 */
-	for(int32_t i = 0; i < function_to_clone->function_parameters.current_index; i++){
-		//Extract the parameter and emit a dummy variable that we'll use for the mapping
-		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), i);
-		three_addr_var_t* parameter_assignee = emit_var_no_alias(parameter_variable);
-
-		//We'll now leverage the copy system to get the equivalent of the parameter
-		three_addr_var_t* parameter_assignee_clone = clone_variable(parameter_assignee, &variable_map);
-
-		//Get the result to process - should be a one-to-one mapping for now
-		parameter_result_t* result = get_result_at_index(parameter_results, i);
-		switch(result->result_type){
-			case PARAM_RESULT_TYPE_VAR:{
-				instruction_t* assignment = emit_assignment_instruction(parameter_assignee_clone, result->param_result.variable_result, function_to_clone->line_number);
-				add_statement(*function_entry, assignment);
-				break;
-			}
-
-			case PARAM_RESULT_TYPE_CONST:{
-				instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee_clone, result->param_result.constant_result, function_to_clone->line_number);
-				add_statement(*function_entry, assignment);
-				break;
-			}
-		}
-	}
+	setup_function_parameters_for_inlined_call(function_to_clone, *function_entry, &variable_map, parameter_results, current_gp_parameter_order, current_sse_parameter_order);
 
 	/**
 	 * Step 5: clone all instructions over

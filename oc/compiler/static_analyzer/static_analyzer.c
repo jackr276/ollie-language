@@ -1975,6 +1975,12 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
 					continue;
 				}
 
+				//If it's not user defined don't bother
+				if(cursor->is_user_defined == FALSE){
+					cursor = cursor->next;
+					continue;
+				}
+
 				//We do not currently support memory SSA so we have to skip
 				if(is_memory_address_type(cursor->type_defined_as) == TRUE 
 					|| cursor->storage_class == STORAGE_CLASS_STACK){
