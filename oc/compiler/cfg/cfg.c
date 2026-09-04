@@ -13317,6 +13317,9 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			symtab_variable_record_t* elaborative_parameter = dynamic_array_get_from_back(&(function_to_clone->function_parameters));
 			generic_type_t* elaborative_param_type = elaborative_parameter->type_defined_as;
 
+			//Also keep whatever it "elaborates" on hand
+			generic_type_t* elaborated_type = elaborative_param_type->internal_types.elaborates;
+
 			/**
 			 * Step 0: clone the elaborative parameter variable and create a new stack
 			 * region for it. Remember that this acts as our "base" or "reference" stack
@@ -13346,6 +13349,40 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			instruction_t* store_paramcount = emit_constant_store_base_address_only(emit_memory_address_var(cloned_elaborative), paramcount_const, i32, line_number);
 			add_statement(function_entry, store_paramcount);
 
+			/**
+			 * Step 2: go through and store every parameter left in the results array. These count
+			 * as our elaborative parameters. Remember that these could be constants, variables
+			 * or pass by copy variables, so we must account for all cases
+			 *
+			 * TODO ARRAY PASSING SPECIAL CASE
+			 */
+			for(; results_index < parameter_results->current_index; results_index++){
+				//Create a temp var that we can give a memory region
+				symtab_variable_record_t* temp_var = create_ssa_compatible_temp_var(current_function, elaborated_type, variable_symtab, get_next_variable_id());
+
+				//Create the stack region for it and associate that with the region
+				stack_region_t* copy_region = create_stack_region_for_type(&(current_function->local_stack), elaborated_type);
+				temp_var->stack_region = copy_region;
+
+				//Emit the synthetic initialization for this
+				instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(temp_var), line_number);
+				add_statement(function_entry, synthetic_initialization);
+
+				//Extract the result and store it
+				parameter_result_t* result = get_result_at_index(parameter_results, results_index);
+
+				/**
+				 * If we're not passed by copy, then we'll just use the normal helper
+				 * to facilitate this. If we are passed by copy then we need to do
+				 * a memory copy assignment
+				 */
+				if(is_type_stack_passed_by_copy(elaborated_type) == FALSE){
+					emit_stack_parameter_result_store(function_entry, emit_memory_address_var(temp_var), result, elaborated_type, line_number);
+				} else {
+					printf("TODO NOT IMPL\n");
+					exit(1);
+				}
+			}
 		}
 	}
 }
