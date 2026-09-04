@@ -13383,9 +13383,14 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 */
 			if(is_type_stack_passed_by_copy(elaborated_type) == FALSE){
 				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(temp_var), result, elaborated_type, line_number);
+
 			} else {
-				printf("TODO NOT IMPL\n");
-				exit(1);
+				//This is as easy as memory copying and adding it in
+				instruction_t* memory_copy = emit_memory_copy_instruction(emit_memory_address_var(temp_var), 
+																			result->param_result.variable_result,
+																			elaborated_type->type_size,
+																			line_number);
+				add_statement(function_entry, memory_copy);
 			}
 		}
 	}
