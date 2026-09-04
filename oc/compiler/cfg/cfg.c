@@ -13317,11 +13317,12 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			symtab_variable_record_t* elaborative_parameter = dynamic_array_get_from_back(&(function_to_clone->function_parameters));
 			generic_type_t* elaborative_param_type = elaborative_parameter->type_defined_as;
 
-
 			/**
 			 * Step 0: clone the elaborative parameter variable and create a new stack
 			 * region for it. Remember that this acts as our "base" or "reference" stack
-			 * region inside of the function, even though it is only 4 bytes
+			 * region inside of the function, even though it is only 4 bytes, so every
+			 * successive parameter that we store is going to get it's own stack region
+			 * here
 			 */
 			symtab_variable_record_t* cloned_elaborative = clone_symtab_variable(elaborative_parameter, variable_map);
 			stack_region_t* base_region = create_elaborative_stack_param_base_region(&(current_function->local_stack), elaborative_param_type);
@@ -13330,15 +13331,21 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			elaborative_parameter->stack_region->maps_to = base_region;
 			cloned_elaborative->stack_region = base_region;
 
+			//Emit the synthetic initialization that we'll need to make the static analyzer happy
+			instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(cloned_elaborative), line_number);
+			add_statement(function_entry, synthetic_initialization);
 
 			/**
-			 * Step 1: we first need to create and package up the paramcount 
+			 * Step 1: let's package up and add in the parameter count(paramcount). This is always
+			 * the first 4 bytes of any elaborative parameter
 			 */
 			int32_t elaborative_parameter_count = parameter_results->current_index - results_index;
+			three_addr_const_t* paramcount_const = emit_direct_integer_or_char_constant(elaborative_parameter_count, i32);
 
-			printf("Elaborative parameters are not yet supported\n");
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Emit the store instruction and add it into the block
+			instruction_t* store_paramcount = emit_constant_store_base_address_only(emit_memory_address_var(cloned_elaborative), paramcount_const, i32, line_number);
+			add_statement(function_entry, store_paramcount);
+
 		}
 	}
 }
@@ -13373,15 +13380,6 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	 */
 	int32_t current_gp_parameter_order = 1;
 	int32_t current_sse_parameter_order = 1;
-
-	/**
-	 * We currently haven't done this yet but will be doing it in the future
-	 */
-	if(cloning_signature->contains_elaborative_stack_param){
-		printf("Function inlining with elaborative stack is currently unimplemented\n");
-		exit(0);
-	}
-
 
 	/**
 	 * Step 1: Clone all function blocks without cloning instructions
