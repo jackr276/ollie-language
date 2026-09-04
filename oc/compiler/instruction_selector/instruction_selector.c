@@ -1183,11 +1183,8 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 
 	//Count is more than 0 - we need to check for elaborative params and update the count
 	if(count != 0){
-		//The last index is where an elaborative param would be
-		int32_t last_index = function_type->function_parameters.current_index - 1;
-
 		//Extract the type at the very last index
-		generic_type_t* parameter_type = dynamic_array_get_at(&(function_type->function_parameters), last_index);
+		generic_type_t* parameter_type = dynamic_array_get_from_back(&(function_type->function_parameters));
 
 		//Bump the count down by one if this is the case
 		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
