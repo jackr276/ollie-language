@@ -13319,6 +13319,15 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		generic_type_t* elaborated_type = elaborative_param_type->internal_types.elaborates;
 
 		/**
+		 * Since array types are always passed by reference, we need to trick the
+		 * compiler here into providing the correct size for the array by turning
+		 * it into an equivalent pointer
+		 */
+		if(elaborated_type->type_class == TYPE_CLASS_ARRAY){
+			elaborated_type = convert_array_type_to_equivalent_pointer(elaborated_type);
+		}
+
+		/**
 		 * Step 0: clone the elaborative parameter variable and create a new stack
 		 * region for it. Remember that this acts as our "base" or "reference" stack
 		 * region inside of the function, even though it is only 4 bytes, so every
@@ -13351,8 +13360,6 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 * Step 2: go through and store every parameter left in the results array. These count
 		 * as our elaborative parameters. Remember that these could be constants, variables
 		 * or pass by copy variables, so we must account for all cases
-		 *
-		 * TODO ARRAY PASSING SPECIAL CASE
 		 */
 		for(; results_index < parameter_results->current_index; results_index++){
 			//Create a temp var that we can give a memory region
