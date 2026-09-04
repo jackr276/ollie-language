@@ -31,7 +31,8 @@ pub fn invoke_elaborative() -> i32 {
 }
 
 
-//Dummy
 pub fn main() -> i32 {
-	ret 0;
+	//Should return 1 + 2 + 3 + 1 + 4 + 5 + 6 + 7 + 8 = 37
+	OUNIT: [exit_status = 37]
+	ret @invoke_elaborative();
 }
