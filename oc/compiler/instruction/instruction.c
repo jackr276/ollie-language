@@ -6627,9 +6627,10 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 
 
 /**
- * Emit a starting offset calculation for the given elaborative param
+ * Emit a special elaborative parameter offset that represents the 4 reserved bytes plus any padding before
+ * we can even get into elaborative parameters themselves
  */
-instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var_t* result, three_addr_var_t* elaborative_param, u_int32_t line_number){
+instruction_t* emit_elaborative_param_offset(three_addr_var_t* result, three_addr_var_t* elaborative_param, u_int32_t line_number){
 	//Allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 

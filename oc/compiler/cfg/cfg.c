@@ -4023,14 +4023,15 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * for the stored paramcount
 			 *
 			 * We know that we have *at least* 4 bytes here on the end, and we may have more padding based
-			 * on what has been passed through the elaborative param
+			 * on what has been passed through the elaborative param. This is all decided by the instruction
+			 * selector later on but we'll need it in here now for clarity
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
 				//Emit a new current offset
 				three_addr_var_t* new_current_offset = emit_temp_var(u64);
 
 				//Emit a special instruction for IR clarity
-				instruction_t* elaborative_param_offset = emit_elaborative_param_starting_offset_calculation(new_current_offset, emit_var(base_address_variable), root->line_number);
+				instruction_t* elaborative_param_offset = emit_elaborative_param_offset(new_current_offset, emit_var(base_address_variable), root->line_number);
 
 				//Put it into the block
 				add_statement(current, elaborative_param_offset);

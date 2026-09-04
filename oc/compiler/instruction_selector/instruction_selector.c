@@ -1643,7 +1643,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 */
 	stack_data_area_t* stack_passed_param_region = &(call_statement->optional_storage.call_storage.stack_parameter_area);
 	if(called_function_signature->contains_stack_params == TRUE){
-		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE, STACK_DATA_AREA_SIZE_TYPE_STATIC);
+		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE);
 	}
 
 	/**
@@ -3010,33 +3010,6 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 
 
 /**
- * Get the base alignment type for an elaborative param. We have special rules for
- * this to enable efficient struct copying
- */
-static inline u_int64_t get_base_alignment_size_for_elaborative_param(generic_type_t* type_being_elaborated){
-	switch(type_being_elaborated->type_class){
-		/**
-		 * To enable aligned copying, all structs and unions for elaborative params are
-		 * aligned to 16 byte boundaries
-		 */
-		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_UNION:
-			return 16;
-
-		/**
-		 * For arrays, we always pass by pointer so in reality we always
-		 * have 8 bytes to align by here
-		 */
-		case TYPE_CLASS_ARRAY:
-			return 8;
-
-		default:
-			return get_base_alignment_type(type_being_elaborated)->type_size;
-	}
-}
-
-
-/**
  * Fetch the initial padding for an elaborative parameter type. Remember that elaborative
  * parameter types always have a 4 byte counter as the first element, followed by any needed 
  * padding, which is then followed by anything else that needs to be added on
@@ -3049,23 +3022,20 @@ static inline u_int64_t get_base_alignment_size_for_elaborative_param(generic_ty
  * 	So if we were doing "param[0]", we'd actually need to start by adding 16 bytes on to account 
  *  for the counter and the padding
  */
-static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t* elaborative_type){
+static inline int64_t get_initial_padding_for_elaborative_type(generic_type_t* elaborative_type){
 	//We always start off with 4 bytes of padding
-	u_int64_t padding_before_first_element = 4;
+	int64_t padding_before_first_element = 4;
 
-	//Get what type we are elaborating
-	generic_type_t* type_being_elaborated = elaborative_type->internal_types.elaborates;
-
-	//Get what we need to align by
-	u_int64_t alignment = get_base_alignment_size_for_elaborative_param(type_being_elaborated);
+	//Get what we need to align by using our special rules
+	int64_t alignment_size = get_alignment_size_for_elaborative_param(elaborative_type);
 
 	/**
 	 * If we don't have any additional padding needed, then that is fine. Otherwise, we will get
 	 * the padding that is needed and add it on here. Realistically that would mean that it has
 	 * to be 8 or 16 byte aligned, so we can actually just reassign what the first element padding is here
 	 */
-	if(padding_before_first_element % alignment != 0){
-		padding_before_first_element = alignment;
+	if(padding_before_first_element % alignment_size != 0){
+		padding_before_first_element = alignment_size;
 	}
 
 	//Give back what we have before the first element
@@ -3078,23 +3048,20 @@ static inline u_int64_t get_initial_padding_for_elaborative_type(generic_type_t*
  * only exists in the IR for clarity and prior work
  */
 static void convert_elaborative_param_offset_to_constant_assignment(instruction_t* elaborative_param_offset){
-	//The base address comes from op1
-	three_addr_var_t* base_address_variable = elaborative_param_offset->operands.oir.operand1;
-
-	//We won't need it for later so wipe it out
-	elaborative_param_offset->operands.oir.operand1 = NULL;
-
 	//Get the starting alignment that we need to add
-	u_int64_t initial_padding = get_initial_padding_for_elaborative_type(base_address_variable->type);
+	three_addr_var_t* base_address_variable = elaborative_param_offset->operands.oir.operand1;
+	int64_t padding_before_first_element = get_initial_padding_for_elaborative_type(base_address_variable->type);
 
-	//Emit the offset constant here
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(initial_padding, u64);
+	//Emit the offset constant for our padding before the first element
+	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(padding_before_first_element, u64);
 	
-	//We can convert this into a constant assignment now
+	/**
+	 * Now convert this into a constant assignment. Be sure to also wipe out operand1
+	 * as it's not longer needed
+	 */
 	elaborative_param_offset->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-
-	//And assign the constant in
-	elaborative_param_offset->operands.oir.constant_operand= offset_constant;
+	elaborative_param_offset->operands.oir.constant_operand = offset_constant;
+	elaborative_param_offset->operands.oir.operand1 = NULL;
 }
 
 
@@ -6495,6 +6462,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				//Convert it here
 				addressing_mode_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+				//Flag that this is addition
+				addressing_mode_statement->op = PLUS;
 
 				//Convert the operands into where they need to go
 				addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
