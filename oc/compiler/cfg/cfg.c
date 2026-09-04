@@ -12612,7 +12612,11 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
 		}
 
 		/**
-		 * TODO DOC ME
+		 * For variables that are stack param memory addressses, we will always have them
+		 * created as regular memory addresses when they're copied. This is because, when
+		 * we inline, the stack passed parameters go onto the function local stack, so we
+		 * only need to reference them on the local stack using the regular memory address 
+		 * variable type
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS: {
 			//Get the mapping
