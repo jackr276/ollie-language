@@ -162,6 +162,12 @@ static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live
  * 1.) Post register allocation, it is possible that the register allocator
  * could've given us something like: movq %rax, %rax. This is entirely
  * useless, and as such we will eliminate instructions like these
+ *
+ * 2.) Post register allocation, it is possible that the register allocator
+ * coalesced the stack pointer %rsp into some other live ranges. If this happened
+ * into an unaligned move statement, we may now be able to treat that unaligned
+ * statement as aligned because we know that the stack pointer will always be 16-byte
+ * aligned
  */
 static void perform_instruction_level_remediations(basic_block_t* function_entry_block){
 	//Grab the head block
@@ -218,6 +224,24 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 						current_instruction = current_instruction->next_statement;
 					}
 
+					break;
+				}
+
+				/**
+				 * Case 2: check all unaligned moves to ensure that they have not been
+				 * coalesced to have their address_register1 as the stack pointer. If they
+				 * have the stack pointer now, then there is a chance that we can treat
+				 * these as aligned moves instead
+				 */
+				case MOVDQU:
+				case MOVUPS:{
+					//Has to be the stack pointer - if it's not we don't care
+					if(current_instruction->operands.x86.address_register1->associated_live_range != stack_pointer_lr){
+						current_instruction = current_instruction->next_statement;
+						break;
+					}
+
+					current_instruction = current_instruction->next_statement;
 					break;
 				}
 
