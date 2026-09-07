@@ -5259,7 +5259,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		reconstruct_window(window, window->instruction2);
 		changed = TRUE;
 	}
-
+	
 	/**
 	 * Memory address rememediation - if we have non store/load
 	 * instructions and we want to remediate their memory addresses,

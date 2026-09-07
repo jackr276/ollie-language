@@ -162,13 +162,6 @@ static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live
  * 1.) Post register allocation, it is possible that the register allocator
  * could've given us something like: movq %rax, %rax. This is entirely
  * useless, and as such we will eliminate instructions like these
- *
- * 2.) Post register allocation, it is possible that we may have coalesced
- * the stack pointer %rsp into the address_register1 of a given unaligned move(movdqu).
- * If we find that this is the case, and we are able to prove that any offset of the
- * unaligned move is a multiple of 16, we will be able to convert this unaligned move
- * into an aligned move(movdqa) because we can now prove that the address it's reading
- * from is aligned
  */
 static void perform_instruction_level_remediations(basic_block_t* function_entry_block){
 	//Grab the head block
@@ -228,42 +221,7 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 					break;
 				}
 
-				/**
-				 * If we have an unaligned move that has %rsp as it's base address and a multiple
-				 * of 16 as it's offset, we know that this is really an aligned move and as
-				 * such can convert it to that
-				 */
-				case MOVUPS:
-				case MOVDQU: {
-					//Most common - it's not a stack pointer so we don't care
-					if(current_instruction->operands.x86.address_register1->associated_live_range != stack_pointer_lr){
-						current_instruction = current_instruction->next_statement;
-						break;
-					}
-
-					printf("HERE UNALIGNED\n");
-
-					switch(current_instruction->addressing_mode){
-						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
-							printf("HERE\n");
-							break;
-						}
-						
-						case ADDRESSING_MODE_OFFSET_ONLY:{
-
-							break;
-						}
-
-						default: {
-							break;
-						}
-					}
-
-					//No matter what always advance up before leaving
-					current_instruction = current_instruction->next_statement;
-					break;
-				}
-
+				//By default do nothing
 				default: {
 					current_instruction = current_instruction->next_statement;
 					break;
