@@ -155,6 +155,22 @@ static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live
 
 
 /**
+ * Simple helper to take an unaligned move and convert it to an aligned move
+ */
+static inline instruction_type_t convert_unaligned_move_to_aligned_move(instruction_type_t unaligned_move_type){
+	switch(unaligned_move_type){
+		case MOVDQU:
+			return MOVDQA;
+		case MOVUPS:
+			return MOVAPS;
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized unaligned move instructon type\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Our first step in postprocessing is to perform any instruction level
  * remediations that we find are necessary. This can take a few forms
  * and we will leverage this one full pass to do it all:
@@ -162,6 +178,12 @@ static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live
  * 1.) Post register allocation, it is possible that the register allocator
  * could've given us something like: movq %rax, %rax. This is entirely
  * useless, and as such we will eliminate instructions like these
+ *
+ * 2.) Post register allocation, it is possible that the register allocator
+ * coalesced the stack pointer %rsp into some other live ranges. If this happened
+ * into an unaligned move statement, we may now be able to treat that unaligned
+ * statement as aligned because we know that the stack pointer will always be 16-byte
+ * aligned
  */
 static void perform_instruction_level_remediations(basic_block_t* function_entry_block){
 	//Grab the head block
@@ -218,6 +240,62 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 						current_instruction = current_instruction->next_statement;
 					}
 
+					break;
+				}
+
+				/**
+				 * Case 2: check all unaligned moves to ensure that they have not been
+				 * coalesced to have their address_register1 as the stack pointer. If they
+				 * have the stack pointer now, then there is a chance that we can treat
+				 * these as aligned moves instead
+				 */
+				case MOVDQU:
+				case MOVUPS:{
+					//Has to be the stack pointer - if it's not we don't care
+					if(current_instruction->operands.x86.address_register1->associated_live_range != stack_pointer_lr){
+						current_instruction = current_instruction->next_statement;
+						break;
+					}
+
+					/**
+					 * As of writing this, we will only convert base address
+					 * only and offset only moves because those are the only
+					 * ones that we can currently guarantee will be aligned
+					 * if we have a stack pointer
+					 */
+					switch(current_instruction->addressing_mode){
+						/**
+						 * Base address only - the address is now %rsp
+						 * so this has to be aligned
+						 */
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
+							current_instruction->instruction_type = convert_unaligned_move_to_aligned_move(current_instruction->instruction_type);
+							break;
+						}
+
+						/**
+						 * The base address %rsp is now aligned but is the offset
+						 * the same story? We can only do this if the offset is a multiple
+						 * of 16
+						 */
+						case ADDRESSING_MODE_OFFSET_ONLY: {
+							//Not a multiple of 16 so get out
+							if(is_constant_value_multiple_of_n(current_instruction->operands.x86.address_offset, 16) == FALSE){
+								current_instruction = current_instruction->next_statement;
+								break;
+							}
+
+							current_instruction->instruction_type = convert_unaligned_move_to_aligned_move(current_instruction->instruction_type);
+							break;
+						}
+
+						//Anything else we can't guarantee so leave alone
+						default:{
+							break;
+						}
+					}
+
+					current_instruction = current_instruction->next_statement;
 					break;
 				}
 

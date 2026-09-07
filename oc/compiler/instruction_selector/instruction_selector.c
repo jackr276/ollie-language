@@ -2630,7 +2630,7 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
  *	 allow the existing processes to convert from there inside of the instruction selector itself. This ensures
  *	 that we maintain all of the existing logic around memory address variables
  */
-static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window, instruction_t* memory_copy_statement){
+static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window_to_rebuild, instruction_t* memory_copy_statement){
 	/**
 	 * Since this function performs a copy assignment, we'll need to make sure that everything here 
 	 * is going to be aligned so that we can use x86 aligned moves. The initial alignment
@@ -2735,7 +2735,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	delete_statement(memory_copy_statement);
 
 	//And we will reorganize the window around the last instruction we've inserted
-	reconstruct_window(window, last_instruction);
+	reconstruct_window(window_to_rebuild, last_instruction);
 }
 
 
@@ -5072,16 +5072,14 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 			break;
 
 		/**
-		 * If we have a memory copy statement, we will need to convert it into the
-		 * loads/stores that we need now. This will reconstruct the window when done.
+		 * If we have a memory copy statement now is the time where we'll convert that into loads and
+		 * stores
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 			convert_memory_copy_statement_into_loads_and_stores(window, instruction);
 
-			//This counts as a change
 			*changed = TRUE;
 			break;
-
 
 		//By default do nothing
 		default:
