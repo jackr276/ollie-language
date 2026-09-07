@@ -257,7 +257,17 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 							break;
 						}
 
+						/**
+						 * The base address %rsp is now aligned but is the offset
+						 * the same story? We can only do this if the offset is a multiple
+						 * of 16
+						 */
 						case ADDRESSING_MODE_OFFSET_ONLY: {
+							//Not a multiple of 16 so get out
+							if(is_constant_value_multiple_of_n(current_instruction->operands.x86.address_offset, 16) == FALSE){
+								current_instruction = current_instruction->next_statement;
+								break;
+							}
 							printf("HERE\n");
 							break;
 						}
