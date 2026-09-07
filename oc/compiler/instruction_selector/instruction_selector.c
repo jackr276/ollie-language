@@ -542,6 +542,10 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
  * Is the given expression eligible for value numbering? Note that all
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
+ *
+ * NOTE: we actually have support for lea statements, but it was found that
+ * having lea staements work like this without rematerialization is actually
+ * worse than just having lea's plainly
  */
 static inline u_int8_t is_statement_eligible_for_value_numbering(instruction_t* statement){
 	switch(statement->statement_type){
@@ -550,7 +554,7 @@ static inline u_int8_t is_statement_eligible_for_value_numbering(instruction_t* 
 			return statement->memory_access_type == NO_MEMORY_ACCESS ? TRUE : FALSE;
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_LEA_STMT:
+		//case THREE_ADDR_CODE_LEA_STMT:
 			return TRUE;
 
 		default:
@@ -7345,13 +7349,11 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 
 
 /**
- * Get the value name for a given variable. 
+ * Get the GVN equivalent table if one exists
  *
  * We will be using the value numbering table to search.
- *
- * TODO MAYBE A RENAME?
  */
-static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_addr_var_t* variable){
+static three_addr_var_t* get_gvn_equivalent_variable(value_numbering_table_t* table, three_addr_var_t* variable){
 	//Simple catch case if we hit it
 	if(variable == NULL){
 		return NULL;
@@ -7401,86 +7403,49 @@ static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_ad
 
 
 /**
- * Replace a variable inside of a parameter list. Since this is inside of a parameter list, we only
- * need to worry about the use count here. This function returns TRUE if a replacement did happen,
- * and FALSE if it did not
- */
-static inline u_int8_t replace_all_parameter_list_variables(value_numbering_table_t* table, dynamic_array_t* parameter_list){
-	//Flag whether or not we've made one
-	u_int8_t performed_substitution = FALSE;
-
-	//Run through the entire list
-	for(int32_t i = 0; i < parameter_list->current_index; i++){
-		//Grab the old one out
-		three_addr_var_t* old_variable = dynamic_array_get_at(parameter_list, i);
-
-		//Get the value name out
-		three_addr_var_t* value_name = get_value_name(table, old_variable);
-		
-		//If they're not equal then we replace
-		if(old_variable != value_name){
-			dynamic_array_set_at(parameter_list, value_name, i);
-
-			//Flag that we did perform one
-			performed_substitution = TRUE;
-		}
-	}
-
-	return performed_substitution;
-}
-
-
-/**
- * For every RHS variable, we will perform value name substitutions. This is very
+ * For every RHS variable, we will perform variable substitutions. This is very
  * similar to the way that register allocation coalescence works except that this
- * one does not rely on interference, and instead relies on proven value names
+ * one does not rely on interference, and instead relies on proven to be equivalent
+ * variables
  *
  * This function will flag if a substution actually went through or not. This is important
  * because that is our check for whether or not this whole thing needs a simplification
  * run or not
  */
-static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t* table, instruction_t* instruction){
-	//Did we or did we not perform a substitution
+static inline u_int8_t perform_gvn_variable_substitutions(value_numbering_table_t* table, instruction_t* instruction){
+	//By default assume we did not have a substitution happen
 	u_int8_t substitution_occured = FALSE;
 
-	//Temp holder for our value names
-	three_addr_var_t* value_name;
+	//Temp holder for our equivea
+	three_addr_var_t* gvn_equivalent;
 
 	//First comes op1
-	value_name = get_value_name(table, instruction->operands.oir.operand1);
 
-	//Replace the variable, and flag that this worked if it did
-	if(replace_rhs_variable(&(instruction->operands.oir.operand1), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
+	/**
+	 * For each variable try to replace them with the gvn equivalent. By bitwise ORing with
+	 * the flag we will get true if we did at least one replacement
+	 */
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.operand1), gvn_equivalent);
 
-	//Now do it for op2
-	value_name = get_value_name(table, instruction->operands.oir.operand2);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.operand2), gvn_equivalent);
 
-	//Same deal here
-	if(replace_rhs_variable(&(instruction->operands.oir.operand2), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand1), gvn_equivalent);
 
-	//Now do it for the address operand
-	value_name = get_value_name(table, instruction->operands.oir.address_operand1);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand2), gvn_equivalent);
 
-	//Same deal here
-	if(replace_rhs_variable(&(instruction->operands.oir.address_operand1), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
+	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
+		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
-	//Now do it for the second address operand
-	value_name = get_value_name(table, instruction->operands.oir.address_operand2);
-
-	//Same deal here
-	if(replace_rhs_variable(&(instruction->operands.oir.address_operand2), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
-
-	//Now replace all of the parameter list variables
-	if(replace_all_parameter_list_variables(table, &(instruction->parameters)) == TRUE){
-		substitution_occured = TRUE;
+		//Only replace if they're different
+		gvn_equivalent = get_gvn_equivalent_variable(table, parameter);
+		if(parameter != gvn_equivalent){
+			dynamic_array_set_at(&(instruction->parameters), gvn_equivalent, i);
+			substitution_occured = TRUE;
+		}
 	}
 
 	return substitution_occured;
@@ -7581,9 +7546,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * perform all necessary substitutions to variables inside
 			 * of the expression
 			 */
-			if(perform_value_name_substitutions(table, cursor) == TRUE){
-				simplification_occured = TRUE;
-			}
+			simplification_occured |= perform_gvn_variable_substitutions(table, cursor);
 
 			/**
 			 * Once we end up down here, we know that we have something that
@@ -7656,9 +7619,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * The value name is stored inside of the variable itself and is linked internally
 		 */
 		} else {
-			if(perform_value_name_substitutions(table, cursor) == TRUE){
-				simplification_occured = TRUE;
-			}
+			simplification_occured |= perform_gvn_variable_substitutions(table, cursor);
 		}
 
 		//Always bump up to the next statement
@@ -7678,13 +7639,9 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		instruction_t* phi_cursor = successor->leader_statement;
 
 		//Run through every instruction that is a phi statement
-		while(phi_cursor != NULL
-				&& phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-
-			if(perform_value_name_substitutions(table, phi_cursor) == TRUE){
-				//Flag that a simplification happened
-				simplification_occured = TRUE;
-			}
+		while(phi_cursor != NULL && phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			//Perform them and do the bitwise update
+			simplification_occured |= perform_gvn_variable_substitutions(table, phi_cursor);
 
 			//Bump the cursor up
 			phi_cursor = phi_cursor->next_statement;
@@ -7701,11 +7658,10 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 		/**
 		 * Recursively explore this one next. If we notice that this child
-		 * block had some simplification occur, then we'll set the flag
+		 * block had some simplification occur, then we'll set the flag using
+		 * bitwise or
 		 */
-		if(global_value_number_block(table, dominator_child) == TRUE){
-			simplification_occured = TRUE;
-		}
+		simplification_occured |= global_value_number_block(table, dominator_child);
 	}
 
 	//Return whether or not we did any simplifying
