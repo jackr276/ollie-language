@@ -484,23 +484,8 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 	switch(instruction->instruction_type){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			switch(instruction->op){
-				/**
-				 * These will all have a flag that tells us whether or not they set
-				 * condition codes. We will rely on that flag for these instructions.
-				 * For other instructions it does not matter
-				 */
-				case G_THAN:
-				case G_THAN_OR_EQ:
-				case L_THAN:
-				case L_THAN_OR_EQ:
-				case DOUBLE_EQUALS:
-				case NOT_EQUALS:
-					return instruction->operands.oir.assignee->sets_cc;
-
-				default:
-					return FALSE;
-			}
+			//Use the flag to determine this
+			return instruction->operands.oir.assignee->sets_cc;
 
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 			return TRUE;
@@ -558,20 +543,20 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
  *
- * This list may be updated as the IR increases/chagnes
+ * NOTE: we actually have support for lea statements, but it was found that
+ * having lea staements work like this without rematerialization is actually
+ * worse than just having lea's plainly
  */
-static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t* instruction){
-	switch(instruction->statement_type){
+static inline u_int8_t is_statement_eligible_for_value_numbering(instruction_t* statement){
+	switch(statement->statement_type){
 		//These are only eligible if there is no memory access
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
-				return TRUE;
-			} else {
-				return FALSE;
-			}
+			return statement->memory_access_type == NO_MEMORY_ACCESS ? TRUE : FALSE;
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		//case THREE_ADDR_CODE_LEA_STMT:
 			return TRUE;
+
 		default:
 			return FALSE;
 	}
@@ -6998,68 +6983,42 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
  * Get the value name for a given variable and *concatenate* it into
  * a given dynamic string. It is a assumed that the string has been
  * allocated by the caller
+ *
+ * All variables in Ollie have a unique variable ID. It is for this reason that we are
+ * able to use the variable ID for both temporary and non-temporary variables
  */
 static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_string_t* output){
 	//Allocate a temporary buffer for this
-	char buffer[1000];
-	//Holder for the variable record
-	symtab_variable_record_t* variable_record = variable->linked_var;
+	static char buffer[1000];
 
-	//Handle each variable type accordingly
 	switch(variable->variable_type){
 		/**
-		 * Temporary variables just output as t<number>
+		 * Temporary variables just output as t_<variable_id>
 		 */
 		case VARIABLE_TYPE_TEMP:
-			sprintf(buffer, "t%d", variable->variable_id);
-			dynamic_string_concatenate(output, buffer);
-
+			sprintf(buffer, "t_%d", variable->variable_id);
 			break;
 
 		/**
-		 * For non temporaries we will use:
-		 * 	<lexical_scope>_name_<ssa_generation>
-		 *
-		 * 	This will guarantee uniqueness even if we have
-		 * 	colliding
+		 * For non temps that have SSA generations we will
+		 * do V_<variable_id>_<ssa_generation>
 		 */
 		case VARIABLE_TYPE_NON_TEMP:
-			//Store the variable record
-			sprintf(buffer, "%d_%s_%d", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
-			dynamic_string_concatenate(output, buffer);
-
+			sprintf(buffer, "V_%d_%d", variable->variable_id, variable->ssa_generation);
 			break;
 
 		/**
-		 * For a memory address, we will just print this
-		 * out as M<<lexical_scope>_<name>_<ssa_generation>>
-		 * if we have a variable name. If not then we'll just be printing
-		 * out the temp var number
+		 * For memory address variables we will do M_<variable_id>_<ssa_generation>
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			if(variable_record != NULL){
-				sprintf(buffer, "M<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
-			} else {
-				sprintf(buffer, "M<t%d>", variable->variable_id);
-			}
-
-			dynamic_string_concatenate(output, buffer);
+			sprintf(buffer, "M_%d_%d", variable->variable_id, variable->ssa_generation);
 			break;
 
 		/**
-		 * For a stack memory address, we will just print this
-		 * out as SM<<scope>_<name>_<ssa_generation>> if we have a
-		 * variable name. If not then we will be using the temp 
-		 * variable number
+		 * For stack memory address variables we will do M_<variable_id>_<ssa_generation>
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			if(variable_record != NULL){
-				sprintf(buffer, "SM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
-			} else {
-				sprintf(buffer, "SM<t%d>", variable->variable_id);
-			}
-
-			dynamic_string_concatenate(output, buffer);
+			sprintf(buffer, "SM_%d_%d", variable->variable_id, variable->ssa_generation);
 			break;
 
 		/**
@@ -7068,8 +7027,6 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 			sprintf(buffer, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
-			dynamic_string_concatenate(output, buffer);
-
 			break;
 
 		/**
@@ -7077,13 +7034,82 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 			sprintf(buffer, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
-			dynamic_string_concatenate(output, buffer);
 			break;
 
 		default:
 			fprintf(stderr, "Fatal internal compiler error: unrecognized variable type detected in value name generator\n");
 			exit(1);
 	}
+
+	//Finally concatenate this to the output
+	dynamic_string_concatenate(output, buffer);
+}
+
+
+/**
+ * Get the value name for a given constant and concatenate it to the given output
+ *
+ * These will all look like: <constant_type>_<constant_value>
+ */
+static void concatenate_constant_value_name_string(three_addr_const_t* constant, dynamic_string_t* output){
+	//For holding constant strings - reused a bunch
+	static char constant_buffer[1000];
+
+	/**
+	 * We only support numeric and char constants for this. Everything
+	 * else goes to error as we should not be seeing it
+	 */
+	switch(constant->const_type){
+		case BYTE_CONST:
+			sprintf(constant_buffer, "%d_%d", BYTE_CONST, constant->constant_value.signed_byte_constant);
+			break;
+		case BYTE_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%d", BYTE_CONST_FORCE_U, constant->constant_value.unsigned_byte_constant);
+			break;
+		case CHAR_CONST:
+			sprintf(constant_buffer, "%d_%d", CHAR_CONST, constant->constant_value.char_constant);
+			break;
+		case SHORT_CONST:
+			sprintf(constant_buffer, "%d_%d", SHORT_CONST, constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%d", SHORT_CONST_FORCE_U, constant->constant_value.unsigned_short_constant);
+			break;
+		case INT_CONST:
+			sprintf(constant_buffer, "%d_%d", INT_CONST, constant->constant_value.signed_integer_constant);
+			break;
+		case INT_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%d", INT_CONST_FORCE_U, constant->constant_value.unsigned_integer_constant);
+			break;
+		case LONG_CONST:
+			sprintf(constant_buffer, "%d_%ld", LONG_CONST, constant->constant_value.signed_long_constant);
+			break;
+		case LONG_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%ld", LONG_CONST_FORCE_U, constant->constant_value.unsigned_long_constant);
+			break;
+		case STACK_PASSED_PARAM_OFFSET:
+			sprintf(constant_buffer, "%d_%ld", STACK_PASSED_PARAM_OFFSET, constant->constant_value.unsigned_long_constant);
+			break;
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unsupported constant type %d given to value numberer\n", constant->const_type);
+			exit(1);
+	}
+
+	//Concatenate this to the output
+	dynamic_string_concatenate(output, constant_buffer);
+}
+
+
+/**
+ * Concatenate an integer to the back of a value name string. This is used for lea indexes
+ */
+static void concatenate_integer_to_value_name_string(int64_t integer, dynamic_string_t* output){
+	//For holding constant strings - reused a bunch
+	static char constant_buffer[50];
+
+	//Print this into the buffer and concatenate to the output
+	sprintf(constant_buffer, "%ld", integer);
+	dynamic_string_concatenate(output, constant_buffer);
 }
 
 
@@ -7155,13 +7181,10 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
  * just need to be unique. As such we will generate the value names with
  * some distinguishable starting keys and their given operand values
  */
-static inline void generate_value_name_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
-	//For holding constant strings
-	char constant_string[300];
-
+static inline void generate_gvn_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
 	//Based on the instruction type we generate different keys
 	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_PHI_FUNC:
+		case THREE_ADDR_CODE_PHI_FUNC: {
 			dynamic_string_concatenate(textual_key, "PHI");
 
 			//Concatenate the variable name of each of the parameters onto the end
@@ -7174,12 +7197,13 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			}
 
 			break;
+		}
 
 		/**
 		 * For a bin op statement we'll have
 		 * value names like BINx_0+y_0
 		 */
-		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
 			//Starting key
 			dynamic_string_concatenate(textual_key, "BIN");
 			
@@ -7193,12 +7217,116 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
 
 			break;
+		}
 
+		/**
+		 * For lea statements, we'll have names based on the addressing mode that
+		 * we're using for the lea statement
+		 */
+		case THREE_ADDR_CODE_LEA_STMT: {
+			//Starting key that also include the addressing mode
+			dynamic_string_concatenate(textual_key, "LEA");
+			dynamic_string_add_char_to_back(textual_key, instruction->addressing_mode);
+
+			//Based on the addressing mode these all get different names
+			switch(instruction->addressing_mode){
+				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_INDEX_AND_SCALE:{
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_OFFSET_ONLY:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_RIP_RELATIVE:{
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_REGISTERS_ONLY:{
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					break;
+				}
+
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					break;
+				}
+
+				/**
+				 * Some invalid addressing mode here. Examples include "addressing mode none"
+				 */
+				default:{
+					fprintf(stderr, "Fatal internal compiler error: Invalid addressing mode %s in lea value numberer", addressing_mode_to_string(instruction->addressing_mode));
+					exit(1);
+				}
+			}
+
+			break;
+		}
+			
 		/**
 		 * For bin op with const statements we'll
 		 * have value names like BINx_0-2
 		 */
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 			//Starting key
 			dynamic_string_concatenate(textual_key, "BIN");
 			
@@ -7208,29 +7336,24 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
 
-			//Extract this for convenience
-			three_addr_const_t* constant_value = instruction->operands.oir.constant_operand;
-
-			//Generate the constant string as well
-			sprintf(constant_string, "%d_%ld", constant_value->const_type, constant_value->constant_value.signed_long_constant);
-			
-			//Add this in
-			dynamic_string_concatenate(textual_key, constant_string);
-
+			//Constant
+			concatenate_constant_value_name_string(instruction->operands.oir.constant_operand, textual_key);
 			break;
+		}
  
-		default:
+		default: {
 			break;
+		}
 	}
 }
 
 
 /**
- * Get the value name for a given variable. 
+ * Get the GVN equivalent table if one exists
  *
  * We will be using the value numbering table to search.
  */
-static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_addr_var_t* variable){
+static three_addr_var_t* get_gvn_equivalent_variable(value_numbering_table_t* table, three_addr_var_t* variable){
 	//Simple catch case if we hit it
 	if(variable == NULL){
 		return NULL;
@@ -7247,6 +7370,7 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
 	//Most common - it's null, just return ourselves
 	if(value_name_substitution == NULL){
 		return variable;
+
 	//Otherwise we found something, so we'll hand that back
 	} else {
 		return value_name_substitution;
@@ -7265,14 +7389,8 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
 static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_addr_var_t* given){
 	//If these aren't equal we replace
 	if(*current != given){
-		//Bump this one's use count down
-		decrement_use_count_for_variable(*current);
-
 		//Make this equal the given
 		*current = given;
-
-		//Bump this one's use count up
-		increment_use_count_for_variable(given);
 
 		//We did substitute
 		return TRUE;
@@ -7285,91 +7403,49 @@ static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_ad
 
 
 /**
- * Replace a variable inside of a parameter list. Since this is inside of a parameter list, we only
- * need to worry about the use count here. This function returns TRUE if a replacement did happen,
- * and FALSE if it did not
- */
-static inline u_int8_t replace_all_parameter_list_variables(value_numbering_table_t* table, dynamic_array_t* parameter_list){
-	//Flag whether or not we've made one
-	u_int8_t performed_substitution = FALSE;
-
-	//Run through the entire list
-	for(int32_t i = 0; i < parameter_list->current_index; i++){
-		//Grab the old one out
-		three_addr_var_t* old_variable = dynamic_array_get_at(parameter_list, i);
-
-		//Get the value name out
-		three_addr_var_t* value_name = get_value_name(table, old_variable);
-		
-		//If they're not equal then we replace
-		if(old_variable != value_name){
-			//Set it in
-			dynamic_array_set_at(parameter_list, value_name, i);
-
-			//Swap the variable increments out
-			decrement_use_count_for_variable(old_variable);
-			increment_use_count_for_variable(value_name);
-
-			//Flag that we did perform one
-			performed_substitution = TRUE;
-		}
-	}
-
-	return performed_substitution;
-}
-
-
-/**
- * For every RHS variable, we will perform value name substitutions. This is very
+ * For every RHS variable, we will perform variable substitutions. This is very
  * similar to the way that register allocation coalescence works except that this
- * one does not rely on interference, and instead relies on proven value names
+ * one does not rely on interference, and instead relies on proven to be equivalent
+ * variables
  *
  * This function will flag if a substution actually went through or not. This is important
  * because that is our check for whether or not this whole thing needs a simplification
  * run or not
  */
-static inline u_int8_t perform_value_name_substitutions(value_numbering_table_t* table, instruction_t* instruction){
-	//Did we or did we not perform a substitution
+static inline u_int8_t perform_gvn_variable_substitutions(value_numbering_table_t* table, instruction_t* instruction){
+	//By default assume we did not have a substitution happen
 	u_int8_t substitution_occured = FALSE;
 
-	//Temp holder for our value names
-	three_addr_var_t* value_name;
+	//Temp holder for our equivea
+	three_addr_var_t* gvn_equivalent;
 
 	//First comes op1
-	value_name = get_value_name(table, instruction->operands.oir.operand1);
 
-	//Replace the variable, and flag that this worked if it did
-	if(replace_rhs_variable(&(instruction->operands.oir.operand1), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
+	/**
+	 * For each variable try to replace them with the gvn equivalent. By bitwise ORing with
+	 * the flag we will get true if we did at least one replacement
+	 */
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.operand1), gvn_equivalent);
 
-	//Now do it for op2
-	value_name = get_value_name(table, instruction->operands.oir.operand2);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.operand2), gvn_equivalent);
 
-	//Same deal here
-	if(replace_rhs_variable(&(instruction->operands.oir.operand2), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand1), gvn_equivalent);
 
-	//Now do it for the address operand
-	value_name = get_value_name(table, instruction->operands.oir.address_operand1);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand2), gvn_equivalent);
 
-	//Same deal here
-	if(replace_rhs_variable(&(instruction->operands.oir.address_operand1), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
+	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
+		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
 
-	//Now do it for the second address operand
-	value_name = get_value_name(table, instruction->operands.oir.address_operand2);
-
-	//Same deal here
-	if(replace_rhs_variable(&(instruction->operands.oir.address_operand2), value_name) == TRUE){
-		substitution_occured = TRUE;
-	}
-
-	//Now replace all of the parameter list variables
-	if(replace_all_parameter_list_variables(table, &(instruction->parameters)) == TRUE){
-		substitution_occured = TRUE;
+		//Only replace if they're different
+		gvn_equivalent = get_gvn_equivalent_variable(table, parameter);
+		if(parameter != gvn_equivalent){
+			dynamic_array_set_at(&(instruction->parameters), gvn_equivalent, i);
+			substitution_occured = TRUE;
+		}
 	}
 
 	return substitution_occured;
@@ -7444,7 +7520,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		dynamic_string_t textual_key = dynamic_string_alloc();
 
 		//Generate the value name like so
-		generate_value_name_key_for_instruction(cursor, &textual_key);
+		generate_gvn_key_for_instruction(cursor, &textual_key);
 		
 		//Now add this in with the key as our name, and the value as the assignee
 		add_value_number_expression(table, cursor->operands.oir.assignee, &textual_key);
@@ -7464,14 +7540,13 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * If it is not, we will still perform value name substitution, but we will
 		 * not store anything in the hashtable
 		 */
-		if(is_expression_eligible_for_value_numbering(cursor)){
+		if(is_statement_eligible_for_value_numbering(cursor) == TRUE){
 			/**
 			 * First we will use the value numberer itself to 
-			 * perform all necessary substitutions
+			 * perform all necessary substitutions to variables inside
+			 * of the expression
 			 */
-			if(perform_value_name_substitutions(table, cursor) == TRUE){
-				simplification_occured = TRUE;
-			}
+			simplification_occured |= perform_gvn_variable_substitutions(table, cursor);
 
 			/**
 			 * Once we end up down here, we know that we have something that
@@ -7482,7 +7557,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			dynamic_string_t textual_string = dynamic_string_alloc();
 
 			//Generate the value name
-			generate_value_name_key_for_instruction(cursor, &textual_string);
+			generate_gvn_key_for_instruction(cursor, &textual_string);
 
 			//Can we find the result in the table?
 			three_addr_var_t* found_result = lookup_value_number_expression(table, &textual_string);
@@ -7493,23 +7568,24 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * found result into this value
 			 *
 			 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
-			 * actually can't replace it even if we do find it. This is because
+			 * actually can't replace it even if we do find it. This is because we rely on the condition
+			 * code setting for any branch/conditional movement to work
 			 */
-			if(found_result != NULL
-				&& does_instruction_set_condition_codes(cursor) == FALSE){
-
+			if(found_result != NULL && does_instruction_set_condition_codes(cursor) == FALSE){
 				//This is now an assignment statement
 				cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
 				//Null out everything else just to be safe
 				cursor->operands.oir.operand2 = NULL;
+				cursor->operands.oir.address_operand1 = NULL;
+				cursor->operands.oir.address_operand2 = NULL;
+				cursor->operands.oir.address_offset = NULL;
+				cursor->operands.oir.address_multiplier = 0;
 				cursor->operands.oir.constant_operand = NULL;
 				cursor->op = BLANK;
 
-				//The op1 is just the result that we found
-				decrement_use_count_for_variable(cursor->operands.oir.operand1);
+				//This should just be operan one now
 				cursor->operands.oir.operand1 = found_result;
-				increment_use_count_for_variable(found_result);
 
 				/**
 				 * Now we can use the textual string again to create a new 
@@ -7539,9 +7615,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * The value name is stored inside of the variable itself and is linked internally
 		 */
 		} else {
-			if(perform_value_name_substitutions(table, cursor) == TRUE){
-				simplification_occured = TRUE;
-			}
+			simplification_occured |= perform_gvn_variable_substitutions(table, cursor);
 		}
 
 		//Always bump up to the next statement
@@ -7561,13 +7635,9 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		instruction_t* phi_cursor = successor->leader_statement;
 
 		//Run through every instruction that is a phi statement
-		while(phi_cursor != NULL
-				&& phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
-
-			if(perform_value_name_substitutions(table, phi_cursor) == TRUE){
-				//Flag that a simplification happened
-				simplification_occured = TRUE;
-			}
+		while(phi_cursor != NULL && phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			//Perform them and do the bitwise update
+			simplification_occured |= perform_gvn_variable_substitutions(table, phi_cursor);
 
 			//Bump the cursor up
 			phi_cursor = phi_cursor->next_statement;
@@ -7584,11 +7654,10 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 		/**
 		 * Recursively explore this one next. If we notice that this child
-		 * block had some simplification occur, then we'll set the flag
+		 * block had some simplification occur, then we'll set the flag using
+		 * bitwise or
 		 */
-		if(global_value_number_block(table, dominator_child) == TRUE){
-			simplification_occured = TRUE;
-		}
+		simplification_occured |= global_value_number_block(table, dominator_child);
 	}
 
 	//Return whether or not we did any simplifying
@@ -7624,8 +7693,8 @@ static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_a
 	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
 		return keyspace;
 	} else {
-		//There are 3 potential variables for each instruction
-		return keyspace * 3;
+		//There are 4 potential variables for each instruction
+		return keyspace * 4;
 	}
 }
 
