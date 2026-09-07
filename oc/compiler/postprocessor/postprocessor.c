@@ -18,6 +18,7 @@
  */
 static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
+static live_range_t* stack_pointer_lr;
 
 // A reusable queue for our traversals
 static heap_queue_t bfs_queue;
@@ -227,13 +228,39 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 					break;
 				}
 
-				/*
+				/**
+				 * If we have an unaligned move that has %rsp as it's base address and a multiple
+				 * of 16 as it's offset, we know that this is really an aligned move and as
+				 * such can convert it to that
+				 */
+				case MOVUPS:
 				case MOVDQU: {
-					//TODO
+					//Most common - it's not a stack pointer so we don't care
+					if(current_instruction->operands.x86.address_register1->associated_live_range != stack_pointer_lr){
+						current_instruction = current_instruction->next_statement;
+						break;
+					}
 
+					switch(current_instruction->addressing_mode){
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
+							printf("HERE\n");
+							break;
+						}
+						
+						case ADDRESSING_MODE_OFFSET_ONLY:{
+
+							break;
+						}
+
+						default: {
+							break;
+						}
+					}
+
+					//No matter what always advance up before leaving
+					current_instruction = current_instruction->next_statement;
 					break;
 				}
-				*/
 
 				default: {
 					current_instruction = current_instruction->next_statement;
@@ -982,6 +1009,9 @@ void postprocess(cfg_t* cfg){
 	//Cache these two special variables
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
+
+	//We'll also want the stack pointer LR
+	stack_pointer_lr = stack_pointer_variable->associated_live_range;
 
 	//Allocate the reusable queue
 	bfs_queue = heap_queue_alloc();
