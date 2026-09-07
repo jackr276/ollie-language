@@ -2130,8 +2130,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					/**
 					 * Otherwise, we'll just swap the var out with the stack pointer since
 					 * they're one in the same
-					 *
-					 * TODO I DONT THINK THIS IS RIGHT!!!!!! - SHOULD BE LEA!
 					 */
 					} else {
 						instruction->operands.oir.operand1 = stack_pointer_variable;
@@ -2182,8 +2180,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					/**
 					 * Then again all we need to do here is set the op1
 					 * to be our stack pointer
-					 *
-					 * TODO I DONT THINK THIS IS RIGHT!!!!!! - SHOULD BE LEA!
 					 */
 					} else {
 						instruction->operands.oir.operand1 = stack_pointer_variable;
