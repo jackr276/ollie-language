@@ -2130,6 +2130,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					/**
 					 * Otherwise, we'll just swap the var out with the stack pointer since
 					 * they're one in the same
+					 *
+					 * TODO I DONT THINK THIS IS RIGHT!!!!!! - SHOULD BE LEA!
 					 */
 					} else {
 						instruction->operands.oir.operand1 = stack_pointer_variable;
@@ -2180,6 +2182,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					/**
 					 * Then again all we need to do here is set the op1
 					 * to be our stack pointer
+					 *
+					 * TODO I DONT THINK THIS IS RIGHT!!!!!! - SHOULD BE LEA!
 					 */
 					} else {
 						instruction->operands.oir.operand1 = stack_pointer_variable;
@@ -7577,18 +7581,14 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 				//Null out everything else just to be safe
 				cursor->operands.oir.operand2 = NULL;
+				cursor->operands.oir.address_operand1 = NULL;
+				cursor->operands.oir.address_operand2 = NULL;
+				cursor->operands.oir.address_offset = NULL;
+				cursor->operands.oir.address_multiplier = 0;
 				cursor->operands.oir.constant_operand = NULL;
 				cursor->op = BLANK;
-				
-				//
-				//
-				//
-				//
-				//TODO MORE CRAP TO NULL OUT
-				//
-				//
-				//
 
+				//This should just be operan one now
 				cursor->operands.oir.operand1 = found_result;
 
 				/**
