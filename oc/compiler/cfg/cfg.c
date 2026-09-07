@@ -13321,6 +13321,12 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 		parameter_result_t* result = get_result_at_index(parameter_results, results_index);
 
+		//TODO DOC
+		if(parameter_variable->alias != NULL){
+			symtab_variable_record_t* parameter_alias = parameter_variable->alias;
+			create_mapping_for_symtab_variable(variable_map, parameter_alias, cloned_parameter);
+		}
+
 		/**
 		 * If we have a regular, register sized quantity that we do not pass by
 		 * doing memory copying, we will handle it here. There could still be stack
@@ -13933,6 +13939,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
