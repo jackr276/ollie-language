@@ -493,6 +493,45 @@ u_int8_t is_constant_value_zero(three_addr_const_t* constant){
 
 
 /**
+ * Is this constant a multiple of the given value n
+ */
+u_int8_t is_constant_value_multiple_of_n(three_addr_const_t* constant, u_int64_t n){
+	switch(constant->const_type){
+		case INT_CONST:
+			return constant->constant_value.signed_integer_constant % n == (int64_t)0 ? TRUE : FALSE;
+
+		case INT_CONST_FORCE_U:
+			return constant->constant_value.unsigned_integer_constant % n == 0 ? TRUE : FALSE;
+
+		case LONG_CONST:
+			return constant->constant_value.signed_long_constant % n == (int64_t)0 ? TRUE : FALSE;
+
+		case LONG_CONST_FORCE_U:
+			return constant->constant_value.unsigned_long_constant % n == 0 ? TRUE : FALSE;
+
+		case SHORT_CONST:
+			return constant->constant_value.signed_short_constant % (int64_t)n == 0 ? TRUE : FALSE;
+
+		case SHORT_CONST_FORCE_U:
+			return constant->constant_value.signed_short_constant % n == 0 ? TRUE : FALSE;
+
+		case BYTE_CONST:
+			return constant->constant_value.signed_byte_constant % (int64_t)n == 0 ? TRUE : FALSE;
+
+		case BYTE_CONST_FORCE_U:
+			return constant->constant_value.unsigned_byte_constant % n == 0 ? TRUE : FALSE;
+
+		case CHAR_CONST:
+			return constant->constant_value.char_constant % n == 0 ? TRUE : FALSE;
+
+		//By default just return false
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is this constant value positive?
  */
 u_int8_t is_constant_value_positive(three_addr_const_t* constant){
