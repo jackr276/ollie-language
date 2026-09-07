@@ -134,6 +134,10 @@ static inline u_int8_t is_jump_instruction(instruction_t* instruction){
 }
 
 
+/**
+ * Do two given live ranges occupy the same exact register? This will only be true if they
+ * are in the same live range/register class as well
+ */
 static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live_range_t* b){
 	//Not possible if they're different classes
 	if(a->live_range_class != b->live_range_class){
@@ -202,67 +206,39 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 					live_range_t* destination_live_range = current_instruction->operands.x86.destination_register->associated_live_range;
 					live_range_t* source_live_range = current_instruction->operands.x86.source_register1->associated_live_range;
 
+					/**
+					 * If they occupy the same register then this instruction is redundant, so we will delete
+					 * it. Otherwise we'll just skip ahead to the next one
+					 */
+					if(do_live_ranges_occupy_same_register(destination_live_range, source_live_range) == TRUE){
+						//Hold onto this before we delete
+						instruction_t* temp_holder = current_instruction->next_statement;
+
+						//Remove the useless copy
+						delete_statement(current_instruction);
+
+						//Make this the temp holder to advance along
+						current_instruction = temp_holder;
+
+					} else {
+						current_instruction = current_instruction->next_statement;
+					}
+
 					break;
 				}
 
+				/*
 				case MOVDQU: {
 					//TODO
 
 					break;
 				}
+				*/
 
 				default: {
 					current_instruction = current_instruction->next_statement;
 					break;
 				}
-			}
-
-
-			//It's not a pure copy, so leave
-			if(is_instruction_pure_copy(current_instruction) == TRUE){
-
-				//Go based on what live range class we have here
-				switch(source_live_range->live_range_class){
-					case LIVE_RANGE_CLASS_GEN_PURPOSE:
-						//We have a pure copy, so we can delete
-						if(source_live_range->reg.gen_purpose == destination_live_range->reg.gen_purpose){
-							instruction_t* holder = current_instruction;
-
-							//Push this one up
-							current_instruction = current_instruction->next_statement;
-
-							//Delete the holder
-							delete_statement(holder);
-
-						//Otherwise just push it up
-						} else {
-							current_instruction = current_instruction->next_statement;
-						}
-
-						break;
-
-					case LIVE_RANGE_CLASS_SSE:
-						//We have a pure copy, so we can delete
-						if(source_live_range->reg.gen_purpose == destination_live_range->reg.gen_purpose){
-							instruction_t* holder = current_instruction;
-
-							//Push this one up
-							current_instruction = current_instruction->next_statement;
-
-							//Delete the holder
-							delete_statement(holder);
-
-						//Otherwise just push it up
-						} else {
-							current_instruction = current_instruction->next_statement;
-						}
-
-						break;
-				}
-
-			//Otherwise push it up
-			} else {
-				current_instruction = current_instruction->next_statement;
 			}
 		}
 
