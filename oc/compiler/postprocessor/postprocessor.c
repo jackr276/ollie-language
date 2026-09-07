@@ -134,6 +134,21 @@ static inline u_int8_t is_jump_instruction(instruction_t* instruction){
 }
 
 
+static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live_range_t* b){
+	//Not possible if they're different classes
+	if(a->live_range_class != b->live_range_class){
+		return FALSE;
+	}
+
+	//Otherwise compare based on register classes
+	if(a->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+		return a->reg.gen_purpose == b->reg.gen_purpose ? TRUE : FALSE;
+	} else {
+		return a->reg.sse_reg == b->reg.sse_reg ? TRUE : FALSE;
+	}
+}
+
+
 /**
  * Our first step in postprocessing is to perform any instruction level
  * remediations that we find are necessary. This can take a few forms
@@ -161,11 +176,50 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 
 		//Run through all instructions
 		while(current_instruction != NULL){
+			switch(current_instruction->instruction_type){
+				/**
+				 * Case 1: check for pure copy instructions where we're moving
+				 * from one register directly into itself
+				 */
+				case MOVB:
+				case MOVL:
+				case MOVW:
+				case MOVQ:
+				case MOVSD:
+				case MOVSS: {
+					/**
+					 * If we have memory access or we don't have a source register we'll
+					 * move along from here
+					 */
+					if(current_instruction->memory_access_type != NO_MEMORY_ACCESS
+						|| current_instruction->operands.x86.source_register1 == NULL){
+
+						current_instruction = current_instruction->next_statement;
+						break;
+					}
+
+					//Extract for convenience
+					live_range_t* destination_live_range = current_instruction->operands.x86.destination_register->associated_live_range;
+					live_range_t* source_live_range = current_instruction->operands.x86.source_register1->associated_live_range;
+
+					break;
+				}
+
+				case MOVDQU: {
+					//TODO
+
+					break;
+				}
+
+				default: {
+					current_instruction = current_instruction->next_statement;
+					break;
+				}
+			}
+
+
 			//It's not a pure copy, so leave
 			if(is_instruction_pure_copy(current_instruction) == TRUE){
-				//Extract for convenience
-				live_range_t* destination_live_range = current_instruction->operands.x86.destination_register->associated_live_range;
-				live_range_t* source_live_range = current_instruction->operands.x86.source_register1->associated_live_range;
 
 				//Go based on what live range class we have here
 				switch(source_live_range->live_range_class){
