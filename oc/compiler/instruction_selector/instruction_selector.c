@@ -550,7 +550,7 @@ static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t*
 			return instruction->memory_access_type == NO_MEMORY_ACCESS ? TRUE : FALSE;
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_LEA_STMT:
+		//case THREE_ADDR_CODE_LEA_STMT:
 			return TRUE;
 
 		default:
@@ -6985,7 +6985,7 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
  */
 static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_string_t* output){
 	//Allocate a temporary buffer for this
-	char buffer[1000];
+	static char buffer[1000];
 
 	switch(variable->variable_type){
 		/**
@@ -6993,7 +6993,6 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_TEMP:
 			sprintf(buffer, "t_%d", variable->variable_id);
-			dynamic_string_concatenate(output, buffer);
 			break;
 
 		/**
@@ -7002,7 +7001,6 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_NON_TEMP:
 			sprintf(buffer, "V_%d_%d", variable->variable_id, variable->ssa_generation);
-			dynamic_string_concatenate(output, buffer);
 			break;
 
 		/**
@@ -7010,7 +7008,6 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
 			sprintf(buffer, "M_%d_%d", variable->variable_id, variable->ssa_generation);
-			dynamic_string_concatenate(output, buffer);
 			break;
 
 		/**
@@ -7018,7 +7015,6 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 			sprintf(buffer, "SM_%d_%d", variable->variable_id, variable->ssa_generation);
-			dynamic_string_concatenate(output, buffer);
 			break;
 
 		/**
@@ -7027,8 +7023,6 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_LOCAL_CONSTANT:
 			sprintf(buffer, ".LC%d", variable->associated_memory_region.local_constant->local_constant_id);
-			dynamic_string_concatenate(output, buffer);
-
 			break;
 
 		/**
@@ -7036,23 +7030,66 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 		 */
 		case VARIABLE_TYPE_FUNCTION_ADDRESS:
 			sprintf(buffer, "%s", variable->associated_memory_region.rip_relative_function->func_name.string);
-			dynamic_string_concatenate(output, buffer);
 			break;
 
 		default:
 			fprintf(stderr, "Fatal internal compiler error: unrecognized variable type detected in value name generator\n");
 			exit(1);
 	}
+
+	//Finally concatenate this to the output
+	dynamic_string_concatenate(output, buffer);
 }
 
 
 /**
  * Get the value name for a given constant and concatenate it to the given output
  *
- * TODO
+ * These will all look like: <constant_type>_<constant_value>
  */
-static void concatenate_constant_value_name_string(three_addr_var_t* variable, dynamic_string_t* output){
+static void concatenate_constant_value_name_string(three_addr_const_t* constant, dynamic_string_t* output){
+	//For holding constant strings - reused a bunch
+	static char constant_buffer[1000];
 
+	/**
+	 * We only support numeric and char constants for this. Everything
+	 * else goes to error as we should not be seeing it
+	 */
+	switch(constant->const_type){
+		case BYTE_CONST:
+			sprintf(constant_buffer, "%d_%d", BYTE_CONST, constant->constant_value.signed_byte_constant);
+			break;
+		case BYTE_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%d", BYTE_CONST_FORCE_U, constant->constant_value.unsigned_byte_constant);
+			break;
+		case CHAR_CONST:
+			sprintf(constant_buffer, "%d_%d", CHAR_CONST, constant->constant_value.char_constant);
+			break;
+		case SHORT_CONST:
+			sprintf(constant_buffer, "%d_%d", SHORT_CONST, constant->constant_value.signed_short_constant);
+			break;
+		case SHORT_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%d", SHORT_CONST_FORCE_U, constant->constant_value.unsigned_short_constant);
+			break;
+		case INT_CONST:
+			sprintf(constant_buffer, "%d_%d", INT_CONST, constant->constant_value.signed_integer_constant);
+			break;
+		case INT_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%d", INT_CONST_FORCE_U, constant->constant_value.unsigned_integer_constant);
+			break;
+		case LONG_CONST:
+			sprintf(constant_buffer, "%d_%ld", LONG_CONST, constant->constant_value.signed_long_constant);
+			break;
+		case LONG_CONST_FORCE_U:
+			sprintf(constant_buffer, "%d_%ld", LONG_CONST_FORCE_U, constant->constant_value.unsigned_long_constant);
+			break;
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unsupported constant type given to value numberer\n");
+			exit(1);
+	}
+
+	//Concatenate this to the output
+	dynamic_string_concatenate(output, constant_buffer);
 }
 
 
@@ -7126,9 +7163,6 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
  * some distinguishable starting keys and their given operand values
  */
 static inline void generate_gvn_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
-	//For holding constant strings
-	char constant_string[300];
-
 	//Based on the instruction type we generate different keys
 	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_PHI_FUNC: {
@@ -7243,15 +7277,8 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
 
-			//Extract this for convenience
-			three_addr_const_t* constant_value = instruction->operands.oir.constant_operand;
-
-			//Generate the constant string as well
-			sprintf(constant_string, "%d_%ld", constant_value->const_type, constant_value->constant_value.signed_long_constant);
-			
-			//Add this in
-			dynamic_string_concatenate(textual_key, constant_string);
-
+			//Constant
+			concatenate_constant_value_name_string(instruction->operands.oir.constant_operand, textual_key);
 			break;
 		}
  
@@ -7266,6 +7293,8 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
  * Get the value name for a given variable. 
  *
  * We will be using the value numbering table to search.
+ *
+ * TODO MAYBE A RENAME?
  */
 static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_addr_var_t* variable){
 	//Simple catch case if we hit it
@@ -7284,6 +7313,7 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
 	//Most common - it's null, just return ourselves
 	if(value_name_substitution == NULL){
 		return variable;
+
 	//Otherwise we found something, so we'll hand that back
 	} else {
 		return value_name_substitution;
@@ -7302,14 +7332,8 @@ static three_addr_var_t* get_value_name(value_numbering_table_t* table, three_ad
 static inline u_int8_t replace_rhs_variable(three_addr_var_t** current, three_addr_var_t* given){
 	//If these aren't equal we replace
 	if(*current != given){
-		//Bump this one's use count down
-		decrement_use_count_for_variable(*current);
-
 		//Make this equal the given
 		*current = given;
-
-		//Bump this one's use count up
-		increment_use_count_for_variable(given);
 
 		//We did substitute
 		return TRUE;
