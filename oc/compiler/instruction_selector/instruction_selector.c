@@ -7093,6 +7093,18 @@ static void concatenate_constant_value_name_string(three_addr_const_t* constant,
 }
 
 
+/**
+ * Concatenate an integer to the back of a value name string. This is used for lea indexes
+ */
+static void concatenate_integer_to_value_name_string(int64_t integer, dynamic_string_t* output){
+	//For holding constant strings - reused a bunch
+	static char constant_buffer[50];
+
+	//Print this into the buffer and concatenate to the output
+	sprintf(constant_buffer, "%ld", integer);
+	dynamic_string_concatenate(output, constant_buffer);
+}
+
 
 /**
  * Is the given phi function redundant? A phi function is redundant
@@ -7205,8 +7217,9 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 		 * we're using for the lea statement
 		 */
 		case THREE_ADDR_CODE_LEA_STMT: {
-			//Starting key
+			//Starting key that also include the addressing mode
 			dynamic_string_concatenate(textual_key, "LEA");
+			dynamic_string_add_char_to_back(textual_key, instruction->addressing_mode);
 
 			//Based on the addressing mode these all get different names
 			switch(instruction->addressing_mode){
@@ -7216,26 +7229,46 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 				}
 
 				case ADDRESSING_MODE_INDEX_AND_SCALE:{
-					//TODO
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
+					break;
 				}
 
 				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:{
-					//TODO
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
 				}
 
 				case ADDRESSING_MODE_OFFSET_ONLY:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+
 					//TODO
 				}
 
 				case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
+
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
 					//TODO
 				}
 
 				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+
+
+					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
 					//TODO
 				}
 
 				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+
 					//TODO
 				}
 
@@ -7248,6 +7281,9 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 				}
 
 				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
+					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+
 					//TODO
 				}
 
