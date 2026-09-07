@@ -2740,35 +2740,6 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 
 
 /**
- * Take a window and convert any memory converting moves into load and store statements
- */
-static inline void convert_memory_copy_statements(instruction_window_t* window, u_int8_t* changed){
-	//Cache all of these here(window may change)
-	instruction_t* instruction1 = window->instruction1;
-	instruction_t* instruction2 = window->instruction2;
-	instruction_t* instruction3 = window->instruction3;
-
-	//Remediate if warranted for instruction1
-	if(instruction1 != NULL && instruction1->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
-		convert_memory_copy_statement_into_loads_and_stores(window, instruction1);
-		*changed = TRUE;
-	}
-
-	//Same for instruction2
-	if(instruction2 != NULL && instruction2->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
-		convert_memory_copy_statement_into_loads_and_stores(window, instruction2);
-		*changed = TRUE;
-	}
-
-	//Same for instruction 3 - window will be rebuilt if appropriate
-	if(instruction3 != NULL && instruction3->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
-		convert_memory_copy_statement_into_loads_and_stores(window, instruction3);
-		*changed = TRUE;
-	}
-}
-
-
-/**
  * Emit a setne three address code statement
  */
 static inline instruction_t* emit_setne_code(three_addr_var_t* assignee, three_addr_var_t* relies_on){
@@ -5100,6 +5071,16 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 			*changed = TRUE;
 			break;
 
+		/**
+		 * If we have a memory copy statement now is the time where we'll convert that into loads and
+		 * stores
+		 */
+		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+			convert_memory_copy_statement_into_loads_and_stores(window, instruction);
+
+			*changed = TRUE;
+			break;
+
 		//By default do nothing
 		default:
 			break;
@@ -5276,13 +5257,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		reconstruct_window(window, window->instruction2);
 		changed = TRUE;
 	}
-
-	/**
-	 * Any/all memory copy statements need to be converted into load/store instructions
-	 * before we continue. We will take the chance to do that now. This helper rebuilds the window
-	 * as needed
-	 */
-	convert_memory_copy_statements(window, &changed);
 	
 	/**
 	 * Memory address rememediation - if we have non store/load
