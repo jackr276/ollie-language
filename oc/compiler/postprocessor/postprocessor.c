@@ -241,6 +241,8 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 						break;
 					}
 
+					printf("HERE UNALIGNED\n");
+
 					switch(current_instruction->addressing_mode){
 						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
 							printf("HERE\n");
