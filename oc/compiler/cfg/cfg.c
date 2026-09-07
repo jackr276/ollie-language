@@ -12440,17 +12440,15 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 	 */
 	symtab_variable_record_t* clone = create_ssa_compatible_temp_var(current_function, source_variable->type_defined_as, variable_symtab, get_next_variable_id());
 
-	//Clone over some of these important flags
-	//
-	//TODO HERE 
-	//
-	//Why would we copy this over? In theory this wouldn't matter because we're inlining so who cares
-	//about the parameter order? This is getting picked up all the way at the precolorer and causing
-	//us to have weird things like %rdi instead of %rax as it was precolored. This caused a lot of
-	//changes so I wouldn't want to merge it until after the rest of inlining but this would be a big
-	//improvement
-	//
-	//clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
+	/**
+	 * IMPORTANT NOTE: one thing that we never want to copy over is the "class_relative_parameter_order". Since
+	 * we are inlining, these are really just regular in-function variables and not parameter variables. As such
+	 * we do not need to perform any precoloring on them as we would with regular function variables. In fact, 
+	 * precoloring these would actually cause additional register interference and lead to a bunch of unnecessary
+	 * copying instructions
+	 */
+	
+	//Storage class remains the same between variables
 	clone->storage_class = source_variable->storage_class;
 
 	/**
@@ -13316,6 +13314,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
 		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
+		//TODO WHAT ABOUT THE ALIAS???
 		generic_type_t* parameter_type = parameter_variable->type_defined_as;
 
 		//We know that we're safe to clone the parameter and get the results
