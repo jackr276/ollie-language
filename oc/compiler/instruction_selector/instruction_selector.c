@@ -564,14 +564,11 @@ static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t*
 	switch(instruction->statement_type){
 		//These are only eligible if there is no memory access
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
-				return TRUE;
-			} else {
-				return FALSE;
-			}
+			return instruction->memory_access_type == NO_MEMORY_ACCESS ? TRUE : FALSE;
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			return TRUE;
+
 		default:
 			return FALSE;
 	}
@@ -6998,67 +6995,45 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
  * Get the value name for a given variable and *concatenate* it into
  * a given dynamic string. It is a assumed that the string has been
  * allocated by the caller
+ *
+ * All variables in Ollie have a unique variable ID. It is for this reason that we are
+ * able to use the variable ID for both temporary and non-temporary variables
  */
 static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_string_t* output){
 	//Allocate a temporary buffer for this
 	char buffer[1000];
-	//Holder for the variable record
-	symtab_variable_record_t* variable_record = variable->linked_var;
 
-	//Handle each variable type accordingly
 	switch(variable->variable_type){
 		/**
-		 * Temporary variables just output as t<number>
+		 * Temporary variables just output as t_<variable_id>
 		 */
 		case VARIABLE_TYPE_TEMP:
-			sprintf(buffer, "t%d", variable->variable_id);
+			sprintf(buffer, "t_%d", variable->variable_id);
 			dynamic_string_concatenate(output, buffer);
-
 			break;
 
 		/**
-		 * For non temporaries we will use:
-		 * 	<lexical_scope>_name_<ssa_generation>
-		 *
-		 * 	This will guarantee uniqueness even if we have
-		 * 	colliding
+		 * For non temps that have SSA generations we will
+		 * do V_<variable_id>_<ssa_generation>
 		 */
 		case VARIABLE_TYPE_NON_TEMP:
-			//Store the variable record
-			sprintf(buffer, "%d_%s_%d", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
+			sprintf(buffer, "V_%d_%d", variable->variable_id, variable->ssa_generation);
 			dynamic_string_concatenate(output, buffer);
-
 			break;
 
 		/**
-		 * For a memory address, we will just print this
-		 * out as M<<lexical_scope>_<name>_<ssa_generation>>
-		 * if we have a variable name. If not then we'll just be printing
-		 * out the temp var number
+		 * For memory address variables we will do M_<variable_id>_<ssa_generation>
 		 */
 		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			if(variable_record != NULL){
-				sprintf(buffer, "M<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
-			} else {
-				sprintf(buffer, "M<t%d>", variable->variable_id);
-			}
-
+			sprintf(buffer, "M_%d_%d", variable->variable_id, variable->ssa_generation);
 			dynamic_string_concatenate(output, buffer);
 			break;
 
 		/**
-		 * For a stack memory address, we will just print this
-		 * out as SM<<scope>_<name>_<ssa_generation>> if we have a
-		 * variable name. If not then we will be using the temp 
-		 * variable number
+		 * For stack memory address variables we will do M_<variable_id>_<ssa_generation>
 		 */
 		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			if(variable_record != NULL){
-				sprintf(buffer, "SM<%d_%s_%d>", variable_record->lexical_scope_id, variable_record->var_name.string, variable->ssa_generation);
-			} else {
-				sprintf(buffer, "SM<t%d>", variable->variable_id);
-			}
-
+			sprintf(buffer, "SM_%d_%d", variable->variable_id, variable->ssa_generation);
 			dynamic_string_concatenate(output, buffer);
 			break;
 
@@ -7624,8 +7599,8 @@ static inline u_int32_t estimate_value_numbering_keyspace_for_function(dynamic_a
 	if(keyspace <= INSTRUCTION_NUMBER_THRESHOLD){
 		return keyspace;
 	} else {
-		//There are 3 potential variables for each instruction
-		return keyspace * 3;
+		//There are 4 potential variables for each instruction
+		return keyspace * 4;
 	}
 }
 
