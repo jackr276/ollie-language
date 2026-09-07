@@ -543,14 +543,14 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
  */
-static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t* instruction){
-	switch(instruction->statement_type){
+static inline u_int8_t is_statement_eligible_for_value_numbering(instruction_t* statement){
+	switch(statement->statement_type){
 		//These are only eligible if there is no memory access
 		case THREE_ADDR_CODE_BIN_OP_STMT:
-			return instruction->memory_access_type == NO_MEMORY_ACCESS ? TRUE : FALSE;
+			return statement->memory_access_type == NO_MEMORY_ACCESS ? TRUE : FALSE;
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		//case THREE_ADDR_CODE_LEA_STMT:
+		case THREE_ADDR_CODE_LEA_STMT:
 			return TRUE;
 
 		default:
@@ -7241,50 +7241,65 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
 					dynamic_string_add_char_to_back(textual_key, '_');
 					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
+					break;
 				}
 
 				case ADDRESSING_MODE_OFFSET_ONLY:{
 					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
 					dynamic_string_add_char_to_back(textual_key, '_');
-
-					//TODO
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					break;
 				}
 
 				case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
-
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
 					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					//TODO
+					break;
 				}
 
 				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
 					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
 					dynamic_string_add_char_to_back(textual_key, '_');
-
-
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
 					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					//TODO
+					break;
 				}
 
 				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
 					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
 					dynamic_string_add_char_to_back(textual_key, '_');
-
-					//TODO
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
+					break;
 				}
 
 				case ADDRESSING_MODE_RIP_RELATIVE:{
-					//TODO
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
+					break;
 				}
 
 				case ADDRESSING_MODE_REGISTERS_ONLY:{
-					//TODO
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					break;
 				}
 
 				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
 					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
 					dynamic_string_add_char_to_back(textual_key, '_');
-
-					//TODO
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					dynamic_string_add_char_to_back(textual_key, '_');
+					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
 				}
 
 				/**
@@ -7561,7 +7576,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * If it is not, we will still perform value name substitution, but we will
 		 * not store anything in the hashtable
 		 */
-		if(is_expression_eligible_for_value_numbering(cursor) == TRUE){
+		if(is_statement_eligible_for_value_numbering(cursor) == TRUE){
 			/**
 			 * First we will use the value numberer itself to 
 			 * perform all necessary substitutions to variables inside
