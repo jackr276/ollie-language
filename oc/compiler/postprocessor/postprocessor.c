@@ -155,6 +155,22 @@ static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live
 
 
 /**
+ * Simple helper to take an unaligned move and convert it to an aligned move
+ */
+static inline instruction_type_t convert_unaligned_move_to_aligned_move(instruction_type_t unaligned_move_type){
+	switch(unaligned_move_type){
+		case MOVDQU:
+			return MOVDQA;
+		case MOVUPS:
+			return MOVAPS;
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized unaligned move instructon type\n");
+			exit(1);
+	}
+}
+
+
+/**
  * Our first step in postprocessing is to perform any instruction level
  * remediations that we find are necessary. This can take a few forms
  * and we will leverage this one full pass to do it all:
@@ -253,7 +269,7 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 						 * so this has to be aligned
 						 */
 						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
-							printf("HERE\n");
+							current_instruction->instruction_type = convert_unaligned_move_to_aligned_move(current_instruction->instruction_type);
 							break;
 						}
 
@@ -268,7 +284,8 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 								current_instruction = current_instruction->next_statement;
 								break;
 							}
-							printf("HERE\n");
+
+							current_instruction->instruction_type = convert_unaligned_move_to_aligned_move(current_instruction->instruction_type);
 							break;
 						}
 
