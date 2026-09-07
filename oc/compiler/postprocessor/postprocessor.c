@@ -135,13 +135,22 @@ static inline u_int8_t is_jump_instruction(instruction_t* instruction){
 
 
 /**
- * Post register allocation, it is possible that the register allocator
+ * Our first step in postprocessing is to perform any instruction level
+ * remediations that we find are necessary. This can take a few forms
+ * and we will leverage this one full pass to do it all:
+ *
+ * 1.) Post register allocation, it is possible that the register allocator
  * could've given us something like: movq %rax, %rax. This is entirely
  * useless, and as such we will eliminate instructions like these
  *
- * This is akin to mark & sweep in the optimizer, though much more simple
+ * 2.) Post register allocation, it is possible that we may have coalesced
+ * the stack pointer %rsp into the address_register1 of a given unaligned move(movdqu).
+ * If we find that this is the case, and we are able to prove that any offset of the
+ * unaligned move is a multiple of 16, we will be able to convert this unaligned move
+ * into an aligned move(movdqa) because we can now prove that the address it's reading
+ * from is aligned
  */
-static void remove_useless_moves(basic_block_t* function_entry_block){
+static void perform_instruction_level_remediations(basic_block_t* function_entry_block){
 	//Grab the head block
 	basic_block_t* current = function_entry_block;
 
@@ -939,10 +948,6 @@ static void reorder_blocks(basic_block_t* function_entry_block){
  * The postprocess function performs all post-allocation cleanup/optimization 
  * tasks and returns the ordered CFG in file-ready form
  */
-/**
- * In the postprocess step, we will run through every statement and perform a few
- * optimizations:
- */
 void postprocess(cfg_t* cfg){
 	//Cache these two special variables
 	stack_pointer_variable = cfg->stack_pointer;
@@ -960,9 +965,10 @@ void postprocess(cfg_t* cfg){
 		dynamic_array_t* function_blocks = &(function_entry_block->function_defined_in->function_blocks);
 
 		/**
-		 * PASS 1: remove any/all useless move operations from the CFG
+		 * PASS 1: perform remediations at the individual instruction level. This
+		 * can take a few forms(see function for details)
 		 */
-		remove_useless_moves(function_entry_block);
+		perform_instruction_level_remediations(function_entry_block);
 
 		/**
 		 * PASS 2: perform a modified branch reduction to condense the code
