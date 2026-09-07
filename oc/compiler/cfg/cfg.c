@@ -13349,14 +13349,17 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
 		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
-		//TODO WHAT ABOUT THE ALIAS???
 		generic_type_t* parameter_type = parameter_variable->type_defined_as;
 
 		//We know that we're safe to clone the parameter and get the results
 		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 		parameter_result_t* result = get_result_at_index(parameter_results, results_index);
 
-		//TODO DOC
+		/**
+		 * For parameter aliases, since we are not going to be precoloring the regular parameters these are 
+		 * simply not relevant. We will make it so that the aliases map to the same cloned variable that the
+		 * parameter itself does
+		 */
 		if(parameter_variable->alias != NULL){
 			symtab_variable_record_t* parameter_alias = parameter_variable->alias;
 			create_mapping_for_symtab_variable(variable_map, parameter_alias, cloned_parameter);
@@ -13974,7 +13977,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
