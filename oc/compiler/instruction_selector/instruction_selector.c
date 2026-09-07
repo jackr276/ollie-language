@@ -542,8 +542,6 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
  * Is the given expression eligible for value numbering? Note that all
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
- *
- * This list may be updated as the IR increases/chagnes
  */
 static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t* instruction){
 	switch(instruction->statement_type){
@@ -552,6 +550,7 @@ static inline u_int8_t is_expression_eligible_for_value_numbering(instruction_t*
 			return instruction->memory_access_type == NO_MEMORY_ACCESS ? TRUE : FALSE;
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_LEA_STMT:
 			return TRUE;
 
 		default:
@@ -7115,7 +7114,7 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
  * just need to be unique. As such we will generate the value names with
  * some distinguishable starting keys and their given operand values
  */
-static inline void generate_value_name_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
+static inline void generate_gvn_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
 	//For holding constant strings
 	char constant_string[300];
 
@@ -7162,11 +7161,47 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			//Starting key
 			dynamic_string_concatenate(textual_key, "LEA");
 
+			//Based on the addressing mode these all get different names
 			switch(instruction->addressing_mode){
+				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
+					//TODO
+				}
 
+				case ADDRESSING_MODE_INDEX_AND_SCALE:{
+					//TODO
+				}
 
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:{
+					//TODO
+				}
 
+				case ADDRESSING_MODE_OFFSET_ONLY:{
+					//TODO
+				}
 
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
+					//TODO
+				}
+
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
+					//TODO
+				}
+
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
+					//TODO
+				}
+
+				case ADDRESSING_MODE_RIP_RELATIVE:{
+					//TODO
+				}
+
+				case ADDRESSING_MODE_REGISTERS_ONLY:{
+					//TODO
+				}
+
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
+					//TODO
+				}
 
 				/**
 				 * Some invalid addressing mode here. Examples include "addressing mode none"
@@ -7428,7 +7463,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		dynamic_string_t textual_key = dynamic_string_alloc();
 
 		//Generate the value name like so
-		generate_value_name_key_for_instruction(cursor, &textual_key);
+		generate_gvn_key_for_instruction(cursor, &textual_key);
 		
 		//Now add this in with the key as our name, and the value as the assignee
 		add_value_number_expression(table, cursor->operands.oir.assignee, &textual_key);
@@ -7467,7 +7502,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			dynamic_string_t textual_string = dynamic_string_alloc();
 
 			//Generate the value name
-			generate_value_name_key_for_instruction(cursor, &textual_string);
+			generate_gvn_key_for_instruction(cursor, &textual_string);
 
 			//Can we find the result in the table?
 			three_addr_var_t* found_result = lookup_value_number_expression(table, &textual_string);
@@ -7489,11 +7524,10 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 				cursor->operands.oir.operand2 = NULL;
 				cursor->operands.oir.constant_operand = NULL;
 				cursor->op = BLANK;
+				
+				//TODO MORE CRAP TO NULL OUT
 
-				//The op1 is just the result that we found
-				decrement_use_count_for_variable(cursor->operands.oir.operand1);
 				cursor->operands.oir.operand1 = found_result;
-				increment_use_count_for_variable(found_result);
 
 				/**
 				 * Now we can use the textual string again to create a new 
