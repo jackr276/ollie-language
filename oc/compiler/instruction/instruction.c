@@ -1004,7 +1004,7 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var){
 	 * is passed via a parameter stack or not. If it is, then we need to 
 	 * flag this as a special kind of variable
 	 */
-	if(var->passed_by_stack == FALSE){
+	if(var->membership != STACK_PASSED_FUNCTION_PARAMETER){
 		//This is a memory address variable. We will flag this for special printing
 		emitted_var->variable_type = VARIABLE_TYPE_MEMORY_ADDRESS;
 
@@ -6627,9 +6627,10 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 
 
 /**
- * Emit a starting offset calculation for the given elaborative param
+ * Emit a special elaborative parameter offset that represents the 4 reserved bytes plus any padding before
+ * we can even get into elaborative parameters themselves
  */
-instruction_t* emit_elaborative_param_starting_offset_calculation(three_addr_var_t* result, three_addr_var_t* elaborative_param, u_int32_t line_number){
+instruction_t* emit_elaborative_param_offset(three_addr_var_t* result, three_addr_var_t* elaborative_param, u_int32_t line_number){
 	//Allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 

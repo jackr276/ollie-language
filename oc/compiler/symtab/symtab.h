@@ -115,6 +115,7 @@ typedef enum {
 	STATIC_VARIABLE,
 	FUNCTION_PARAMETER,
 	FUNCTION_PARAMETER_ALIAS,
+	STACK_PASSED_FUNCTION_PARAMETER,
 	RETURN_BY_COPY_PARAMETER,
 	RETURN_BY_COPY_PARAMETER_ALIAS,
 } variable_membership_t;
@@ -328,8 +329,6 @@ struct symtab_variable_record_t{
 	 * checking
 	 */
 	u_int8_t is_user_defined;
-	//Is this a function parameter that is passed via stack?
-	u_int8_t passed_by_stack;
 	//What's the visibility of this(only used for global variables)
 	visibilty_type_t visibility;
 };

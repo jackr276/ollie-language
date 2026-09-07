@@ -20,7 +20,14 @@
 /**
  * Allocate the internal dynamic array in the data area
  */
-void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type, stack_data_area_size_type_t size_type);
+void stack_data_area_alloc(stack_data_area_t* area, stack_data_area_type_t type);
+
+/**
+ * Create an elaborative param base region. Note that all other regions will be up and above this region and not contained
+ * within here, but this is the region that will be associated with the elaborative parameter variable and it will be our starting
+ * point to offset into for every elaborative param grab
+ */
+stack_region_t* create_elaborative_stack_param_base_region(stack_data_area_t* area, generic_type_t* elaborative_type);
 
 /**
  * Create a stack region for the type provided. This will handle alignment and addition
