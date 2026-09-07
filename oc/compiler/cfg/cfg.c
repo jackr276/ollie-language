@@ -13025,6 +13025,41 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		}
 
 		/**
+		 * For assign statements, we want to account for the case where we have a meaningless assignment
+		 * that takes place after cloning. A perfect example of this is with function parameters. Function
+		 * parameters have aliases in normal operation that help with interference. However, after cloning,
+		 * these function parameter aliases and the parameters that they aliased are the exact same, so
+		 * any assignment would look like:
+		 * 	^t14_0 <- ^t14_0
+		 * and is completely useless
+		 */
+		case THREE_ADDR_CODE_ASSN_STMT: {
+			//First clone the new assignee and the new operand
+			three_addr_var_t* new_assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			three_addr_var_t* new_operand = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+
+			//If these two are equal then we don't need to do anything
+			if(variables_equal_no_ssa(new_assignee, new_operand) == TRUE){
+				return;
+			}
+
+			/**
+			 * If we get here then we know that it's not a useless copy. We can
+			 * clone over all of the needed info
+			 */
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+			new_instruction->operands.oir.assignee = new_assignee;
+			new_instruction->operands.oir.operand1 = new_operand;
+
+			//Add it to the block and get out
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
+
+		/**
 		 * By default we need to clone every single variable that 
 		 */
 		default: {
