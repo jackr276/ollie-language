@@ -241,6 +241,33 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 						break;
 					}
 
+					/**
+					 * As of writing this, we will only convert base address
+					 * only and offset only moves because those are the only
+					 * ones that we can currently guarantee will be aligned
+					 * if we have a stack pointer
+					 */
+					switch(current_instruction->addressing_mode){
+						/**
+						 * Base address only - the address is now %rsp
+						 * so this has to be aligned
+						 */
+						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
+							printf("HERE\n");
+							break;
+						}
+
+						case ADDRESSING_MODE_OFFSET_ONLY: {
+							printf("HERE\n");
+							break;
+						}
+
+						//Anything else we can't guarantee so leave alone
+						default:{
+							break;
+						}
+					}
+
 					current_instruction = current_instruction->next_statement;
 					break;
 				}
