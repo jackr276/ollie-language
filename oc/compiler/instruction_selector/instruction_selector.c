@@ -484,23 +484,8 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 	switch(instruction->instruction_type){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			switch(instruction->op){
-				/**
-				 * These will all have a flag that tells us whether or not they set
-				 * condition codes. We will rely on that flag for these instructions.
-				 * For other instructions it does not matter
-				 */
-				case G_THAN:
-				case G_THAN_OR_EQ:
-				case L_THAN:
-				case L_THAN_OR_EQ:
-				case DOUBLE_EQUALS:
-				case NOT_EQUALS:
-					return instruction->operands.oir.assignee->sets_cc;
-
-				default:
-					return FALSE;
-			}
+			//Use the flag to determine this
+			return instruction->operands.oir.assignee->sets_cc;
 
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 			return TRUE;
@@ -7170,6 +7155,30 @@ static inline void generate_value_name_key_for_instruction(instruction_t* instru
 			break;
 
 		/**
+		 * For lea statements, we'll have names based on the addressing mode that
+		 * we're using for the lea statement
+		 */
+		case THREE_ADDR_CODE_LEA_STMT:
+			//Starting key
+			dynamic_string_concatenate(textual_key, "LEA");
+
+			switch(instruction->addressing_mode){
+
+
+
+
+
+				/**
+				 * Some invalid addressing mode here. Examples include "addressing mode none"
+				 */
+				default:{
+					fprintf(stderr, "Fatal internal compiler error: Invalid addressing mode %s in lea value numberer", addressing_mode_to_string(instruction->addressing_mode));
+					exit(1);
+				}
+			}
+			
+
+		/**
 		 * For bin op with const statements we'll
 		 * have value names like BINx_0-2
 		 */
@@ -7439,10 +7448,11 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		 * If it is not, we will still perform value name substitution, but we will
 		 * not store anything in the hashtable
 		 */
-		if(is_expression_eligible_for_value_numbering(cursor)){
+		if(is_expression_eligible_for_value_numbering(cursor) == TRUE){
 			/**
 			 * First we will use the value numberer itself to 
-			 * perform all necessary substitutions
+			 * perform all necessary substitutions to variables inside
+			 * of the expression
 			 */
 			if(perform_value_name_substitutions(table, cursor) == TRUE){
 				simplification_occured = TRUE;
@@ -7468,11 +7478,10 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * found result into this value
 			 *
 			 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
-			 * actually can't replace it even if we do find it. This is because
+			 * actually can't replace it even if we do find it. This is because we rely on the condition
+			 * code setting for any branch/conditional movement to work
 			 */
-			if(found_result != NULL
-				&& does_instruction_set_condition_codes(cursor) == FALSE){
-
+			if(found_result != NULL && does_instruction_set_condition_codes(cursor) == FALSE){
 				//This is now an assignment statement
 				cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
