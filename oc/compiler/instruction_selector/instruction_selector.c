@@ -7083,8 +7083,11 @@ static void concatenate_constant_value_name_string(three_addr_const_t* constant,
 		case LONG_CONST_FORCE_U:
 			sprintf(constant_buffer, "%d_%ld", LONG_CONST_FORCE_U, constant->constant_value.unsigned_long_constant);
 			break;
+		case STACK_PASSED_PARAM_OFFSET:
+			sprintf(constant_buffer, "%d_%ld", STACK_PASSED_PARAM_OFFSET, constant->constant_value.unsigned_long_constant);
+			break;
 		default:
-			fprintf(stderr, "Fatal internal compiler error: unsupported constant type given to value numberer\n");
+			fprintf(stderr, "Fatal internal compiler error: unsupported constant type %d given to value numberer\n", constant->const_type);
 			exit(1);
 	}
 
@@ -7300,6 +7303,7 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
 					dynamic_string_add_char_to_back(textual_key, '_');
 					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
+					break;
 				}
 
 				/**
@@ -7415,12 +7419,7 @@ static inline u_int8_t replace_all_parameter_list_variables(value_numbering_tabl
 		
 		//If they're not equal then we replace
 		if(old_variable != value_name){
-			//Set it in
 			dynamic_array_set_at(parameter_list, value_name, i);
-
-			//Swap the variable increments out
-			decrement_use_count_for_variable(old_variable);
-			increment_use_count_for_variable(value_name);
 
 			//Flag that we did perform one
 			performed_substitution = TRUE;
