@@ -2742,7 +2742,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 /**
  * Take a window and convert any memory converting moves into load and store statements
  */
-static inline void convert_memory_copy_statements(instruction_window_t* window){
+static inline void convert_memory_copy_statements(instruction_window_t* window, u_int8_t* changed){
 	//Cache all of these here(window may change)
 	instruction_t* instruction1 = window->instruction1;
 	instruction_t* instruction2 = window->instruction2;
@@ -2751,16 +2751,19 @@ static inline void convert_memory_copy_statements(instruction_window_t* window){
 	//Remediate if warranted for instruction1
 	if(instruction1 != NULL && instruction1->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
 		convert_memory_copy_statement_into_loads_and_stores(window, instruction1);
+		*changed = TRUE;
 	}
 
 	//Same for instruction2
 	if(instruction2 != NULL && instruction2->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
 		convert_memory_copy_statement_into_loads_and_stores(window, instruction2);
+		*changed = TRUE;
 	}
 
 	//Same for instruction 3 - window will be rebuilt if appropriate
 	if(instruction3 != NULL && instruction3->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
 		convert_memory_copy_statement_into_loads_and_stores(window, instruction3);
+		*changed = TRUE;
 	}
 }
 
@@ -5279,7 +5282,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * before we continue. We will take the chance to do that now. This helper rebuilds the window
 	 * as needed
 	 */
-	convert_memory_copy_statements(window);
+	convert_memory_copy_statements(window, &changed);
 	
 	/**
 	 * Memory address rememediation - if we have non store/load
