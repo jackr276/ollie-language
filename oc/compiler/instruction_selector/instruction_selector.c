@@ -7047,6 +7047,17 @@ static void concatenate_value_name_string(three_addr_var_t* variable, dynamic_st
 
 
 /**
+ * Get the value name for a given constant and concatenate it to the given output
+ *
+ * TODO
+ */
+static void concatenate_constant_value_name_string(three_addr_var_t* variable, dynamic_string_t* output){
+
+}
+
+
+
+/**
  * Is the given phi function redundant? A phi function is redundant
  * if *all* of the variables inside of the phi function have ended
  * up becoming the same via the GVN pass. This is easy to check
@@ -7120,7 +7131,7 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 
 	//Based on the instruction type we generate different keys
 	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_PHI_FUNC:
+		case THREE_ADDR_CODE_PHI_FUNC: {
 			dynamic_string_concatenate(textual_key, "PHI");
 
 			//Concatenate the variable name of each of the parameters onto the end
@@ -7133,12 +7144,13 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 			}
 
 			break;
+		}
 
 		/**
 		 * For a bin op statement we'll have
 		 * value names like BINx_0+y_0
 		 */
-		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
 			//Starting key
 			dynamic_string_concatenate(textual_key, "BIN");
 			
@@ -7152,19 +7164,21 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 			concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
 
 			break;
+		}
 
 		/**
 		 * For lea statements, we'll have names based on the addressing mode that
 		 * we're using for the lea statement
 		 */
-		case THREE_ADDR_CODE_LEA_STMT:
+		case THREE_ADDR_CODE_LEA_STMT: {
 			//Starting key
 			dynamic_string_concatenate(textual_key, "LEA");
 
 			//Based on the addressing mode these all get different names
 			switch(instruction->addressing_mode){
 				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
-					//TODO
+					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
+					break;
 				}
 
 				case ADDRESSING_MODE_INDEX_AND_SCALE:{
@@ -7211,13 +7225,15 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 					exit(1);
 				}
 			}
-			
 
+			break;
+		}
+			
 		/**
 		 * For bin op with const statements we'll
 		 * have value names like BINx_0-2
 		 */
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 			//Starting key
 			dynamic_string_concatenate(textual_key, "BIN");
 			
@@ -7237,9 +7253,11 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 			dynamic_string_concatenate(textual_key, constant_string);
 
 			break;
+		}
  
-		default:
+		default: {
 			break;
+		}
 	}
 }
 
@@ -7525,7 +7543,14 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 				cursor->operands.oir.constant_operand = NULL;
 				cursor->op = BLANK;
 				
+				//
+				//
+				//
+				//
 				//TODO MORE CRAP TO NULL OUT
+				//
+				//
+				//
 
 				cursor->operands.oir.operand1 = found_result;
 
