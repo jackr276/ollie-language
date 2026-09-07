@@ -12440,8 +12440,15 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 	 */
 	symtab_variable_record_t* clone = create_ssa_compatible_temp_var(current_function, source_variable->type_defined_as, variable_symtab, get_next_variable_id());
 
-	//Clone over some of these important flags
-	clone->class_relative_function_parameter_order = source_variable->class_relative_function_parameter_order;
+	/**
+	 * IMPORTANT NOTE: one thing that we never want to copy over is the "class_relative_parameter_order". Since
+	 * we are inlining, these are really just regular in-function variables and not parameter variables. As such
+	 * we do not need to perform any precoloring on them as we would with regular function variables. In fact, 
+	 * precoloring these would actually cause additional register interference and lead to a bunch of unnecessary
+	 * copying instructions
+	 */
+	
+	//Storage class remains the same between variables
 	clone->storage_class = source_variable->storage_class;
 
 	/**
@@ -13018,6 +13025,41 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		}
 
 		/**
+		 * For assign statements, we want to account for the case where we have a meaningless assignment
+		 * that takes place after cloning. A perfect example of this is with function parameters. Function
+		 * parameters have aliases in normal operation that help with interference. However, after cloning,
+		 * these function parameter aliases and the parameters that they aliased are the exact same, so
+		 * any assignment would look like:
+		 * 	^t14_0 <- ^t14_0
+		 * and is completely useless
+		 */
+		case THREE_ADDR_CODE_ASSN_STMT: {
+			//First clone the new assignee and the new operand
+			three_addr_var_t* new_assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			three_addr_var_t* new_operand = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+
+			//If these two are equal then we don't need to do anything
+			if(variables_equal_no_ssa(new_assignee, new_operand) == TRUE){
+				return;
+			}
+
+			/**
+			 * If we get here then we know that it's not a useless copy. We can
+			 * clone over all of the needed info
+			 */
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+			new_instruction->operands.oir.assignee = new_assignee;
+			new_instruction->operands.oir.operand1 = new_operand;
+
+			//Add it to the block and get out
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
+
+		/**
 		 * By default we need to clone every single variable that 
 		 */
 		default: {
@@ -13312,6 +13354,16 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		//We know that we're safe to clone the parameter and get the results
 		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 		parameter_result_t* result = get_result_at_index(parameter_results, results_index);
+
+		/**
+		 * For parameter aliases, since we are not going to be precoloring the regular parameters these are 
+		 * simply not relevant. We will make it so that the aliases map to the same cloned variable that the
+		 * parameter itself does
+		 */
+		if(parameter_variable->alias != NULL){
+			symtab_variable_record_t* parameter_alias = parameter_variable->alias;
+			create_mapping_for_symtab_variable(variable_map, parameter_alias, cloned_parameter);
+		}
 
 		/**
 		 * If we have a regular, register sized quantity that we do not pass by

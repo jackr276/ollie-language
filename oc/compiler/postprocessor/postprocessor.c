@@ -18,6 +18,7 @@
  */
 static three_addr_var_t* stack_pointer_variable;
 static three_addr_var_t* instruction_pointer_variable;
+static live_range_t* stack_pointer_lr;
 
 // A reusable queue for our traversals
 static heap_queue_t bfs_queue;
@@ -135,13 +136,34 @@ static inline u_int8_t is_jump_instruction(instruction_t* instruction){
 
 
 /**
- * Post register allocation, it is possible that the register allocator
+ * Do two given live ranges occupy the same exact register? This will only be true if they
+ * are in the same live range/register class as well
+ */
+static inline u_int8_t do_live_ranges_occupy_same_register(live_range_t* a, live_range_t* b){
+	//Not possible if they're different classes
+	if(a->live_range_class != b->live_range_class){
+		return FALSE;
+	}
+
+	//Otherwise compare based on register classes
+	if(a->live_range_class == LIVE_RANGE_CLASS_GEN_PURPOSE){
+		return a->reg.gen_purpose == b->reg.gen_purpose ? TRUE : FALSE;
+	} else {
+		return a->reg.sse_reg == b->reg.sse_reg ? TRUE : FALSE;
+	}
+}
+
+
+/**
+ * Our first step in postprocessing is to perform any instruction level
+ * remediations that we find are necessary. This can take a few forms
+ * and we will leverage this one full pass to do it all:
+ *
+ * 1.) Post register allocation, it is possible that the register allocator
  * could've given us something like: movq %rax, %rax. This is entirely
  * useless, and as such we will eliminate instructions like these
- *
- * This is akin to mark & sweep in the optimizer, though much more simple
  */
-static void remove_useless_moves(basic_block_t* function_entry_block){
+static void perform_instruction_level_remediations(basic_block_t* function_entry_block){
 	//Grab the head block
 	basic_block_t* current = function_entry_block;
 
@@ -152,54 +174,58 @@ static void remove_useless_moves(basic_block_t* function_entry_block){
 
 		//Run through all instructions
 		while(current_instruction != NULL){
-			//It's not a pure copy, so leave
-			if(is_instruction_pure_copy(current_instruction) == TRUE){
-				//Extract for convenience
-				live_range_t* destination_live_range = current_instruction->operands.x86.destination_register->associated_live_range;
-				live_range_t* source_live_range = current_instruction->operands.x86.source_register1->associated_live_range;
+			switch(current_instruction->instruction_type){
+				/**
+				 * Case 1: check for pure copy instructions where we're moving
+				 * from one register directly into itself
+				 */
+				case MOVB:
+				case MOVL:
+				case MOVW:
+				case MOVQ:
+				case MOVSD:
+				case MOVSS: {
+					/**
+					 * If we have memory access or we don't have a source register we'll
+					 * move along from here
+					 */
+					if(current_instruction->memory_access_type != NO_MEMORY_ACCESS
+						|| current_instruction->operands.x86.source_register1 == NULL){
 
-				//Go based on what live range class we have here
-				switch(source_live_range->live_range_class){
-					case LIVE_RANGE_CLASS_GEN_PURPOSE:
-						//We have a pure copy, so we can delete
-						if(source_live_range->reg.gen_purpose == destination_live_range->reg.gen_purpose){
-							instruction_t* holder = current_instruction;
-
-							//Push this one up
-							current_instruction = current_instruction->next_statement;
-
-							//Delete the holder
-							delete_statement(holder);
-
-						//Otherwise just push it up
-						} else {
-							current_instruction = current_instruction->next_statement;
-						}
-
+						current_instruction = current_instruction->next_statement;
 						break;
+					}
 
-					case LIVE_RANGE_CLASS_SSE:
-						//We have a pure copy, so we can delete
-						if(source_live_range->reg.gen_purpose == destination_live_range->reg.gen_purpose){
-							instruction_t* holder = current_instruction;
+					//Extract for convenience
+					live_range_t* destination_live_range = current_instruction->operands.x86.destination_register->associated_live_range;
+					live_range_t* source_live_range = current_instruction->operands.x86.source_register1->associated_live_range;
 
-							//Push this one up
-							current_instruction = current_instruction->next_statement;
+					/**
+					 * If they occupy the same register then this instruction is redundant, so we will delete
+					 * it. Otherwise we'll just skip ahead to the next one
+					 */
+					if(do_live_ranges_occupy_same_register(destination_live_range, source_live_range) == TRUE){
+						//Hold onto this before we delete
+						instruction_t* temp_holder = current_instruction->next_statement;
 
-							//Delete the holder
-							delete_statement(holder);
+						//Remove the useless copy
+						delete_statement(current_instruction);
 
-						//Otherwise just push it up
-						} else {
-							current_instruction = current_instruction->next_statement;
-						}
+						//Make this the temp holder to advance along
+						current_instruction = temp_holder;
 
-						break;
+					} else {
+						current_instruction = current_instruction->next_statement;
+					}
+
+					break;
 				}
 
-			//Otherwise push it up
-			} else {
-				current_instruction = current_instruction->next_statement;
+				//By default do nothing
+				default: {
+					current_instruction = current_instruction->next_statement;
+					break;
+				}
 			}
 		}
 
@@ -939,14 +965,13 @@ static void reorder_blocks(basic_block_t* function_entry_block){
  * The postprocess function performs all post-allocation cleanup/optimization 
  * tasks and returns the ordered CFG in file-ready form
  */
-/**
- * In the postprocess step, we will run through every statement and perform a few
- * optimizations:
- */
 void postprocess(cfg_t* cfg){
 	//Cache these two special variables
 	stack_pointer_variable = cfg->stack_pointer;
 	instruction_pointer_variable = cfg->instruction_pointer;
+
+	//We'll also want the stack pointer LR
+	stack_pointer_lr = stack_pointer_variable->associated_live_range;
 
 	//Allocate the reusable queue
 	bfs_queue = heap_queue_alloc();
@@ -960,9 +985,10 @@ void postprocess(cfg_t* cfg){
 		dynamic_array_t* function_blocks = &(function_entry_block->function_defined_in->function_blocks);
 
 		/**
-		 * PASS 1: remove any/all useless move operations from the CFG
+		 * PASS 1: perform remediations at the individual instruction level. This
+		 * can take a few forms(see function for details)
 		 */
-		remove_useless_moves(function_entry_block);
+		perform_instruction_level_remediations(function_entry_block);
 
 		/**
 		 * PASS 2: perform a modified branch reduction to condense the code
