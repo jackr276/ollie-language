@@ -6919,11 +6919,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			//Our function pointer itself comes from whatever this result is
 			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, function_call_node->line_number);
 
-			printf("FUNCTION POINTER VAR IS OF TYPE %s\n", function_pointer_var->type->type_name.string);
-
 			//Now we can emit the indirect call statement
 			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, function_call_node->line_number);
 
+			//Make sure that we advance the cursor up to be in the parameters
+			cursor = cursor->next_sibling;
 			break;
 		}
 
