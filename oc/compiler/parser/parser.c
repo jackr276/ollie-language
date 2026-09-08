@@ -2159,12 +2159,20 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
 		 */
 		if(params_seen != function_parameter_types->current_index){
-			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-			  function_name.string, function_parameter_types->current_index, params_seen, function_signature->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Error out
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+			if(function_name != NULL){
+				sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d", 
+				  				function_name->string,
+								function_signature->type_name.string,
+								function_parameter_types->current_index,
+								params_seen);
+			} else {
+				sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d", 
+								function_signature->type_name.string,
+								function_parameter_types->current_index,
+								params_seen);
+			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 
 	/**
@@ -2177,10 +2185,16 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name.string, function_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+			if(function_name != NULL){
+				sprintf(info, "Function \"%s\" of type \"%s\" expects 0 parameters",
+								function_name->string,
+								function_signature->type_name.string);
+			} else {
+				sprintf(info, "Function of type \"%s\" expects 0 parameters",
+								function_signature->type_name.string);
+			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Otherwise if it was fine, we'll now pop the grouping stack
@@ -2194,11 +2208,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * both cases appropriately
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	/**
-	 * Deal with the cases where we see the handle keyword. Remember that we're
-	 * only allowed to see this if we have a function that does raise errors
-	 */
 	if(lookahead.tok == HANDLE){
 		//If we don't raise errors then fail out
 		if(function_signature->raises_errors == FALSE){
