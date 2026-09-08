@@ -119,7 +119,7 @@ struct generic_ast_node_t{
 		//The type record that we have
 		symtab_type_record_t* type_record;
 		//The signature for a callee in a function call
-		generic_type_t* callee_signature;
+		function_type_t* callee_signature;
 		//Field in a struct or union
 		symtab_variable_record_t* field_variable;
 		//For enum constants - we'll hold onto the enum type here too

@@ -6885,7 +6885,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	basic_block_t* current_block = basic_block;
 
 	//Get the signature from the node itself
-	function_type_t* signature = function_call_node->optional_storage.callee_signature->internal_types.function_type;
+	function_type_t* signature = function_call_node->optional_storage.callee_signature;
 
 	//We'll need to hold onto the statement itself and the assignee
 	instruction_t* function_call_statement = NULL;

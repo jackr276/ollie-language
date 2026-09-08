@@ -1999,7 +1999,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * the callee's function signature inside of the optional storage block
 	 */
 	function_call_node->inferred_type = internal_function_type->return_type;
-	function_call_node->optional_storage.callee_signature = function_signature;
+	function_call_node->optional_storage.callee_signature = internal_function_type;
 
 	//Store the line number at this point
 	function_call_node->line_number = parser_line_num;
@@ -3992,7 +3992,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 */
 				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 					//Extract the function type from here
-					function_signature = cast_expr->optional_storage.callee_signature->internal_types.function_type;
+					function_signature = cast_expr->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
@@ -4012,7 +4012,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 */
 				case AST_NODE_TYPE_FUNCTION_CALL:
 					//Extract the function type from here
-					function_signature = cast_expr->optional_storage.callee_signature->internal_types.function_type;
+					function_signature = cast_expr->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
