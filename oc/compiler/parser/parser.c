@@ -1916,8 +1916,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	lexitem_t lookahead;
 	//We'll also keep a nicer reference to the function name
 	dynamic_string_t function_name;
-	//A pointer that holds our function call node
-	generic_ast_node_t* function_call_node;
 
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
@@ -1931,19 +1929,47 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	/**
 	 * Now that we've in theory gotten either the function itself or the expression
-	 * that is equivalent to it. We will extract the function record, signature and
-	 * underlying function type to work with
+	 * that is equivalent to it. We will extract the function record and signature
+	 * of the underlying function to work with
 	 */
 	symtab_function_record_t* function_record = unary_expression_node->func_record;
 	generic_type_t* function_signature = unary_expression_node->inferred_type;
-	function_type_t* internal_function_type = function_signature->internal_types.function_type;
 
+	//We need to do validations before it's safe to grab this
+	function_type_t* internal_function_type = NULL;
 
+	/**
+	 * If we have an actual function record(most common), we'll create what we call
+	 * a "direct call" which will *not* have any unary expression attached to it. If
+	 * we do not, then we will make an indirect call, which *always* has a unary expression
+	 * as the first child
+	 */
+	generic_ast_node_t* function_call_node;
 	if(function_record != NULL){
+		//Allocate and tack the fucntion record on
+		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
+		function_call_node->func_record = function_record;
+
+		//Add an edge on the direct call graph
+		add_function_call(current_function, function_record);
+		
+		//Flag that this was called
+		function_record->called = TRUE;
+
+		//It's safe to grab this now
+		internal_function_type = function_signature->internal_types.function_type;
+
+		//If we are calling an inlined function then flag this
+		if(internal_function_type->is_inlined == TRUE){
+			current_function->calls_inlined_function = TRUE;
+		}
 
 	} else {
 
 	}
+
+	//The inferred type is always the signature's return type
+	function_call_node->inferred_type = internal_function_type->return_type;
 
 
 
