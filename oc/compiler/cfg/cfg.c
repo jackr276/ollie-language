@@ -6912,6 +6912,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * expression node that we will use to derive our callable variable
 		 */
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
+	printf("HERE IN CFG\n");
 			//Process the unary expression
 			cfg_result_package_t unary_results = emit_unary_expression(current_block, cursor);
 			current_block = unary_results.final_block;
@@ -6932,6 +6933,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * record that we are calling itself is stored inside of the func_record field
 		 */
 		case AST_NODE_TYPE_FUNCTION_CALL: { 
+	printf("HERE IN CFG DIRECT\n");
 			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
 			function_call_statement->is_inlined_call = signature->is_inlined;
 

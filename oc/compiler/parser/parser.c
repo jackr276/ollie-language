@@ -1909,7 +1909,7 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @{<unary_expression>|<qualified-function-name>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
+ * BNF Rule: <function-call> ::= @{<unary_expression>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
@@ -1925,6 +1925,10 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	generic_ast_node_t* unary_expression_node = unary_expression(token_stream, side);
 	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid expression given to call statement", parser_line_num);
+	}
+
+	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_FUNCTION_CALL){
+		printf("HAVE FUNCTION CALL UNARY\n");
 	}
 
 	/**
@@ -1945,6 +1949,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * as the first child
 	 */
 	generic_ast_node_t* function_call_node;
+	//TODO BUG IS RIGHT HERE WE CANNOT USE THIS TO DETERMINE ANYTHING because what if the unary
+	//expression is a function call in and of itself???
 	if(function_record != NULL){
 		//Allocate and tack the fucntion record on
 		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
@@ -2825,7 +2831,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			//We'll push it up to the stack for matching
 			push_token(&grouping_stack, lookahead);
 
-			//We are now required to see a valid ternary expression
+			//We are now required to see a valid assignment expression
 			generic_ast_node_t* expr = assignment_expression(token_stream);
 
 			//If it's an error, just give the node back
@@ -2853,6 +2859,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 		//We could see a function call
 		case AT:
+			printf("HERE\n\n\n");
 			return function_call(token_stream, side);
 
 		//If we get here we fail
@@ -3071,7 +3078,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	}
 
 loop_end:
-	//If whatever our operator here is is not an assignment operator, we can just use the ternary rule
+	//If whatever our operator here is is not an assignment operator, we can just use the in expression rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
 		return in_expression(token_stream, SIDE_TYPE_RIGHT);
 	}
