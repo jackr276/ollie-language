@@ -1914,8 +1914,6 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
-	//We'll also keep a nicer reference to the function name
-	dynamic_string_t function_name;
 
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
@@ -1965,60 +1963,14 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		}
 
 	} else {
-
-	}
-
-	//The inferred type is always the signature's return type
-	function_call_node->inferred_type = internal_function_type->return_type;
-
-
-
-
-	//This is the most common case - that we have a simple, direct function call
-	if(function_record != NULL){
-		//Allocate this as a regular function call node
-		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
-
-		//Store the function record in the node
-		function_call_node->func_record = function_record;
-
-		//Store the overall type
-		function_type = function_record->signature;
-
-		//Store our function signature
-		function_signature = function_record->signature->internal_types.function_type;
-
-		//Note that the current function calls out to the given one
-		add_function_call(current_function, function_record);
-
-		//We'll now note that this was indeed called
-		function_record->called = TRUE;
-
-		//If we are calling an inlined function, flag it for the eventual inlining step
-		if(function_signature->is_inlined == TRUE){
-			current_function->calls_inlined_function = TRUE;
-		}
-
-	//The only way to get here is if the function pointer wasn't NULL
-	} else {
-		//Strip the type away here
-		function_type = dealias_type(function_pointer_variable->type_defined_as);
-
-		//If this is not a function signature, then we can't call it as one
-		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
-			//Print and fail out here
-			sprintf(info, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
+		//Validate that what we're trying to call is actually a function
+		if(function_signature->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", function_signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Now that we know this exists, we'll allocate this one as an indirect function call
+		//Allocate this as an indirect call
 		function_call_node = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
-
-		//Store our funcion signature
-		function_signature = function_type->internal_types.function_type;
-
-		//Store the variable too
-		function_call_node->variable = function_pointer_variable;
 
 		/**
 		 * This function performs an indirect call. We do not and can not know what the function 
@@ -2026,18 +1978,21 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * initial alignment for this function
 		 */
 		current_function->requires_initial_alignment = TRUE;
+
+		/**
+		 * IMPORTANT: indirect function calls always have a unary expression node as their first
+		 * child. This node stores what exactly we're trying to call
+		 */
+		add_child_node(function_call_node, unary_expression_node);
 	}
 
-	//Add the inferred type in for convenience as well
-	function_call_node->inferred_type = function_signature->return_type;
+	//The inferred type is always the signature's return type
+	function_call_node->inferred_type = internal_function_type->return_type;
 	
 	//We now need to see a left parenthesis for our param list
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Fail out here
 	if(lookahead.tok != L_PAREN){
-		//Send this error node up the chain
-		return print_and_return_error("Left parenthesis expected on function call", parser_line_num);
+		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
 	}
 
 	//Push onto the grouping stack once we see this
