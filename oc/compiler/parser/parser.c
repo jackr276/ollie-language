@@ -1993,6 +1993,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	//The inferred type is always the signature's return type
 	function_call_node->inferred_type = internal_function_type->return_type;
+
+	//Store the line number at this point
+	function_call_node->line_number = parser_line_num;
 	
 	//We now need to see a left parenthesis for our param list
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -2209,25 +2212,26 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok == HANDLE){
-		//If we don't raise errors then fail out
-		if(function_signature->raises_errors == FALSE){
-			//Remember that we could have a regular function or a function pointer
+		/**
+		 * If we don't raise errors then this is never correct so
+		 * fail out
+		 */
+		if(internal_function_type->raises_errors == FALSE){
 			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+				sprintf(info, "Function \"%s\" of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
 							function_record->func_name.string,
-							function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+							function_signature->type_name.string);
 
-			//Function pointer
 			} else {
-				sprintf(info, "Function signature \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
-							function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+				sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+							function_signature->type_name.string);
 			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Now let's process the handle statement
-		generic_ast_node_t* handle_node = handle_statement(token_stream, function_type);
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_signature);
 
 		//If this fails then we fail out
  		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -2248,27 +2252,21 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * If this function raises errors, then we actually
 		 * had to see this, so this is an error
 		 */
-		if(function_signature->raises_errors == TRUE){
-			//Remember we could have a regular function or function pointer
+		if(internal_function_type->raises_errors == TRUE){
 			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as raising errors. A \"handle\" statement is required upon every call of this function", 
+				sprintf(info, "Function \"%s\" of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function", 
 								function_record->func_name.string,
-								function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+								function_signature->type_name.string);
 
-			//Function pointer
 			} else {
-				sprintf(info, "Function signature \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
-								function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+				sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+								function_signature->type_name.string);
 			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
-	//Add the line number in
-	function_call_node->line_number = parser_line_num;
-
-	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
 }
 
