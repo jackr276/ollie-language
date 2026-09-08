@@ -6889,7 +6889,15 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//We'll need to hold onto the statement itself and the assignee
 	instruction_t* function_call_statement = NULL;
+
+	/**
+	 * We may or may not have an actual function assignee variable here
+	 * based on whether or not we return void
+	 */
 	three_addr_var_t* function_assignee = NULL;
+	if(signature->returns_void == FALSE){
+		function_assignee = emit_temp_var(signature->return_type);
+	}
 
 	//We will also need a cursor to traverse the subtree
 	generic_ast_node_t* cursor = function_call_node->first_child;
@@ -6899,14 +6907,15 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * needs to be agnostic to the node type
 	 */
 	switch(function_call_node->ast_node_type){
-		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			printf("TODO NOW IS INCORRECT\n");
-			exit(1);
+		/**
+		 * For indirect function calls, the first child will always point to a unary
+		 * expression node that we will use to derive our callable variable
+		 */
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
+			//Process the unary expression
+			cfg_result_package_t unary_results = emit_unary_expression(current_block, cursor);
 
-			//May be NULL or not based on what we have as the return type
-			if(signature->returns_void == FALSE){
-				function_assignee = emit_temp_var(signature->return_type);
-			}
+			//TODO NOT DONE
 
 			//We first need to emit the function pointer variable
 			three_addr_var_t* function_pointer_var = emit_var(function_call_node->variable);
@@ -6915,27 +6924,24 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, function_call_node->line_number);
 
 			break;
+		}
 
-		case AST_NODE_TYPE_FUNCTION_CALL:
-			//May be NULL or not based on what we have as the return type
-			if(signature->returns_void == FALSE){
-				function_assignee = emit_temp_var(signature->return_type);
-			}
-
-			/**
-			 * Now we can emit the direct call statement
-			 * If we have a direct call that is inlined we will flag
-			 * this call instruction as being inlined
-			 */
+		/**
+		 * For direct call statements, the first child is actually a parameter. The
+		 * record that we are calling itself is stored inside of the func_record field
+		 */
+		case AST_NODE_TYPE_FUNCTION_CALL: { 
 			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
 			function_call_statement->is_inlined_call = signature->is_inlined;
 
 			break;
+		}
 
 		//This should be unreachable but just to be sure
-		default:
+		default: {
 			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
 			exit(1);
+		}
 	}
 
 	//If we have parameters allocate the array now
