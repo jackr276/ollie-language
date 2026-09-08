@@ -6898,6 +6898,9 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	switch(function_call_node->ast_node_type){
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+			printf("TODO NOW IS INCORRECT\n");
+			exit(1);
+
 			//Signature comes from the variable
 			signature = function_call_node->variable->type_defined_as->internal_types.function_type;
 

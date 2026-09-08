@@ -1977,6 +1977,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		//Allocate this as an indirect call
 		function_call_node = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
 
+		//It's safe to populate this now
+		internal_function_type = function_signature->internal_types.function_type;
+
 		/**
 		 * This function performs an indirect call. We do not and can not know what the function 
 		 * that results from this call is. As such, we need to be safe and now assume that we require an 
@@ -3984,6 +3987,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 * Other items are completely ineligible
 				 */
 				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+					//TODO WRONG VARIABLES ARE NOT A GUARANTEE
+					//
+					//
 					//Extract the function type from here
 					function_signature = cast_expr->variable->type_defined_as->internal_types.function_type;
 
@@ -4004,6 +4010,10 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 * Other items are completely ineligible
 				 */
 				case AST_NODE_TYPE_FUNCTION_CALL:
+					//TODO MAY WANNA REDO THIS AS WELL
+					//
+					//
+					//
 					//Extract the function type from here
 					function_signature = cast_expr->func_record->signature->internal_types.function_type;
 
