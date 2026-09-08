@@ -1914,6 +1914,8 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
+	//A pointer for our function name. Remember that we won't always have this
+	dynamic_string_t* function_name = NULL;
 
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
@@ -1953,6 +1955,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		
 		//Flag that this was called
 		function_record->called = TRUE;
+
+		//In this instance store the function name
+		function_name = &(function_record->func_name);
 
 		//It's safe to grab this now
 		internal_function_type = function_signature->internal_types.function_type;
@@ -2004,8 +2009,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * if it does not, we can save some work here and just look for
 	 * the R_PAREN
 	 */
-	if(function_signature->function_parameters.current_index > 0){
-
+	dynamic_array_t* function_parameter_types = &(internal_function_type->function_parameters);
+	if(function_parameter_types->current_index > 0){
 		//The number of parameters that we've seen
 		int32_t params_seen = 0;
 
@@ -2018,12 +2023,12 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			params_seen++;
 
 			//We'll let the error below handle this, we just don't want to segfault
-			if(params_seen > function_signature->function_parameters.current_index){
+			if(params_seen > internal_function_type->function_parameters.current_index){
 				break;
 			}
 
 			//Grab the current function param
-			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), params_seen - 1);
+			generic_type_t* param_type = dynamic_array_get_at(function_parameter_types, params_seen - 1);
 
 			/**
 			 * For an elaborative param, we need to sort of pause here and accumulate.
@@ -2049,13 +2054,24 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 					//Following that we'll generate another error message to make it more clear
-					sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-							function_name.string, 
-							(param_type->mutability == MUTABLE ? "mut ": ""),
-							param_type->type_name.string, params_seen,
-							//Print the mut keyword if we need it
-							(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-							current_param->inferred_type->type_name.string, function_type->type_name.string);
+					if(function_name != NULL){
+						sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+								function_name->string, 
+								function_signature->type_name.string,
+								(param_type->mutability == MUTABLE ? "mut ": ""),
+								param_type->type_name.string, params_seen,
+								//Print the mut keyword if we need it
+								(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								current_param->inferred_type->type_name.string, function_signature->type_name.string);
+					} else {
+						sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+								function_signature->type_name.string,
+								(param_type->mutability == MUTABLE ? "mut ": ""),
+								param_type->type_name.string, params_seen,
+								//Print the mut keyword if we need it
+								(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								current_param->inferred_type->type_name.string, function_signature->type_name.string);
+					}
 
 					//Use the helper to return this
 					return print_and_return_error(info, parser_line_num);
@@ -2125,9 +2141,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * empty elaborative param. We still have to handle this, so now is
 		 * the time to pick up on that
 		 */
-		if(params_seen == function_signature->function_parameters.current_index - 1){
+		if(params_seen == function_parameter_types->current_index - 1){
 			//Extract it - let's see if it is elaborative
-			generic_type_t* final_param_type = dynamic_array_get_from_back(&(function_signature->function_parameters));
+			generic_type_t* final_param_type = dynamic_array_get_from_back(function_parameter_types);
 
 			//If it is then this is ok, we will handle accordingly
 			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
@@ -2142,9 +2158,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		/**
 		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
 		 */
-		if(params_seen != function_signature->function_parameters.current_index){
+		if(params_seen != function_parameter_types->current_index){
 			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-			  function_name.string, function_signature->function_parameters.current_index, params_seen, function_type->type_name.string);
+			  function_name.string, function_parameter_types->current_index, params_seen, function_signature->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			num_errors++;
 			//Error out
@@ -2163,9 +2179,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		if(lookahead.tok != R_PAREN){
 			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name.string, function_type->type_name.string);
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Print out the actual function record as well
 			num_errors++;
-			//Return the error node
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 		}
 
