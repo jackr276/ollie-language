@@ -118,11 +118,13 @@ struct generic_ast_node_t{
 	union{
 		//The type record that we have
 		symtab_type_record_t* type_record;
+		//The signature for a callee in a function call
+		generic_type_t* callee_signature;
 		//Field in a struct or union
 		symtab_variable_record_t* field_variable;
 		//For enum constants - we'll hold onto the enum type here too
 		generic_type_t* enum_type;
-		//For error types in a hanldes statement
+		//For error types in a handles statement
 		generic_type_t* error_type;
 		//For any/all error types, we'll hold onto the actual value of the error here
 		u_int32_t error_id;
