@@ -6914,11 +6914,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
 			//Process the unary expression
 			cfg_result_package_t unary_results = emit_unary_expression(current_block, cursor);
+			current_block = unary_results.final_block;
 
-			//TODO NOT DONE
+			//Our function pointer itself comes from whatever this result is
+			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, function_call_node->line_number);
 
-			//We first need to emit the function pointer variable
-			three_addr_var_t* function_pointer_var = emit_var(function_call_node->variable);
+			printf("FUNCTION POINTER VAR IS OF TYPE %s\n", function_pointer_var->type->type_name.string);
 
 			//Now we can emit the indirect call statement
 			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, function_call_node->line_number);
