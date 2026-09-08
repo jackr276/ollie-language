@@ -1914,16 +1914,10 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
-	//Second lookahead
-	lexitem_t lookahead2;
 	//We'll also keep a nicer reference to the function name
 	dynamic_string_t function_name;
 	//A pointer that holds our function call node
 	generic_ast_node_t* function_call_node;
-	//Hold the overall type for error printing
-	generic_type_t* function_type;
-	//The generic type that holds our function signature
-	function_type_t* function_signature;
 
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
@@ -1935,140 +1929,24 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		return print_and_return_error("Invalid expression given to call statement", parser_line_num);
 	}
 
-
-	//Holders for when our eventual process here shakes out
-	symtab_variable_record_t* function_pointer_variable = NULL;
-	symtab_function_record_t* function_record = NULL;
-
-
 	/**
-	 * If the lookahead token is *not* a ::, then we are just doing a regular lookup.
-	 * This identifier has the possibility of being a direct function call or a function pointer
-	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
-	 * and go accordingly
-	 *
-	 * NOTE: if we're looking up a function without a fully qualified name, we just bottom
-	 * line won't be able to find it unless the access is valid. It's for this reason that 
-	 * we don't need to do any validation for a regular lookup
+	 * Now that we've in theory gotten either the function itself or the expression
+	 * that is equivalent to it. We will extract the function record, signature and
+	 * underlying function type to work with
 	 */
-	if(lookahead2.tok != COLONCOLON){
-		//Push it back because we don't need it
-		push_back_token(token_stream, &parser_line_num);
+	symtab_function_record_t* function_record = unary_expression_node->func_record;
+	generic_type_t* function_signature = unary_expression_node->inferred_type;
+	function_type_t* internal_function_type = function_signature->internal_types.function_type;
 
-		//Grab the function name out for convenience
-		function_name = lookahead.lexeme;
 
-		//Most common case is we're just calling directly so we'll start there
-		function_record = lookup_function(function_symtab, function_name.string);
+	if(function_record != NULL){
 
-		//Only then will we look up the function pointer variable. If that fails, then this is just bad
-		if(function_record == NULL){
-			function_pointer_variable = lookup_variable(variable_symtab, function_name.string);
-
-			//If this is also NULL, then we'll fail out
-			if(function_pointer_variable == NULL){
-				//Customize our error message based on the namespace
-				if(function_symtab->current->is_default == TRUE){
-					sprintf(info, "\"%s\" is not currently defined as a function pointer or function or is not visible by default from within the current namespace. \
-									Are you missing namespace qualifiers?", function_name.string);
-				} else {
-					sprintf(info, "\"%s\" is not currently defined as a function pointer or a function in the current namespace \"%s\" or any parent namespace",
-										function_name.string,
-										generate_fully_qualified_namespace_name(function_symtab->current).string);
-				}
-
-				return print_and_return_error(info, parser_line_num);
-			}
-		}
-
-	/**
-	 * Otherwise if we did see a ::, then we're doing a fully qualified
-	 * function lookup. If we have seen this then we can guarantee that
-	 * this is not a function pointer
-	 */
 	} else {
-		/**
-		 * Initially we're looking at the very first namespace. We need to just do a blanket search to
-		 * see if anything is here in the entire program 
-		 */
-		function_namespace_t* current_namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
 
-		//No point in going any further
-		if(current_namespace == NULL){
-			sprintf(info, "There is no namespace named \"%s\" in the program", lookahead.lexeme.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		/**
-		 * Once we've gotten here we know that the lookahead is a valid namespace
-		 * and lookahead2 was ::. We need to keep refreshing both tokens. So long
-		 * as lookahead2 is ::, we need to keep searching for lookahead as a valid
-		 * namespace. Once lookahead2 is not ::, that's how we know we've found our
-		 * function name in lookahead and that is also our terminal condition
-		 */
-		while(TRUE){
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			lookahead2 = get_next_token(token_stream, &parser_line_num);
-
-			//Just a generic parse error here
-			if(lookahead.tok != IDENT){
-				sprintf(info, "Expected identifier after :: but got \"%s\"", lexitem_to_string(&lookahead));
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//We saw :: again, so we need to check that lookahead is a valid namespace under the current namespace
-			if(lookahead2.tok == COLONCOLON){
-				//Look it up under the parent
-				function_namespace_t* child = lookup_namespace_under_parent(current_namespace, lookahead.lexeme.string);
-
-				//This is a fail case if we found nothing
-				if(child == NULL){
-					sprintf(info, "No namespace named \"%s\" exists under the namespace \"%s\"",
-			 						lookahead.lexeme.string,
-			 						generate_fully_qualified_namespace_name(current_namespace).string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//Otherwise we found something so we'll make that our new current
-				current_namespace = child;
-
-			//Otherwise, we've reached the end so we'll need to lookup the function inside of our given namespace
-			} else {
-				//Push back lookahead2
-				push_back_token(token_stream, &parser_line_num);
-
-				//Flag that this is the function name
-				function_name = lookahead.lexeme;
-
-				//We need to ensure that the lexeme under lookahed is actually a function in our namespace
-				symtab_function_record_t* found_function = lookup_function_in_namespace(current_namespace, function_name.string);
-
-				//Hard fail case if we end up with this
-				if(found_function == NULL){
-					sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
-			 						function_name.string,
-			 						generate_fully_qualified_namespace_name(current_namespace).string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//Otherwise this is our function record
-				function_record = found_function;
-
-				/**
-				 * We now need to validate that we can actually access this function from the current
-				 * namespace. There is a helper that takes care of all of this, we just need to invoke it
-				 */
-				if(validate_function_access(function_record) == FAILURE){
-					sprintf(info, "Invalid attempt to access function \"%s\"",
-			 				generate_fully_qualified_function_name(function_record).string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//This is our terminal case
-				break;
-			}
-		}
 	}
+
+
+
 
 	//This is the most common case - that we have a simple, direct function call
 	if(function_record != NULL){
