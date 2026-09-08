@@ -30,6 +30,6 @@ pub fn main() -> i32{
 
 	let functions:mut arithmetic_function[] = [add, subtract, multiply];
 
-	//Call into the function directly
-	ret @functions[2](1, 3);
+	OUNIT: [exit_status = 4]
+	ret @functions[2](1, 3) + @(functions[1])(2, 3);
 }

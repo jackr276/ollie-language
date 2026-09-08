@@ -36,6 +36,7 @@ pub fn main() -> i32{
 
 	let x:arithmetic_function = functions[2];
 
+	OUNIT: [exit_status = 3]
 	ret @x(1, 3);
 }
 

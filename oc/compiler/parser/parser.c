@@ -1902,16 +1902,14 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 
 
 /**
- * A function call looks for a very specific kind of identifer followed by
- * parenthesis and the appropriate number of parameters for the function, each of
- * the appropriate type
- *
- * We will handle the case where we have a qualified function name with :: separators in here
- * as well. This leads to a bit of complication when parsing the actual name
+ * Function calls always come after an "@" and can have the function itself expressed as a unary
+ * expression. The unary expression will either work its way down into an actual function itself
+ * or some kind of expression(identifier, array, struct access, etc.) that has a function type
+ * to it. This is what we will use to call
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
+ * BNF Rule: <function-call> ::= @{<unary_expression>|<qualified-function-name>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
@@ -1926,23 +1924,22 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	generic_type_t* function_type;
 	//The generic type that holds our function signature
 	function_type_t* function_signature;
-	
-	//Grab the next token using the lookahead
-	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//We have a general error-probably will be quite uncommon
-	if(lookahead.tok != IDENT){
-		sprintf(info, "Expected identifier after @ but got \"%s\" instead", lexitem_to_string(&lookahead));
-
-		return print_and_return_error("Non-identifier provided as function call", parser_line_num);
+	/**
+	 * The very first thing that we do see should be a unary expression. This unary expression
+	 * will either give us the actual function itself *or* it will give us an expression that
+	 * returns a function type(signature) that we will be able to call indirectly
+	 */
+	generic_ast_node_t* unary_expression_node = unary_expression(token_stream, side);
+	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid expression given to call statement", parser_line_num);
 	}
+
 
 	//Holders for when our eventual process here shakes out
 	symtab_variable_record_t* function_pointer_variable = NULL;
 	symtab_function_record_t* function_record = NULL;
 
-	//Do we see the "::" separator here? If so then we need to parse the fully qualified name
-	lookahead2 = get_next_token(token_stream, &parser_line_num);
 
 	/**
 	 * If the lookahead token is *not* a ::, then we are just doing a regular lookup.
