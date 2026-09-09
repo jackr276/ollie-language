@@ -6569,8 +6569,20 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	//Otherwise it's fine so we add it and move on
 	add_child_node(in_expression_node, else_branch);
 
+	/**
+	 * Determine the ternary compatability. If this returns NULL it means that we have
+	 * invalid types being used here
+	 */
+	generic_type_t* final_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
+	if(final_type == NULL){
+		sprintf(info, "Types \"%s\" and \"%s\" are not compatable for use in a ternary expression",
+						if_branch->inferred_type->type_name.string,
+						else_branch->inferred_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
 	//Determine the compatibility of these ternary nodes, and coerce it
-	in_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
+	in_expression_node->inferred_type = final_type;
 
 	//A ternary is not assignable
 	in_expression_node->is_assignable = FALSE;
