@@ -1927,32 +1927,29 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		return print_and_return_error("Invalid expression given to call statement", parser_line_num);
 	}
 
-	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_FUNCTION_CALL){
-		printf("HAVE FUNCTION CALL UNARY\n");
-	}
-
 	/**
 	 * Now that we've in theory gotten either the function itself or the expression
 	 * that is equivalent to it. We will extract the function record and signature
 	 * of the underlying function to work with
 	 */
-	symtab_function_record_t* function_record = unary_expression_node->func_record;
+	symtab_function_record_t* function_record = NULL;
 	generic_type_t* function_signature = unary_expression_node->inferred_type;
 
 	//We need to do validations before it's safe to grab this
 	function_type_t* internal_function_type = NULL;
 
 	/**
-	 * If we have an actual function record(most common), we'll create what we call
+	 * If we have an actual function record(func const), we'll create what we call
 	 * a "direct call" which will *not* have any unary expression attached to it. If
 	 * we do not, then we will make an indirect call, which *always* has a unary expression
 	 * as the first child
 	 */
 	generic_ast_node_t* function_call_node;
-	//TODO BUG IS RIGHT HERE WE CANNOT USE THIS TO DETERMINE ANYTHING because what if the unary
-	//expression is a function call in and of itself???
-	if(function_record != NULL){
-		//Allocate and tack the fucntion record on
+	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT && unary_expression_node->constant_type == FUNC_CONST){
+		//Extract the function record from the constant node
+		function_record = unary_expression_node->func_record;
+
+		//Allocate and tack the function record on
 		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
 		function_call_node->func_record = function_record;
 
@@ -2859,7 +2856,6 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 
 		//We could see a function call
 		case AT:
-			printf("HERE\n\n\n");
 			return function_call(token_stream, side);
 
 		//If we get here we fail
