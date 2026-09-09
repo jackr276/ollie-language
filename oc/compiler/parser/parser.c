@@ -1902,222 +1902,86 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 
 
 /**
- * A function call looks for a very specific kind of identifer followed by
- * parenthesis and the appropriate number of parameters for the function, each of
- * the appropriate type
- *
- * We will handle the case where we have a qualified function name with :: separators in here
- * as well. This leads to a bit of complication when parsing the actual name
+ * Function calls always come after an "@" and can have the function itself expressed as a unary
+ * expression. The unary expression will either work its way down into an actual function itself
+ * or some kind of expression(identifier, array, struct access, etc.) that has a function type
+ * to it. This is what we will use to call
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
- * BNF Rule: <function-call> ::= @{<identifier>|<qualified-function-name>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
+ * BNF Rule: <function-call> ::= @{<unary_expression>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
-	//Second lookahead
-	lexitem_t lookahead2;
-	//We'll also keep a nicer reference to the function name
-	dynamic_string_t function_name;
-	//A pointer that holds our function call node
-	generic_ast_node_t* function_call_node;
-	//Hold the overall type for error printing
-	generic_type_t* function_type;
-	//The generic type that holds our function signature
-	function_type_t* function_signature;
-	
-	//Grab the next token using the lookahead
-	lookahead = get_next_token(token_stream, &parser_line_num);
+	//A pointer for our function name. Remember that we won't always have this
+	dynamic_string_t* function_name = NULL;
 
-	//We have a general error-probably will be quite uncommon
-	if(lookahead.tok != IDENT){
-		sprintf(info, "Expected identifier after @ but got \"%s\" instead", lexitem_to_string(&lookahead));
-
-		return print_and_return_error("Non-identifier provided as function call", parser_line_num);
+	/**
+	 * The very first thing that we do see should be a unary expression. This unary expression
+	 * will either give us the actual function itself *or* it will give us an expression that
+	 * returns a function type(signature) that we will be able to call indirectly
+	 */
+	generic_ast_node_t* unary_expression_node = unary_expression(token_stream, side);
+	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid expression given to call statement", parser_line_num);
 	}
 
-	//Holders for when our eventual process here shakes out
-	symtab_variable_record_t* function_pointer_variable = NULL;
+	/**
+	 * Now that we've in theory gotten either the function itself or the expression
+	 * that is equivalent to it. We will extract the function record and signature
+	 * of the underlying function to work with
+	 */
 	symtab_function_record_t* function_record = NULL;
+	generic_type_t* function_signature = unary_expression_node->inferred_type;
 
-	//Do we see the "::" separator here? If so then we need to parse the fully qualified name
-	lookahead2 = get_next_token(token_stream, &parser_line_num);
-
-	/**
-	 * If the lookahead token is *not* a ::, then we are just doing a regular lookup.
-	 * This identifier has the possibility of being a direct function call or a function pointer
-	 * of some kind. To determine which it is, we'll need to look the name up in both symtabs
-	 * and go accordingly
-	 *
-	 * NOTE: if we're looking up a function without a fully qualified name, we just bottom
-	 * line won't be able to find it unless the access is valid. It's for this reason that 
-	 * we don't need to do any validation for a regular lookup
-	 */
-	if(lookahead2.tok != COLONCOLON){
-		//Push it back because we don't need it
-		push_back_token(token_stream, &parser_line_num);
-
-		//Grab the function name out for convenience
-		function_name = lookahead.lexeme;
-
-		//Most common case is we're just calling directly so we'll start there
-		function_record = lookup_function(function_symtab, function_name.string);
-
-		//Only then will we look up the function pointer variable. If that fails, then this is just bad
-		if(function_record == NULL){
-			function_pointer_variable = lookup_variable(variable_symtab, function_name.string);
-
-			//If this is also NULL, then we'll fail out
-			if(function_pointer_variable == NULL){
-				//Customize our error message based on the namespace
-				if(function_symtab->current->is_default == TRUE){
-					sprintf(info, "\"%s\" is not currently defined as a function pointer or function or is not visible by default from within the current namespace. \
-									Are you missing namespace qualifiers?", function_name.string);
-				} else {
-					sprintf(info, "\"%s\" is not currently defined as a function pointer or a function in the current namespace \"%s\" or any parent namespace",
-										function_name.string,
-										generate_fully_qualified_namespace_name(function_symtab->current).string);
-				}
-
-				return print_and_return_error(info, parser_line_num);
-			}
-		}
+	//We need to do validations before it's safe to grab this
+	function_type_t* internal_function_type = NULL;
 
 	/**
-	 * Otherwise if we did see a ::, then we're doing a fully qualified
-	 * function lookup. If we have seen this then we can guarantee that
-	 * this is not a function pointer
+	 * If we have an actual function record(func const), we'll create what we call
+	 * a "direct call" which will *not* have any unary expression attached to it. If
+	 * we do not, then we will make an indirect call, which *always* has a unary expression
+	 * as the first child
 	 */
-	} else {
-		/**
-		 * Initially we're looking at the very first namespace. We need to just do a blanket search to
-		 * see if anything is here in the entire program 
-		 */
-		function_namespace_t* current_namespace = lookup_namespace(function_symtab, lookahead.lexeme.string);
+	generic_ast_node_t* function_call_node;
+	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT && unary_expression_node->constant_type == FUNC_CONST){
+		//Extract the function record from the constant node
+		function_record = unary_expression_node->func_record;
 
-		//No point in going any further
-		if(current_namespace == NULL){
-			sprintf(info, "There is no namespace named \"%s\" in the program", lookahead.lexeme.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		/**
-		 * Once we've gotten here we know that the lookahead is a valid namespace
-		 * and lookahead2 was ::. We need to keep refreshing both tokens. So long
-		 * as lookahead2 is ::, we need to keep searching for lookahead as a valid
-		 * namespace. Once lookahead2 is not ::, that's how we know we've found our
-		 * function name in lookahead and that is also our terminal condition
-		 */
-		while(TRUE){
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			lookahead2 = get_next_token(token_stream, &parser_line_num);
-
-			//Just a generic parse error here
-			if(lookahead.tok != IDENT){
-				sprintf(info, "Expected identifier after :: but got \"%s\"", lexitem_to_string(&lookahead));
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			//We saw :: again, so we need to check that lookahead is a valid namespace under the current namespace
-			if(lookahead2.tok == COLONCOLON){
-				//Look it up under the parent
-				function_namespace_t* child = lookup_namespace_under_parent(current_namespace, lookahead.lexeme.string);
-
-				//This is a fail case if we found nothing
-				if(child == NULL){
-					sprintf(info, "No namespace named \"%s\" exists under the namespace \"%s\"",
-			 						lookahead.lexeme.string,
-			 						generate_fully_qualified_namespace_name(current_namespace).string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//Otherwise we found something so we'll make that our new current
-				current_namespace = child;
-
-			//Otherwise, we've reached the end so we'll need to lookup the function inside of our given namespace
-			} else {
-				//Push back lookahead2
-				push_back_token(token_stream, &parser_line_num);
-
-				//Flag that this is the function name
-				function_name = lookahead.lexeme;
-
-				//We need to ensure that the lexeme under lookahed is actually a function in our namespace
-				symtab_function_record_t* found_function = lookup_function_in_namespace(current_namespace, function_name.string);
-
-				//Hard fail case if we end up with this
-				if(found_function == NULL){
-					sprintf(info, "No function named \"%s\" exists under the namespace \"%s\"",
-			 						function_name.string,
-			 						generate_fully_qualified_namespace_name(current_namespace).string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//Otherwise this is our function record
-				function_record = found_function;
-
-				/**
-				 * We now need to validate that we can actually access this function from the current
-				 * namespace. There is a helper that takes care of all of this, we just need to invoke it
-				 */
-				if(validate_function_access(function_record) == FAILURE){
-					sprintf(info, "Invalid attempt to access function \"%s\"",
-			 				generate_fully_qualified_function_name(function_record).string);
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				//This is our terminal case
-				break;
-			}
-		}
-	}
-
-	//This is the most common case - that we have a simple, direct function call
-	if(function_record != NULL){
-		//Allocate this as a regular function call node
+		//Allocate and tack the function record on
 		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
-
-		//Store the function record in the node
 		function_call_node->func_record = function_record;
 
-		//Store the overall type
-		function_type = function_record->signature;
-
-		//Store our function signature
-		function_signature = function_record->signature->internal_types.function_type;
-
-		//Note that the current function calls out to the given one
+		//Add an edge on the direct call graph
 		add_function_call(current_function, function_record);
-
-		//We'll now note that this was indeed called
+		
+		//Flag that this was called
 		function_record->called = TRUE;
 
-		//If we are calling an inlined function, flag it for the eventual inlining step
-		if(function_signature->is_inlined == TRUE){
+		//In this instance store the function name
+		function_name = &(function_record->func_name);
+
+		//It's safe to grab this now
+		internal_function_type = function_signature->internal_types.function_type;
+
+		//If we are calling an inlined function then flag this
+		if(internal_function_type->is_inlined == TRUE){
 			current_function->calls_inlined_function = TRUE;
 		}
 
-	//The only way to get here is if the function pointer wasn't NULL
 	} else {
-		//Strip the type away here
-		function_type = dealias_type(function_pointer_variable->type_defined_as);
-
-		//If this is not a function signature, then we can't call it as one
-		if(function_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
-			//Print and fail out here
-			sprintf(info, "\"%s\" is defined as type %s, and cannot be called as a function. Only function types may be called", function_name.string, function_type->type_name.string);
+		//Validate that what we're trying to call is actually a function
+		if(function_signature->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", function_signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Now that we know this exists, we'll allocate this one as an indirect function call
+		//Allocate this as an indirect call
 		function_call_node = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
 
-		//Store our funcion signature
-		function_signature = function_type->internal_types.function_type;
-
-		//Store the variable too
-		function_call_node->variable = function_pointer_variable;
+		//It's safe to populate this now
+		internal_function_type = function_signature->internal_types.function_type;
 
 		/**
 		 * This function performs an indirect call. We do not and can not know what the function 
@@ -2125,18 +1989,28 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * initial alignment for this function
 		 */
 		current_function->requires_initial_alignment = TRUE;
+
+		/**
+		 * IMPORTANT: indirect function calls always have a unary expression node as their first
+		 * child. This node stores what exactly we're trying to call
+		 */
+		add_child_node(function_call_node, unary_expression_node);
 	}
 
-	//Add the inferred type in for convenience as well
-	function_call_node->inferred_type = function_signature->return_type;
+	/**
+	 * The inferred type is always the signature's return type. We will also store
+	 * the callee's function signature inside of the optional storage block
+	 */
+	function_call_node->inferred_type = internal_function_type->return_type;
+	function_call_node->optional_storage.callee_signature = internal_function_type;
+
+	//Store the line number at this point
+	function_call_node->line_number = parser_line_num;
 	
 	//We now need to see a left parenthesis for our param list
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Fail out here
 	if(lookahead.tok != L_PAREN){
-		//Send this error node up the chain
-		return print_and_return_error("Left parenthesis expected on function call", parser_line_num);
+		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
 	}
 
 	//Push onto the grouping stack once we see this
@@ -2148,8 +2022,8 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * if it does not, we can save some work here and just look for
 	 * the R_PAREN
 	 */
-	if(function_signature->function_parameters.current_index > 0){
-
+	dynamic_array_t* function_parameter_types = &(internal_function_type->function_parameters);
+	if(function_parameter_types->current_index > 0){
 		//The number of parameters that we've seen
 		int32_t params_seen = 0;
 
@@ -2162,12 +2036,12 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 			params_seen++;
 
 			//We'll let the error below handle this, we just don't want to segfault
-			if(params_seen > function_signature->function_parameters.current_index){
+			if(params_seen > internal_function_type->function_parameters.current_index){
 				break;
 			}
 
 			//Grab the current function param
-			generic_type_t* param_type = dynamic_array_get_at(&(function_signature->function_parameters), params_seen - 1);
+			generic_type_t* param_type = dynamic_array_get_at(function_parameter_types, params_seen - 1);
 
 			/**
 			 * For an elaborative param, we need to sort of pause here and accumulate.
@@ -2193,13 +2067,24 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 					//Following that we'll generate another error message to make it more clear
-					sprintf(info, "Function \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-							function_name.string, 
-							(param_type->mutability == MUTABLE ? "mut ": ""),
-							param_type->type_name.string, params_seen,
-							//Print the mut keyword if we need it
-							(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-							current_param->inferred_type->type_name.string, function_type->type_name.string);
+					if(function_name != NULL){
+						sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+								function_name->string, 
+								function_signature->type_name.string,
+								(param_type->mutability == MUTABLE ? "mut ": ""),
+								param_type->type_name.string, params_seen,
+								//Print the mut keyword if we need it
+								(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								current_param->inferred_type->type_name.string, function_signature->type_name.string);
+					} else {
+						sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+								function_signature->type_name.string,
+								(param_type->mutability == MUTABLE ? "mut ": ""),
+								param_type->type_name.string, params_seen,
+								//Print the mut keyword if we need it
+								(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								current_param->inferred_type->type_name.string, function_signature->type_name.string);
+					}
 
 					//Use the helper to return this
 					return print_and_return_error(info, parser_line_num);
@@ -2269,9 +2154,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * empty elaborative param. We still have to handle this, so now is
 		 * the time to pick up on that
 		 */
-		if(params_seen == function_signature->function_parameters.current_index - 1){
+		if(params_seen == function_parameter_types->current_index - 1){
 			//Extract it - let's see if it is elaborative
-			generic_type_t* final_param_type = dynamic_array_get_from_back(&(function_signature->function_parameters));
+			generic_type_t* final_param_type = dynamic_array_get_from_back(function_parameter_types);
 
 			//If it is then this is ok, we will handle accordingly
 			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
@@ -2286,13 +2171,21 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		/**
 		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
 		 */
-		if(params_seen != function_signature->function_parameters.current_index){
-			sprintf(info, "Function %s expects %d parameters, but was given %d. Defined as: %s", 
-			  function_name.string, function_signature->function_parameters.current_index, params_seen, function_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			//Error out
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+		if(params_seen != function_parameter_types->current_index){
+			if(function_name != NULL){
+				sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d", 
+				  				function_name->string,
+								function_signature->type_name.string,
+								function_parameter_types->current_index,
+								params_seen);
+			} else {
+				sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d", 
+								function_signature->type_name.string,
+								function_parameter_types->current_index,
+								params_seen);
+			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 
 	/**
@@ -2305,12 +2198,16 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		
 		//If it's not an R_PAREN, then we fail
 		if(lookahead.tok != R_PAREN){
-			sprintf(info, "Function \"%s\" expects 0 parameters. Defined as: %s", function_name.string, function_type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			//Print out the actual function record as well
-			num_errors++;
-			//Return the error node
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+			if(function_name != NULL){
+				sprintf(info, "Function \"%s\" of type \"%s\" expects 0 parameters",
+								function_name->string,
+								function_signature->type_name.string);
+			} else {
+				sprintf(info, "Function of type \"%s\" expects 0 parameters",
+								function_signature->type_name.string);
+			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Otherwise if it was fine, we'll now pop the grouping stack
@@ -2324,31 +2221,27 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	 * both cases appropriately
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	/**
-	 * Deal with the cases where we see the handle keyword. Remember that we're
-	 * only allowed to see this if we have a function that does raise errors
-	 */
 	if(lookahead.tok == HANDLE){
-		//If we don't raise errors then fail out
-		if(function_signature->raises_errors == FALSE){
-			//Remember that we could have a regular function or a function pointer
+		/**
+		 * If we don't raise errors then this is never correct so
+		 * fail out
+		 */
+		if(internal_function_type->raises_errors == FALSE){
 			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+				sprintf(info, "Function \"%s\" of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
 							function_record->func_name.string,
-							function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+							function_signature->type_name.string);
 
-			//Function pointer
 			} else {
-				sprintf(info, "Function signature \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
-							function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+				sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+							function_signature->type_name.string);
 			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Now let's process the handle statement
-		generic_ast_node_t* handle_node = handle_statement(token_stream, function_type);
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_signature);
 
 		//If this fails then we fail out
  		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -2369,27 +2262,21 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		 * If this function raises errors, then we actually
 		 * had to see this, so this is an error
 		 */
-		if(function_signature->raises_errors == TRUE){
-			//Remember we could have a regular function or function pointer
+		if(internal_function_type->raises_errors == TRUE){
 			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" has signature \"%s\" and is defined as raising errors. A \"handle\" statement is required upon every call of this function", 
+				sprintf(info, "Function \"%s\" of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function", 
 								function_record->func_name.string,
-								function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+								function_signature->type_name.string);
 
-			//Function pointer
 			} else {
-				sprintf(info, "Function signature \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
-								function_type->type_name.string);
-				return print_and_return_error(info, parser_line_num);
+				sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+								function_signature->type_name.string);
 			}
+
+			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
-	//Add the line number in
-	function_call_node->line_number = parser_line_num;
-
-	//Otherwise, if we make it here, we're all good to return the function call node
 	return function_call_node;
 }
 
@@ -2941,7 +2828,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
 			//We'll push it up to the stack for matching
 			push_token(&grouping_stack, lookahead);
 
-			//We are now required to see a valid ternary expression
+			//We are now required to see a valid assignment expression
 			generic_ast_node_t* expr = assignment_expression(token_stream);
 
 			//If it's an error, just give the node back
@@ -3187,7 +3074,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	}
 
 loop_end:
-	//If whatever our operator here is is not an assignment operator, we can just use the ternary rule
+	//If whatever our operator here is is not an assignment operator, we can just use the in expression rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
 		return in_expression(token_stream, SIDE_TYPE_RIGHT);
 	}
@@ -4108,7 +3995,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 */
 				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 					//Extract the function type from here
-					function_signature = cast_expr->variable->type_defined_as->internal_types.function_type;
+					function_signature = cast_expr->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
@@ -4128,7 +4015,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 				 */
 				case AST_NODE_TYPE_FUNCTION_CALL:
 					//Extract the function type from here
-					function_signature = cast_expr->func_record->signature->internal_types.function_type;
+					function_signature = cast_expr->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
@@ -6682,8 +6569,20 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	//Otherwise it's fine so we add it and move on
 	add_child_node(in_expression_node, else_branch);
 
+	/**
+	 * Determine the ternary compatability. If this returns NULL it means that we have
+	 * invalid types being used here
+	 */
+	generic_type_t* final_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
+	if(final_type == NULL){
+		sprintf(info, "Types \"%s\" and \"%s\" are not compatable for use in a ternary expression",
+						if_branch->inferred_type->type_name.string,
+						else_branch->inferred_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
 	//Determine the compatibility of these ternary nodes, and coerce it
-	in_expression_node->inferred_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
+	in_expression_node->inferred_type = final_type;
 
 	//A ternary is not assignable
 	in_expression_node->is_assignable = FALSE;

@@ -6884,59 +6884,65 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
 
-	/**
-	 * We will need to hold onto the signature, function call statement and
-	 * function assignee here when we emit our actual call statement
-	 */
-	function_type_t* signature = NULL;
+	//Get the signature from the node itself
+	function_type_t* signature = function_call_node->optional_storage.callee_signature;
+
+	//We'll need to hold onto the statement itself and the assignee
 	instruction_t* function_call_statement = NULL;
+
+	/**
+	 * We may or may not have an actual function assignee variable here
+	 * based on whether or not we return void
+	 */
 	three_addr_var_t* function_assignee = NULL;
+	if(signature->returns_void == FALSE){
+		function_assignee = emit_temp_var(signature->return_type);
+	}
+
+	//We will also need a cursor to traverse the subtree
+	generic_ast_node_t* cursor = function_call_node->first_child;
 
 	/**
 	 * Any/all of our conditional processing will be done here. After this everything
 	 * needs to be agnostic to the node type
 	 */
 	switch(function_call_node->ast_node_type){
-		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
-			//Signature comes from the variable
-			signature = function_call_node->variable->type_defined_as->internal_types.function_type;
+		/**
+		 * For indirect function calls, the first child will always point to a unary
+		 * expression node that we will use to derive our callable variable
+		 */
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
+			//Process the unary expression
+			cfg_result_package_t unary_results = emit_unary_expression(current_block, cursor);
+			current_block = unary_results.final_block;
 
-			//May be NULL or not based on what we have as the return type
-			if(signature->returns_void == FALSE){
-				function_assignee = emit_temp_var(signature->return_type);
-			}
-
-			//We first need to emit the function pointer variable
-			three_addr_var_t* function_pointer_var = emit_var(function_call_node->variable);
+			//Our function pointer itself comes from whatever this result is
+			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, function_call_node->line_number);
 
 			//Now we can emit the indirect call statement
 			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, function_call_node->line_number);
 
+			//Make sure that we advance the cursor up to be in the parameters
+			cursor = cursor->next_sibling;
 			break;
+		}
 
-		case AST_NODE_TYPE_FUNCTION_CALL:
-			//Signature is just stored in the symtab record itself
-			signature = function_call_node->func_record->signature->internal_types.function_type;
-
-			//May be NULL or not based on what we have as the return type
-			if(signature->returns_void == FALSE){
-				function_assignee = emit_temp_var(signature->return_type);
-			}
-
-			/**
-			 * Now we can emit the direct call statement
-			 * If we have a direct call that is inlined we will flag
-			 * this call instruction as being inlined
-			 */
+		/**
+		 * For direct call statements, the first child is actually a parameter. The
+		 * record that we are calling itself is stored inside of the func_record field
+		 */
+		case AST_NODE_TYPE_FUNCTION_CALL: { 
 			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
 			function_call_statement->is_inlined_call = signature->is_inlined;
 
 			break;
+		}
 
 		//This should be unreachable but just to be sure
-		default:
+		default: {
 			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
 			exit(1);
+		}
 	}
 
 	//If we have parameters allocate the array now
@@ -6945,19 +6951,18 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	/**
-	 * Grab a cursor to process parameters and keep going until we run out or we hit
-	 * a different kind of statement
+	 * Run through our cursor so long as we keep having parameter nodes. We'll know that
+	 * we're done once we either hit NULL or a handles statement
 	 */
-	generic_ast_node_t* param_cursor = function_call_node->first_child;
-	while(param_cursor != NULL && param_cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
+	while(cursor != NULL && cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
 		cfg_result_package_t parameter_results;
 
 		/**
 		 * For everything that is not an elaborative param statement, we'll
 		 * handle it internally to this function
 		 */
-		if(param_cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
-			parameter_results = emit_parameter_expression(current_block, param_cursor, &(function_call_statement->parameter_results));
+		if(cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
+			parameter_results = emit_parameter_expression(current_block, cursor, &(function_call_statement->parameter_results));
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -6966,12 +6971,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle the stack management later
 		 */
 		} else {
-			parameter_results = emit_elaborative_param_expressions(current_block, param_cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_elaborative_param_expressions(current_block, cursor, &(function_call_statement->parameter_results));
 		}
 
 		//Bump the final block and move up
 		current_block = parameter_results.final_block;
-		param_cursor = param_cursor->next_sibling;
+		cursor = cursor->next_sibling;
 	}
 
 	/**
@@ -6985,7 +6990,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * translate it into a switch statement. Our strategy here is to only emit
 	 * the final result assignment once we're inside of the handle statement itself
 	 */
-	if(param_cursor != NULL && param_cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
+	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		/**
 		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
 		 * the result assignment that comes with it
@@ -7005,7 +7010,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		error_assignee = assignment->operands.oir.assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		result_package = emit_handle_statement(current_block, param_cursor, function_assignee, error_assignee);
+		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
 
 	} else {
 		//If this is not a void return type, we'll need to emit this temp assignment

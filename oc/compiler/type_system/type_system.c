@@ -1396,6 +1396,15 @@ generic_type_t* determine_ternary_compatibility(void* symtab, generic_type_t** a
 	}
 
 	/**
+	 * For function pointer types we can leverage the types_assignable rule
+	 * to determine if they're compatable or not. We will not do anything
+	 * with coercion because function types cannot be coerced
+	 */
+	if((*a)->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
+		return types_assignable(*a, *b);
+	}
+
+	/**
 	 * We'll need this to be a basic or size type to
 	 * have this work
 	 */

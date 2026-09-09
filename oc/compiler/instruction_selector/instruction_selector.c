@@ -8760,7 +8760,7 @@ static instruction_type_t select_move_instruction(variable_size_t destination_si
 					return CVTSI2SDQ;
 
 				default:
-					printf("Fatal internal compiler error: undefined/invalid destination variable size encountered in quad word move selector\n");
+					printf("Fatal internal compiler error: undefined/invalid destination variable size %d encountered in quad word move selector\n", destination_size);
 					exit(1);
 			}
 
