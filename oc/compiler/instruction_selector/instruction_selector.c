@@ -2144,7 +2144,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 								three_addr_var_t* address_result = emit_temp_var(u64);
 
 								//Emit the address calculation
-								instruction_t* address_calc = emit_binary_operation_with_const_instruction(address_result, stack_pointer_variable, PLUS, stack_offset_constant, instruction->line_number);
+								instruction_t* address_calc = emit_lea_offset_only(address_result, stack_pointer_variable, stack_offset_constant, instruction->line_number);
 								insert_instruction_before_given(address_calc, instruction);
 
 								//Now our instruction's op1 becomes this value
@@ -2228,7 +2228,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							three_addr_var_t* address_result = emit_temp_var(u64);
 
 							//Emit the calculation for our address
-							instruction_t* address_calc = emit_binary_operation_with_const_instruction(address_result, stack_pointer_variable, PLUS, stack_offset_constant, instruction->line_number);
+							instruction_t* address_calc = emit_lea_offset_only(address_result, stack_pointer_variable, stack_offset_constant, instruction->line_number);
 							insert_instruction_before_given(address_calc, instruction);
 
 							//This is now our first operand
@@ -2357,16 +2357,13 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				}
 
 				/**
-				 * For any binary operation instruction, we're just going to have to emit the extra assignment
-				 * here since again we cannot know what the offset is going to be
-				 *
+				 * To remediate a stack parameter address in with a binary operation we may be able to turn
+				 * it into a LEA based on the operand. For a plus or minus
 				 * Example:
 				 *   t4 <- PARAMATER_MEM<dd_0> + 32
 				 *
-				 *   Turns into
-				 *
-				 * 	 t5 <- rsp + <Stack passed offset region 2>
-				 *   t4 <- t5 + 32
+				 *   Turns into:
+				 *   t4 <- LEA 32 + <stack passed offset region 2>(rsp)
 				 *
 				 *   TODO HERE NEEDS TO BE REDONE
 				 *
@@ -2429,7 +2426,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							three_addr_var_t* calculated_address = emit_temp_var(u64);
 
 							//Create and insert the address calculation
-							instruction_t* address_calc = emit_binary_operation_with_const_instruction(calculated_address, stack_pointer_variable, PLUS, stack_offset_constant, instruction->line_number);
+							instruction_t* address_calc = emit_lea_offset_only(calculated_address, stack_pointer_variable, stack_offset_constant, instruction->line_number);
 							insert_instruction_before_given(address_calc, instruction);
 
 							//Just replace the first operand with our newly calculated address
