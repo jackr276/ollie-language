@@ -2361,7 +2361,6 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * here since again we cannot know what the offset is going to be
 				 *
 				 * Example:
-				 *
 				 *   t4 <- PARAMATER_MEM<dd_0> + 32
 				 *
 				 *   Turns into
@@ -2381,36 +2380,52 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
 
-					//Simplify based on what we have
+					/**
+					 * If we have a PLUS/MINUS binary operation, we can convert this into a lea statement. Otherwise,
+					 * we will keep it as a binary operation expression
+					 */
 					switch(instruction->op){
-						case PLUS:
+						case PLUS: {
+							//Simplify our two constants
 							add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
+
+							//Convert this into a lea
+							instruction->operands.oir.address_operand1 = stack_pointer_variable;
+							instruction->operands.oir.address_offset = stack_offset_constant;
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Wipe out the old fields
+							instruction->op = BLANK;
+							instruction->operands.oir.operand1 = NULL;
+							instruction->operands.oir.constant_operand = NULL;
+							break;
+						}
+
+						case MINUS: {
+							//Simplify our two constants
+							subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
+
+							//Convert this into a lea
+							instruction->operands.oir.address_operand1 = stack_pointer_variable;
+							instruction->operands.oir.address_offset = stack_offset_constant;
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+							//Wipe out the old fields
+							instruction->op = BLANK;
+							instruction->operands.oir.operand1 = NULL;
+							instruction->operands.oir.constant_operand = NULL;
 							break;
 
-						case MINUS:
-							subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
-							break;
+						}
 
 						//This should be impossible, if we get here it's a hard out
+						//TODO NOT IMPOSSIBLE
 						default:
 							printf("Fatal internal compiler error. Attempt to do a binary operation that is not +/- with a memory address\n");
 							exit(1);
 					}
-
-					//Wipe out the operator
-					instruction->op = BLANK;
-
-					//The address operand becomes that stack pointer
-					instruction->operands.oir.address_operand1 = stack_pointer_variable;
-
-					//And this becomes the address constant
-					instruction->operands.oir.address_offset = stack_offset_constant;
-
-					//Change the instruction type to a lea
-					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-					//This is an offset only
-					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					break;
 				}
