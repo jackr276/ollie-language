@@ -2097,6 +2097,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 						//Simplify based on what we have
+						//TODO REFACTOR ENTIRELY
 						switch(instruction->op){
 							case PLUS:
 								add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
@@ -2128,11 +2129,37 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					/**
-					 * Otherwise, we'll just swap the var out with the stack pointer since
-					 * they're one in the same
+					 * There's nothing for us to do with the memory address but swap it out
+					 * with the stack pointer. However, we will want to convert this into 
+					 * a lea if possilbe
 					 */
 					} else {
-						instruction->operands.oir.operand1 = stack_pointer_variable;
+
+						/**
+						 * If we have a PLUS, we can make this into a lea
+						 */
+						if(instruction->op == PLUS){
+
+							//Update the offset and address op
+							instruction->operands.oir.address_operand1 = stack_pointer_variable;
+							instruction->operands.oir.address_offset = instruction->operands.oir.constant_operand;
+
+							//Wipe these out for any future reference
+							instruction->operands.oir.constant_operand = NULL;
+							instruction->operands.oir.operand1 = NULL;
+							
+							//Make this a lea with a given addressing mode
+							instruction->op = BLANK;
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+						/**
+						 * Otherwise it's not LEA eligible so we'll have to leave it as a binary
+						 * operation
+						 */
+						} else {
+							instruction->operands.oir.operand1 = stack_pointer_variable;
+						}
 					}
 
 					break;
