@@ -2365,10 +2365,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *   Turns into:
 				 *   t4 <- LEA 32 + <stack passed offset region 2>(rsp)
 				 *
-				 *   TODO HERE NEEDS TO BE REDONE
-				 *
-				 *   There are instances where this need not be a plus or minus
-				 *
+				 *  In all other cases besides +/- we will emit a lea above the
+				 *  expression and then use that result in place of the old operand1
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 					//Emit the constant
@@ -2439,47 +2437,47 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				}
 
 				/**
-				 * Final and trickiest case. We need to have a memory calculation *and* a regular
-				 * calculation stuffed into here, but we only have 2 operands to work with. We will
-				 * need to use our special version of a lea for this in most cases
 				 *
-				 * TODO HERE NEEDS TO BE REDONE
-				 *
-				 * There are cases where this is not a plus or minus
+				 * TODO REDO
 				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT: {
 					//Create the offset constant
 					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
-					//Add the additional offset in as an adjustment(it's usually 0)
+					//Add the additional offset in as an adjustment
 					stack_offset_constant->constant_adjustment = additional_offset;
 
-					//This is now our address offset
-					instruction->operands.oir.address_offset = stack_offset_constant;
+					/**
+					 * If we have a PLUS, then this can be converted into a LEA statement with
+					 * registers and an offset
+					 */
+					if(instruction->op == PLUS){
+						//Populate the LEA statement
+						instruction->operands.oir.address_offset = stack_offset_constant;
+						instruction->operands.oir.address_operand1 = stack_pointer_variable;
+						instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
-					//First address operand becomes the stack pointer
-					instruction->operands.oir.address_operand1 = stack_pointer_variable;
-					instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+						//Wipe out the old values
+						instruction->op = BLANK;
+						instruction->operands.oir.operand1 = NULL;
+						instruction->operands.oir.operand2 = NULL;
 
-					//Finally declare that this is a lea statement
-					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+					/**
+					 * Otherwise we'll need to do an address calculation first and then use the result
+					 * of that in the existing binary operation
+					 */
+					} else {
+						three_addr_var_t* calculated_address = emit_temp_var(u64);
 
-					//Go based on the op here
-					switch(instruction->op){
-						//In this case, we'd have something like t5 <- <offset>(t4, t5)
-						case PLUS:
-							//This is a lea statement with registers and an offset
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-							break;
-						
-						//Unreachable path - hard fail if we somehow get to this
-						default:
-							printf("Fatal internal compiler error: Invalid binary operand found on address calculation\n");
-							exit(1);
+						//Create the address calculation and insert it before the binary operation
+						instruction_t* address_calc = emit_lea_offset_only(calculated_address, stack_pointer_variable, stack_offset_constant, instruction->line_number);
+						insert_instruction_before_given(address_calc, instruction);
+
+						//Finally replace the old op1 with this new calculated address
+						instruction->operands.oir.operand1 = calculated_address;
 					}
-
-					//Wipe out the op once we're done
-					instruction->op = BLANK;
 
 					break;
 				}
