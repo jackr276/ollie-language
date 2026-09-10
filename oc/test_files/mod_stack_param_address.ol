@@ -26,6 +26,6 @@ pub fn is_addr_even(input:struct my_struct) -> bool {
 pub fn main() -> i32 {
 	let passer:struct my_struct = {5, 5, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]};
 
-	OUNIT: [exit_status = 3]
+	OUNIT: [exit_status = true]
 	ret @is_addr_even(passer);
 }

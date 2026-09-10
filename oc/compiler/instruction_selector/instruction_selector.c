@@ -2420,11 +2420,22 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 						}
 
-						//This should be impossible, if we get here it's a hard out
-						//TODO NOT IMPOSSIBLE
-						default:
-							printf("Fatal internal compiler error. Attempt to do a binary operation that is not +/- with a memory address\n");
-							exit(1);
+						/**
+						 * For anything else we will need to do the address calculation 
+						 * above the actual binary operation itself, we cannot cleanly
+						 * combine them all into one statement at this point
+						 */
+						default: {
+							three_addr_var_t* calculated_address = emit_temp_var(u64);
+
+							//Create and insert the address calculation
+							instruction_t* address_calc = emit_binary_operation_with_const_instruction(calculated_address, stack_pointer_variable, PLUS, stack_offset_constant, instruction->line_number);
+							insert_instruction_before_given(address_calc, instruction);
+
+							//Just replace the first operand with our newly calculated address
+							instruction->operands.oir.operand1 = calculated_address;
+							break;
+						}
 					}
 
 					break;
