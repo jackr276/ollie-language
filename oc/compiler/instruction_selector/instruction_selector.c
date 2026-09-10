@@ -1853,13 +1853,6 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
  * be hit when we're taking memory addresses or doing pointer arithmetic with arrays
  */
 static void remediate_memory_address_variable_in_non_access_context(instruction_window_t* window, instruction_t* instruction){
-	//For later use
-	int64_t stack_offset;
-	//Additional offsets may come when we have stack params
-	int64_t additional_offset;
-	three_addr_const_t* stack_offset_constant;
-	instruction_t* address_instruction;
-
 	/**
 	 * If we've survived to down here, we know that we don't have to deal with a global or static
 	 * variable. Because of that we can make a few more assumptions that allow us to
@@ -1884,14 +1877,14 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	if(associated_variable != NULL){
 		switch(associated_variable->membership){
 			case GLOBAL_VARIABLE:
-			case STATIC_VARIABLE:
+			case STATIC_VARIABLE: {
 				switch(instruction->statement_type){
 					/**
 					 * A global variable address assignment like this will turn into a leaq statement
 					 */
-					case THREE_ADDR_CODE_ASSN_STMT:
+					case THREE_ADDR_CODE_ASSN_STMT: {
 						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(instruction->operands.oir.assignee, instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
+						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(instruction->operands.oir.assignee, instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
 
 						//Insert this after the given instruction
 						insert_instruction_after_given(address_instruction, instruction);
@@ -1903,15 +1896,16 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						reconstruct_window(window, address_instruction);
 
 						break;
+					}
 
 					/**
 					 * A global var address assignment like this will generate
 					 * 2 separate instructions. One instruction will hold the global variable address,
 					 * while the other holds the actual binary operation
 					 */
-					case THREE_ADDR_CODE_BIN_OP_STMT:
+					case THREE_ADDR_CODE_BIN_OP_STMT: {
 						//Let the helper emit the statement. We will use a temp destination for this
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
+						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
 
 						//This goes in before the given one
 						insert_instruction_before_given(address_instruction, instruction);
@@ -1923,14 +1917,15 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						reconstruct_window(window, instruction);
 
 						break;
+					}
 
 					/**
 					 * A global var address like this will generate one special instruction that is RIP relative
 					 * with a constant offset
 					 */
-					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 						//Let the helper do all of the work
-						address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->operands.oir.assignee,
+						instruction_t* address_instruction = emit_global_variable_address_calculation_with_offset_oir(instruction->operands.oir.assignee,
 																					 					instruction->operands.oir.operand1,
 																					 					instruction_pointer_variable,
 																					 					instruction->operands.oir.constant_operand,
@@ -1949,14 +1944,15 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						reconstruct_window(window, address_instruction);
 
 						break;
+					}
 
 					/**
 					 * For our store operations, to rememdiate we just need to do everything that we would normally do 
 					 * before the store operation and replace the op1 with what we had
 					 */
-					case THREE_ADDR_CODE_STORE_STATEMENT:
+					case THREE_ADDR_CODE_STORE_STATEMENT: {
 						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
+						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.operand1, instruction_pointer_variable, instruction->line_number);
 
 						//Put this right before the store
 						insert_instruction_before_given(address_instruction, instruction);
@@ -1965,14 +1961,15 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						instruction->operands.oir.operand1 = address_instruction->operands.oir.assignee;
 
 						break;
+					}
 
 					/**
 					 * For lea operations, to rememdiate we just need to do everything that we would normally do 
 					 * before the lea and insert that
 					 */
-					case THREE_ADDR_CODE_LEA_STMT:
+					case THREE_ADDR_CODE_LEA_STMT: {
 						//Let the helper emit the statement
-						address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable, instruction->line_number);
+						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable, instruction->line_number);
 
 						//Put this right before the store
 						insert_instruction_before_given(address_instruction, instruction);
@@ -1981,17 +1978,20 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						instruction->operands.oir.address_operand1 = address_instruction->operands.oir.assignee;
 						
 						break;
+					}
 
 					//This should never happen
-					default:
+					default: {
 						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
 						exit(1);
+					}
 				}
 
 				/**
 				 * We are completely done once we get here so we leave
 				 */
 				return;
+			}
 
 			/**
 			 * If the variable is not the type that we're after, we come down to the next section to handle
@@ -2013,15 +2013,15 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 		 * do need to take into consideration that we may have stack passed parameters here that mess
 		 * with the base address, so we instead use the "additional offset" field to account for this
 		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_MEMORY_ADDRESS: {
 			//The additional offset may come from stack passed parameters, and we need to account for it
-			additional_offset = memory_address_operand->memory_address_base_adjustment;
+			int64_t additional_offset = memory_address_operand->memory_address_base_adjustment;
 
 			/**
 			 * Extract the stack offset for our use. This will determine how 
 			 * we process things down below
 			 */
-			stack_offset = memory_address_operand->associated_memory_region.stack_region->function_local_base_address + additional_offset;
+			int64_t stack_offset = memory_address_operand->associated_memory_region.stack_region->function_local_base_address + additional_offset;
 
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
@@ -2030,7 +2030,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * can turn this into a lea with an offset or a
 				 * straight assignment depending on the offset
 				 */
-				case THREE_ADDR_CODE_ASSN_STMT:
+				case THREE_ADDR_CODE_ASSN_STMT: {
 					//Make into a lea statement
 					if(stack_offset != 0){
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
@@ -2053,12 +2053,13 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					}
 
 					break;
+				}
 
 				/**
 				 * Store statements act very similarly to assignment statements. We
 				 * just put the store right after the memory address assignment
 				 */
-				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_STATEMENT: {
 					//Make it a lea
 					if(stack_offset != 0){
 						//Emit the stack offset constant
@@ -2083,6 +2084,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					}
 
 					break;
+				}
 					
 				/**
 				 * For a statement like this, we will merge the existing
@@ -2090,14 +2092,14 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * with a memory address are Plus/minus, so we only need to 
 				 * account for 2 cases here
 				 */
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 					/**
 					 * We have a stack offset to contend with so we'll need to either combine that
 					 * offset with our given offset or do 2 separate operations
 					 */
 					if(stack_offset != 0){
 						//Emit the constant
-						stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
+						three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
 
 						//Simplify based on what we have
 						switch(instruction->op){
@@ -2186,14 +2188,14 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					}
 
 					break;
+				}
 
 				/**
 				 * Final and trickiest case. We need to have a memory calculation *and* a regular
 				 * calculation stuffed into here, but we only have 2 operands to work with. We will
 				 * need to use our special version of a lea for this in most cases
 				 */
-				case THREE_ADDR_CODE_BIN_OP_STMT:
-					//Convert this into a lea statement
+				case THREE_ADDR_CODE_BIN_OP_STMT: {
 					if(stack_offset != 0){
 						//Create the offset constant
 						three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
@@ -2236,13 +2238,14 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					}
 
 					break;
+				}
 
 				/**
 				 * If we have a lea statement, we'll just emit an address calculation beforehand
 				 * and throw it above the current one. The future lea simplifier
 				 * should be able to pick up on the simplification and compress if appropriate
 				 */
-				case THREE_ADDR_CODE_LEA_STMT:
+				case THREE_ADDR_CODE_LEA_STMT: {
 					if(stack_offset != 0){
 						//Emit the lea
 						instruction_t* above_lea = emit_lea_offset_only(emit_temp_var(i64), stack_pointer_variable, emit_direct_integer_or_char_constant(stack_offset, i64), instruction->line_number);
@@ -2258,23 +2261,26 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					}
 
 					break;
+				}
 
 				//This should never happen
-				default:
+				default: {
 					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
 					exit(1);
 				}
+			}
 
 			//Final break for the case
 			break;
+		}
 
 		/**
 		 * Stack parameter offsets use specialized variables to represent their difference from memory address variables. We
 		 * need handling entirely separate from the regular memory addresses to support this
 		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS: {
 			//Grab the additional offset for processing
-			additional_offset = memory_address_operand->memory_address_base_adjustment;
+			int64_t additional_offset = memory_address_operand->memory_address_base_adjustment;
 
 			//Go based on what kind of statement that we've got here
 			switch(instruction->statement_type){
@@ -2286,7 +2292,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * 	 t5 <- lea <Stack passed offset region 2>(%rsp)
 				 *
 				 */
-				case THREE_ADDR_CODE_ASSN_STMT:
+				case THREE_ADDR_CODE_ASSN_STMT: {
 					//Convert this into our lea offest
 					instruction->operands.oir.address_offset = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
@@ -2303,6 +2309,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					break;
+				}
 
 				/**
 				 * Store statements act very similarly to the assignment
@@ -2310,15 +2317,15 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * actual statement. We do not need to account for cases where
 				 * the offset from %rsp is 0 because that will never happen
 				 */
-				case THREE_ADDR_CODE_STORE_STATEMENT:
+				case THREE_ADDR_CODE_STORE_STATEMENT: {
 					//Emit the special stack constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
 					//Store the additional offset here as well
 					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//Now emit the address calculation
-					address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant, instruction->line_number);
+					instruction_t* address_instruction = emit_lea_offset_only(emit_temp_var(u64), stack_pointer_variable, stack_offset_constant, instruction->line_number);
 
 					//This goes in right before the store does
 					insert_instruction_before_given(address_instruction, instruction);
@@ -2327,6 +2334,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					instruction->operands.oir.operand1 = address_instruction->operands.oir.assignee;
 
 					break;
+				}
 
 				/**
 				 * For any binary operation instruction, we're just going to have to emit the extra assignment
@@ -2342,9 +2350,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *   t4 <- t5 + 32
 				 *
 				 */
-				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 					//Emit the constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
 					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
@@ -2380,17 +2388,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					//This is an offset only
 					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
-
 					break;
+				}
 
 				/**
 				 * Final and trickiest case. We need to have a memory calculation *and* a regular
 				 * calculation stuffed into here, but we only have 2 operands to work with. We will
 				 * need to use our special version of a lea for this in most cases
 				 */
-				case THREE_ADDR_CODE_BIN_OP_STMT:
+				case THREE_ADDR_CODE_BIN_OP_STMT: {
 					//Create the offset constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
 					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
@@ -2423,14 +2431,15 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					instruction->op = BLANK;
 
 					break;
+				}
 
 				/**
 				 * For a lea we'll just emit a lea to go above it and let the future simplifier run
 				 * determine if any compression can be done
 				 */
-				case THREE_ADDR_CODE_LEA_STMT:
+				case THREE_ADDR_CODE_LEA_STMT: {
 					//Create the offset constant
-					stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
 
 					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
@@ -2443,6 +2452,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					instruction->operands.oir.address_operand1 = lea_statement->operands.oir.assignee;
 
 					break;
+				}
 				
 				//This should never happen
 				default:
@@ -2451,12 +2461,13 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				}
 
 			break;
-			
+		}
 
 		//This should be impossible
-		default:
+		default: {
 			printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
 			exit(1);
+		}	
 	}
 }
 
