@@ -2437,8 +2437,9 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				}
 
 				/**
-				 *
-				 * TODO REDO
+				 * For binary operations with two variables, we can turn it into a LEA statement if we have an addition
+				 * operation. For everything else we will need to put the address calculation above the original statement
+				 * and sub it in for op1
 				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT: {
 					//Create the offset constant
