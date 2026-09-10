@@ -3061,7 +3061,7 @@ static inline void optimize_mod_by_power_of_2(instruction_window_t* window){
 			 * instruction to avoid altering it
 			 */
 			if(mod_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-				|| mod_instruction->operands.oir.operand1->was_value_named == TRUE){
+				|| get_use_count_for_variable(mod_instruction->operands.oir.operand1) > 1){
 				//Extract it
 				three_addr_var_t* operand1 = mod_instruction->operands.oir.operand1;
 
@@ -11064,7 +11064,7 @@ static void handle_left_shift_instruction(instruction_window_t* window){
 		 * temp assignment
 		 */
 		if(left_shift_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| left_shift_instruction->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(left_shift_instruction->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), left_shift_instruction->operands.oir.operand1);
 
@@ -11236,7 +11236,7 @@ static void handle_right_shift_instruction(instruction_window_t* window){
 		 * temp assignment
 		 */
 		if(right_shift_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| right_shift_instruction->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(right_shift_instruction->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), right_shift_instruction->operands.oir.operand1);
 
@@ -11364,7 +11364,7 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 		 * temp assignment
 		 */
 		if(bitwise_or->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| bitwise_or->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(bitwise_or->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->operands.oir.operand1);
 
@@ -11493,7 +11493,7 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 		 * temp assignment
 		 */
 		if(bitwise_and->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| bitwise_and->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(bitwise_and->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_and->operands.oir.operand1);
 
@@ -11622,7 +11622,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 		 * temp assignment
 		 */
 		if(bitwise_xor->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| bitwise_xor->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(bitwise_xor->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_xor->operands.oir.operand1);
 
@@ -12183,7 +12183,7 @@ static void handle_signed_multiplication_instruction(instruction_window_t* windo
 		 * temp assignment
 		 */
 		if(multiplication_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| multiplication_instruction->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(multiplication_instruction->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.operand1);
 
@@ -12305,7 +12305,7 @@ static void handle_sse_multiplication_instruction(instruction_window_t* window, 
 		 * temp assignment
 		 */
 		if(multiplication_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| multiplication_instruction->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(multiplication_instruction->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), multiplication_instruction->operands.oir.operand1);
 
@@ -12660,7 +12660,7 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 		 * temp assignment
 		 */
 		if(division_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| division_instruction->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(division_instruction->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), division_instruction->operands.oir.operand1);
 
@@ -13075,7 +13075,7 @@ static void handle_subtraction_instruction(instruction_window_t* window){
 		 * temp assignment
 		 */
 		if(subtraction_instruction->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-			|| subtraction_instruction->operands.oir.operand1->was_value_named == TRUE){
+			|| get_use_count_for_variable(subtraction_instruction->operands.oir.operand1) > 1){
 
 			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), subtraction_instruction->operands.oir.operand1);
 
@@ -13282,7 +13282,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 			 * an extra assignment to ensure we aren't overwriting things here
 			 */
 			if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-				|| original_addition->operands.oir.operand1->was_value_named == TRUE){
+				|| get_use_count_for_variable(original_addition->operands.oir.operand1) > 1){
 
 				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
 
@@ -13353,7 +13353,7 @@ static void handle_addition_instruction(instruction_window_t* window){
 			 * an extra assignment to ensure we aren't overwriting things here
 			 */
 			if(original_addition->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-				|| original_addition->operands.oir.operand1->was_value_named == TRUE){
+				|| get_use_count_for_variable(original_addition->operands.oir.operand1) > 1){
 
 				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), original_addition->operands.oir.operand1);
 
