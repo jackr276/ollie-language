@@ -16164,12 +16164,18 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
  */
 static void select_instructions(cfg_t* cfg){
 	//We will again do instruction selection on a per-function level basis
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract the entry
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
 		//Extract the function record too
 		symtab_function_record_t* function_record = function_entry->function_defined_in;
+
+		/**
+		 * Before we select anything let's do one final use count revamp
+		 */
+		reset_all_use_counts(&use_count_tracker);
+		populate_use_counts_for_function(&(function_record->function_blocks));
 
 		//Save the current block here
 		basic_block_t* current = function_entry;
