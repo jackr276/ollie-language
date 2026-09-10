@@ -2224,18 +2224,27 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						 * address calculation above and get it tied in that way
 						 */
 						} else {
+							//New variable that will replace op1
+							three_addr_var_t* address_result = emit_temp_var(u64);
 
-							//TODO
+							//Emit the calculation for our address
+							instruction_t* address_calc = emit_binary_operation_with_const_instruction(address_result, stack_pointer_variable, PLUS, stack_offset_constant, instruction->line_number);
+							insert_instruction_before_given(address_calc, instruction);
+
+							//This is now our first operand
+							instruction->operands.oir.operand1 = address_result;
 						}
 						
 					/**
-					 * Then again all we need to do here is set the op1
-					 * to be our stack pointer
-					 *
-					 * TODO MAKE LEA
+					 * If we have no offset we can still try to take this opportunity
+					 * to turn our binary operation into a lea if it's compatible
 					 */
 					} else {
-						instruction->operands.oir.operand1 = stack_pointer_variable;
+						if(instruction->op == PLUS){
+
+						} else {
+							instruction->operands.oir.operand1 = stack_pointer_variable;
+						}
 					}
 
 					break;
