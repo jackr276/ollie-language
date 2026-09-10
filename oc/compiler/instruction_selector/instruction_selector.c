@@ -2139,7 +2139,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							 */
 							default: {
 								//Holder for our address
-								three_addr_var_t* address_result = emit_temp_var(instruction->operands.oir.operand1->type);
+								three_addr_var_t* address_result = emit_temp_var(u64);
 
 								//Emit the address calculation
 								instruction_t* address_calc = emit_binary_operation_with_const_instruction(address_result, stack_pointer_variable, PLUS, stack_offset_constant, instruction->line_number);
