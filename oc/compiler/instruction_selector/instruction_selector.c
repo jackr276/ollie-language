@@ -2241,6 +2241,16 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					} else {
 						if(instruction->op == PLUS){
+							//Set the new operands and make it a lea
+							instruction->operands.oir.address_operand1 = stack_pointer_variable;
+							instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+
+							//Wipe out all of the old fields
+							instruction->op = BLANK;
+							instruction->operands.oir.operand1 = NULL;
+							instruction->operands.oir.operand2 = NULL;
 
 						} else {
 							instruction->operands.oir.operand1 = stack_pointer_variable;
