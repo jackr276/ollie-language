@@ -18,7 +18,7 @@ pub fn is_addr_even(input:struct my_struct) -> bool {
 	//LSB is 1 means that we're odd
 	let mask:i32 = 0x01;
 
-	if(<i64>(&(input)) & mask == 0) {
+	if((<i64>(&(input)) & mask) == 0) {
 		ret true;
 	} else {
 		ret false;

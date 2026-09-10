@@ -4810,6 +4810,9 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 					addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
 					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
 
+					//This now has both registers, an offset and a scale
+					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+
 					//Scrap the old lea
 					delete_statement(lea_statement);
 
