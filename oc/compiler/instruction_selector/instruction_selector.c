@@ -2369,6 +2369,10 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * 	 t5 <- rsp + <Stack passed offset region 2>
 				 *   t4 <- t5 + 32
 				 *
+				 *   TODO HERE NEEDS TO BE REDONE
+				 *
+				 *   There are instances where this need not be a plus or minus
+				 *
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 					//Emit the constant
@@ -2415,6 +2419,10 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * Final and trickiest case. We need to have a memory calculation *and* a regular
 				 * calculation stuffed into here, but we only have 2 operands to work with. We will
 				 * need to use our special version of a lea for this in most cases
+				 *
+				 * TODO HERE NEEDS TO BE REDONE
+				 *
+				 * There are cases where this is not a plus or minus
 				 */
 				case THREE_ADDR_CODE_BIN_OP_STMT: {
 					//Create the offset constant
