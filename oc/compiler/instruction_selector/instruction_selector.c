@@ -2200,38 +2200,39 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						//Create the offset constant
 						three_addr_const_t* stack_offset_constant = emit_direct_integer_or_char_constant(stack_offset, i64);
 
-						//This is now our address ofset
-						instruction->operands.oir.address_offset = stack_offset_constant;
+						/**
+						 * If we have a PLUS, then we can turn this into a lea with
+						 * registers and an offset
+						 */
+						if(instruction->op == PLUS){
+							//Populate the lea fields
+							instruction->operands.oir.address_offset = stack_offset_constant;
+							instruction->operands.oir.address_operand1 = stack_pointer_variable;
+							instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
 
-						//First address operand becomes the stack pointer
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
-						instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+							//Wipe out the old fields
+							instruction->op = BLANK;
+							instruction->operands.oir.operand1 = NULL;
+							instruction->operands.oir.operand2 = NULL;
 
-						//Finally declare that this is a lea statement
-						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							//Flag this as a lea now
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
-						//Go based on the op here
-						switch(instruction->op){
-							//In this case, we'd have something like t5 <- <offset>(t4, t5)
-							case PLUS:
-								//This is a lea statement with registers and an offset
-								instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-								
-								//Nothing else to do here
-								break;
-							
-							//Unreachable path - hard fail if we somehow get to this
-							default:
-								printf("Fatal internal compiler error: Invalid binary operand found on address calculation\n");
-								exit(1);
+						/**
+						 * Any operator besides plus is not compatible with a lea, so we'll need to emit the 
+						 * address calculation above and get it tied in that way
+						 */
+						} else {
+
+							//TODO
 						}
-
-						//Wipe out the op once we're done
-						instruction->op = BLANK;
 						
 					/**
 					 * Then again all we need to do here is set the op1
 					 * to be our stack pointer
+					 *
+					 * TODO MAKE LEA
 					 */
 					} else {
 						instruction->operands.oir.operand1 = stack_pointer_variable;
