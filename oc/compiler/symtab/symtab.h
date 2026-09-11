@@ -175,6 +175,11 @@ struct symtab_function_record_t{
 	stack_data_area_t stack_passed_parameters;
 	//The list of all functions that this function calls out to
 	dynamic_set_t called_functions;
+	/**
+	 * What are the overloads that this particular function has? Remember
+	 * it is possible that there are no overloads of this function
+	 */
+	dynamic_array_t overloads;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
 	/**

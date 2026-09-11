@@ -1902,6 +1902,25 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 
 
 /**
+ * A direct function call will need to account for the possibility that we have
+ * an overloaded function call. As such, we cannot verify the parameter list until
+ * after we've done all of the parameter parsing
+ */
+//TODO
+
+
+
+/**
+ * An indirect function call does not need to worry at all about overloading because
+ * there is only one thing that we're able to call, that being the function pointer
+ * that is being called
+ */
+//TODO
+
+
+
+
+/**
  * Function calls always come after an "@" and can have the function itself expressed as a unary
  * expression. The unary expression will either work its way down into an actual function itself
  * or some kind of expression(identifier, array, struct access, etc.) that has a function type

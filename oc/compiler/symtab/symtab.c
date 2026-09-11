@@ -3257,6 +3257,9 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				//Destroy the parameters
 				dynamic_array_dealloc(&(temp->function_parameters));
 
+				//Destroy the overloads
+				dynamic_array_dealloc(&(temp->overloads));
+
 				//Dealloate the function type
 				type_dealloc(temp->signature);
 
