@@ -14032,6 +14032,95 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
+ * Remember that functions in Ollie can be overloaded, so if we have a symtab "hit" on a function that's either predeclared or not
+ * it may not actually be a true hit, we'll need to get the parameter list to fully evaluate
+ *
+ * BNF Rule: <function-definition> ::= {pub}? {inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
+ */
+static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stream){
+	//Freeze the line number
+	u_int32_t current_line = parser_line_num;
+	lexitem_t lookahead;
+	//Visibility is always going to default to private
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+	//By default we are not inlining
+	u_int8_t is_inlined = FALSE;
+	//Cache the token index of definition that we're dealing with
+	u_int32_t token_index_of_definition = token_stream->token_pointer;
+
+	/**
+	 * Step 1: determine our preamble
+	 *
+	 * Get our token out and start going through the start of
+	 * the function definition. There are a bunch of valid
+	 * combos here including:
+	 * 	pub fn
+	 * 	pub inline fn
+	 * 	inline fn
+	 * 	fn
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	switch(lookahead.tok){
+		case PUB:
+			//Flag that it is public
+			visibility = VISIBILITY_TYPE_PUBLIC;
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case INLINE:
+					//Flag that it was inlined
+					is_inlined = TRUE;
+
+					//Get the next token and make sure it's the FN keyword
+					lookahead = get_next_token(token_stream, &parser_line_num);
+					if(lookahead.tok != FN){
+						return print_and_return_error("Expected \"fn\" after \"pub inline\"", parser_line_num);
+					}
+
+					break;
+	 
+				default:
+					return print_and_return_error("Expected \"fn\" or \"inline\" keyword after \"pub\" in function declaration", parser_line_num);
+			}
+			
+			break;
+
+		case INLINE:
+			//This is being inlined
+			is_inlined = TRUE;
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok != FN){
+				return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			}
+
+			break;
+
+		case FN:
+			break;
+		
+		default:
+			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
+	}
+
+
+}
+
+
+
+/**
+ * Handle the case where we declare a function. A function will always be one of the children of a declaration
+ * partition
+ *
+ * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
+ *
  * TODO WE NEED TO IMPLEMENT FUNCTION OVERLOADING
  *
  * BNF Rule: <function-definition> ::= {pub}? {inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
