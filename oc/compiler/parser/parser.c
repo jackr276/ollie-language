@@ -14323,6 +14323,169 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
 
 
 /**
+ * An error list will handle all of the errors in a function definition if a function has a "raises" statement. It is
+ * important to note that this may not be empty. If we see the raises keyword, we need to raise at least one specific
+ * error
+ *
+ * <error-list> = (<error>+)
+ *
+ *
+ * TODO
+ */
+static inline u_int8_t error_list2(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function){
+	//Extract the internal function type
+	function_type_t* internal_function_type = function_type->internal_types.function_type;
+
+	//Only do this if we're not defining from scratch
+	if(defining_predeclared_function == FALSE){
+		internal_function_type->potential_errors = dynamic_array_alloc();
+	}
+
+	//The lookahead token
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If we do not see an open paren, we fail
+	if(lookahead.tok != L_PAREN){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis required after raises keyword", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//Push onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Start the error count off at 0
+	int32_t error_count = 0;
+
+	//Now we need to see at least one, but possibly many, error types in here
+	do {
+		//Get the next token
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we don't see an ident then this is a failure
+		if(lookahead.tok != IDENT){
+			sprintf(info, "Expected to see a custom error type, but instead say \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//If we make it here we're on the right track, let's see what we can find. Remember that all
+		//types are defacto immutalbe
+		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
+
+		//We can't find it - big problem
+		if(found_type == NULL){
+			sprintf(info, "There exists no error type with the name \"%s\"", lookahead.lexeme.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		//Get the inner type out
+		generic_type_t* error_type = found_type->type;
+
+		//Make sure that we dealias this - it is possible to alias any type
+		error_type = dealias_type(error_type);
+
+		//Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types, not just any
+		//old type
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" is not an error type and cannot be raised by a function as one", lookahead.lexeme.string);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+		/**
+		 * If we're not defining something that was predeclared, then all we need to do
+		 * is add this in
+		 */
+		if(defining_predeclared_function == FALSE){
+			//Let's first check for duplicated errors
+			for(int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
+				//Extrace it
+				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
+
+				//If they're equal at all, we fail out
+				if(types_identical(candidate, error_type) == TRUE){
+					sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FAILURE;
+				}
+			}
+
+			//Add it in
+			dynamic_array_add(&(internal_function_type->potential_errors), error_type);
+
+		} else {
+			//We have too many - we need to bail out
+			if(error_count >= internal_function_type->potential_errors.current_index){
+				sprintf(info, "Function was predeclared as only having %d errors", internal_function_type->potential_errors.current_index); 
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+
+			//Extract the predeclared version
+			generic_type_t* predeclared_error = dynamic_array_get_at(&(internal_function_type->potential_errors), error_count);
+
+			//If this isn't an exact match, we fail out
+			if(predeclared_error != error_type){
+				sprintf(info, "Function was predeclared with error number %d as \"%s\", but declared with \"%s\" as error number %d", error_count + 1, predeclared_error->type_name.string, error_type->type_name.string, error_count + 1);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				num_errors++;
+				return FAILURE;
+			}
+		}
+
+		//Bump the error count up
+		error_count++;
+
+		//Now we can either see a comma or the closing paren
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+		//If we have a comma then continue
+		if(lookahead.tok == COMMA){
+			continue;
+
+		//If we have an R_PAREN then get out
+		} else if(lookahead.tok == R_PAREN){
+			break;
+
+		//Otherwise this is an error
+		} else {
+			sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			num_errors++;
+			return FAILURE;
+		}
+
+	//Loop forever until one of our exit cases is hit
+	} while(TRUE);
+
+	//Final check if we have a mismatch
+	if(defining_predeclared_function == TRUE && error_count != internal_function_type->potential_errors.current_index){
+		sprintf(info, "Mismatched error list lengths: predeclared wtih %d errors and declared with %d instead", internal_function_type->potential_errors.current_index, error_count);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
+		num_errors++;
+		return FAILURE;
+	}
+
+	//With that we are done, we can return success
+	return SUCCESS;
+}
+
+
+/**
  * Handle the parsing for the function return type and any errors that we raise.
  * By the time we get here we have already successfully parsed all of the function
  * parameters so all that we should need to parse are the arrow, type specifier, and
@@ -14358,34 +14521,23 @@ static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_str
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok == RAISES){
-		//If we didn't denote that this could raise errors with the ! after fn, we
-		//need to fail out here
-		if(raises_errors == FALSE){
-			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Set this flag as true for down the road
-		specific_error_list = TRUE;
-
 		/**
-		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
+		 * If we didn't denote that this could raise errors with the ! after fn, we
+		 * have an invalid declaration and will fail out
 		 */
-		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index == 0){
-			sprintf(info, "Function \"%s\" was not declared as raising specific errors. \"raises\" is invalid in this context. Predeclared as type: %s",
-		   					function_record->func_name.string, function_record->signature->type_name.string);
-			return print_and_return_error(info, parser_line_num);
+		if(internal_type->raises_errors == FALSE){
+			return print_and_return_failure("Function was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
 		}
 
 		//Wipe the slate clean for this function - we'll start tracking again here
 		clear_dynamic_set(&errors_raised_by_current_function);
 
 		//Now that we've made it past that, we can let the helper do the parsing for us
-		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
+		u_int8_t success = error_list(token_stream, function_signature);
 
 		//Fail out if bad
 		if(success == FAILURE){
-			return print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
+			return print_and_return_failure("Invalid error list detected in function declaration", parser_line_num);
 		}
 
 	} else {
