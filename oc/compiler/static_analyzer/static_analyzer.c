@@ -727,7 +727,7 @@ static instruction_t* emit_phi_function(symtab_variable_record_t* variable){
 	stmt->parameters = dynamic_array_alloc();
 
 	//Note what kind of node this is
-	stmt->statement_type = THREE_ADDR_CODE_PHI_FUNC;
+	stmt->statement_type = THREE_ADDR_CODE_PHI_STMT;
 
 	//And give the statement back
 	return stmt;
@@ -1178,7 +1178,7 @@ static void rename_block(basic_block_t* entry){
 	 */
 	while(cursor != NULL){
 		switch(cursor->statement_type){
-			case THREE_ADDR_CODE_PHI_FUNC:
+			case THREE_ADDR_CODE_PHI_STMT:
 				/**
 				 * Phi functions are a special case because they overwrite
 				 * multiple definitions, not just one. We'll use a special
@@ -1263,7 +1263,7 @@ static void rename_block(basic_block_t* entry){
 		 * Crawl through every phi function in the successor(they're all at the top) and
 		 * for each one generate a new variable and add it in
 		 */
-		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 			//We have a phi function, so what are we assigning to it?
 			symtab_variable_record_t* phi_func_assignee = succ_cursor->operands.oir.assignee->linked_var;
 
@@ -1521,7 +1521,7 @@ static inline u_int8_t update_initialization_states_in_block(basic_block_t* bloc
 	 * that is not one we can stop processing and leave
 	 */
 	instruction_t* cursor = block->leader_statement;
-	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 		//Extract and save for later
 		three_addr_var_t* assignee = cursor->operands.oir.assignee;
 		variable_initialization_state_t current_init_state = get_variable_initialization_state(assignee);
@@ -1879,7 +1879,7 @@ static u_int8_t perform_initialization_and_mutability_analysis_for_block(basic_b
 
 	//Run through all instructions in the block
 	while(cursor != NULL){
-		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		if(cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 			cursor = cursor->next_statement;
 			continue;
 		}

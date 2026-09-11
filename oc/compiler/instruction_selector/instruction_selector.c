@@ -1826,7 +1826,7 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 		instruction_t* instruction_cursor = block->leader_statement;
 		while(instruction_cursor != NULL){
 			//Don't count phi functions in this
-			if(instruction_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+			if(instruction_cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 				instruction_cursor = instruction_cursor->next_statement;
 				continue;
 			}
@@ -7298,7 +7298,7 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 static inline void generate_gvn_key_for_instruction(instruction_t* instruction, dynamic_string_t* textual_key){
 	//Based on the instruction type we generate different keys
 	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_PHI_FUNC: {
+		case THREE_ADDR_CODE_PHI_STMT: {
 			dynamic_string_concatenate(textual_key, "PHI");
 
 			//Concatenate the variable name of each of the parameters onto the end
@@ -7615,7 +7615,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 	instruction_t* cursor = block->leader_statement;
 
 	//So long as we see phi functions
-	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+	while(cursor != NULL && cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 		//It's redundant so we continue out
 		if(convert_phi_function_if_redundant(table, cursor) == TRUE){
 			//This is a simplification
@@ -7749,7 +7749,7 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 		instruction_t* phi_cursor = successor->leader_statement;
 
 		//Run through every instruction that is a phi statement
-		while(phi_cursor != NULL && phi_cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		while(phi_cursor != NULL && phi_cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 			//Perform them and do the bitwise update
 			simplification_occured |= perform_gvn_variable_substitutions(table, phi_cursor);
 
@@ -8341,7 +8341,7 @@ static void mark(dynamic_array_t* function_blocks){
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
-			case THREE_ADDR_CODE_PHI_FUNC:
+			case THREE_ADDR_CODE_PHI_STMT:
 				params = stmt->parameters;
 
 				//Add this in here
@@ -16116,7 +16116,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 			handle_binary_operation_instruction(window);
 			break;
-		case THREE_ADDR_CODE_PHI_FUNC:
+		case THREE_ADDR_CODE_PHI_STMT:
 			instruction->instruction_type = PHI_FUNCTION;
 			break;
 		case THREE_ADDR_CODE_NEG_STATEMENT:
