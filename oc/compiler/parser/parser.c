@@ -7638,8 +7638,8 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	 * Store both of the given return types inside of the function signature. This handles all needed
 	 * bookkeeping for us already
 	 */
-	add_return_type_to_signature(mutable_function_type->internal_types.function_type, return_type);
-	add_return_type_to_signature(immutable_function_type->internal_types.function_type, return_type);
+	add_return_type_to_signature(mutable_function_type, return_type);
+	add_return_type_to_signature(immutable_function_type, return_type);
 
 	//Refresh the token
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8864,7 +8864,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	 * Get the return type added to the signature. This handles all internal bookkeeping
 	 * related to the function's return type
 	 */
-	add_return_type_to_signature(function_type->internal_types.function_type, return_type);
+	add_return_type_to_signature(function_type, return_type);
 
 	//We can now optionally see the RAISES keyword
 	lookahead = get_next_token(stream, &parser_line_num);
@@ -13987,7 +13987,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	 * Add the return type to the function. The helper takes care of any/all internal
 	 * bookkeeping that needs to be done for it
 	 */
-	add_return_type_to_signature(function_record->signature->internal_types.function_type, return_type);
+	add_return_type_to_signature(function_record->signature, return_type);
 
 	//We can now optionally see the RAISES keyword
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14323,6 +14323,81 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
 
 
 /**
+ * Handle the parsing for the function return type and any errors that we raise.
+ * By the time we get here we have already successfully parsed all of the function
+ * parameters so all that we should need to parse are the arrow, type specifier, and
+ * the raises error list
+ */
+static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature){
+	//Hang onto the internal type for our convenience
+	function_type_t* internal_type = function_signature->internal_types.function_type;
+
+	//First we need to see the return arrow(->)
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != ARROW){
+		return print_and_return_failure("Arrow(->) required after parameter-list in function", parser_line_num);
+	}
+
+	/**
+	 * Now if we get here, we must see a valid type specifier
+	 * The type specifier rule already does existence checking for us
+	 */
+	generic_type_t* return_type = type_specifier(token_stream);
+	if(return_type == NULL){
+		return print_and_return_failure("Invalid return type given to function. All functions, even void returning ones, must have an explicit return type", parser_line_num);
+	}
+
+	//Dealias it if need be and then get this into the function signature
+	return_type = dealias_type(return_type);
+	add_return_type_to_signature(function_signature, return_type);
+
+	/**
+	 * Now we can process the error raising if appropriate. We will also
+	 * validate that the fn keyword has the needed "!" if we are raising
+	 * errors
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == RAISES){
+		//If we didn't denote that this could raise errors with the ! after fn, we
+		//need to fail out here
+		if(raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Set this flag as true for down the road
+		specific_error_list = TRUE;
+
+		/**
+		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
+		 */
+		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index == 0){
+			sprintf(info, "Function \"%s\" was not declared as raising specific errors. \"raises\" is invalid in this context. Predeclared as type: %s",
+		   					function_record->func_name.string, function_record->signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Wipe the slate clean for this function - we'll start tracking again here
+		clear_dynamic_set(&errors_raised_by_current_function);
+
+		//Now that we've made it past that, we can let the helper do the parsing for us
+		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
+
+		//Fail out if bad
+		if(success == FAILURE){
+			return print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
+		}
+
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	//We made it here so we're set
+	return SUCCESS;
+}
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
@@ -14470,6 +14545,13 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	if(parse_function_parameters(token_stream, new_function_signature, &function_parameters) == FALSE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
+
+	/**
+	 * We should now be able to get the return type out and add that to the signature
+	 * as well
+	 *
+	 * TODO WE NEED THE RETURN BY COPY REMEDIATION AFTER WE CREATE THE RECORD
+	 */
 
 
 

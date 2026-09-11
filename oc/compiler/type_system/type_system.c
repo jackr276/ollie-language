@@ -3195,8 +3195,12 @@ generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8
  * the is_void_type flag, as well as anything that needs to happen if we are returning a stack
  * passed return value
  */
-void add_return_type_to_signature(function_type_t* signature, generic_type_t* return_type){
+void add_return_type_to_signature(generic_type_t* function_signature, generic_type_t* return_type){
+	//Use the internal type for convenience
+	function_type_t* signature = function_signature->internal_types.function_type;
+
 	//If we've already added it then we're good to just move along
+	//TODO WTF IS HAPPENING HERE???
 	if(signature->return_type != NULL){
 		return;
 	}
