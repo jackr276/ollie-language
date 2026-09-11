@@ -8539,9 +8539,8 @@ static void simplify(cfg_t* cfg){
 		perform_call_lowering_in_function(function, &(function->function_blocks));
 
 		/**
-		 * Before we do anything else, we'll need to do an initial population
-		 * of the use counts for each three_addr_variable inside of our given 
-		 * function
+		 * Run the initial simplifier pass for the function, being sure that we 
+		 * reset all of our use counts every time
 		 */
 		do {
 			reset_all_use_counts(&use_count_tracker);
