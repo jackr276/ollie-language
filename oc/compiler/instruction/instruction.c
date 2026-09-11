@@ -2915,7 +2915,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		case THREE_ADDR_CODE_PHI_FUNC:
+		case THREE_ADDR_CODE_PHI_STMT:
 			//Print it in block header mode
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_BLOCK_HEADER);
 			fprintf(fl, " <- PHI(");
