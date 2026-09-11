@@ -2591,6 +2591,8 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 *
 		 * Since a function value is constant and never changes, we will classify this record as a constant
 		 * if we do find it. If we find nothing then we fail
+		 *
+		 * TODO there may be more than one function here
 		 */
 		symtab_function_record_t* found_function = lookup_function(function_symtab, var_name);
 		if(found_function != NULL){
@@ -13703,6 +13705,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * promise that a function of this signature will exist at 
  * some point
  *
+ * TODO we need to implement function overloading
+ *
  * <function_predeclaration> ::= declare {pub}? {inline}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
@@ -13805,6 +13809,9 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	dynamic_string_t function_name = lookahead.lexeme;
 
 	//Try to find it in this namespace
+	//
+	//THIS IS WRONG!!!!
+	//With function overloading you can have the exact same name but different param counts, etc etc etc
 	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
 
 	//Fail out if found
@@ -14006,6 +14013,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
+ * TODO WE NEED TO IMPLEMENT FUNCTION OVERLOADING
+ *
  * BNF Rule: <function-definition> ::= {pub}? {inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
  */
 static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
@@ -14128,8 +14137,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		return print_and_return_error("Invalid name given as function name", current_line);
 	}
 
+	//TODO THIS IS ALL WRONG! we need to now account for function overloading
+
 	//Otherwise, we could still have a failure here if this is any kind of duplicate
-	//Grab a reference for convenience
 	dynamic_string_t function_name = lookahead.lexeme;
 
 	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
