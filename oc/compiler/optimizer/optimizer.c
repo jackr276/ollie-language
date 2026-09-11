@@ -581,7 +581,7 @@ static void mark(dynamic_array_t* function_blocks){
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
-			case THREE_ADDR_CODE_PHI_FUNC:
+			case THREE_ADDR_CODE_PHI_STMT:
 				//Add this in here
 				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					//Add the definitions in
@@ -1197,7 +1197,7 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			 * Phi functions mean that stuff is coming from outside of the block, we will skip this as it's not important
 			 * to us at all for this case
 			 */
-			case THREE_ADDR_CODE_PHI_FUNC:
+			case THREE_ADDR_CODE_PHI_STMT:
 				break;
 
 			/**
@@ -1530,7 +1530,7 @@ static void remediate_phi_functions(basic_block_t* target, basic_block_t* former
 
 		//If this is not a phi function, we get out. Remember that all
 		//phi functions always apears at the top of the block
-		if(phi_function_cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+		if(phi_function_cursor->statement_type != THREE_ADDR_CODE_PHI_STMT){
 			break;
 		}
 
@@ -1597,7 +1597,7 @@ static inline void hoist_branch(basic_block_t* target, basic_block_t* branch_blo
 	//Run through every single instruction
 	while(cursor != NULL){
 		//This will be handled later
-		if(cursor->statement_type == THREE_ADDR_CODE_PHI_FUNC){
+		if(cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 			cursor = cursor->next_statement;
 			continue;
 		}
@@ -2310,7 +2310,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		/**
 		 * If we do not immediately see a phi function then this is not going to work
 		 */
-		if(candidate_cursor == NULL || candidate_cursor->statement_type != THREE_ADDR_CODE_PHI_FUNC){
+		if(candidate_cursor == NULL || candidate_cursor->statement_type != THREE_ADDR_CODE_PHI_STMT){
 			continue;
 		}
 

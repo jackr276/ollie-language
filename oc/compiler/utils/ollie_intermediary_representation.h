@@ -127,8 +127,10 @@ typedef enum {
 	THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT,
 	//A "Load effective address(lea)" instruction
 	THREE_ADDR_CODE_LEA_STMT,
-	//A phi function - for SSA analysis only
-	THREE_ADDR_CODE_PHI_FUNC,
+	//Phi statements for regular variables
+	THREE_ADDR_CODE_PHI_STMT,
+	//Memory phi statements for memory regions
+	THREE_ADDR_CODE_MEMORY_PHI_STMT,
 	//A specialized CLEAR instruction
 	THREE_ADDR_CODE_CLEAR_STMT,
 	//A specialized instruction used when we need temporary stack allocations
