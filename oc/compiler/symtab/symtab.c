@@ -1272,6 +1272,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 	//Allocate the list of all functions that this calls
 	record->called_functions = dynamic_set_alloc();
 
+	//This is a normal function
+	record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
+
 	//Store what dependency this comes from
 	record->dependency_graph_node = dependency_contained_in;
 

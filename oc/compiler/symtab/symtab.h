@@ -134,6 +134,17 @@ typedef enum {
 
 
 /**
+ * Is this function a regular function or is it a
+ * function that either is overloaded or is an overload
+ * of a different function?
+ */
+typedef enum {
+	FUNCTION_CLASSIFICATION_NORMAL,
+	FUNCTION_CLASSIFICATION_OVERLOAD
+} function_classification_t;
+
+
+/**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
  *
@@ -192,6 +203,14 @@ struct symtab_function_record_t{
 	 * will allow us to just print out the actual source code in the event of an error
 	 */
 	u_int32_t token_index_of_definition;
+	/**
+	 * What kind of function is this? As of right now
+	 * there are 2 kinds: regular and overloaded
+	 * Overloaded functions will need to have their
+	 * names mangled when we do the final printout
+	 * to avoid collisions
+	 */
+	function_classification_t function_classification;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
