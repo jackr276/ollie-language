@@ -70,8 +70,6 @@ static dynamic_set_t errors_raised_by_current_function;
 static dynamic_array_t current_function_jump_statements;
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
-//Store the overall current function scope
-static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
 
 //Keep hold of the current dependency node that we are on
 static dependency_graph_node_t* current_dependency_node = NULL;
@@ -14157,10 +14155,48 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 * Step 4: process the parameter list
 	 *
 	 * Now that we know the name is valid we should be able to process the parameter
-	 * list
+	 * list. We can also start working on building up the function signature here. The
+	 * function signature is what will eventually be used to determine overloading and
+	 * duplicate matching
 	 *
-	 * TODO FUNCTION TYPE
+	 * TODO THIS IS ONLY THE IMMUTABLE VERSION
 	 */
+	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
+
+	/**
+	 * We'll need to initialize a new variable scope here. This variable scope is designed
+	 * so that we include the function parameters in it. We need to remember to close
+	 * this once we leave
+	 *
+	 * We will consider this to be the "top level" scope for our function. The function
+	 * record will store a reference to this. In the future if we go to inline, we will
+	 * use this variable scope for all new variable creation
+	 *
+	 * TODO REMEMBER TO POPULATE THIS WITH THE FUNCTION RECORD AND SET THE TOP LEVEL
+	 * SCOPE
+	 */
+	initialize_variable_scope(variable_symtab, NULL, function_symtab->current);
+
+
+	/**
+	 * IMPORTANT: we need to hang onto this overarching function scope
+	 * for future uses/lookups
+	 */
+	//top_level_function_variable_scope = variable_symtab->current;
+
+	/**
+	 * Now we must ensure that we see a valid parameter list. It is important to note that
+	 * parameter lists can be empty, but whatever we have here we'll have to add in
+	 * Parameter list parent is the function node
+	 */
+	//u_int8_t status = parameter_list(token_stream, function_record, defining_predeclared_function);
+	
+	
+
+	//We have a bad parameter list, we just fail out
+	//if(status == FAILURE){
+	//	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	//}
 
 
 
@@ -14439,12 +14475,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	function_record->top_level_scope = variable_symtab->current;
 
 	/**
-	 * IMPORTANT: we need to hang onto this overarching function scope
-	 * for future uses/lookups
-	 */
-	top_level_function_variable_scope = variable_symtab->current;
-
-	/**
 	 * Now we must ensure that we see a valid parameter list. It is important to note that
 	 * parameter lists can be empty, but whatever we have here we'll have to add in
 	 * Parameter list parent is the function node
@@ -14648,9 +14678,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//Close the variable scope that we opened for the parameter list/compound statement
 	finalize_variable_scope(variable_symtab);
-
-	//This is now out of date so scrap it
-	top_level_function_variable_scope = NULL;
 
 	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(&nesting_stack);
