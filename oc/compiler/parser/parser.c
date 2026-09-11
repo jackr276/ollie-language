@@ -13201,7 +13201,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	if(lookahead.tok != COLON){
 		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
 		num_errors++;
-		//Return NULL to signify failure
 		return NULL;
 	}
 
@@ -13457,10 +13456,10 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 /**
  * Validate the parameter list for a given function type. There are a few fail
  * cases that we currently watch out for. They are:
- * 	21) Elaborative parameters must always be the very last function parameter
- * 	32) There may not be more than one elaborative parameter per function
+ * 	1) Elaborative parameters must always be the very last function parameter
+ * 	2) There may not be more than one elaborative parameter per function
  */
-static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
+static inline u_int8_t validate_function_parameter_list(generic_type_t* function_type){
 	//Grab the internal function type out
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
@@ -14025,6 +14024,158 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 
 
 /**
+ * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
+ * top lexical scope for the function itself. Like all rules, it returns a reference to the
+ * root of the subtree that it creates
+ *
+ * This rule will return a symtab variable record that represents the parameter it made. If will return
+ * NULL if an error occurs
+ *
+ * We can optionally see the "params" keyword here to denote that this is actually
+ * a variable length, specifically stack passed array of values of a given type. We know
+ * that the params parameter must also be the absolute last parameter given to us
+ * for a function
+ *
+ * BNF Rule: <parameter-declaration> ::= <identifier> : {params}? <type-specifier>
+ */
+static symtab_variable_record_t* parameter_declaration2(ollie_token_stream_t* token_stream, int32_t* current_gen_purpose_param, int32_t* current_sse_param){
+	//Lookahead token
+	lexitem_t lookahead;
+	//Did we see the params keyword or not
+	u_int8_t params_seen = FALSE;
+	//Save where we have the token pointer index of declaration
+	u_int32_t token_pointer_index_of_declaration = token_stream->token_pointer;
+
+	//Now we can optionally see the constant keyword here
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If it didn't work we fail immediately
+	if(lookahead.tok != IDENT){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Now we must perform all needed duplication checks for the name
+	dynamic_string_t name = lookahead.lexeme;
+
+	//Check that it isn't some duplicated variable name
+	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
+
+	//Fail out here
+	if(found_var != NULL){
+		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
+		print_variable_name_to_buffer(info, found_var);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	//Check for a duplicated type
+	if(do_duplicate_types_exist(name.string) == TRUE){
+		return NULL;
+	}
+
+	//Now we need to see a colon
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//If it isn't a colon, we're out
+	if(lookahead.tok != COLON){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
+		num_errors++;
+		return NULL;
+	}
+
+	/**
+	 * There is a chance that we could be seeing the "params" keyword here
+	 * to denote that we have an elaborative stack param. This is only valid in 
+	 * the context of a function signature which is why we must see it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//Flag this if we see it
+	if(lookahead.tok == PARAMS){
+		params_seen = TRUE;
+
+	//Otherwise put it back
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	//We are now required to see a valid type specifier node
+	generic_type_t* type = type_specifier(token_stream);
+	
+	//If the node fails, we'll just send the error up the chain
+	if(type == NULL){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
+		num_errors++;
+		//It's already an error, just propogate it up
+		return NULL;
+	}
+
+	//If this is an incomplete type, then we also fail
+	if(type->type_complete == FALSE){
+		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		num_errors++;
+		//It's already an error, just propogate it up
+		return NULL;
+	}
+
+	/**
+	 * Once we get here, we have actually seen an entire valid parameter 
+	 * declaration. It is now incumbent on us to store it in the variable 
+	 * symbol table
+	 */
+	symtab_variable_record_t* param_record = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_pointer_index_of_declaration);
+
+	/**
+	 * If we've seen the params keyword now is the time
+	 * to update the type to be an elaborative type
+	 */
+	if(params_seen == TRUE){
+		//Let the handler deal with it
+		type = handle_elaborative_param_type(type);
+
+		//Null is an error, fail out
+		if(type == NULL){
+			return NULL;
+		}
+	}
+
+	//It is a function parameter
+	param_record->membership = FUNCTION_PARAMETER;
+	//Store the type as well, very important
+	param_record->type_defined_as = type;
+
+	/**
+	 * So long as this type is *not* passed by copy, we will include
+	 * it in our parameter counts
+	 */
+	if(is_type_stack_passed_by_copy(type) == FALSE){
+		//Most common case, not a floating point so it counts as general-purpose
+		if(IS_FLOATING_POINT(type) == FALSE){
+			param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
+
+			//Bump it for the next go about
+			(*current_gen_purpose_param)++;
+		} else {
+			param_record->class_relative_function_parameter_order = *current_sse_param;
+
+			//Bump it for the next go about
+			(*current_sse_param)++;
+		}
+	}
+
+	//We've now built up our param record, so we'll give add it to the symtab
+	insert_variable(variable_symtab, param_record);
+
+	//Give the variable back
+	return param_record;
+}
+
+
+/**
  * A paramater list will handle all of the parameters in a function definition. It is important
  * to note that a parameter list may very well be empty, and that this rule will handle that case.
  * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
@@ -14032,9 +14183,11 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
  * This rule will create symtab variables for each parameter, but it will *NOT INSERT THEM*. They need to
  * be inserted/have their "function defined in" updated once the function record is created
  *
+ * NOTE: it is expected that the "created_parameters" array has already been allocated
+ *
  * <parameter-list> ::= (<identifier> : <type-specifier> { ,{<identifier> : <type-specifier>}*)
  */
-static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_stream, generic_type_t* function_signature, dynamic_array_t* created_parameters){
+static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_stream, generic_type_t* function_signature, dynamic_array_t* parameter_list){
 	//Grab this out for convenience
 	function_type_t* internal_function_type = function_signature->internal_types.function_type;
 	
@@ -14047,197 +14200,121 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
 	//Otherwise, we'll push this onto the list to check for later
 	push_token(&grouping_stack, lookahead);
 
-	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
-	//done here and we'll just return an empty list
+	/**
+	 * Now let's see what we have as the token. If it's an R_PAREN, we know that we're
+	 * done here and we'll just return an empty list. We cou
+	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
 	switch(lookahead.tok){
-		//If we see an R_PAREN immediately, we can check and leave
-		case R_PAREN:
-			//If we have a mismatch, we can return these
+		/**
+		 * Case 1: we have a parameter list like: pub fn my_fn() ... that's just empty,
+		 * in which case we can just leave out now
+		 */
+		case R_PAREN: {
+			//Just make sure that we have the matching L_PAREN
 			if(pop_token(&grouping_stack).tok != L_PAREN){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-				num_errors++;
-				return FAILURE;
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
 			}
 
-			//If we're validating, let's check and ensure that the defined type also has no params
-			if(defining_predeclared_function == TRUE){
-				//If we have a mismatch, we fail out
-				if(internal_function_type->function_parameters.current_index != 0){
-					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->function_parameters.current_index);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FAILURE;
-				}
-			}
-
-			//Otherwise we're fine, so return the list node
 			return SUCCESS;
+		}
 
-		//This is a possibility, we could see (void) as a valid declaration of no parameters
-		case VOID:
-			//We now need to see a closing R_PAREN
+		/**
+		 * Case 2: Ollie supports parameter declarations like: pub fn my_fn(void)... as an
+		 * alternative way to declare an empty list. If that is the case then we can also 
+		 * come through and return early
+		 */
+		case VOID: {
 			lookahead = get_next_token(token_stream, &parser_line_num);
 
-			//Fail out if we don't see this
+			//Validate that we have closing parenthesis
 			if(lookahead.tok != R_PAREN){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected after void parameter list declaration", parser_line_num);
-				num_errors++;
-				return FAILURE;
+				return print_and_return_failure("Closing parenthesis expected after void parameter list declaration", parser_line_num);
 			}
 
-			//Also check for grouping
+			//Validate parenthesis matching
 			if(pop_token(&grouping_stack).tok != L_PAREN){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-				num_errors++;
-				return FAILURE;
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
 			}
 
-			//If we're validating, let's check and ensure that the defined type also has no params
-			if(defining_predeclared_function == TRUE){
-				//If we have a mismatch, we fail out
-				if(internal_function_type->function_parameters.current_index != 0){
-					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->function_parameters.current_index);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FAILURE;
-				}
-			}
-
-			//Give back the parameter list node
 			return SUCCESS;
+		}
 			
-		//By default just put it back and get out
-		default:
+		/**
+		 * Case 3: we actually have some parameter here so we're going to need
+		 * to push back the token for future processing
+		 */
+		default: {
 			push_back_token(token_stream, &parser_line_num);
 			break;
+		}
 	}
 
-	//Start off at 1 for both of these
-	u_int16_t general_purpose_parameter_number = 1;
-	u_int16_t sse_parameter_number = 1;
-	//We also maintain one with no split, just the absolute number
-	u_int16_t absolute_parameter_number = 1;
+	/**
+	 * We will be maintaining both the class relative(SSE/gen purpose)
+	 * and absolute parameter number orderings for everything
+	 */
+	int32_t general_purpose_parameter_number = 1;
+	int32_t sse_parameter_number = 1;
+	int32_t absolute_parameter_number = 1;
 
-	//We'll keep going as long as we see more commas
-	do{
+	/**
+	 * Keep parsing so long as we don't see the lone ")" at the very end signifying that we're done
+	 */
+	while(TRUE){
 		//We must first see a valid parameter declaration
-		symtab_variable_record_t* parameter = parameter_declaration(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
+		symtab_variable_record_t* parameter = parameter_declaration2(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
 
-		//It's invalid, we'll just send it up the chain
+		//Fail out if we're invalid
 		if(parameter == NULL){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid parameter declaration found in parameter list", parser_line_num);
-			num_errors++;
-			return FAILURE;;
+			return print_and_return_failure("Invalid parameter declaration found in parameter list", parser_line_num);
 		}
 
-		//If we're not defining a predeclared function, we need to add this parameter in
-		if(defining_predeclared_function == FALSE){
-			//Let the helper add it in
-			add_parameter_to_function_type(function_type, parameter->type_defined_as);
-
-		//If we get here, we need to validate that the type that was declared is
-		//the same as the one originally given
-		} else {
-			//Check if we've got too many parameters
-			if(absolute_parameter_number > internal_function_type->function_parameters.current_index){
-				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->function_parameters.current_index);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Extract for validations
-			generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), absolute_parameter_number - 1);
-
-			//We need to ensure that the mutability levels match here
-			if(parameter_type->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
-				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-
-			//The other option for a mismatch
-			} else if(parameter_type->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
-				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//If the mutability levels are off, we fail out
-			if(parameter_type->mutability != parameter->type_defined_as->mutability){
-				sprintf(info, "Mutability mismatch for parameter %d", absolute_parameter_number);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Grab the defined type out
-			generic_type_t* declared_type = dealias_type(parameter_type);
-			//And this type
-			generic_type_t* defined_type = dealias_type(parameter->type_defined_as);
-
-			//If these 2 don't match, we fail
-			if(defined_type != declared_type){
-				sprintf(info, "Parameter %d was defined with type \"%s\", but declared with type \"%s\"",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Otherwise if we survive to here, then we're good
-		}
-
-		//Once we're here, we can add the function parameter in
-		add_function_parameter(function_record, parameter);
-
-		//We made it here, so we've seen one more absolute number
+		//We've seen one more absolute parameter
 		absolute_parameter_number++;
 
-		//Refresh the lookahead token
+		//Add the type to the signature 
+		add_parameter_to_function_type(function_signature, parameter->type_defined_as);
+
+		//Store the variable itself inside of our list of function parameters
+		dynamic_array_add(parameter_list, parameter);
+
+		//Refresh the lookahead token and use it to determine our next move
 		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == COMMA){
+			continue;
 
-	//We keep going as long as we see commas
-	} while(lookahead.tok == COMMA);
+		} else if(lookahead.tok == R_PAREN){
+			break;
 
-	//If we're predeclaring, we need to check that the parameter count matches
-	if(defining_predeclared_function == TRUE && function_record->function_parameters.current_index != internal_function_type->function_parameters.current_index){
-		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->function_parameters.current_index, function_record->function_parameters.current_index);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
+		} else {
+			sprintf(info, "Expected ) or , after function parameter declaration but say %s instead", lexitem_to_string(&lookahead));
+			return print_and_return_failure(info, parser_line_num);
+		}
 	}
 
-	//Once we reach here, we need to check for the R_PAREN
-	if(lookahead.tok != R_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected after parameter list", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Otherwise it worked, so we need to check matching
+	//We only get here if we say an R_PAREN, make sure we match though
 	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		return FAILURE;
+		return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
 	}
 
 	/**
-	 * Once we are fully done with all of our parameters, we will need to finalize the alignment
-	 * on the given stack data area. This ensures that the overall size is going to be 8-byte
-	 * aligned, and that all of the padding if needed is present
+	 * Finally perform validations on our parameter list. We know that the only
+	 * accepatable place for an elaborative parameter is as the very last parameter
+	 * in the function itself
 	 */
-	if(function_record->signature->internal_types.function_type->contains_stack_params == TRUE){
-		align_stack_data_area(&(function_record->stack_passed_parameters));
-	}
+	for(int32_t i = 0; i < absolute_parameter_number; i++){
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), i);
 
-	/**
-	 * Validate the function parameter list using our helper
-	 */
-	if(validate_function_parameter_list(function_type) == FALSE){
-		return FAILURE;
+		/**
+		 * If we have an elaborative param here, let's check to make
+		 * sure that it is the very last parameter in the function
+		 */
+		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
+			if(i != absolute_parameter_number - 1){
+				return print_and_return_failure("Elaborative param types must always be the last type in a parameter list", parser_line_num);
+			}
+		}
 	}
 
 	//If we make it down here then this all worked, so
@@ -14378,13 +14455,21 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 * Before we can think about anything symtab related, we're going to need to completely
 	 * build up a function signature so that, when we go looking for predeclarations and/or
 	 * function overloading we're armed with a signature to compare against
-	 *
-	 * We will not be doing anything with the symtab just yet
 	 */
-	u_int32_t parameter_list_starting_token = token_stream->token_pointer;
 	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
 
-
+	/**
+	 * Parse all of the function parameters inside of the signature. Since we do not
+	 * yet have a function type to put them in, we will locally store the created
+	 * symtab variable records inside of a dynamic array that we will use if we
+	 * have a match in the end
+	 *
+	 * TODO UPDATE PARAMETER SYMTAB VARS ONCE WE HAVE THE FUNCTION RECORD CREATED/FOUND
+	 */
+	dynamic_array_t function_parameters = dynamic_array_alloc();
+	if(parse_function_parameters(token_stream, new_function_signature, &function_parameters) == FALSE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
 
 
