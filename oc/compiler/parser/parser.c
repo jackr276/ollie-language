@@ -14032,6 +14032,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
+ * TODO REWRITE
+ *
  * Remember that functions in Ollie can be overloaded, so if we have a symtab "hit" on a function that's either predeclared or not
  * it may not actually be a true hit, we'll need to get the parameter list to fully evaluate
  *
@@ -14045,6 +14047,8 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
 	//By default we are not inlining
 	u_int8_t is_inlined = FALSE;
+	//By default we do not raise errors either
+	u_int8_t raises_errors = FALSE;
 	//Cache the token index of definition that we're dealing with
 	u_int32_t token_index_of_definition = token_stream->token_pointer;
 
@@ -14061,7 +14065,7 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 	switch(lookahead.tok){
-		case PUB:
+		case PUB: {
 			//Flag that it is public
 			visibility = VISIBILITY_TYPE_PUBLIC;
 
@@ -14089,8 +14093,9 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 			}
 			
 			break;
+		}
 
-		case INLINE:
+		case INLINE: {
 			//This is being inlined
 			is_inlined = TRUE;
 
@@ -14101,14 +14106,91 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 			}
 
 			break;
+		}
 
 		case FN:
 			break;
 		
-		default:
+		default: {
 			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
+		}
 	}
+
+	/**
+	 * Step 2: error raising
+	 *
+	 * It is possible for us to see the "!" for this function, in which case that means that this function
+	 * may raise errors of any kind. If we see this, we need to consume it and flag it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	/**
+	 * Step 3: extract the function's name
+	 * 
+	 * Get the name of the function which should be next. Note that the function
+	 * name cannot, as of right now, be used to check for duplicates yet because of
+	 * overloading
+	 *
+	 * We can however check to make sure that this function is not colliding with any
+	 * existing variable or type names
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Invalid name given as function name", current_line);
+	}
+
+	//For our convenience get this out
+	dynamic_string_t* function_name = &(lookahead.lexeme);
+
+	//Check for duplicate variables here
+	if(do_duplicate_variables_exist(function_name->string) || do_duplicate_types_exist(function_name->string)){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Step 4: process the parameter list
+	 *
+	 * Now that we know the name is valid we should be able to process the parameter
+	 * list
+	 *
+	 * TODO FUNCTION TYPE
+	 */
+
+
+
+
+
+
+
+
+
+
+	/**
+	 * We also have the AST function node, this will be intialized immediately
+	 * It also requires a symtab record of the function, but this will be assigned
+	 * later once we have it
+	 */
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
+
+
+	//TODO BODY PROCESSING
+
+
+
+	//We also need to mark that we're in a function using the nesting stack
+	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
+
+	/**
+	 * Since most functions do not use user defined jumps, we will initialize
+	 * this to be NULL here and only allocate when the need arises
+	 */
+	current_function_jump_statements = INITIALIZE_DYNAMIC_ARRAY;
 
 
 }
