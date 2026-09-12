@@ -4696,11 +4696,19 @@ static void print_and_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 	}
 
-	//Now we'll need the source immediate/source
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we will go to register/constant printing. However
+	 * if we do have memory access, we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(stdout, instruction, mode);
 	}
 
 	//Now our comma and the destination
@@ -4731,11 +4739,19 @@ static void print_or_instruction(FILE* fl, instruction_t* instruction, variable_
 			break;
 	}
 
-	//Now we'll need the source immediate/source
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we will go to register/constant printing. However
+	 * if we do have memory access, we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(stdout, instruction, mode);
 	}
 
 	//Now our comma and the destination
@@ -4772,11 +4788,19 @@ static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, v
 			break;
 	}
 
-	//Now we'll need the source immediate/source
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we will go to register/constant printing. However
+	 * if we do have memory access, we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(stdout, instruction, mode);
 	}
 
 	//Now our comma and the destination

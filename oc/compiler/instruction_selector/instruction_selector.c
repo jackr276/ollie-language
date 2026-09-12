@@ -5195,6 +5195,8 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
  * 		example, shifts don't count because they do not support it)
  * 	2.) There must be *no* converting moves required. If there are, then doing this work is actually
  * 		only going to make our lives more difficult in the end
+ *
+ *TODO HERE
  */
 static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation(instruction_t* instruction){
 	//First disqualifier is this
@@ -5221,6 +5223,9 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		case MINUS:
 		case PLUS:
 		case STAR:
+		case SINGLE_AND:
+		case SINGLE_OR:
+		case CARROT:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
@@ -7032,6 +7037,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * what would normally be a load and then an op into just one operation, which reduces overall register
 	 * pressure and looks cleaner. Due to the way this usually works in OIR we're only going to have to check
 	 * this for instructions 1 and 2(1 being the load source, 2 being the load destination)
+	 *
+	 * TODO HERE
 	 */
 	if(is_instruction_non_converting_load_operation(window->instruction1) == TRUE
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
