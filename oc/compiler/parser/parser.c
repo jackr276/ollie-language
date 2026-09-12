@@ -14327,28 +14327,21 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
  * important to note that this may not be empty. If we see the raises keyword, we need to raise at least one specific
  * error
  *
- * <error-list> = (<error>+)
+ * <error-list> = (<error> {, <error>}*)
  *
- *
- * TODO
+ * TODO FINISH REWORK
  */
-static inline u_int8_t error_list2(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function){
+static inline u_int8_t error_list2(ollie_token_stream_t* token_stream, generic_type_t* function_type){
 	//Extract the internal function type
 	function_type_t* internal_function_type = function_type->internal_types.function_type;
 
-	//Only do this if we're not defining from scratch
-	if(defining_predeclared_function == FALSE){
-		internal_function_type->potential_errors = dynamic_array_alloc();
-	}
-
-	//The lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	//We'll need to allocate the list of potential errors
+	internal_function_type->potential_errors = dynamic_array_alloc();
 
 	//If we do not see an open paren, we fail
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis required after raises keyword", parser_line_num);
-		num_errors++;
-		return FAILURE;
+		return print_and_return_failure("Opening parenthesis required after raises keyword", parser_line_num);
 	}
 
 	//Push onto the grouping stack
@@ -14464,14 +14457,6 @@ static inline u_int8_t error_list2(ollie_token_stream_t* token_stream, generic_t
 
 	//Loop forever until one of our exit cases is hit
 	} while(TRUE);
-
-	//Final check if we have a mismatch
-	if(defining_predeclared_function == TRUE && error_count != internal_function_type->potential_errors.current_index){
-		sprintf(info, "Mismatched error list lengths: predeclared wtih %d errors and declared with %d instead", internal_function_type->potential_errors.current_index, error_count);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
 
 	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
 	if(pop_token(&grouping_stack).tok != L_PAREN){
