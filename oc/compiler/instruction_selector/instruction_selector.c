@@ -5280,6 +5280,9 @@ static inline u_int8_t is_instruction_non_converting_load_operation(instruction_
  * Remove a variable from a given instruction's slot. This involves
  * decrementing the use count and then setting the variable slot
  * to NULL(hence the double pointer)
+ *
+ * TODO - I tested this and it had no effect on any output. I'm really not sure how much
+ * value this is providing for the complexity of us having to do this
  */
 static inline void remove_variable(three_addr_var_t** variable_to_remove){
 	//Decrement the use count
