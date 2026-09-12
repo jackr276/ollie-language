@@ -11638,11 +11638,20 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 		//Destination is just the assignee
 		bitwise_xor->operands.x86.destination_register = bitwise_xor->operands.oir.assignee;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_xor->operands.oir.operand2 != NULL){
-			bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can handle this here. If we do have memory
+		 * access we'll pass this over to the dedicated rule to handle it
+		 */
+		if(bitwise_xor->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_xor->operands.oir.operand2 != NULL){
+				bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+			} else {
+				bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_xor);
 		}
 
 		//Rebuild around the instruction
@@ -11680,11 +11689,20 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 		//The destination register is op1
 		bitwise_xor->operands.x86.destination_register = bitwise_xor->operands.oir.operand1;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_xor->operands.oir.operand2 != NULL){
-			bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can handle this here. If we do have memory
+		 * access we'll pass this over to the dedicated rule to handle it
+		 */
+		if(bitwise_xor->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_xor->operands.oir.operand2 != NULL){
+				bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+			} else {
+				bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_xor);
 		}
 
 		//Move the destination register into the actual assignee now

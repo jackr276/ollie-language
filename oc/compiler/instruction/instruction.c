@@ -4709,7 +4709,7 @@ static void print_and_instruction(FILE* fl, instruction_t* instruction, variable
 		}
 
 	} else {
-		print_x86_addressing_mode_expression(stdout, instruction, mode);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Now our comma and the destination
@@ -4752,7 +4752,7 @@ static void print_or_instruction(FILE* fl, instruction_t* instruction, variable_
 		}
 
 	} else {
-		print_x86_addressing_mode_expression(stdout, instruction, mode);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Now our comma and the destination
@@ -4801,7 +4801,7 @@ static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, v
 		}
 
 	} else {
-		print_x86_addressing_mode_expression(stdout, instruction, mode);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Now our comma and the destination
