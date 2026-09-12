@@ -11337,20 +11337,19 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	bitwise_or->instruction_type = select_bitwise_inclusive_or_instruction(size);
 
 	/**
-	 * If we have no memory access, then we can handle one of two scenarios:
-	 * 	1.) The variables are equal, in which case we need no temp assignee
-	 * 	2.) The variables are not equal, in which case we need a temp assignee
+	 * If we already have the setup we need where op1 and the assignee are the same variable,
+	 * we can just leave the instruction as is. If we do not, then we will need temp assignments
+	 * to make all of this work
 	 */
-	if(bitwise_or->memory_access_type == NO_MEMORY_ACCESS){
+	if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1) == TRUE){
+		//Destination is just the assignee
+		bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.assignee;
+		
 		/**
-		 * If we already have the setup we need where op1 and the assignee are the same variable,
-		 * we can just leave the instruction as is. If we do not, then we will need temp assignments
-		 * to make all of this work
+		 * Based on the memory access type we'll either deal with the second operand
+		 * or kick this over to the addressing mode helper
 		 */
-		if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1) == TRUE){
-			//Destination is just the assignee
-			bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.assignee;
-
+		if(bitwise_or->memory_access_type == NO_MEMORY_ACCESS){
 			//Assign the source or the source immediate based on which we need
 			if(bitwise_or->operands.oir.operand2 != NULL){
 				bitwise_or->operands.x86.source_register1 = bitwise_or->operands.oir.operand2;
@@ -11358,134 +11357,72 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 				bitwise_or->operands.x86.source_immediate = bitwise_or->operands.oir.constant_operand;
 			}
 
-			//Rebuild around the instruction
-			reconstruct_window(window, bitwise_or);
-
-		/**
-		 * Otherwise we've got something like:
-		 * 	t4 <- t3 & 2
-		 *
-		 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
-		 * 	like
-		 * 	
-		 * 	t3 <- t3 & 2
-		 * 	t4 <- t3
-		 */
 		} else {
-			/**
-			 * If this is either not a temp var *or* we have a use count that is higher than
-			 * one(can happen with value numbering), then we'll need to emit another
-			 * temp assignment
-			 */
-			if(bitwise_or->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-				|| get_use_count_for_variable(bitwise_or->operands.oir.operand1) > 1){
-
-				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->operands.oir.operand1);
-
-				//Put this before the instruction
-				insert_instruction_before_given(temp_assigment, bitwise_or);
-
-				//This now is op1
-				bitwise_or->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
-			}
-
-			//The destination register is op1
-			bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.operand1;
-
-			//Assign the source or the source immediate based on which we need
-			if(bitwise_or->operands.oir.operand2 != NULL){
-				bitwise_or->operands.x86.source_register1 = bitwise_or->operands.oir.operand2;
-			} else {
-				bitwise_or->operands.x86.source_immediate = bitwise_or->operands.oir.constant_operand;
-			}
-
-			//Move the destination register into the actual assignee now
-			instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->operands.oir.assignee, bitwise_or->operands.x86.destination_register);
-
-			//This goes in *after* the bitwise or
-			insert_instruction_after_given(assignment_instruction, bitwise_or);
-
-			//Let the helper deal with the pxor clear
-			insert_pxor_clear_if_needed(assignment_instruction);
-
-			//Rebuild the whole window around this
-			reconstruct_window(window, assignment_instruction);
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_or);
 		}
 
+		//Rebuild around the instruction
+		reconstruct_window(window, bitwise_or);
+
 	/**
-	 * Otherwise we do have a memory access instruction, so we'll need to handle things a bit
-	 * differently
+	 * Otherwise we've got something like:
+	 * 	t4 <- t3 & 2
+	 *
+	 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
+	 * 	like
+	 * 	
+	 * 	t3 <- t3 & 2
+	 * 	t4 <- t3
 	 */
 	} else {
 		/**
-		 * If we already have the setup we need where op1 and the assignee are the same variable,
-		 * we can just leave the instruction as is. If we do not, then we will need temp assignments
-		 * to make all of this work
+		 * If this is either not a temp var *or* we have a use count that is higher than
+		 * one(can happen with value numbering), then we'll need to emit another
+		 * temp assignment
 		 */
-		if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1) == TRUE){
-			//Destination is just the assignee
-			bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.assignee;
+		if(bitwise_or->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
+			|| get_use_count_for_variable(bitwise_or->operands.oir.operand1) > 1){
 
-			//Let the helper deal with the addressing mode
-			handle_base_address_and_addressing_mode_for_instruction(bitwise_or);
+			instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->operands.oir.operand1);
 
-			//Rebuild around the instruction
-			reconstruct_window(window, bitwise_or);
+			//Put this before the instruction
+			insert_instruction_before_given(temp_assigment, bitwise_or);
 
-		/**
-		 * Otherwise we've got something like:
-		 * 	t4 <- t3 & LOAD(rsp)
-		 *
-		 * 	We'll need to make it so that the assignee and the op1 are the same. We'd do something
-		 * 	like
-		 * 	
-		 * 	t3 <- t3 & LOAD(rsp)
-		 * 	t4 <- t3
-		 */
-		} else {
-			/**
-			 * If this is either not a temp var *or* we have a use count that is higher than
-			 * one(can happen with value numbering), then we'll need to emit another
-			 * temp assignment
-			 */
-			if(bitwise_or->operands.oir.operand1->variable_type != VARIABLE_TYPE_TEMP
-				|| get_use_count_for_variable(bitwise_or->operands.oir.operand1) > 1){
-
-				instruction_t* temp_assigment = emit_move_instruction(emit_temp_var(destination_type), bitwise_or->operands.oir.operand1);
-
-				//Put this before the instruction
-				insert_instruction_before_given(temp_assigment, bitwise_or);
-
-				//This now is op1
-				bitwise_or->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
-			}
-
-			//The destination register is op1
-			bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.operand1;
-
-			//Let the helper deal with the addressing mode
-			handle_base_address_and_addressing_mode_for_instruction(bitwise_or);
-
-			//Move the destination register into the actual assignee now
-			instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->operands.oir.assignee, bitwise_or->operands.x86.destination_register);
-
-			//This goes in *after* the bitwise or
-			insert_instruction_after_given(assignment_instruction, bitwise_or);
-
-			//Let the helper deal with the pxor clear
-			insert_pxor_clear_if_needed(assignment_instruction);
-
-			//Rebuild the whole window around this
-			reconstruct_window(window, assignment_instruction);
+			//This now is op1
+			bitwise_or->operands.oir.operand1 = temp_assigment->operands.x86.destination_register;
 		}
 
-	/**
-	 * Otherwise we do have a memory access instruction, so we'll need to handle things a bit
-	 * differently
-	 */
+		//The destination register is op1
+		bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.operand1;
 
+		/**
+		 * Based on the memory access type we'll either deal with the second operand
+		 * or kick this over to the addressing mode helper
+		 */
+		if(bitwise_or->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_or->operands.oir.operand2 != NULL){
+				bitwise_or->operands.x86.source_register1 = bitwise_or->operands.oir.operand2;
+			} else {
+				bitwise_or->operands.x86.source_immediate = bitwise_or->operands.oir.constant_operand;
+			}
+
+		} else {
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_or);
+		}
+
+		//Move the destination register into the actual assignee now
+		instruction_t* assignment_instruction = emit_move_instruction(bitwise_or->operands.oir.assignee, bitwise_or->operands.x86.destination_register);
+
+		//This goes in *after* the bitwise or
+		insert_instruction_after_given(assignment_instruction, bitwise_or);
+
+		//Let the helper deal with the pxor clear
+		insert_pxor_clear_if_needed(assignment_instruction);
+
+		//Rebuild the whole window around this
+		reconstruct_window(window, assignment_instruction);
 	}
-
 }
 
 
@@ -11554,11 +11491,20 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 		//Destination is just the assignee
 		bitwise_and->operands.x86.destination_register = bitwise_and->operands.oir.assignee;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_and->operands.oir.operand2 != NULL){
-			bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can go based off of the second operand. However
+		 * if there is memory access we'll need to kick this over to the dedicated rule
+		 */
+		if(bitwise_and->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_and->operands.oir.operand2 != NULL){
+				bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+			} else {
+				bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_and);
 		}
 
 		//Rebuild around the instruction
@@ -11596,11 +11542,20 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 		//The destination register is op1
 		bitwise_and->operands.x86.destination_register = bitwise_and->operands.oir.operand1;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_and->operands.oir.operand2 != NULL){
-			bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can go based off of the second operand. However
+		 * if there is memory access we'll need to kick this over to the dedicated rule
+		 */
+		if(bitwise_and->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_and->operands.oir.operand2 != NULL){
+				bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+			} else {
+				bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_and);
 		}
 
 		//Move the destination register into the actual assignee now
