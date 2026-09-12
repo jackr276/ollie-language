@@ -3257,9 +3257,10 @@ static void print_x86_addressing_mode_expression(FILE* fl, instruction_t* instru
 			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
 			break;
 
-		//Do nothing
+		//Default is this fails
 		default:
-			break;
+			fprintf(stderr, "Fatal internal compiler error: invalid addressing mode found in instruction printer\n");
+			exit(1);
 	}
 }
 
