@@ -1262,6 +1262,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();
 
+	//Allocate this as well
+	record->function_parameters = dynamic_array_alloc();
+
 	//Copy the name over
 	record->func_name = *name;
 	//Hash it and store it to avoid to repeated hashing

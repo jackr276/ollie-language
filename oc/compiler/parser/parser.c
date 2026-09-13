@@ -14654,10 +14654,34 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 		created_function_record->signature = new_function_signature;
 		created_function_record->function_parameters = function_parameters;
 
+		//This is a normal function
+		created_function_record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
+
+		/**
+		 * If we have a function named "main", then we have some special rules that we'll
+		 * need to follow. We only check for this here because the main function may *only*
+		 * be defined directly
+		 */
+		if(strcmp(function_name->string, "main") == 0){
+			if(validate_main_function(new_function_signature) == FALSE){
+				return print_and_return_error("Invalid definition for main() function", parser_line_num);
+			}
+
+
+		} 
+
+
 	} else {
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
+
+	/**
+	 * Now that it's been fully created we can insert this into the symtab
+	 * and flag that it is now defined
+	 */
+	created_function_record->defined = TRUE;
+	insert_function(function_symtab, created_function_record);
 
 	/**
 	 * IMPORTANT - now that we've created the function type we need to properly add
@@ -14689,23 +14713,6 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	}
 
 
-	//If we're dealing with the main function, we need to validate that the parameter order, visibility
-	//of the function, and return type are valid
-	if(is_main_function == TRUE && validate_main_function(function_record->signature) == FALSE){
-		//Error out here
-		return print_and_return_error("Invalid definition for main() function", parser_line_num);
-	}
-
-
-
-
-	/**
-	 * We also have the AST function node, this will be intialized immediately
-	 * It also requires a symtab record of the function, but this will be assigned
-	 * later once we have it
-	 */
-	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
-
 
 	//TODO BODY PROCESSING
 
@@ -14720,6 +14727,13 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 */
 	current_function_jump_statements = INITIALIZE_DYNAMIC_ARRAY;
 
+
+	/**
+	 * We also have the AST function node, this will be intialized immediately
+	 * It also requires a symtab record of the function, but this will be assigned
+	 * later once we have it
+	 */
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 
 }
 
