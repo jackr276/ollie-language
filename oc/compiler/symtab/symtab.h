@@ -675,10 +675,14 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * is pushed over the edge to be a stack param. We need to make the adjustment for all
  * of them, as well as for their function_parameter_order
  */
-void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, function_type_t* signature);
+void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record);
 
 /**
- * Make a function record
+ * Dynamically allocate a function record
+ *
+ * Creating a function record here does NOT:
+ * 	- Create any function signature
+ * 	- Create any function parameters
  */
 symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index);
 

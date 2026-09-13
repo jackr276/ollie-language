@@ -13639,6 +13639,8 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * <function_predeclaration> ::= declare {pub}? {inline}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
+ *
+ *
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
 	//Is this an inline function? Assume no by default
@@ -13652,6 +13654,9 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 
 	//Get the first token in the stream
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 
 	/**
 	 * When we start parsing we have quite a few combos to account for.Some
@@ -14592,6 +14597,7 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 * function overloading we're armed with a signature to compare against
 	 */
 	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
+	function_type_t* internal_function_type = new_function_signature->internal_types.function_type;
 
 	/**
 	 * Step 5: Parse function parameters
@@ -14620,6 +14626,44 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	if(parse_function_return_type_and_error_list(token_stream, new_function_signature) == FALSE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
+
+	/**
+	 * Step 7: Creation/updating of the function's symtab record
+	 *
+	 * There are 3 options for every given function definition that we need
+	 * to account for:
+	 * 	1.) We are defining a completely new function - if we cannot find anything
+	 * 		during our symtab lookup then we fall here
+	 * 	2.) We are overloading an existing function - if we find a function but it has
+	 * 		a different signature than our expected one, we fall here
+	 * 	3.) We are defining a function that has already been predeclared - we fall
+	 * 		here if we find a function whose signature is an exact match of what
+	 * 		we predeclared
+	 */
+	symtab_function_record_t* created_function_record = NULL;
+	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name->string);
+	if(found_function == NULL){
+		//Create the brand new function record
+		created_function_record = create_function_record(function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
+
+		//Store the signature and the parameters that we've made for it
+		created_function_record->signature = new_function_signature;
+		created_function_record->function_parameters = function_parameters;
+
+	} else {
+		//TODO
+
+	}
+
+	/**
+	 * IMPORTANT - if we return by coyp we need to remediate this now
+	 * via the special helper
+	 */
+	if(internal_function_type->returns_by_copy == TRUE){
+		remediate_return_by_copy_gp_parameters(created_function_record);
+	}
+
+
 
 
 
@@ -14993,7 +15037,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * of them, as well as for their function_parameter_order
 	 */
 	if(function_signature->returns_by_copy == TRUE){
-		remediate_return_by_copy_gp_parameters(function_record, function_signature);
+		remediate_return_by_copy_gp_parameters(function_record);
 	}
 
 	//We can optionally see the raises keyword here

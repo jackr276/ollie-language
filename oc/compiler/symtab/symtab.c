@@ -1194,7 +1194,10 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * is pushed over the edge to be a stack param. We need to make the adjustment for all
  * of them, as well as for their function_parameter_order
  */
-void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, function_type_t* signature){
+void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record){
+	//Extract for convenience
+	function_type_t* signature = record->signature->internal_types.function_type;
+
 	for(int32_t i = 0; i < record->function_parameters.current_index; i++){
 		//Grab the parameter out
 		symtab_variable_record_t* parameter = dynamic_array_get_at(&(record->function_parameters), i);
@@ -1244,7 +1247,11 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, fu
 
 /**
  * Dynamically allocate a function record
-*/
+ *
+ * Creating a function record here does NOT:
+ * 	- Create any function signature
+ * 	- Create any function parameters
+ */
 symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
@@ -1254,9 +1261,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 
 	//Allocate the array for all function blocks
 	record->function_blocks = dynamic_array_alloc();
-
-	//Allocate space for the function parameter
-	record->function_parameters = dynamic_array_alloc();
 
 	//Copy the name over
 	record->func_name = *name;
@@ -1277,9 +1281,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 
 	//Store what dependency this comes from
 	record->dependency_graph_node = dependency_contained_in;
-
-	//We know that we need to create this immediately
-	record->signature = create_function_pointer_type(visibility, is_inlined, line_number, raises_errors, NOT_MUTABLE);
 
 	/**
 	 * IMPOTANT - for error printing, we will store the function's token index of definition here
