@@ -12436,21 +12436,21 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
  */
 static void handle_signed_division(instruction_window_t* window, generic_type_t* destination_type){
 	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
+	instruction_t* original_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
-	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand1->type) == TRUE){
-		division_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand1, destination_type);
+	if(is_converting_move_required(destination_type, original_instruction->operands.oir.operand1->type) == TRUE){
+		original_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(original_instruction, original_instruction->operands.oir.operand1, destination_type);
 	}
 
 	//We first need to move the first operand into RAX
-	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->operands.oir.operand1->type), division_instruction->operands.oir.operand1);
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(original_instruction->operands.oir.operand1->type), original_instruction->operands.oir.operand1);
 
 	//Insert the move to rax before the multiplication instruction
-	insert_instruction_before_given(move_to_rax, division_instruction);
+	insert_instruction_before_given(move_to_rax, original_instruction);
 
 	//This is just the destination register here
 	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
@@ -12470,54 +12470,67 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
 	higher_order_dividend_bits = cl_instruction->operands.x86.destination_register2;
 
 	//Insert this before the given
-	insert_instruction_before_given(cl_instruction, division_instruction);
+	insert_instruction_before_given(cl_instruction, original_instruction);
 
 	/**
-	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-	 * also account for the case that we have a constant to take care of
+	 * Based on what memory access we have here we'll either be able
+	 * to emit the division instruction directly or we'll need to
+	 * emit it half-baked and fill in the operands
 	 */
-	if(division_instruction->operands.oir.operand2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand2, destination_type);
+	instruction_t* division;
+	if(original_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		/**
+		 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+		 * also account for the case that we have a constant to take care of
+		 */
+		if(original_instruction->operands.oir.operand2 != NULL){
+			//Do we need to do a type conversion? If so, we'll do a converting move here
+			if(is_converting_move_required(destination_type, original_instruction->operands.oir.operand2->type) == TRUE){
+				divisor = create_and_insert_converting_move_instruction(original_instruction, original_instruction->operands.oir.operand2, destination_type);
 
-		//Otherwise divisor is just the op2
+			//Otherwise divisor is just the op2
+			} else {
+				divisor = original_instruction->operands.oir.operand2;
+			}
+
+		//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
 		} else {
-			divisor = division_instruction->operands.oir.operand2;
+			//Emit the constant move
+			instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), original_instruction->operands.oir.constant_operand);
+
+			//Now we'll insert this before the division instruction
+			insert_instruction_before_given(constant_move, original_instruction);
+
+			//This is the divisor now
+			divisor = constant_move->operands.x86.destination_register;
 		}
 
-	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+		//Now we should have what we need, so we can emit the division instruction
+		division = emit_div_instruction(destination_type, divisor, dividend, higher_order_dividend_bits, TRUE);
+
 	} else {
-		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), division_instruction->operands.oir.constant_operand);
 
-		//Now we'll insert this before the division instruction
-		insert_instruction_before_given(constant_move, division_instruction);
-
-		//This is the divisor now
-		divisor = constant_move->operands.x86.destination_register;
 	}
 
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, higher_order_dividend_bits, TRUE);
+
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->operands.x86.destination_register;
 
 	//Insert this before the division instruction
-	insert_instruction_before_given(division, division_instruction);
+	insert_instruction_before_given(division, original_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->operands.oir.assignee, quotient);
+	instruction_t* result_movement = emit_move_instruction(original_instruction->operands.oir.assignee, quotient);
 
 	//Insert this before the original division instruction
-	insert_instruction_before_given(result_movement, division_instruction);
+	insert_instruction_before_given(result_movement, original_instruction);
 
 	//Add this in if it's needed
 	insert_pxor_clear_if_needed(result_movement);
 
 	//Delete the division instruction
-	delete_statement(division_instruction);
+	delete_statement(original_instruction);
 
 	//Reconstruct the window here
 	reconstruct_window(window, result_movement);
