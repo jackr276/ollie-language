@@ -145,7 +145,7 @@ static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* f
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
-static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
+static inline u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
 static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token_stream, symtab_type_record_t* current_type, lightstack_t* bounds_stack);
 static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* base_member_type, lightstack_t* bounds_stack, mutability_type_t mutability);
@@ -13631,9 +13631,6 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
  * <parameter-list> ::= (<identifier> : <type-specifier> { ,{<identifier> : <type-specifier>}*)
  */
 static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_stream, generic_type_t* function_signature, dynamic_array_t* parameter_list){
-	//Grab this out for convenience
-	function_type_t* internal_function_type = function_signature->internal_types.function_type;
-	
 	//No parenthesis - fail out
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok != L_PAREN){
@@ -13761,22 +13758,7 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
 	 * accepatable place for an elaborative parameter is as the very last parameter
 	 * in the function itself
 	 */
-	for(int32_t i = 0; i < absolute_parameter_number - 1; i++){
-		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), i);
-
-		/**
-		 * If we have an elaborative param here, let's check to make
-		 * sure that it is the very last parameter in the function
-		 */
-		if(parameter_type->type_class == TYPE_CLASS_ELABORATIVE){
-			if(i != absolute_parameter_number - 1){
-				return print_and_return_failure("Elaborative param types must always be the last type in a parameter list", parser_line_num);
-			}
-		}
-	}
-
-	//If we make it down here then this all worked, so
-	return SUCCESS;
+	return validate_function_parameter_list(function_signature);
 }
 
 

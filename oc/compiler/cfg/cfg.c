@@ -10616,6 +10616,16 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 		ast_cursor = ast_cursor->next_sibling;
 	}
 
+	/**
+	 * Account for the case where we have a completely
+	 * empty compound statement. In this case we'll
+	 * just allocate a dummy block and get out
+	 */
+	if(starting_block == NULL){
+		starting_block = basic_block_alloc_and_estimate();
+		current_block = starting_block;
+	}
+
 	//If we make it down here - we still need to ensure that results are packaged properly
 	results.starting_block = starting_block;
 	results.final_block = current_block;
@@ -13982,7 +13992,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
