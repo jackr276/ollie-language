@@ -13024,93 +13024,6 @@ static u_int8_t validate_error_list_against_raised_errors(symtab_function_record
 
 
 /**
- * Perform validation on the parameter & return type & order
- * for the main function
- */
-static u_int8_t validate_main_function(generic_type_t* type){
-	//Let's extract the signature first for convenience
-	function_type_t* signature = type->internal_types.function_type;
-
-	//If the main function is not public, then we fail
-	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
-		num_errors++;
-		return FALSE;
-	}
-
-	/**
-	 * The name function may not be declared in anything that
-	 * is not the default namespace. So if we see that
-	 * the current namespace is not default, we fail out
-	 */
-	if(function_symtab->current->is_default == FALSE){
-		sprintf(info, "The main function was found declared inside the namespace \"%s\". The main function may only be declared inside of the top level namespace.",
-		  				function_symtab->current->namespace_name.string);
-		num_errors++;
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		return FALSE;
-	}
-
-	//For storing parameter types
-	generic_type_t* parameter_type;
-
-	//Let's first validate the parameter count. The main function can
-	//either have 0 or 2 parameters
-	
-	switch(signature->function_parameters.current_index){
-		//This is allowed
-		case 0:
-			break;
-
-		//If we have two, we need to validate the type of each parameter
-		case 2:
-			//Extract the first parameter
-			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 0);
-			
-			//If it isn't a basic type and it isn't an i32, we fail
-			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
-				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
-			}
-
-			//Now let's grab the second parameter
-			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 1);
-
-			//This must be a char** type. If it's not, we fail out
-			if(is_type_string_array(parameter_type) == FALSE){
-				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
-			}
-
-			//If we make it all the way down here, then we know that we're set
-			break;
-
-		//We'll print an error and leave if this is the case
-		default:
-			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FALSE;
-	}
-
-	//Finally, we'll validate the return type of the main function. It must also always be an i32
-	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
-		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FALSE;
-	}
-
-	//If we make it here, then we know it's true
-	return TRUE;
-}
-
-
-/**
  * Handle an elaborative param type. This includes error checking
  * to see if the type is valid, and checking to see if we've already created
  * an elaborative param of the given type to avoid duplicates
@@ -14472,12 +14385,85 @@ static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_str
 
 
 /**
+ * Perform validation on the parameter & return type & order for the main function
+ *
+ * The allowed signatures are either:
+ * 1.)	pub fn main() -> i32 ..
+ * 2.)  pub fn main(<>:i32, <>:char**) -> i32
+ */
+static inline u_int8_t validate_main_function(generic_type_t* function_signature){
+	//Let's extract the signature first for convenience
+	function_type_t* signature = function_signature->internal_types.function_type;
+
+	//If the main function is not public, then we fail
+	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
+		return print_and_return_failure("The main function must be prefixed with the \"pub\" keyword", parser_line_num);
+	}
+
+	/**
+	 * The name function may not be declared in anything that
+	 * is not the default namespace. So if we see that
+	 * the current namespace is not default, we fail out
+	 */
+	if(function_symtab->current->is_default == FALSE){
+		sprintf(info, "The main function was found declared inside the namespace \"%s\". The main function may only be declared inside of the top level namespace.",
+		  				function_symtab->current->namespace_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+	
+	/**
+	 * The main function may have no parameters *OR* it could have
+	 * two parameters. Any other count is invalid. There are conditions
+	 * on what the first 2 parameters may be
+	 */
+	switch(signature->function_parameters.current_index){
+		case 0: {
+			break;
+		}
+
+		case 2: {
+			//Extract the first parameter
+			generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), 0);
+			
+			//If it isn't a basic type and it isn't an i32, we fail
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
+				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", function_signature->type_name.string);
+				return print_and_return_failure(info, parser_line_num);
+			}
+
+			//Now let's grab the second parameter
+			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 1);
+
+			//This must be a char** type. If it's not, we fail out
+			if(is_type_string_array(parameter_type) == FALSE){
+				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", function_signature->type_name.string);
+				return print_and_return_failure(info, parser_line_num);
+			}
+
+			break;
+		}
+
+		default: {
+			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", function_signature->type_name.string);
+			return print_and_return_failure(info, parser_line_num);
+		}
+	}
+
+	//Finally, we'll validate the return type of the main function. It must also always be an i32
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
+		sprintf(info, "The main function must return a value of type i32, instead was given: %s", function_signature->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	return TRUE;
+}
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
  * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
- *
- * TODO REWRITE
  *
  * Remember that functions in Ollie can be overloaded, so if we have a symtab "hit" on a function that's either predeclared or not
  * it may not actually be a true hit, we'll need to get the parameter list to fully evaluate
@@ -14608,6 +14594,8 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
 
 	/**
+	 * Step 5: Parse function parameters
+	 *
 	 * Parse all of the function parameters inside of the signature. Since we do not
 	 * yet have a function type to put them in, we will locally store the created
 	 * symtab variable records inside of a dynamic array that we will use if we
@@ -14622,6 +14610,8 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 
 
 	/**
+	 * Step 6: Parse the return type and error list
+	 *
 	 * We should now be able to get the return type and any error
 	 * raising types out and add that to the signature as well
 	 *
@@ -14992,7 +14982,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * function's signature. The return type adder handles everything that
 	 * is needed for the internal bookkeeping
 	 */
-	add_return_type_to_signature(function_signature, type);
+	//add_return_type_to_signature(function_signature, type);
 
 	/**
 	 * Since a returned-by-copy value will *always* have the memory address to copy to
