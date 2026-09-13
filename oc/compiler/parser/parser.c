@@ -925,6 +925,19 @@ static inline u_int8_t print_and_return_failure(char* error_message, u_int32_t p
 
 
 /**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline void* print_and_return_null(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Give back the NULL
+	return NULL;
+}
+
+
+/**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
  * is always the child of some parent node. We will always return the reference to the node
  * created here
@@ -13499,8 +13512,11 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
  * for a function
  *
  * BNF Rule: <parameter-declaration> ::= <identifier> : {params}? <type-specifier>
+ *
+ *
+ * TODO FIX THIS WHOLE THING
  */
-static symtab_variable_record_t* parameter_declaration2(ollie_token_stream_t* token_stream, int32_t* current_gen_purpose_param, int32_t* current_sse_param){
+static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* token_stream, int32_t* current_gen_purpose_param, int32_t* current_sse_param){
 	//Lookahead token
 	lexitem_t lookahead;
 	//Did we see the params keyword or not
@@ -13513,29 +13529,13 @@ static symtab_variable_record_t* parameter_declaration2(ollie_token_stream_t* to
 
 	//If it didn't work we fail immediately
 	if(lookahead.tok != IDENT){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
-		num_errors++;
-		return NULL;
+		return print_and_return_null("Expected identifier in function parameter declaration", parser_line_num);
 	}
 
-	//Now we must perform all needed duplication checks for the name
+	//Extract for convenience
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Check that it isn't some duplicated variable name
-	//
-	////TODO WHAT IS THE POINT OF THIS ANYMORE
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_variable_name_to_buffer(info, found_var);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Check for a duplicated type
+	//Now we must perform all needed duplication checks for the name
 	if(do_duplicate_types_exist(name.string) == TRUE){
 		return NULL;
 	}
@@ -13545,9 +13545,7 @@ static symtab_variable_record_t* parameter_declaration2(ollie_token_stream_t* to
 
 	//If it isn't a colon, we're out
 	if(lookahead.tok != COLON){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
-		num_errors++;
-		return NULL;
+		return print_and_return_null("Colon required between type specifier and identifier in paramter declaration", parser_line_num);
 	}
 
 	/**
@@ -13571,19 +13569,13 @@ static symtab_variable_record_t* parameter_declaration2(ollie_token_stream_t* to
 	
 	//If the node fails, we'll just send the error up the chain
 	if(type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
-		num_errors++;
-		//It's already an error, just propogate it up
-		return NULL;
+		return print_and_return_null("Invalid type specifier given to function parameter", parser_line_num);
 	}
 
 	//If this is an incomplete type, then we also fail
 	if(type->type_complete == FALSE){
 		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		//It's already an error, just propogate it up
-		return NULL;
+		return print_and_return_null(info, parser_line_num);
 	}
 
 	/**
@@ -13629,9 +13621,6 @@ static symtab_variable_record_t* parameter_declaration2(ollie_token_stream_t* to
 			(*current_sse_param)++;
 		}
 	}
-
-	//We've now built up our param record, so we'll give add it to the symtab
-	insert_variable(variable_symtab, param_record);
 
 	//Give the variable back
 	return param_record;
@@ -13726,7 +13715,7 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
 	 */
 	while(TRUE){
 		//We must first see a valid parameter declaration
-		symtab_variable_record_t* parameter = parameter_declaration2(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
+		symtab_variable_record_t* parameter = parameter_declaration(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
 
 		//Fail out if we're invalid
 		if(parameter == NULL){
@@ -14211,10 +14200,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	}
 
 	//For our convenience get this out
-	dynamic_string_t* function_name = &(lookahead.lexeme);
+	dynamic_string_t function_name = lookahead.lexeme;
 
 	//Check for duplicate variables here
-	if(do_duplicate_variables_exist(function_name->string) || do_duplicate_types_exist(function_name->string)){
+	if(do_duplicate_variables_exist(function_name.string) || do_duplicate_types_exist(function_name.string)){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
@@ -14273,16 +14262,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * 		we predeclared
 	 */
 	symtab_function_record_t* created_function_record = NULL;
-	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name->string);
+	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
 	if(found_function == NULL){
 		//Create the brand new function record
-		created_function_record = create_function_record(function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
+		created_function_record = create_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 
-		//Store the signature and the parameters that we've made for it
+		//Store the signature and classify this as normal
 		created_function_record->signature = new_function_signature;
-		created_function_record->function_parameters = function_parameters;
-
-		//This is a normal function
 		created_function_record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
 
 		/**
@@ -14290,7 +14276,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * need to follow. We only check for this here because the main function may *only*
 		 * be defined directly
 		 */
-		if(strcmp(function_name->string, "main") == 0){
+		if(strcmp(function_name.string, "main") == 0){
 			if(validate_main_function(new_function_signature) == FALSE){
 				return print_and_return_error("Invalid definition for main() function", parser_line_num);
 			}
@@ -14343,10 +14329,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	for(int32_t i = 0; i < function_parameters.current_index; i++){
 		symtab_variable_record_t* function_parameter = dynamic_array_get_at(&function_parameters, i);
 
-		//Insert it into the symtab
+		//Insert it into the symtab and add it to the function record
 		insert_variable(variable_symtab, function_parameter);
-
-		add_function_parameter(created_function_record, dynamic_array_get_at(&function_parameters, i));
+		add_function_parameter(created_function_record, function_parameter);
 	}
 
 	/**
@@ -14391,7 +14376,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	//Warn if we have no body
 	if(compound_stmt_node->first_child == NULL){
-		sprintf(info, "Function %s has no body", function_name->string);
+		sprintf(info, "Function %s has no body", function_name.string);
 		print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 	}
 
@@ -14405,8 +14390,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-
-	//TODO STACK DATA AREA ALGINMENT
+	/**
+	 * Make sure to align the stack passed parameter region if we do
+	 * have them
+	 */
+	if(internal_function_type->contains_stack_params == TRUE){
+		align_stack_data_area(&(created_function_record->stack_passed_parameters));
+	}
 
 	/**
 	 * Step 14: final bookkeeping
@@ -14417,6 +14407,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	finalize_variable_scope(variable_symtab);
 	pop_nesting_level(&nesting_stack);
+	dynamic_array_dealloc(&function_parameters);
 	current_function = NULL;
 	current_function_signature = NULL;
 
