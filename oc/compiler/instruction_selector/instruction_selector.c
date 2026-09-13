@@ -12736,8 +12736,16 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 	if(variables_equal_no_ssa(division_instruction->operands.oir.assignee, division_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		division_instruction->operands.x86.destination_register = division_instruction->operands.oir.assignee;
-		//This is always op2
-		division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+
+		/**
+		 * If we have no memory access then we'll use operand2 for the source register. Otherwise,
+		 * we'll need to select our addressing mode expression
+		 */
+		if(division_instruction->memory_access_type == NO_MEMORY_ACCESS){
+			division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+		} else {
+			handle_base_address_and_addressing_mode_for_instruction(division_instruction);
+		}
 
 		//Rebuild around the instruction
 		reconstruct_window(window, division_instruction);
@@ -12774,8 +12782,15 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 		//The destination register is op1
 		division_instruction->operands.x86.destination_register = division_instruction->operands.oir.operand1;
 
-		//This is always the source register
-		division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we'll use operand2 for the source register. Otherwise,
+		 * we'll need to select our addressing mode expression
+		 */
+		if(division_instruction->memory_access_type == NO_MEMORY_ACCESS){
+			division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+		} else {
+			handle_base_address_and_addressing_mode_for_instruction(division_instruction);
+		}
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->operands.oir.assignee, division_instruction->operands.x86.destination_register);
