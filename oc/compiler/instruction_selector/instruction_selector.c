@@ -5195,8 +5195,6 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
  * 		example, shifts don't count because they do not support it)
  * 	2.) There must be *no* converting moves required. If there are, then doing this work is actually
  * 		only going to make our lives more difficult in the end
- *
- *TODO HERE
  */
 static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation(instruction_t* instruction){
 	//First disqualifier is this
@@ -5233,6 +5231,7 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
 		case F_SLASH:
+		case MOD:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
@@ -7028,8 +7027,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * what would normally be a load and then an op into just one operation, which reduces overall register
 	 * pressure and looks cleaner. Due to the way this usually works in OIR we're only going to have to check
 	 * this for instructions 1 and 2(1 being the load source, 2 being the load destination)
-	 *
-	 * TODO HERE
 	 */
 	if(is_instruction_non_converting_load_operation(window->instruction1) == TRUE
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -11727,6 +11724,8 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
+ *
+ * TODO HERE
  */
 static inline void handle_signed_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
@@ -11829,6 +11828,8 @@ static inline void handle_signed_modulus(instruction_window_t* window, generic_t
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
+ *
+ * TODO HERE
  */
 static inline void handle_unsigned_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
