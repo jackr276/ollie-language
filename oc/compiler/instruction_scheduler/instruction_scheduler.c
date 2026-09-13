@@ -219,6 +219,7 @@ static void build_dependency_graph_for_block(data_dependency_graph_t* graph, bas
 				update_dependence_for_variable(graph, current, instructions, current->operands.x86.source_register2, i - 1);
 				update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register1, i - 1);
 				update_dependence_for_variable(graph, current, instructions, current->operands.x86.address_register2, i - 1);
+				update_dependence_for_variable(graph, current, instructions, current->operands.x86.higher_order_dividend_bits, i - 1);
 
 				break;
 		}
