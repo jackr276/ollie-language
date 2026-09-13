@@ -5226,6 +5226,12 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		case SINGLE_AND:
 		case SINGLE_OR:
 		case CARROT:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 

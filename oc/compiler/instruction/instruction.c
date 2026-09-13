@@ -4340,11 +4340,18 @@ static inline void print_general_purpose_cmp_instruction(FILE* fl, instruction_t
 			break;
 	}
 
-	//If we have an immediate value, print it
-	if(instruction->operands.x86.source_immediate != NULL){
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+	/**
+	 * We can either see a regular CMP with no memory access or we can see one
+	 * that has a load as the second operand
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_immediate != NULL){
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		} else {
+			print_variable(fl, instruction->operands.x86.source_register2, mode);
+		}
 	} else {
-		print_variable(fl, instruction->operands.x86.source_register2, mode);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	fprintf(fl, ",");
@@ -4379,8 +4386,15 @@ static inline void print_sse_cmp_instruction(FILE* fl, instruction_t* instructio
 			break;
 	}
 
-	//No immediate values here, only ever a register
-	print_variable(fl, instruction->operands.x86.source_register2, mode);
+	/**
+	 * We can either see a regular CMP with no memory access or we can see one
+	 * that has a load as the second operand
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register2, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	fprintf(fl, ",");
 
@@ -4442,9 +4456,15 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 			exit(1);
 	}
 
-	//Now print out the source register
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
-	fprintf(fl, ", ");
+	/**
+	 * We can either see a regular CMPSx with no memory access or we can see one
+	 * that has a load as the second operand
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register2, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Finally the second source which also doubles as the destination
 	print_variable(fl, instruction->operands.x86.destination_register, mode);
@@ -5018,6 +5038,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MULQ:
 			print_unsigned_multiplication_instruction(fl, instruction, mode);
 			break;
+
 		case IMULW:
 		case IMULB:
 		case IMULQ:
