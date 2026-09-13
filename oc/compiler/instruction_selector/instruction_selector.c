@@ -12587,11 +12587,11 @@ static void handle_unsigned_division(instruction_window_t* window, generic_type_
 	//This is just the destination register here
 	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
+	/**
+	 * If we have no memory access then we may need to handle converting moves/constant moves
+	 * so we'll do that now
+	 */
 	if(original_instruction->memory_access_type == NO_MEMORY_ACCESS){
-		/**
-		 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-		 * also account for the case that we have a constant to take care of
-		 */
 		if(original_instruction->operands.oir.operand2 != NULL){
 			//Do we need to do a type conversion? If so, we'll do a converting move here
 			if(is_converting_move_required(destination_type, original_instruction->operands.oir.operand2->type) == TRUE){
@@ -12613,10 +12613,6 @@ static void handle_unsigned_division(instruction_window_t* window, generic_type_
 			//This is the divisor now
 			divisor = constant_move->operands.x86.destination_register;
 		}
-
-	} else {
-		//TODO IMPLEMENT
-
 	}
 
 	/**
@@ -12632,8 +12628,31 @@ static void handle_unsigned_division(instruction_window_t* window, generic_type_
 	//This goes in before the given instruction
 	insert_instruction_before_given(clear_instruction, original_instruction);
 
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, cleared_rdx, FALSE);
+	/**
+	 * Now we should have what we need, so we can emit the division instruction
+	 * 
+	 * If we have no memory access, we can emit the division instruction with the divisor
+	 * directly. If we do have memory access, then we'll need to copy over the addressing
+	 * operands and let the selector convert those properly
+	 */
+	instruction_t* division = NULL;
+	if(original_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		division = emit_div_instruction(destination_type, divisor, dividend, cleared_rdx, FALSE);
+	} else {
+		//Emit with no divisor
+		division = emit_div_instruction(destination_type, NULL, dividend, cleared_rdx, FALSE);
+
+		//Copy all of the addressing info over
+		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
+		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
+		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
+		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->memory_access_type = READ_FROM_MEMORY;
+		division->addressing_mode = original_instruction->addressing_mode;
+
+		//Now invoke the helper to translate from OIR into x86
+		handle_base_address_and_addressing_mode_for_instruction(division);
+	}
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->operands.x86.destination_register;
