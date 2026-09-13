@@ -3973,8 +3973,15 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 			break;
 	}
 
-	//The divisor is in the second source register
-	print_variable(fl, instruction->operands.x86.source_register2, mode);
+	/**
+	 * If we have no memory access, we will print out the second source register. Otherwise
+	 * we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register2, mode);
+	} else {
+		print_x86_addressing_mode_expression(stdout, instruction, mode);
+	}
 
 	//Print the implied source
 	fprintf(fl, " /* Dividend: ");
@@ -4209,8 +4216,15 @@ static inline void print_sse_division_instruction(FILE* fl, instruction_t* instr
 			break;
 	}
 
-	//We don't ever need to worry about an immediate value for SSE instructions
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we're drawing from the first source register,
+	 * otherwise we'll display using all of the addressing infrastructure
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");

@@ -5232,6 +5232,7 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
+		case F_SLASH:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
