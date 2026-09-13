@@ -2558,7 +2558,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			if(stmt->operands.oir.operand1 != NULL){
 				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			} else {
-				print_three_addr_constant(stdout, stmt->operands.oir.constant_operand);
+				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
 
 			fprintf(fl, "\n");
@@ -2977,9 +2977,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			print_variable(stdout, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- Starting Offset of Elaborative Param <");
-			print_variable(stdout, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, ">\n");
 			break;
 
@@ -3980,7 +3980,7 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
 		print_variable(fl, instruction->operands.x86.source_register2, mode);
 	} else {
-		print_x86_addressing_mode_expression(stdout, instruction, mode);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Print the implied source
