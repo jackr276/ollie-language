@@ -13504,7 +13504,10 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
  * root of the subtree that it creates
  *
  * This rule will return a symtab variable record that represents the parameter it made. If will return
- * NULL if an error occurs
+ * NULL if an error occurs. 
+ *
+ * NOTE: this function will *NEVER* save the symtab variable that it creates. This is done later
+ * once we determine that a new function record needs to be made
  *
  * We can optionally see the "params" keyword here to denote that this is actually
  * a variable length, specifically stack passed array of values of a given type. We know
@@ -13512,9 +13515,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
  * for a function
  *
  * BNF Rule: <parameter-declaration> ::= <identifier> : {params}? <type-specifier>
- *
- *
- * TODO FIX THIS WHOLE THING
  */
 static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* token_stream, int32_t* current_gen_purpose_param, int32_t* current_sse_param){
 	//Lookahead token
@@ -13524,26 +13524,22 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	//Save where we have the token pointer index of declaration
 	u_int32_t token_pointer_index_of_declaration = token_stream->token_pointer;
 
-	//Now we can optionally see the constant keyword here
+	//We need to first see an identifier
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If it didn't work we fail immediately
 	if(lookahead.tok != IDENT){
 		return print_and_return_null("Expected identifier in function parameter declaration", parser_line_num);
 	}
 
-	//Extract for convenience
+	//Extract for convenience - can NOT be a pointer
 	dynamic_string_t name = lookahead.lexeme;
 
-	//Now we must perform all needed duplication checks for the name
+	//Validate that we don't have duplicate types
 	if(do_duplicate_types_exist(name.string) == TRUE){
 		return NULL;
 	}
 
-	//Now we need to see a colon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
 	//If it isn't a colon, we're out
+	lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok != COLON){
 		return print_and_return_null("Colon required between type specifier and identifier in paramter declaration", parser_line_num);
 	}
@@ -13554,12 +13550,8 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * the context of a function signature which is why we must see it here
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Flag this if we see it
 	if(lookahead.tok == PARAMS){
 		params_seen = TRUE;
-
-	//Otherwise put it back
 	} else {
 		push_back_token(token_stream, &parser_line_num);
 	}
@@ -13572,7 +13564,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 		return print_and_return_null("Invalid type specifier given to function parameter", parser_line_num);
 	}
 
-	//If this is an incomplete type, then we also fail
+	//Must be an incomplete type, if it's not then we're out
 	if(type->type_complete == FALSE){
 		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
 		return print_and_return_null(info, parser_line_num);
@@ -13590,10 +13582,8 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 	 * to update the type to be an elaborative type
 	 */
 	if(params_seen == TRUE){
-		//Let the handler deal with it
 		type = handle_elaborative_param_type(type);
 
-		//Null is an error, fail out
 		if(type == NULL){
 			return NULL;
 		}
@@ -13605,7 +13595,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	/**
 	 * So long as this type is *not* passed by copy, we will include
-	 * it in our parameter counts
+	 * it in our parameter counts. Pass by copy 
 	 */
 	if(is_type_stack_passed_by_copy(type) == FALSE){
 		//Most common case, not a floating point so it counts as general-purpose
@@ -13614,6 +13604,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 			//Bump it for the next go about
 			(*current_gen_purpose_param)++;
+
 		} else {
 			param_record->class_relative_function_parameter_order = *current_sse_param;
 
