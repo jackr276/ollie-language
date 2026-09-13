@@ -2558,7 +2558,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			if(stmt->operands.oir.operand1 != NULL){
 				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			} else {
-				print_three_addr_constant(stdout, stmt->operands.oir.constant_operand);
+				print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			}
 
 			fprintf(fl, "\n");
@@ -2977,9 +2977,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
-			print_variable(stdout, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- Starting Offset of Elaborative Param <");
-			print_variable(stdout, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, ">\n");
 			break;
 
@@ -3257,9 +3257,10 @@ static void print_x86_addressing_mode_expression(FILE* fl, instruction_t* instru
 			fprintf(fl, ", %ld)", instruction->operands.x86.address_multiplier);
 			break;
 
-		//Do nothing
+		//Default is this fails
 		default:
-			break;
+			fprintf(stderr, "Fatal internal compiler error: invalid addressing mode found in instruction printer\n");
+			exit(1);
 	}
 }
 
@@ -3972,19 +3973,28 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 			break;
 	}
 
-	//The divisor is in the second source register
-	print_variable(fl, instruction->operands.x86.source_register2, mode);
+	/**
+	 * If we have no memory access, we will print out the second source register. Otherwise
+	 * we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register2, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Print the implied source
 	fprintf(fl, " /* Dividend: ");
 	
 	/**
-	 * The dividend always comes from source register 1 and occasionally the address register
+	 * The dividend always comes from source register 1 and occasionally the higher
+	 * order dividend bits
 	 */
-	if(instruction->operands.x86.address_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.address_register1, mode);
+	if(instruction->operands.x86.higher_order_dividend_bits != NULL){
+		print_variable(fl, instruction->operands.x86.higher_order_dividend_bits, mode);
 		fprintf(fl, ":");
 	}
+
 	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//Print out both the quotient and the remainder
@@ -4208,8 +4218,15 @@ static inline void print_sse_division_instruction(FILE* fl, instruction_t* instr
 			break;
 	}
 
-	//We don't ever need to worry about an immediate value for SSE instructions
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we're drawing from the first source register,
+	 * otherwise we'll display using all of the addressing infrastructure
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	//Needed comma
 	fprintf(fl, ", ");
@@ -4339,11 +4356,18 @@ static inline void print_general_purpose_cmp_instruction(FILE* fl, instruction_t
 			break;
 	}
 
-	//If we have an immediate value, print it
-	if(instruction->operands.x86.source_immediate != NULL){
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+	/**
+	 * We can either see a regular CMP with no memory access or we can see one
+	 * that has a load as the second operand
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_immediate != NULL){
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		} else {
+			print_variable(fl, instruction->operands.x86.source_register2, mode);
+		}
 	} else {
-		print_variable(fl, instruction->operands.x86.source_register2, mode);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	fprintf(fl, ",");
@@ -4378,8 +4402,15 @@ static inline void print_sse_cmp_instruction(FILE* fl, instruction_t* instructio
 			break;
 	}
 
-	//No immediate values here, only ever a register
-	print_variable(fl, instruction->operands.x86.source_register2, mode);
+	/**
+	 * We can either see a regular CMP with no memory access or we can see one
+	 * that has a load as the second operand
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register2, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
 
 	fprintf(fl, ",");
 
@@ -4441,8 +4472,16 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 			exit(1);
 	}
 
-	//Now print out the source register
-	print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * We can either see a regular CMPSx with no memory access or we can see one
+	 * that has a load as the second operand
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	} else {
+		print_x86_addressing_mode_expression(fl, instruction, mode);
+	}
+
 	fprintf(fl, ", ");
 
 	//Finally the second source which also doubles as the destination
@@ -4696,11 +4735,19 @@ static void print_and_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 	}
 
-	//Now we'll need the source immediate/source
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we will go to register/constant printing. However
+	 * if we do have memory access, we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Now our comma and the destination
@@ -4731,11 +4778,19 @@ static void print_or_instruction(FILE* fl, instruction_t* instruction, variable_
 			break;
 	}
 
-	//Now we'll need the source immediate/source
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we will go to register/constant printing. However
+	 * if we do have memory access, we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Now our comma and the destination
@@ -4772,11 +4827,19 @@ static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, v
 			break;
 	}
 
-	//Now we'll need the source immediate/source
-	if(instruction->operands.x86.source_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
+	/**
+	 * If we have no memory access then we will go to register/constant printing. However
+	 * if we do have memory access, we'll print out the addressing mode operation
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(instruction->operands.x86.source_register1 != NULL){
+			print_variable(fl, instruction->operands.x86.source_register1, mode);
+		} else {
+			print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		}
+
 	} else {
-		print_immediate_value(fl, instruction->operands.x86.source_immediate);
+		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
 
 	//Now our comma and the destination
@@ -4993,6 +5056,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 		case MULQ:
 			print_unsigned_multiplication_instruction(fl, instruction, mode);
 			break;
+
 		case IMULW:
 		case IMULB:
 		case IMULQ:

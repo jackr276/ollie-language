@@ -14,5 +14,7 @@ pub fn float_mul_pow_2(f:f32) -> f32 {
 }
 
 pub fn main() -> i32 {
-	ret 0;
+	//Should return 4 + 20 = 24
+	OUNIT: [exit_status = 24]
+	ret @float_div_pow_2(16.66) + @float_mul_pow_2(5);
 }
