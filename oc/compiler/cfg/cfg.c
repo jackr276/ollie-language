@@ -13982,6 +13982,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
