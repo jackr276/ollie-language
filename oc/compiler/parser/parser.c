@@ -14183,6 +14183,8 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
 		//We must first see a valid parameter declaration
 		symtab_variable_record_t* parameter = parameter_declaration2(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
 
+		//TODO VALIDATE NO DUPLICATES
+
 		//Fail out if we're invalid
 		if(parameter == NULL){
 			return print_and_return_failure("Invalid parameter declaration found in parameter list", parser_line_num);
@@ -14663,6 +14665,9 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 			if(validate_main_function(new_function_signature) == FALSE){
 				return print_and_return_error("Invalid definition for main() function", parser_line_num);
 			}
+
+			//The main function is implicitly assumed to be called always
+			created_function_record->called = TRUE;
 		} 
 
 	} else {
@@ -14675,10 +14680,13 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 *
 	 * Now that it's been fully created we can insert this into the symtab
 	 * and flag that it is now defined
+	 *
+	 * We'll also push the nesting level as a function on here
 	 */
 	created_function_record->line_number = current_line;
 	created_function_record->defined = TRUE;
 	insert_function(function_symtab, created_function_record);
+	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
 	/**
 	 * Step 10: add the parameters in
@@ -14700,6 +14708,11 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 
 	//Run through and add them all in
 	for(int32_t i = 0; i < function_parameters.current_index; i++){
+		symtab_variable_record_t* function_parameter = dynamic_array_get_at(&function_parameters, i);
+
+		//Insert it into the symtab
+		insert_variable(variable_symtab, function_parameter);
+
 		add_function_parameter(created_function_record, dynamic_array_get_at(&function_parameters, i));
 	}
 
@@ -14718,37 +14731,42 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	}
 
 	/**
+	 * Step 12: build the function body
 	 *
+	 * Now that we have everything set up we are ready to build the body. This is ultimately
+	 * a compound statement so we will be using that rule to do this. Before doing this,
+	 * we will be clearing out the old deferred statement node, errors raised and current jump
+	 * statements nodes
+	 *
+	 * When we see our compound statement here, we will pass a flag in of false to indicate
+	 * that we do not want to fully open up a new variable scope. We already have a fresh variable scope opened pu
+	 * that has all of our function parameters in it. Ollie disallows copying function parameters in the opening
+	 * scope of a function definition, so we want them to all be in the same variable scope
 	 */
 	deferred_stmts_node = NULL;
 	clear_dynamic_array(&errors_raised_by_current_function);
 	clear_dynamic_array(&current_function_jump_statements);
 
 	/**
-	 * When we see our compound statement here, we will pass a flag in of false to indicate
-	 * that we do not want to fully open up a new variable scope. We already have a fresh variable scope opened pu
-	 * that has all of our function parameters in it. Ollie disallows copying function parameters in the opening
-	 * scope of a function definition, so we want them to all be in the same variable scope
+	 * Invoke the helper and make sure to pass in FALSE because we do *NOT*
+	 * want to create a new variable scope
 	 */
 	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, FALSE);
-
-	//If this fails we'll just pass it through
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return compound_stmt_node;
 	}
 
-	//If this function is a void return type, we need to manually insert
-	//a ret statement at the very end, if there isn't one already
+	//Warn if we have no body
+	if(compound_stmt_node->first_child == NULL){
+		sprintf(info, "Function %s has no body", function_name->string);
+		print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+	}
+
 	//Let's drill down to the very end
 	generic_ast_node_t* cursor = compound_stmt_node->first_child;
 
 	//We could have an entirely null function body
 	if(cursor != NULL){
-		//So long as we don't see ret statements here, we keep going
-		while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
-			//Advance
-			cursor = cursor->next_sibling;
-		}
 
 		//If we get here we know that it worked, so we'll add it in as a child
 		add_child_node(function_node, compound_stmt_node);
@@ -14772,17 +14790,8 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 
 			}
 		}
-
-	} else {
-		sprintf(info, "Function %s has no body", function_record->func_name.string);
-		print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 	}
 
-	//If this is the main funcition, it has been called implicitly
-	if(is_main_function == TRUE){
-		//Mark that it's been called
-		function_record->called = TRUE;
-	}
 	
 	//Destroy the jump statements if need be
 	dynamic_array_dealloc(&current_function_jump_statements);
