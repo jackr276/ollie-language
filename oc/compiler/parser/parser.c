@@ -64,10 +64,10 @@ static generic_ast_node_t* prog = NULL;
 static symtab_function_record_t* current_function = NULL;
 static function_type_t* current_function_signature = NULL;
 
-//Keep track of all of the errors that have been raised by the current function
-static dynamic_set_t errors_raised_by_current_function;
-//Array that holds all of the jump statements for our current function
+//Maintain a list of the errors/jump statements in the current function
+static dynamic_array_t errors_raised_by_current_function;
 static dynamic_array_t current_function_jump_statements;
+
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
 
@@ -1221,8 +1221,8 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 		//Otherwise we are good
 		error_id_value = error_type->internal_types.error_type_id;
 
-		//Add this into the set of all errors raised by the current function
-		dynamic_set_add(&errors_raised_by_current_function, error_type);
+		//Add this into the list of all errors raised by the current function
+		dynamic_array_add(&errors_raised_by_current_function, error_type);
 
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
@@ -10486,8 +10486,8 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 		//Otherwise we are good
 		error_id_value = error_type->internal_types.error_type_id;
 
-		//Add this into the set of all errors raised by the current function
-		dynamic_set_add(&errors_raised_by_current_function, error_type);
+		//Add this into the list of all errors raised by the current function
+		dynamic_array_add(&errors_raised_by_current_function, error_type);
 
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
@@ -12998,7 +12998,7 @@ static u_int8_t validate_error_list_against_raised_errors(symtab_function_record
 		//Now let's go through all of the errors that are raised and check those
 		for(int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
 			//Extract the error that we raised
-			generic_type_t* raised_error = dynamic_set_get_at(&errors_raised_by_current_function, j);
+			generic_type_t* raised_error = dynamic_array_get_at(&errors_raised_by_current_function, j);
 
 			//If these are identical, then we set the flag and get out
 			if(types_identical(raised_error, mandatory_error) == TRUE){
@@ -14372,9 +14372,6 @@ static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_str
 			return print_and_return_failure("Function was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
 		}
 
-		//Wipe the slate clean for this function - we'll start tracking again here
-		clear_dynamic_set(&errors_raised_by_current_function);
-
 		//Now that we've made it past that, we can let the helper do the parsing for us
 		if(error_list2(token_stream, function_signature) == FAILURE){
 			return print_and_return_failure("Invalid error list detected in function declaration", parser_line_num);
@@ -14679,10 +14676,13 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 * Now that it's been fully created we can insert this into the symtab
 	 * and flag that it is now defined
 	 */
+	created_function_record->line_number = current_line;
 	created_function_record->defined = TRUE;
 	insert_function(function_symtab, created_function_record);
 
 	/**
+	 * Step 10: add the parameters in
+	 *
 	 * IMPORTANT - now that we've created the function type we need to properly add
 	 * all of the function parameters to this function type. There is a lot of internal
 	 * bookkeeping that happens when we do this which is why we only do it now
@@ -14704,6 +14704,8 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	}
 
 	/**
+	 * Step 11: return by copy remediation
+	 *
 	 * IMPORTANT Since a returned-by-copy value will *always* have the memory address to copy to
 	 * passed into the function via %rdi, it is essential that we go through and update
 	 * the symtab_function_record here as well as all of the parameters. Edge case that
@@ -14715,10 +14717,12 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 		remediate_return_by_copy_gp_parameters(created_function_record);
 	}
 
-
-
-	//Some housekeeping, if there were previously deferred statements, we want them out
+	/**
+	 *
+	 */
 	deferred_stmts_node = NULL;
+	clear_dynamic_array(&errors_raised_by_current_function);
+	clear_dynamic_array(&current_function_jump_statements);
 
 	/**
 	 * When we see our compound statement here, we will pass a flag in of false to indicate
@@ -14732,12 +14736,6 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return compound_stmt_node;
 	}
-
-	//This function was defined
-	function_record->defined = TRUE;
-
-	//Where was this function defined
-	function_record->line_number = current_line;
 
 	//If this function is a void return type, we need to manually insert
 	//a ret statement at the very end, if there isn't one already
@@ -14831,9 +14829,13 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 * We also have the AST function node, this will be intialized immediately
 	 * It also requires a symtab record of the function, but this will be assigned
 	 * later once we have it
+	 *
+	 * TODO VALIDATE
 	 */
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
-
+	function_node->line_number = current_line;
+	add_child_node(function_node, compound_stmt_node);
+	return function_node;
 }
 
 
@@ -15957,8 +15959,13 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	 * important of these messages is extra errors in the raises clause that are never used. To support
 	 * this, we maintain a global list of all the errors that the function raises. To save on allocation
 	 * overhead, we'll just keep one of these for the lifetime of the parser
+	 *
+	 * For any/all functions that have jump statements, we'll need to do validations on them in the
+	 * end so we'll maintain an array of jump statements that we add to and clear out for each function
+	 * to avoid the allocation overhead
 	 */
-	errors_raised_by_current_function = dynamic_set_alloc();
+	errors_raised_by_current_function = dynamic_array_alloc();
+	current_function_jump_statements = dynamic_array_alloc();
 
 	//Global entry/run point, will give us a tree with the root being here
 	prog = program(build_order);
