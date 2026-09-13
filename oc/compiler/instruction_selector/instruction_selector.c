@@ -12719,9 +12719,10 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 	}
 
 	/**
-	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 * Do the same for op2 if op2 exists
 	 */
-	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand2->type) == TRUE){
+	if(division_instruction->operands.oir.operand2 != NULL 
+			&& is_converting_move_required(destination_type, division_instruction->operands.oir.operand2->type) == TRUE){
 		division_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand2, destination_type);
 	}
 
