@@ -5221,6 +5221,17 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		case MINUS:
 		case PLUS:
 		case STAR:
+		case SINGLE_AND:
+		case SINGLE_OR:
+		case CARROT:
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		case F_SLASH:
+		case MOD:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
@@ -5268,20 +5279,6 @@ static inline u_int8_t is_instruction_non_converting_load_operation(instruction_
 	}
 
 	return TRUE;
-}
-
-
-/**
- * Remove a variable from a given instruction's slot. This involves
- * decrementing the use count and then setting the variable slot
- * to NULL(hence the double pointer)
- */
-static inline void remove_variable(three_addr_var_t** variable_to_remove){
-	//Decrement the use count
-	decrement_use_count_for_variable(*variable_to_remove);
-
-	//And NULL it out
-	*variable_to_remove = NULL;
 }
 
 
@@ -5403,7 +5400,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		assign_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 		//Completely scrap this variable
-		remove_variable(&(assign_operation->operands.oir.operand1));
+		assign_operation->operands.oir.operand1 = NULL;
 
 		//Once we've done this, the first statement is entirely useless
 		delete_statement(constant_assignment);
@@ -5435,8 +5432,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			//Let's mark that this is now a binary op with const statement
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
-			//Scrap the old op2
-			remove_variable(&(binary_operation->operands.oir.operand2));
+			//Scrapt the old op2
+			binary_operation->operands.oir.operand2 = NULL;
 
 			//Replace it with what we had prior
 			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
@@ -5475,7 +5472,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
 
 			//Scrap the old op2
-			remove_variable(&(binary_operation->operands.oir.operand2));
+			binary_operation->operands.oir.operand2 = NULL;
 
 			//Replace it with what we had prior
 			binary_operation->operands.oir.constant_operand = constant_assignment->operands.oir.constant_operand;
@@ -5555,7 +5552,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 
 		//Wipe the old operand out
-		remove_variable(&(binary_operation->operands.oir.operand1));
+		binary_operation->operands.oir.operand1 = NULL;
 
 		//The old binary operation is now simply an assign const statement
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -5626,7 +5623,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 
 		//Wipe the old operand out
-		remove_variable(&(binary_operation->operands.oir.operand1));
+		binary_operation->operands.oir.operand1 = NULL;
 
 		//The old binary operation is now simply an assign const statement
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -5763,7 +5760,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
 					
 					//Op2 is no longer needed
-					remove_variable(&(binary_operation->operands.oir.operand2));
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//This is now a BIN_OP_WITH_CONST
 					binary_operation->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
@@ -5792,8 +5789,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 					//Remove these two operands
-					remove_variable(&(binary_operation->operands.oir.operand1));
-					remove_variable(&(binary_operation->operands.oir.operand2));
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//Remove the opcode to avoid confusion
 					binary_operation->op = BLANK;
@@ -5821,8 +5818,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 				//Remove these variables
-				remove_variable(&(binary_operation->operands.oir.operand1));
-				remove_variable(&(binary_operation->operands.oir.operand2));
+				binary_operation->operands.oir.operand1 = NULL;
+				binary_operation->operands.oir.operand2 = NULL;
 
 				//Avoid any confusion with the op as well
 				binary_operation->op = BLANK;
@@ -5845,7 +5842,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			case SINGLE_AND:
 			case SINGLE_OR:
 				//Delete the second operand
-				remove_variable(&(binary_operation->operands.oir.operand2));
+				binary_operation->operands.oir.operand2 = NULL;
 
 				//Avoid confusion by clearing out the operator
 				binary_operation->op = BLANK;
@@ -5872,9 +5869,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
 
 					//Get rid of the second operand and the op
-					remove_variable(&(binary_operation->operands.oir.operand2));
-
-					//Clear out the operator too
+					binary_operation->operands.oir.operand2 = NULL;
 					binary_operation->op = BLANK;
 
 					//Turn this into a test to see if op1 is 0 or not, that's all we need
@@ -5921,8 +5916,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
 
 					//Remove these variables
-					remove_variable(&(binary_operation->operands.oir.operand1));
-					remove_variable(&(binary_operation->operands.oir.operand2));
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//Avoid any confusion with the op as well
 					binary_operation->op = BLANK;
@@ -5951,8 +5946,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 					//Remove these variables
-					remove_variable(&(binary_operation->operands.oir.operand1));
-					remove_variable(&(binary_operation->operands.oir.operand2));
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//Avoid any confusion with the op as well
 					binary_operation->op = BLANK;
@@ -6196,8 +6191,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * Since this is now a lea operands 1 and 2 do not exist, we'll
 			 * NULL them out to reflect this
 			 */
-			remove_variable(&(constant_operation->operands.oir.operand1));
-			remove_variable(&(constant_operation->operands.oir.operand2));
+			constant_operation->operands.oir.operand1 = NULL;
+			constant_operation->operands.oir.operand2 = NULL;
 
 			//Delete the old binary operation
 			delete_statement(binary_operation);
@@ -6264,8 +6259,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * Since this is now a lea operands 1 and 2 do not exist, we'll
 					 * NULL them out to reflect this
 					 */
-					remove_variable(&(binary_operation->operands.oir.operand1));
-					remove_variable(&(binary_operation->operands.oir.operand2));
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2 = NULL;
 
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
@@ -6303,8 +6298,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * Since this is now a lea operands 1 and 2 do not exist, we'll
 					 * NULL them out to reflect this
 					 */
-					remove_variable(&(binary_operation->operands.oir.operand1));
-					remove_variable(&(binary_operation->operands.oir.operand2));
+					binary_operation->operands.oir.operand1 = NULL;
+					binary_operation->operands.oir.operand2 = NULL;
 					
 					//Once this is done we can scrap the first instruction
 					delete_statement(bin_operation_with_const);
@@ -6683,7 +6678,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 		//Wipe out operand1
-		remove_variable(&(binary_operation->operands.oir.operand1));
+		binary_operation->operands.oir.operand1 = NULL;
 
 		/**
 		 * Instruction 1 is now completely useless *if* that was the only time that
@@ -6724,7 +6719,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//Wipe out op1
-					remove_variable(&(current_instruction->operands.oir.operand1));
+					current_instruction->operands.oir.operand1 = NULL;
 
 				//Otherwise, the value is not 0
 				} else {
@@ -6790,7 +6785,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					current_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//Wipe out op1
-					remove_variable(&(current_instruction->operands.oir.operand1));
+					current_instruction->operands.oir.operand1 = NULL;
 
 					//Set the constant's value to 1
 					current_instruction->operands.oir.constant_operand->constant_value.signed_long_constant = 1;
@@ -6867,7 +6862,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
 					//The constant is still the same thing(0), let's just wipe out the ops
-					remove_variable(&(first_instruction->operands.oir.operand1));
+					first_instruction->operands.oir.operand1 = NULL;
 
 					//We changed something
 					changed = TRUE;
@@ -6957,7 +6952,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					first_instruction->op = BLANK;
 
 					//We no longer even need our op1
-					remove_variable(&(first_instruction->operands.oir.operand1));
+					first_instruction->operands.oir.operand1 = NULL;
 
 					//We can modify op1 const to just be 0 now. This is lazy but it
 					//works, we'll just 0 out all 64 bits
@@ -10474,8 +10469,8 @@ static instruction_t* emit_div_instruction(generic_type_t* destination_type, thr
 
 	//Dividend is always the implicit source(%rax)
 	instruction->operands.x86.source_register1 = dividend;
-	//Address register2 is used for overflow(higher order bits(%rdx))
-	instruction->operands.x86.address_register1 = higher_order_dividend_bits;
+	//Higher order dividend bits is used for overflow(higher order bits(%rdx))
+	instruction->operands.x86.higher_order_dividend_bits = higher_order_dividend_bits;
 	//The divisor is what will actually show up on the instruction
 	instruction->operands.x86.source_register2 = divisor;
 
@@ -10552,7 +10547,7 @@ static inline instruction_type_t select_sub_instruction(variable_size_t size){
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
-static instruction_type_t select_cmp_instruction(variable_size_t size){
+static inline instruction_type_t select_cmp_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
 		case BYTE:
@@ -11337,12 +11332,21 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 	if(variables_equal_no_ssa(bitwise_or->operands.oir.assignee, bitwise_or->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.assignee;
+		
+		/**
+		 * Based on the memory access type we'll either deal with the second operand
+		 * or kick this over to the addressing mode helper
+		 */
+		if(bitwise_or->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_or->operands.oir.operand2 != NULL){
+				bitwise_or->operands.x86.source_register1 = bitwise_or->operands.oir.operand2;
+			} else {
+				bitwise_or->operands.x86.source_immediate = bitwise_or->operands.oir.constant_operand;
+			}
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_or->operands.oir.operand2 != NULL){
-			bitwise_or->operands.x86.source_register1 = bitwise_or->operands.oir.operand2;
 		} else {
-			bitwise_or->operands.x86.source_immediate = bitwise_or->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_or);
 		}
 
 		//Rebuild around the instruction
@@ -11379,11 +11383,20 @@ static void handle_bitwise_inclusive_or_instruction(instruction_window_t* window
 		//The destination register is op1
 		bitwise_or->operands.x86.destination_register = bitwise_or->operands.oir.operand1;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_or->operands.oir.operand2 != NULL){
-			bitwise_or->operands.x86.source_register1 = bitwise_or->operands.oir.operand2;
+		/**
+		 * Based on the memory access type we'll either deal with the second operand
+		 * or kick this over to the addressing mode helper
+		 */
+		if(bitwise_or->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_or->operands.oir.operand2 != NULL){
+				bitwise_or->operands.x86.source_register1 = bitwise_or->operands.oir.operand2;
+			} else {
+				bitwise_or->operands.x86.source_immediate = bitwise_or->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_or->operands.x86.source_immediate = bitwise_or->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_or);
 		}
 
 		//Move the destination register into the actual assignee now
@@ -11466,11 +11479,20 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 		//Destination is just the assignee
 		bitwise_and->operands.x86.destination_register = bitwise_and->operands.oir.assignee;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_and->operands.oir.operand2 != NULL){
-			bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can go based off of the second operand. However
+		 * if there is memory access we'll need to kick this over to the dedicated rule
+		 */
+		if(bitwise_and->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_and->operands.oir.operand2 != NULL){
+				bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+			} else {
+				bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_and);
 		}
 
 		//Rebuild around the instruction
@@ -11508,11 +11530,20 @@ static void handle_bitwise_and_instruction(instruction_window_t* window){
 		//The destination register is op1
 		bitwise_and->operands.x86.destination_register = bitwise_and->operands.oir.operand1;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_and->operands.oir.operand2 != NULL){
-			bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can go based off of the second operand. However
+		 * if there is memory access we'll need to kick this over to the dedicated rule
+		 */
+		if(bitwise_and->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_and->operands.oir.operand2 != NULL){
+				bitwise_and->operands.x86.source_register1 = bitwise_and->operands.oir.operand2;
+			} else {
+				bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_and->operands.x86.source_immediate = bitwise_and->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_and);
 		}
 
 		//Move the destination register into the actual assignee now
@@ -11595,11 +11626,20 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 		//Destination is just the assignee
 		bitwise_xor->operands.x86.destination_register = bitwise_xor->operands.oir.assignee;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_xor->operands.oir.operand2 != NULL){
-			bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can handle this here. If we do have memory
+		 * access we'll pass this over to the dedicated rule to handle it
+		 */
+		if(bitwise_xor->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_xor->operands.oir.operand2 != NULL){
+				bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+			} else {
+				bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_xor);
 		}
 
 		//Rebuild around the instruction
@@ -11637,11 +11677,20 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 		//The destination register is op1
 		bitwise_xor->operands.x86.destination_register = bitwise_xor->operands.oir.operand1;
 
-		//Assign the source or the source immediate based on which we need
-		if(bitwise_xor->operands.oir.operand2 != NULL){
-			bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we can handle this here. If we do have memory
+		 * access we'll pass this over to the dedicated rule to handle it
+		 */
+		if(bitwise_xor->memory_access_type == NO_MEMORY_ACCESS){
+			//Assign the source or the source immediate based on which we need
+			if(bitwise_xor->operands.oir.operand2 != NULL){
+				bitwise_xor->operands.x86.source_register1 = bitwise_xor->operands.oir.operand2;
+			} else {
+				bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			}
+
 		} else {
-			bitwise_xor->operands.x86.source_immediate = bitwise_xor->operands.oir.constant_operand;
+			handle_base_address_and_addressing_mode_for_instruction(bitwise_xor);
 		}
 
 		//Move the destination register into the actual assignee now
@@ -11679,8 +11728,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 static inline void handle_signed_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
-
-	three_addr_var_t* divisor;
+	three_addr_var_t* divisor = NULL;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand1->type) == TRUE){
@@ -11714,32 +11762,52 @@ static inline void handle_signed_modulus(instruction_window_t* window, generic_t
 	insert_instruction_before_given(cl_instruction, modulus_instruction);
 
 	/**
-	 * Handle all converting moves/constant assignment moves that we need to here
+	 * We can either have a modulus instruction that has no memory access, in which
+	 * case we'll need to deal with our operands, or we can have one that does have
+	 * memory access
 	 */
-	if(modulus_instruction->operands.oir.operand2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand2, result_type);
+	instruction_t* division = NULL;
+	if(modulus_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(modulus_instruction->operands.oir.operand2 != NULL){
+			//Do we need to do a type conversion? If so, we'll do a converting move here
+			if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand2->type) == TRUE){
+				divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand2, result_type);
 
-		//Otherwise source 2 is just the op2
+			//Otherwise source 2 is just the op2
+			} else {
+				divisor = modulus_instruction->operands.oir.operand2;
+			}
+		
+		//Otherwise we'll need a const assignment
 		} else {
-			divisor = modulus_instruction->operands.oir.operand2;
+			//Emit the move
+			instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->operands.oir.assignee->type), modulus_instruction->operands.oir.constant_operand);
+
+			//This goes right in before the mod
+			insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+			//And this now is our divisor
+			divisor = constant_assignment->operands.x86.destination_register;
 		}
-	
-	//Otherwise we'll need a const assignment
+		
+		//Now we should have what we need, so we can emit the division instruction
+		division = emit_div_instruction(result_type, divisor, dividend, higher_order_dividend_bits, TRUE);
+
 	} else {
-		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(modulus_instruction->operands.oir.assignee->type), modulus_instruction->operands.oir.constant_operand);
+		//Emit the division but intentionally leave the divisor NULL
+		division = emit_div_instruction(result_type, NULL, dividend, higher_order_dividend_bits, TRUE);
 
-		//This goes right in before the mod
-		insert_instruction_before_given(constant_assignment, modulus_instruction);
+		//Copy over all of the addressing mode operands
+		division->operands.oir.address_multiplier = modulus_instruction->operands.oir.address_multiplier;
+		division->operands.oir.address_offset = modulus_instruction->operands.oir.address_offset;
+		division->operands.oir.address_operand1 = modulus_instruction->operands.oir.address_operand1;
+		division->operands.oir.address_operand2 = modulus_instruction->operands.oir.address_operand2;
+		division->memory_access_type = READ_FROM_MEMORY;
+		division->addressing_mode = modulus_instruction->addressing_mode;
 
-		//And this now is our divisor
-		divisor = constant_assignment->operands.x86.destination_register;
+		//Let the dedicated helper rule convert from OIR to x86
+		handle_base_address_and_addressing_mode_for_instruction(division);
 	}
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, higher_order_dividend_bits, TRUE);
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->operands.x86.destination_register2;
@@ -11781,8 +11849,7 @@ static inline void handle_signed_modulus(instruction_window_t* window, generic_t
 static inline void handle_unsigned_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
-
-	three_addr_var_t* divisor;
+	three_addr_var_t* divisor = NULL;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand1->type) == TRUE){
@@ -11799,28 +11866,31 @@ static inline void handle_unsigned_modulus(instruction_window_t* window, generic
 	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
 	/**
-	 * Handle all converting moves/constant assignment moves that we need to here
+	 * Handle all converting moves/constant assignment moves that we need to here. This only
+	 * applies if we have a modulus instruction that does not have memory access
 	 */
-	if(modulus_instruction->operands.oir.operand2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand2, result_type);
+	if(modulus_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(modulus_instruction->operands.oir.operand2 != NULL){
+			//Do we need to do a type conversion? If so, we'll do a converting move here
+			if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand2->type) == TRUE){
+				divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand2, result_type);
 
-		//Otherwise source 2 is just the op2
+			//Otherwise source 2 is just the op2
+			} else {
+				divisor = modulus_instruction->operands.oir.operand2;
+			}
+		
+		//Otherwise we'll need a const assignment
 		} else {
-			divisor = modulus_instruction->operands.oir.operand2;
+			//Emit the move
+			instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(result_type), modulus_instruction->operands.oir.constant_operand);
+
+			//This goes right in before the mod
+			insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+			//And this now is our divisor
+			divisor = constant_assignment->operands.x86.destination_register;
 		}
-	
-	//Otherwise we'll need a const assignment
-	} else {
-		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(result_type), modulus_instruction->operands.oir.constant_operand);
-
-		//This goes right in before the mod
-		insert_instruction_before_given(constant_assignment, modulus_instruction);
-
-		//And this now is our divisor
-		divisor = constant_assignment->operands.x86.destination_register;
 	}
 
 	/**
@@ -11836,8 +11906,28 @@ static inline void handle_unsigned_modulus(instruction_window_t* window, generic
 	//This goes in before the given instruction
 	insert_instruction_before_given(clear_instruction, modulus_instruction);
 
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, cleared_rdx, FALSE);
+	/**
+	 * Based on what kind of memory access we ahve we'll either emit this using the 
+	 * regular operands or we'll use the addressing mode
+	 */
+	instruction_t* division = NULL;
+	if(modulus_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		division = emit_div_instruction(result_type, divisor, dividend, cleared_rdx, FALSE);
+	} else {
+		//Intentionally leave the divisor blank
+		division = emit_div_instruction(result_type, NULL, dividend, cleared_rdx, FALSE);
+
+		//Copy over all of the addressing mode operands
+		division->operands.oir.address_multiplier = modulus_instruction->operands.oir.address_multiplier;
+		division->operands.oir.address_offset = modulus_instruction->operands.oir.address_offset;
+		division->operands.oir.address_operand1 = modulus_instruction->operands.oir.address_operand1;
+		division->operands.oir.address_operand2 = modulus_instruction->operands.oir.address_operand2;
+		division->memory_access_type = READ_FROM_MEMORY;
+		division->addressing_mode = modulus_instruction->addressing_mode;
+
+		//Let the dedicated helper rule convert from OIR to x86
+		handle_base_address_and_addressing_mode_for_instruction(division);
+	}
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->operands.x86.destination_register2;
@@ -12384,21 +12474,21 @@ static inline void handle_multiplication_instruction(instruction_window_t* windo
  */
 static void handle_signed_division(instruction_window_t* window, generic_type_t* destination_type){
 	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
+	instruction_t* original_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
-	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand1->type) == TRUE){
-		division_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand1, destination_type);
+	if(is_converting_move_required(destination_type, original_instruction->operands.oir.operand1->type) == TRUE){
+		original_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(original_instruction, original_instruction->operands.oir.operand1, destination_type);
 	}
 
 	//We first need to move the first operand into RAX
-	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->operands.oir.operand1->type), division_instruction->operands.oir.operand1);
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(original_instruction->operands.oir.operand1->type), original_instruction->operands.oir.operand1);
 
 	//Insert the move to rax before the multiplication instruction
-	insert_instruction_before_given(move_to_rax, division_instruction);
+	insert_instruction_before_given(move_to_rax, original_instruction);
 
 	//This is just the destination register here
 	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
@@ -12418,54 +12508,77 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
 	higher_order_dividend_bits = cl_instruction->operands.x86.destination_register2;
 
 	//Insert this before the given
-	insert_instruction_before_given(cl_instruction, division_instruction);
+	insert_instruction_before_given(cl_instruction, original_instruction);
 
 	/**
-	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-	 * also account for the case that we have a constant to take care of
+	 * Based on what memory access we have here we'll either be able
+	 * to emit the division instruction directly or we'll need to
+	 * emit it half-baked and fill in the operands
 	 */
-	if(division_instruction->operands.oir.operand2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand2, destination_type);
+	instruction_t* division;
+	if(original_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		/**
+		 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
+		 * also account for the case that we have a constant to take care of
+		 */
+		if(original_instruction->operands.oir.operand2 != NULL){
+			//Do we need to do a type conversion? If so, we'll do a converting move here
+			if(is_converting_move_required(destination_type, original_instruction->operands.oir.operand2->type) == TRUE){
+				divisor = create_and_insert_converting_move_instruction(original_instruction, original_instruction->operands.oir.operand2, destination_type);
 
-		//Otherwise divisor is just the op2
+			//Otherwise divisor is just the op2
+			} else {
+				divisor = original_instruction->operands.oir.operand2;
+			}
+
+		//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
 		} else {
-			divisor = division_instruction->operands.oir.operand2;
+			//Emit the constant move
+			instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), original_instruction->operands.oir.constant_operand);
+
+			//Now we'll insert this before the division instruction
+			insert_instruction_before_given(constant_move, original_instruction);
+
+			//This is the divisor now
+			divisor = constant_move->operands.x86.destination_register;
 		}
 
-	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
+		//Now we should have what we need, so we can emit the division instruction
+		division = emit_div_instruction(destination_type, divisor, dividend, higher_order_dividend_bits, TRUE);
+
 	} else {
-		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), division_instruction->operands.oir.constant_operand);
+		//Let the helper emit the division instruction but leave the divisor(op2) empty
+		division = emit_div_instruction(destination_type, NULL, dividend, higher_order_dividend_bits, TRUE);
 
-		//Now we'll insert this before the division instruction
-		insert_instruction_before_given(constant_move, division_instruction);
+		//Copy all of the addressing info over
+		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
+		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
+		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
+		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->memory_access_type = READ_FROM_MEMORY;
+		division->addressing_mode = original_instruction->addressing_mode;
 
-		//This is the divisor now
-		divisor = constant_move->operands.x86.destination_register;
+		//Now invoke the helper to translate from OIR into x86
+		handle_base_address_and_addressing_mode_for_instruction(division);
 	}
-
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, higher_order_dividend_bits, TRUE);
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->operands.x86.destination_register;
 
 	//Insert this before the division instruction
-	insert_instruction_before_given(division, division_instruction);
+	insert_instruction_before_given(division, original_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->operands.oir.assignee, quotient);
+	instruction_t* result_movement = emit_move_instruction(original_instruction->operands.oir.assignee, quotient);
 
 	//Insert this before the original division instruction
-	insert_instruction_before_given(result_movement, division_instruction);
+	insert_instruction_before_given(result_movement, original_instruction);
 
 	//Add this in if it's needed
 	insert_pxor_clear_if_needed(result_movement);
 
 	//Delete the division instruction
-	delete_statement(division_instruction);
+	delete_statement(original_instruction);
 
 	//Reconstruct the window here
 	reconstruct_window(window, result_movement);
@@ -12492,50 +12605,52 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
  */
 static void handle_unsigned_division(instruction_window_t* window, generic_type_t* destination_type){
 	//Firstly, the instruction that we're looking for is the very first one
-	instruction_t* division_instruction = window->instruction1;
+	instruction_t* original_instruction = window->instruction1;
 
 	//A temp holder for the final second source variable
 	three_addr_var_t* divisor;
 
 	//If we need to convert, we'll do that here
-	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand1->type) == TRUE){
+	if(is_converting_move_required(destination_type, original_instruction->operands.oir.operand1->type) == TRUE){
 		//Let the helper deal with it
-		division_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand1, destination_type);
+		original_instruction->operands.oir.operand1 = create_and_insert_converting_move_instruction(original_instruction, original_instruction->operands.oir.operand1, destination_type);
 	}
 
 	//We first need to move the first operand into RAX
-	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(division_instruction->operands.oir.operand1->type), division_instruction->operands.oir.operand1);
+	instruction_t* move_to_rax = emit_move_instruction(emit_temp_var(original_instruction->operands.oir.operand1->type), original_instruction->operands.oir.operand1);
 
 	//Insert the move to rax before the multiplication instruction
-	insert_instruction_before_given(move_to_rax, division_instruction);
+	insert_instruction_before_given(move_to_rax, original_instruction);
 
 	//This is just the destination register here
 	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
 	/**
-	 * If we have an op2(dividing two variables), we'll handle all of our converting moves here. We'll
-	 * also account for the case that we have a constant to take care of
+	 * If we have no memory access then we may need to handle converting moves/constant moves
+	 * so we'll do that now
 	 */
-	if(division_instruction->operands.oir.operand2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand2, destination_type);
+	if(original_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(original_instruction->operands.oir.operand2 != NULL){
+			//Do we need to do a type conversion? If so, we'll do a converting move here
+			if(is_converting_move_required(destination_type, original_instruction->operands.oir.operand2->type) == TRUE){
+				divisor = create_and_insert_converting_move_instruction(original_instruction, original_instruction->operands.oir.operand2, destination_type);
 
-		//Otherwise divisor is just the op2
+			//Otherwise divisor is just the op2
+			} else {
+				divisor = original_instruction->operands.oir.operand2;
+			}
+
+		//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
 		} else {
-			divisor = division_instruction->operands.oir.operand2;
+			//Emit the constant move
+			instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), original_instruction->operands.oir.constant_operand);
+
+			//Now we'll insert this before the division instruction
+			insert_instruction_before_given(constant_move, original_instruction);
+
+			//This is the divisor now
+			divisor = constant_move->operands.x86.destination_register;
 		}
-
-	//Otherwise we have a constant - x86 division doesn't support having these as operands so we'll need a move
-	} else {
-		//Emit the constant move
-		instruction_t* constant_move = emit_constant_move_instruction(emit_temp_var(destination_type), division_instruction->operands.oir.constant_operand);
-
-		//Now we'll insert this before the division instruction
-		insert_instruction_before_given(constant_move, division_instruction);
-
-		//This is the divisor now
-		divisor = constant_move->operands.x86.destination_register;
 	}
 
 	/**
@@ -12549,32 +12664,54 @@ static void handle_unsigned_division(instruction_window_t* window, generic_type_
 	instruction_t* clear_instruction = emit_gp_register_clear_instruction(cleared_rdx);
 
 	//This goes in before the given instruction
-	insert_instruction_before_given(clear_instruction, division_instruction);
+	insert_instruction_before_given(clear_instruction, original_instruction);
 
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(destination_type, divisor, dividend, cleared_rdx, FALSE);
+	/**
+	 * Now we should have what we need, so we can emit the division instruction
+	 * 
+	 * If we have no memory access, we can emit the division instruction with the divisor
+	 * directly. If we do have memory access, then we'll need to copy over the addressing
+	 * operands and let the selector convert those properly
+	 */
+	instruction_t* division = NULL;
+	if(original_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		division = emit_div_instruction(destination_type, divisor, dividend, cleared_rdx, FALSE);
+	} else {
+		//Emit with no divisor
+		division = emit_div_instruction(destination_type, NULL, dividend, cleared_rdx, FALSE);
+
+		//Copy all of the addressing info over
+		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
+		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
+		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
+		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->memory_access_type = READ_FROM_MEMORY;
+		division->addressing_mode = original_instruction->addressing_mode;
+
+		//Now invoke the helper to translate from OIR into x86
+		handle_base_address_and_addressing_mode_for_instruction(division);
+	}
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->operands.x86.destination_register;
 
 	//Insert this before the division instruction
-	insert_instruction_before_given(division, division_instruction);
+	insert_instruction_before_given(division, original_instruction);
 
 	//Once we've done all that, we need one final movement operation
-	instruction_t* result_movement = emit_move_instruction(division_instruction->operands.oir.assignee, quotient);
+	instruction_t* result_movement = emit_move_instruction(original_instruction->operands.oir.assignee, quotient);
 
 	//Insert this before the original division instruction
-	insert_instruction_before_given(result_movement, division_instruction);
+	insert_instruction_before_given(result_movement, original_instruction);
 
 	//Add in the clear instruction if need be
 	insert_pxor_clear_if_needed(result_movement);
 
 	//Delete the division instruction
-	delete_statement(division_instruction);
+	delete_statement(original_instruction);
 
 	//Reconstruct the window here
 	reconstruct_window(window, result_movement);
-
 }
 
 
@@ -12620,9 +12757,10 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 	}
 
 	/**
-	 * Do the same for op2. Note that we are guaranteed an op2 here becuase this is a floating point multiplication
+	 * Do the same for op2 if op2 exists
 	 */
-	if(is_converting_move_required(destination_type, division_instruction->operands.oir.operand2->type) == TRUE){
+	if(division_instruction->operands.oir.operand2 != NULL 
+			&& is_converting_move_required(destination_type, division_instruction->operands.oir.operand2->type) == TRUE){
 		division_instruction->operands.oir.operand2 = create_and_insert_converting_move_instruction(division_instruction, division_instruction->operands.oir.operand2, destination_type);
 	}
 
@@ -12637,8 +12775,16 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 	if(variables_equal_no_ssa(division_instruction->operands.oir.assignee, division_instruction->operands.oir.operand1) == TRUE){
 		//Destination is just the assignee
 		division_instruction->operands.x86.destination_register = division_instruction->operands.oir.assignee;
-		//This is always op2
-		division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+
+		/**
+		 * If we have no memory access then we'll use operand2 for the source register. Otherwise,
+		 * we'll need to select our addressing mode expression
+		 */
+		if(division_instruction->memory_access_type == NO_MEMORY_ACCESS){
+			division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+		} else {
+			handle_base_address_and_addressing_mode_for_instruction(division_instruction);
+		}
 
 		//Rebuild around the instruction
 		reconstruct_window(window, division_instruction);
@@ -12675,8 +12821,15 @@ static void handle_sse_division_instruction(instruction_window_t* window, generi
 		//The destination register is op1
 		division_instruction->operands.x86.destination_register = division_instruction->operands.oir.operand1;
 
-		//This is always the source register
-		division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+		/**
+		 * If we have no memory access then we'll use operand2 for the source register. Otherwise,
+		 * we'll need to select our addressing mode expression
+		 */
+		if(division_instruction->memory_access_type == NO_MEMORY_ACCESS){
+			division_instruction->operands.x86.source_register1 = division_instruction->operands.oir.operand2;
+		} else {
+			handle_base_address_and_addressing_mode_for_instruction(division_instruction);
+		}
 
 		//Move the destination register into the actual assignee now
 		instruction_t* assignment_instruction = emit_move_instruction(division_instruction->operands.oir.assignee, division_instruction->operands.x86.destination_register);
@@ -12865,15 +13018,21 @@ static void handle_cmp_instruction(instruction_window_t* window){
 		//Move as needed
 		instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
 
-		//If we have 
-		if(instruction->operands.oir.operand2 != NULL){
-			instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
-		} else {
-			instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
-		}
+		/**
+		 * We can either see a CMP with no memory access and a register/immediate source,
+		 * or we can see one that will have an addressing mode expression as its second
+		 * operand
+		 */
+		if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+			if(instruction->operands.oir.operand2 != NULL){
+				instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
+			} else {
+				instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
+			}
 
-		//And we're done, there's no other work to do for a regular comparison
-		//that will be followed by a branch
+		} else {
+			handle_base_address_and_addressing_mode_for_instruction(instruction);
+		}
 
 	/**
 	 * If we make it here, then we will need to leverage different setting logic
@@ -12889,11 +13048,20 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			//Move as needed
 			instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
 
-			//If we have 
-			if(instruction->operands.oir.operand2 != NULL){
-				instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
+			/**
+			 * We can either see a CMP with no memory access and a register/immediate source,
+			 * or we can see one that will have an addressing mode expression as its second
+			 * operand
+			 */
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				if(instruction->operands.oir.operand2 != NULL){
+					instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
+				} else {
+					instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
+				}
+
 			} else {
-				instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
+				handle_base_address_and_addressing_mode_for_instruction(instruction);
 			}
 
 			//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
@@ -12944,8 +13112,21 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			//Now let's assign the destination/source. Remember that it's essential to use the copied_op1 in the destination
 			//so that we don't run into any issues with registers being overwritten
 			instruction->operands.x86.destination_register = copied_op1;
-			//It is not possible for this to be a constant
-			instruction->operands.x86.source_register1 = instruction->operands.oir.operand2;
+
+			/**
+			 * We can either see a CMP with no memory access and a register/immediate source,
+			 * or we can see one that will have an addressing mode expression as its second
+			 * operand
+			 *
+			 * NOTE: for these special comparison operations, the source_register1 is actually
+			 * the second operand because we overwrite the destination, similar to an addition
+			 * or subtractino instruction
+			 */
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				instruction->operands.x86.source_register1 = instruction->operands.oir.operand2;
+			} else {
+				handle_base_address_and_addressing_mode_for_instruction(instruction);
+			}
 
 			//Now that we've done all that, we need to emit a move instruction that takes the copied op1 and puts it into
 			//a general purpose register(32 bit)
