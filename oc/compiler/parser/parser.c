@@ -12946,84 +12946,6 @@ static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_globa
 
 
 /**
- * We need to go through and check all of the jump statements that we have in the function. If any
- * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
- */
-static inline u_int8_t check_jump_labels(){
-	//Run through all of these statements
-	for(int32_t i=  0; i < current_function_jump_statements.current_index; i++){
-		//Extract the one we need
-		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
-
-		//Let's see if we can find the label that this one is jumping to
-		char* name = current_jump_statement->string_value.string;
-
-		symtab_label_record_t* jumping_to_label = lookup_label(current_function->user_defined_labels, name);
-
-		//Didn't find it, so we fail out
-		if(jumping_to_label == NULL){
-			sprintf(info, "No label %s exists in function %s", name, current_function->func_name.string);
-			num_errors++;
-			print_parse_message(MESSAGE_TYPE_ERROR, info, current_jump_statement->line_number);
-			return FAILURE;
-		}
-
-		//Store this label record inside of the jump node for later
-		current_jump_statement->optional_storage.label_record = jumping_to_label;
-	}
-
-	//If we get here then they all worked
-	return SUCCESS;
-}
-
-
-/**
- * If a user puts an error in a raises statement but then fails to raise that error inside of
- * the actual function, then we are going to be mandating entirely useless checks down the
- * road. We need to account for this by validating that every error inside of the
- * raises statement is actually raised by the function
- */
-static u_int8_t validate_error_list_against_raised_errors(symtab_function_record_t* function){
-	//Extract what we require to be checked
-	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
-
-	//Run through all of the mandatory checked errors
-	for(int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
-		//Extract the error that we require
-		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
-
-		//Assume by default that it's missing
-		u_int8_t raised_by_function = FALSE;
-
-		//Now let's go through all of the errors that are raised and check those
-		for(int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
-			//Extract the error that we raised
-			generic_type_t* raised_error = dynamic_array_get_at(&errors_raised_by_current_function, j);
-
-			//If these are identical, then we set the flag and get out
-			if(types_identical(raised_error, mandatory_error) == TRUE){
-				raised_by_function = TRUE;
-				break;
-			}
-		}
-
-		//Is it raised by the function? If not we've got an error
-		if(raised_by_function == FALSE){
-			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
-		   					function->func_name.string, mandatory_error->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-	}
-
-	//If we made it all of the way down here then we are good
-	return SUCCESS;
-
-}
-
-
-/**
  * Handle an elaborative param type. This includes error checking
  * to see if the type is valid, and checking to see if we've already created
  * an elaborative param of the given type to avoid duplicates
@@ -14464,6 +14386,78 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 
 
 /**
+ * We need to go through and check all of the jump statements that we have in the function. If any
+ * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
+ */
+static inline u_int8_t check_jump_labels(){
+	//Run through all of these statements
+	for(int32_t i=  0; i < current_function_jump_statements.current_index; i++){
+		//Extract the one we need
+		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
+
+		//Let's see if we can find the label that this one is jumping to
+		char* name = current_jump_statement->string_value.string;
+
+		symtab_label_record_t* jumping_to_label = lookup_label(current_function->user_defined_labels, name);
+
+		//Didn't find it, so we fail out
+		if(jumping_to_label == NULL){
+			sprintf(info, "No label %s exists in function %s", name, current_function->func_name.string);
+			return print_and_return_failure(info, current_jump_statement->line_number);
+		}
+
+		//Store this label record inside of the jump node for later
+		current_jump_statement->optional_storage.label_record = jumping_to_label;
+	}
+
+	//If we get here then they all worked
+	return SUCCESS;
+}
+
+
+/**
+ * If a user puts an error in a raises statement but then fails to raise that error inside of
+ * the actual function, then we are going to be mandating entirely useless checks down the
+ * road. We need to account for this by validating that every error inside of the
+ * raises statement is actually raised by the function
+ */
+static inline u_int8_t validate_error_list_against_raised_errors(symtab_function_record_t* function){
+	//Extract what we require to be checked
+	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
+
+	//Run through all of the mandatory checked errors
+	for(int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
+		//Extract the error that we require
+		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
+
+		//Assume by default that it's missing
+		u_int8_t raised_by_function = FALSE;
+
+		//Now let's go through all of the errors that are raised and check those
+		for(int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
+			//Extract the error that we raised
+			generic_type_t* raised_error = dynamic_array_get_at(&errors_raised_by_current_function, j);
+
+			//If these are identical, then we set the flag and get out
+			if(types_identical(raised_error, mandatory_error) == TRUE){
+				raised_by_function = TRUE;
+				break;
+			}
+		}
+
+		//Is it raised by the function? If not we've got an error
+		if(raised_by_function == FALSE){
+			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
+		   					function->func_name.string, mandatory_error->type_name.string);
+			return print_and_return_failure(info, parser_line_num);
+		}
+	}
+
+	return SUCCESS;
+}
+
+
+/**
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
@@ -14610,7 +14604,6 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	if(parse_function_parameters(token_stream, new_function_signature, &function_parameters) == FALSE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
 
 	/**
 	 * Step 6: Parse the return type and error list
@@ -14762,91 +14755,37 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 		print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 	}
 
-	//Let's drill down to the very end
-	generic_ast_node_t* cursor = compound_stmt_node->first_child;
-
-	//We could have an entirely null function body
-	if(cursor != NULL){
-
-		//If we get here we know that it worked, so we'll add it in as a child
-		add_child_node(function_node, compound_stmt_node);
-	
-		//We now need to check and see if our jump statements are actually valid
-		if(check_jump_labels() == FAILURE){
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		/**
-		 * If a function raises a specific error list, then we can check
-		 * and see what errors actually were raised(we maintain this in a list)
-		 * and validate that every error in that error clause was raised at least 
-		 * once. Remember that the raises list mandates that all callers check those
-		 * errors, so something being in there and not being raised is an issue
-		 */
-		if(specific_error_list == TRUE){
-			//If this fails then we are done
-			if(validate_error_list_against_raised_errors(function_record) == FAILURE){
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-
-			}
-		}
+	/**
+	 * Step 13: final validations
+	 *
+	 * We need to validate the jump labels and raised errors(if any of either exist). We'll
+	 * let the dedicated rules handle this
+	 */
+	if(check_jump_labels() == FAILURE || validate_error_list_against_raised_errors(created_function_record) == FALSE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	
-	//Destroy the jump statements if need be
-	dynamic_array_dealloc(&current_function_jump_statements);
-
-	//Store the line number
-	function_node->line_number = current_line;
-
-	//Close the variable scope that we opened for the parameter list/compound statement
+	/**
+	 * Step 14: final bookkeeping
+	 *
+	 * We're all done so now we can close out the original variable scope that we made
+	 * and pop the nesting level
+	 */
 	finalize_variable_scope(variable_symtab);
-
-	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(&nesting_stack);
 
-	//All good so we can get out
-	return function_node;
-
-
-
-
-
-
-
-
-
-
-
-
-
-	//TODO BODY PROCESSING
-
-
-
-	//We also need to mark that we're in a function using the nesting stack
-	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
-
 	/**
-	 * Since most functions do not use user defined jumps, we will initialize
-	 * this to be NULL here and only allocate when the need arises
-	 */
-	current_function_jump_statements = INITIALIZE_DYNAMIC_ARRAY;
-
-
-	/**
-	 * We also have the AST function node, this will be intialized immediately
-	 * It also requires a symtab record of the function, but this will be assigned
-	 * later once we have it
+	 * Step 15: package up and return
 	 *
-	 * TODO VALIDATE
+	 * Create the final AST function definition node, add the compound statement as a child,
+	 * and get out
 	 */
 	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
 	function_node->line_number = current_line;
+	function_node->func_record = created_function_record;
 	add_child_node(function_node, compound_stmt_node);
 	return function_node;
 }
-
 
 
 /**
