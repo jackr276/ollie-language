@@ -14606,8 +14606,6 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 * yet have a function type to put them in, we will locally store the created
 	 * symtab variable records inside of a dynamic array that we will use if we
 	 * have a match in the end
-	 *
-	 * TODO UPDATE PARAMETER SYMTAB VARS ONCE WE HAVE THE FUNCTION RECORD CREATED/FOUND
 	 */
 	dynamic_array_t function_parameters = dynamic_array_alloc();
 	if(parse_function_parameters(token_stream, new_function_signature, &function_parameters) == FALSE){
@@ -14620,15 +14618,21 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	 *
 	 * We should now be able to get the return type and any error
 	 * raising types out and add that to the signature as well
-	 *
-	 * TODO WE NEED THE RETURN BY COPY REMEDIATION AFTER WE CREATE THE RECORD
 	 */
 	if(parse_function_return_type_and_error_list(token_stream, new_function_signature) == FALSE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	/**
-	 * Step 7: Creation/updating of the function's symtab record
+	 * Step 7: create the function type string
+	 *
+	 * Now that we've got the return type and parameters in we can
+	 * create the function signature
+	 */
+	generate_function_pointer_type_name(new_function_signature);
+
+	/**
+	 * Step 8: Creation/updating of the function's symtab record
 	 *
 	 * There are 3 options for every given function definition that we need
 	 * to account for:
@@ -14651,8 +14655,29 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 		created_function_record->function_parameters = function_parameters;
 
 	} else {
-		//TODO
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
 
+	/**
+	 * IMPORTANT - now that we've created the function type we need to properly add
+	 * all of the function parameters to this function type. There is a lot of internal
+	 * bookkeeping that happens when we do this which is why we only do it now
+	 *
+	 * We'll need to initialize a new variable scope here. This variable scope is designed
+	 * so that we include the function parameters in it. We need to remember to close
+	 * this once we leave
+	 *
+	 * We will consider this to be the "top level" scope for our function. The function
+	 * record will store a reference to this. In the future if we go to inline, we will
+	 * use this variable scope for all new variable creation
+	 */
+	initialize_variable_scope(variable_symtab, created_function_record, function_symtab->current);
+	created_function_record->top_level_scope = variable_symtab->current;
+
+	//Run through and add them all in
+	for(int32_t i = 0; i < function_parameters.current_index; i++){
+		add_function_parameter(created_function_record, dynamic_array_get_at(&function_parameters, i));
 	}
 
 	/**
@@ -14664,43 +14689,12 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	}
 
 
-
-
-
-
-
-	/**
-	 * IMPORTANT: we need to hang onto this overarching function scope
-	 * for future uses/lookups
-	 */
-	//top_level_function_variable_scope = variable_symtab->current;
-
-	
-	
-
-	//We have a bad parameter list, we just fail out
-	//if(status == FAILURE){
-	//	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	//}
-
-	/**
-	 * We'll need to initialize a new variable scope here. This variable scope is designed
-	 * so that we include the function parameters in it. We need to remember to close
-	 * this once we leave
-	 *
-	 * We will consider this to be the "top level" scope for our function. The function
-	 * record will store a reference to this. In the future if we go to inline, we will
-	 * use this variable scope for all new variable creation
-	 *
-	 * TODO REMEMBER TO POPULATE THIS WITH THE FUNCTION RECORD AND SET THE TOP LEVEL
-	 * SCOPE
-	 */
-	initialize_variable_scope(variable_symtab, NULL, function_symtab->current);
-
-
-
-
-
+	//If we're dealing with the main function, we need to validate that the parameter order, visibility
+	//of the function, and return type are valid
+	if(is_main_function == TRUE && validate_main_function(function_record->signature) == FALSE){
+		//Error out here
+		return print_and_return_error("Invalid definition for main() function", parser_line_num);
+	}
 
 
 
@@ -15089,15 +15083,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Now that the function record has been finalized, we'll need to produce the type name
-	generate_function_pointer_type_name(function_record->signature);
-
-	//If we're dealing with the main function, we need to validate that the parameter order, visibility
-	//of the function, and return type are valid
-	if(is_main_function == TRUE && validate_main_function(function_record->signature) == FALSE){
-		//Error out here
-		return print_and_return_error("Invalid definition for main() function", parser_line_num);
-	}
 
 	//Some housekeeping, if there were previously deferred statements, we want them out
 	deferred_stmts_node = NULL;
