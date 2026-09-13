@@ -1252,7 +1252,7 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record){
  * 	- Create any function signature
  * 	- Create any function parameters
  */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index){
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -1278,9 +1278,6 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 
 	//Allocate the list of all functions that this calls
 	record->called_functions = dynamic_set_alloc();
-
-	//This is a normal function
-	record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
 
 	//Store what dependency this comes from
 	record->dependency_graph_node = dependency_contained_in;

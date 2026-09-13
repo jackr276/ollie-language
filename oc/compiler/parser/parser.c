@@ -13702,7 +13702,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	}
 
 	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
+	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 
 	//Now we need to see an lparen to begin the parameters
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -14158,7 +14158,7 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
 	 * accepatable place for an elaborative parameter is as the very last parameter
 	 * in the function itself
 	 */
-	for(int32_t i = 0; i < absolute_parameter_number; i++){
+	for(int32_t i = 0; i < absolute_parameter_number - 1; i++){
 		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), i);
 
 		/**
@@ -14653,7 +14653,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name->string);
 	if(found_function == NULL){
 		//Create the brand new function record
-		created_function_record = create_function_record(function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
+		created_function_record = create_function_record(function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 
 		//Store the signature and the parameters that we've made for it
 		created_function_record->signature = new_function_signature;
@@ -14693,6 +14693,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	created_function_record->defined = TRUE;
 	insert_function(function_symtab, created_function_record);
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
+
+	//Flag that this is our current function
+	current_function = created_function_record;
+	current_function_signature = internal_function_type;
 
 	/**
 	 * Step 10: add the parameters in
@@ -14782,10 +14786,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * Step 14: final bookkeeping
 	 *
 	 * We're all done so now we can close out the original variable scope that we made
-	 * and pop the nesting level
+	 * and pop the nesting level. We'll also NULL out the current function type and the 
+	 * signature
 	 */
 	finalize_variable_scope(variable_symtab);
 	pop_nesting_level(&nesting_stack);
+	current_function = NULL;
+	current_function_signature = NULL;
 
 	/**
 	 * Step 15: package up and return
