@@ -4461,10 +4461,12 @@ static inline void print_sse_scalar_cmp_instruction(FILE* fl, instruction_t* ins
 	 * that has a load as the second operand
 	 */
 	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
-		print_variable(fl, instruction->operands.x86.source_register2, mode);
+		print_variable(fl, instruction->operands.x86.source_register1, mode);
 	} else {
 		print_x86_addressing_mode_expression(fl, instruction, mode);
 	}
+
+	fprintf(fl, ", ");
 
 	//Finally the second source which also doubles as the destination
 	print_variable(fl, instruction->operands.x86.destination_register, mode);

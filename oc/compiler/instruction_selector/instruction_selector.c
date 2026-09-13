@@ -10549,7 +10549,7 @@ static inline instruction_type_t select_sub_instruction(variable_size_t size){
  * A very simple helper function that selects the right add instruction based
  * solely on variable size. Done to avoid code duplication
  */
-static instruction_type_t select_cmp_instruction(variable_size_t size){
+static inline instruction_type_t select_cmp_instruction(variable_size_t size){
 	//Go based on size
 	switch(size){
 		case BYTE:
@@ -12916,15 +12916,21 @@ static void handle_cmp_instruction(instruction_window_t* window){
 		//Move as needed
 		instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
 
-		//If we have 
-		if(instruction->operands.oir.operand2 != NULL){
-			instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
-		} else {
-			instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
-		}
+		/**
+		 * We can either see a CMP with no memory access and a register/immediate source,
+		 * or we can see one that will have an addressing mode expression as its second
+		 * operand
+		 */
+		if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+			if(instruction->operands.oir.operand2 != NULL){
+				instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
+			} else {
+				instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
+			}
 
-		//And we're done, there's no other work to do for a regular comparison
-		//that will be followed by a branch
+		} else {
+			handle_base_address_and_addressing_mode_for_instruction(instruction);
+		}
 
 	/**
 	 * If we make it here, then we will need to leverage different setting logic
@@ -12940,11 +12946,20 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			//Move as needed
 			instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
 
-			//If we have 
-			if(instruction->operands.oir.operand2 != NULL){
-				instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
+			/**
+			 * We can either see a CMP with no memory access and a register/immediate source,
+			 * or we can see one that will have an addressing mode expression as its second
+			 * operand
+			 */
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				if(instruction->operands.oir.operand2 != NULL){
+					instruction->operands.x86.source_register2 = instruction->operands.oir.operand2;
+				} else {
+					instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
+				}
+
 			} else {
-				instruction->operands.x86.source_immediate = instruction->operands.oir.constant_operand;
+				handle_base_address_and_addressing_mode_for_instruction(instruction);
 			}
 
 			//We'll now need to insert inbetween here. These relie on the result of the comparison instruction. The set instruction
@@ -12995,8 +13010,21 @@ static void handle_cmp_instruction(instruction_window_t* window){
 			//Now let's assign the destination/source. Remember that it's essential to use the copied_op1 in the destination
 			//so that we don't run into any issues with registers being overwritten
 			instruction->operands.x86.destination_register = copied_op1;
-			//It is not possible for this to be a constant
-			instruction->operands.x86.source_register1 = instruction->operands.oir.operand2;
+
+			/**
+			 * We can either see a CMP with no memory access and a register/immediate source,
+			 * or we can see one that will have an addressing mode expression as its second
+			 * operand
+			 *
+			 * NOTE: for these special comparison operations, the source_register1 is actually
+			 * the second operand because we overwrite the destination, similar to an addition
+			 * or subtractino instruction
+			 */
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				instruction->operands.x86.source_register1 = instruction->operands.oir.operand2;
+			} else {
+				handle_base_address_and_addressing_mode_for_instruction(instruction);
+			}
 
 			//Now that we've done all that, we need to emit a move instruction that takes the copied op1 and puts it into
 			//a general purpose register(32 bit)
