@@ -14666,10 +14666,7 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 			if(validate_main_function(new_function_signature) == FALSE){
 				return print_and_return_error("Invalid definition for main() function", parser_line_num);
 			}
-
-
 		} 
-
 
 	} else {
 		printf("TODO NOT IMPLEMENTED\n");
@@ -14677,6 +14674,8 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	}
 
 	/**
+	 * Step 9: insert the function record
+	 *
 	 * Now that it's been fully created we can insert this into the symtab
 	 * and flag that it is now defined
 	 */
@@ -14705,12 +14704,112 @@ static generic_ast_node_t* function_definition2(ollie_token_stream_t* token_stre
 	}
 
 	/**
-	 * IMPORTANT - if we return by coyp we need to remediate this now
-	 * via the special helper
+	 * IMPORTANT Since a returned-by-copy value will *always* have the memory address to copy to
+	 * passed into the function via %rdi, it is essential that we go through and update
+	 * the symtab_function_record here as well as all of the parameters. Edge case that
+	 * we are looking out for: if we had 6 GP params, now we have 7, and the last one
+	 * is pushed over the edge to be a stack param. We need to make the adjustment for all
+	 * of them, as well as for their function_parameter_order
 	 */
 	if(internal_function_type->returns_by_copy == TRUE){
 		remediate_return_by_copy_gp_parameters(created_function_record);
 	}
+
+
+
+	//Some housekeeping, if there were previously deferred statements, we want them out
+	deferred_stmts_node = NULL;
+
+	/**
+	 * When we see our compound statement here, we will pass a flag in of false to indicate
+	 * that we do not want to fully open up a new variable scope. We already have a fresh variable scope opened pu
+	 * that has all of our function parameters in it. Ollie disallows copying function parameters in the opening
+	 * scope of a function definition, so we want them to all be in the same variable scope
+	 */
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, FALSE);
+
+	//If this fails we'll just pass it through
+	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return compound_stmt_node;
+	}
+
+	//This function was defined
+	function_record->defined = TRUE;
+
+	//Where was this function defined
+	function_record->line_number = current_line;
+
+	//If this function is a void return type, we need to manually insert
+	//a ret statement at the very end, if there isn't one already
+	//Let's drill down to the very end
+	generic_ast_node_t* cursor = compound_stmt_node->first_child;
+
+	//We could have an entirely null function body
+	if(cursor != NULL){
+		//So long as we don't see ret statements here, we keep going
+		while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
+			//Advance
+			cursor = cursor->next_sibling;
+		}
+
+		//If we get here we know that it worked, so we'll add it in as a child
+		add_child_node(function_node, compound_stmt_node);
+	
+		//We now need to check and see if our jump statements are actually valid
+		if(check_jump_labels() == FAILURE){
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
+		 * If a function raises a specific error list, then we can check
+		 * and see what errors actually were raised(we maintain this in a list)
+		 * and validate that every error in that error clause was raised at least 
+		 * once. Remember that the raises list mandates that all callers check those
+		 * errors, so something being in there and not being raised is an issue
+		 */
+		if(specific_error_list == TRUE){
+			//If this fails then we are done
+			if(validate_error_list_against_raised_errors(function_record) == FAILURE){
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+
+			}
+		}
+
+	} else {
+		sprintf(info, "Function %s has no body", function_record->func_name.string);
+		print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
+	}
+
+	//If this is the main funcition, it has been called implicitly
+	if(is_main_function == TRUE){
+		//Mark that it's been called
+		function_record->called = TRUE;
+	}
+	
+	//Destroy the jump statements if need be
+	dynamic_array_dealloc(&current_function_jump_statements);
+
+	//Store the line number
+	function_node->line_number = current_line;
+
+	//Close the variable scope that we opened for the parameter list/compound statement
+	finalize_variable_scope(variable_symtab);
+
+	//Remove the nesting level now that we're not in a function
+	pop_nesting_level(&nesting_stack);
+
+	//All good so we can get out
+	return function_node;
+
+
+
+
+
+
+
+
+
+
 
 
 
