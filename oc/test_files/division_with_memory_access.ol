@@ -16,7 +16,7 @@ pub fn signed_div_with_memory(x:i32[5], y:i32) -> i32 {
 
 
 pub fn float_div_with_memory(x:f32[5], y:f32) -> f32 {
-	ret y / x[4];
+	ret y / x[1];
 }
 
 
