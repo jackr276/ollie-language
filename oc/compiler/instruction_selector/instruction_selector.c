@@ -5232,8 +5232,7 @@ static inline u_int8_t is_instruction_memory_operand_compatible_binary_operation
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-		//TODO UNCOMMENT
-	//	case F_SLASH:
+		case F_SLASH:
 			type_operating_over = get_destination_type_for_binary_operation_instruction(instruction);
 			break;
 
@@ -12513,10 +12512,17 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
 		//Let the helper emit the division instruction but leave the divisor(op2) empty
 		division = emit_div_instruction(destination_type, NULL, dividend, higher_order_dividend_bits, TRUE);
 
-		printf("TODO NOT IMPLEMENTED\n");
+		//Copy all of the addressing info over
+		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
+		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
+		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
+		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->memory_access_type = READ_FROM_MEMORY;
+		division->addressing_mode = original_instruction->addressing_mode;
+
+		//Now invoke the helper to translate from OIR into x86
+		handle_base_address_and_addressing_mode_for_instruction(division);
 	}
-
-
 
 	//The quotient is the destination register
 	three_addr_var_t* quotient = division->operands.x86.destination_register;
