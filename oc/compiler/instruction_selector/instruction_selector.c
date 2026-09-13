@@ -11728,8 +11728,7 @@ static void handle_bitwise_exclusive_or_instruction(instruction_window_t* window
 static inline void handle_signed_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
-
-	three_addr_var_t* divisor;
+	three_addr_var_t* divisor = NULL;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand1->type) == TRUE){
@@ -11846,14 +11845,11 @@ static inline void handle_signed_modulus(instruction_window_t* window, generic_t
  *
  * NOTE: We guarantee that the instruction we're after is always the first
  * instruction in the window
- *
- * TODO HERE
  */
 static inline void handle_unsigned_modulus(instruction_window_t* window, generic_type_t* result_type){
 	//Firstly, the instruction that we're looking for is the very first one
 	instruction_t* modulus_instruction = window->instruction1;
-
-	three_addr_var_t* divisor;
+	three_addr_var_t* divisor = NULL;
 
 	//If we need to convert, we'll do that here
 	if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand1->type) == TRUE){
@@ -11870,28 +11866,31 @@ static inline void handle_unsigned_modulus(instruction_window_t* window, generic
 	three_addr_var_t* dividend = move_to_rax->operands.x86.destination_register;
 
 	/**
-	 * Handle all converting moves/constant assignment moves that we need to here
+	 * Handle all converting moves/constant assignment moves that we need to here. This only
+	 * applies if we have a modulus instruction that does not have memory access
 	 */
-	if(modulus_instruction->operands.oir.operand2 != NULL){
-		//Do we need to do a type conversion? If so, we'll do a converting move here
-		if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand2->type) == TRUE){
-			divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand2, result_type);
+	if(modulus_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		if(modulus_instruction->operands.oir.operand2 != NULL){
+			//Do we need to do a type conversion? If so, we'll do a converting move here
+			if(is_converting_move_required(result_type, modulus_instruction->operands.oir.operand2->type) == TRUE){
+				divisor = create_and_insert_converting_move_instruction(modulus_instruction, modulus_instruction->operands.oir.operand2, result_type);
 
-		//Otherwise source 2 is just the op2
+			//Otherwise source 2 is just the op2
+			} else {
+				divisor = modulus_instruction->operands.oir.operand2;
+			}
+		
+		//Otherwise we'll need a const assignment
 		} else {
-			divisor = modulus_instruction->operands.oir.operand2;
+			//Emit the move
+			instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(result_type), modulus_instruction->operands.oir.constant_operand);
+
+			//This goes right in before the mod
+			insert_instruction_before_given(constant_assignment, modulus_instruction);
+
+			//And this now is our divisor
+			divisor = constant_assignment->operands.x86.destination_register;
 		}
-	
-	//Otherwise we'll need a const assignment
-	} else {
-		//Emit the move
-		instruction_t* constant_assignment = emit_constant_move_instruction(emit_temp_var(result_type), modulus_instruction->operands.oir.constant_operand);
-
-		//This goes right in before the mod
-		insert_instruction_before_given(constant_assignment, modulus_instruction);
-
-		//And this now is our divisor
-		divisor = constant_assignment->operands.x86.destination_register;
 	}
 
 	/**
@@ -11907,8 +11906,28 @@ static inline void handle_unsigned_modulus(instruction_window_t* window, generic
 	//This goes in before the given instruction
 	insert_instruction_before_given(clear_instruction, modulus_instruction);
 
-	//Now we should have what we need, so we can emit the division instruction
-	instruction_t* division = emit_div_instruction(result_type, divisor, dividend, cleared_rdx, FALSE);
+	/**
+	 * Based on what kind of memory access we ahve we'll either emit this using the 
+	 * regular operands or we'll use the addressing mode
+	 */
+	instruction_t* division = NULL;
+	if(modulus_instruction->memory_access_type == NO_MEMORY_ACCESS){
+		division = emit_div_instruction(result_type, divisor, dividend, cleared_rdx, FALSE);
+	} else {
+		//Intentionally leave the divisor blank
+		division = emit_div_instruction(result_type, NULL, dividend, cleared_rdx, FALSE);
+
+		//Copy over all of the addressing mode operands
+		division->operands.oir.address_multiplier = modulus_instruction->operands.oir.address_multiplier;
+		division->operands.oir.address_offset = modulus_instruction->operands.oir.address_offset;
+		division->operands.oir.address_operand1 = modulus_instruction->operands.oir.address_operand1;
+		division->operands.oir.address_operand2 = modulus_instruction->operands.oir.address_operand2;
+		division->memory_access_type = READ_FROM_MEMORY;
+		division->addressing_mode = modulus_instruction->addressing_mode;
+
+		//Let the dedicated helper rule convert from OIR to x86
+		handle_base_address_and_addressing_mode_for_instruction(division);
+	}
 	
 	//Store the remainder register here
 	three_addr_var_t* remainder_register = division->operands.x86.destination_register2;
