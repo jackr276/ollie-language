@@ -1486,6 +1486,10 @@ static dynamic_array_t calculate_live_after_for_block(basic_block_t* block, inst
 			add_live_now_live_range(operation->operands.x86.address_register2->associated_live_range, &live_after);
 		}
 
+		if(operation->operands.x86.higher_order_dividend_bits != NULL){
+			add_live_now_live_range(operation->operands.x86.higher_order_dividend_bits->associated_live_range, &live_after);
+		}
+
 		/**
 		 * SPECIAL CASES:
 		 *
@@ -1738,6 +1742,14 @@ static void calculate_all_interference_in_block(basic_block_t* block){
 		}
 
 		/**
+		 * The higher order bits are always in the general purpose register %rdx. Them being flagged as live
+		 * now is very important so we don't delete them
+		 */
+		if(operation->operands.x86.higher_order_dividend_bits != NULL){
+			add_live_now_live_range(operation->operands.x86.higher_order_dividend_bits->associated_live_range, &live_now_general_purpose);
+		}
+
+		/**
 		 * SPECIAL CASES:
 		 *
 		 * Function calls(direct/indirect) have function parameters that are being used
@@ -1924,6 +1936,12 @@ static void calculate_target_interference_in_block(basic_block_t* block, live_ra
 			&& operation->operands.x86.address_register2->associated_live_range->live_range_class == target_class){
 
 			add_live_now_live_range(operation->operands.x86.address_register2->associated_live_range, &target_live_now);
+		}
+
+		if(operation->operands.x86.higher_order_dividend_bits != NULL
+			&& operation->operands.x86.higher_order_dividend_bits->associated_live_range->live_range_class == target_class){
+
+			add_live_now_live_range(operation->operands.x86.higher_order_dividend_bits->associated_live_range, &target_live_now);
 		}
 
 		/**
@@ -2407,6 +2425,10 @@ static void compute_block_level_used_and_assigned_sets(basic_block_t* block){
 
 				if(cursor->operands.x86.address_register2 != NULL){
 					add_live_range_to_use_set(cursor->operands.x86.address_register2->associated_live_range, block);
+				}
+
+				if(cursor->operands.x86.higher_order_dividend_bits != NULL){
+					add_live_range_to_use_set(cursor->operands.x86.higher_order_dividend_bits->associated_live_range, block);
 				}
 
 				/**
@@ -3161,6 +3183,7 @@ static instruction_t* handle_instruction_level_spilling(symtab_function_record_t
 	handle_source_spill(function, live_ranges, instruction->operands.x86.source_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 	handle_source_spill(function, live_ranges, instruction->operands.x86.address_register1, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 	handle_source_spill(function, live_ranges, instruction->operands.x86.address_register2, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
+	handle_source_spill(function, live_ranges, instruction->operands.x86.higher_order_dividend_bits, spill_range, currently_spilled, instruction, spill_region->function_local_base_address);
 
 	//Run through all function parameters
 	if(instruction->instruction_type != PHI_FUNCTION){
