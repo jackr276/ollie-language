@@ -102,6 +102,12 @@ struct instruction_t{
 			three_addr_var_t* source_register1;
 			//Second source register for x86 assembly
 			three_addr_var_t* source_register2;
+			/**
+			 * Division instructions have higher order bits
+			 * on their dividend that are populated after an
+			 * extension. This will always be precolored to %rdx
+			 */
+			three_addr_var_t* higher_order_dividend_bits;
 			//Immediate value for x86 assembly
 			three_addr_const_t* source_immediate;
 			//First destination register

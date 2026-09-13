@@ -965,6 +965,7 @@ static inline void handle_live_ranges_for_instruction(dynamic_array_t* SSE_live_
 	 */
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.source_register1);
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.source_register2);
+	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.higher_order_dividend_bits);
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.address_register1);
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.address_register2);
 	assign_live_range_to_variable(SSE_live_ranges, gp_live_ranges, block, instruction->operands.x86.destination_register);
@@ -2155,11 +2156,10 @@ static void precolor_instruction(instruction_t* instruction){
 			instruction->operands.x86.source_register1->associated_live_range->reg.gen_purpose = RAX;
 
 			/**
-			 * We've hijacked the address_calc_reg1 register for the higher order bits in
-			 * our division instruction. These higher order bits will always be stored in
-			 * RDX
+			 * The "higher order dividend bits" register is specifically our overflow register
+			 * that exits just for this purpose. We will precolor it here to represent this
 			 */
-			instruction->operands.x86.address_register1->associated_live_range->reg.gen_purpose = RDX;
+			instruction->operands.x86.higher_order_dividend_bits->associated_live_range->reg.gen_purpose = RDX;
 
 			//The first destination register is the quotient, and is in RAX
 			instruction->operands.x86.destination_register->associated_live_range->reg.gen_purpose = RAX;

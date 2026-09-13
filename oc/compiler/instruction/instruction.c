@@ -3987,12 +3987,14 @@ static void print_division_instruction(FILE* fl, instruction_t* instruction, var
 	fprintf(fl, " /* Dividend: ");
 	
 	/**
-	 * The dividend always comes from source register 1 and occasionally the address register
+	 * The dividend always comes from source register 1 and occasionally the higher
+	 * order dividend bits
 	 */
-	if(instruction->operands.x86.address_register1 != NULL){
-		print_variable(fl, instruction->operands.x86.address_register1, mode);
+	if(instruction->operands.x86.higher_order_dividend_bits != NULL){
+		print_variable(fl, instruction->operands.x86.higher_order_dividend_bits, mode);
 		fprintf(fl, ":");
 	}
+
 	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
 	//Print out both the quotient and the remainder

@@ -10473,8 +10473,8 @@ static instruction_t* emit_div_instruction(generic_type_t* destination_type, thr
 
 	//Dividend is always the implicit source(%rax)
 	instruction->operands.x86.source_register1 = dividend;
-	//Address register2 is used for overflow(higher order bits(%rdx))
-	instruction->operands.x86.address_register1 = higher_order_dividend_bits;
+	//Higher order dividend bits is used for overflow(higher order bits(%rdx))
+	instruction->operands.x86.higher_order_dividend_bits = higher_order_dividend_bits;
 	//The divisor is what will actually show up on the instruction
 	instruction->operands.x86.source_register2 = divisor;
 
