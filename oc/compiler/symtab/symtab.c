@@ -81,9 +81,8 @@ static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
 /**
  * Get the unique function ID by incrementing and returning it from the symtab
  */
-static inline u_int32_t increment_and_get_function_id(function_symtab_t* symtab){
-	(symtab->current_function_id)++;
-	return symtab->current_function_id;
+static inline u_int32_t get_and_increment_function_id(function_symtab_t* symtab){
+	return (symtab->current_function_id)++;
 }
 
 
@@ -1507,7 +1506,7 @@ symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t lin
  */
 void insert_function_into_overload_set(function_overload_set_t* overload_set, function_symtab_t* symtab, symtab_function_record_t* record){
 	//Assign a unique identifier for this function
-	record->function_id = increment_and_get_function_id(symtab);
+	record->function_id = get_and_increment_function_id(symtab);
 
 	/**
 	 * We maintain a one-to-one mapping of index as function ID to function record
@@ -1525,10 +1524,11 @@ void insert_function_into_overload_set(function_overload_set_t* overload_set, fu
 	}
 
 	/**
-	 * Now all we need to do is add this to the overload set's members
-	 * and we are all done
+	 * Now all we need to do is add this to the overload set's members 
+	 * and make the association between this function and the overload set
 	 */
 	dynamic_array_add(&(overload_set->member_functions), record);
+	record->overload_set = overload_set;
 }
 
 
@@ -1956,17 +1956,18 @@ function_overload_set_t* lookup_function_overload_set(function_symtab_t* symtab,
 
 	//Keep crawling our way up until we find it
 	do {
-		//Grab whatever record is at that hash
-		symtab_function_record_t* record_cursor = namespace_cursor->records[h];
+		//Get the overload set 
+		function_overload_set_t* set_cursor = namespace_cursor->records[h];
 
 		//We could have had collisions so we'll have to hunt here
-		while(record_cursor != NULL){
+		while(set_cursor != NULL){
 			//If we find the right one, then we can get out
-			if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
-				return record_cursor;
+			if(strncmp(set_cursor->name.string, name, set_cursor->name.current_length) == 0){
+				return set_cursor;
 			}
+
 			//Advance it if we didn't have the right name
-			record_cursor = record_cursor->next;
+			set_cursor = set_cursor->next;
 		}
 
 		//If we didn't find it then we'll go up the chain by one
@@ -1993,17 +1994,17 @@ function_overload_set_t* lookup_function_overload_set_in_namespace(function_name
 	u_int64_t h = hash_function(name); 
 
 	//Grab whatever record is at that hash
-	symtab_function_record_t* record_cursor = namespace_to_search->records[h];
+	function_overload_set_t* set_cursor = namespace_to_search->records[h];
 
 	//We could have had collisions so we'll have to hunt here
-	while(record_cursor != NULL){
+	while(set_cursor != NULL){
 		//If we find the right one, then we can get out
-		if(strncmp(record_cursor->func_name.string, name, record_cursor->func_name.current_length) == 0){
-			return record_cursor;
+		if(strncmp(set_cursor->name.string, name, set_cursor->name.current_length) == 0){
+			return set_cursor;
 		}
 
 		//Advance it if we didn't have the right name
-		record_cursor = record_cursor->next;
+		set_cursor = set_cursor->next;
 	}
 
 	//When we make it down here, we found nothing so
@@ -2026,6 +2027,7 @@ symtab_function_record_t* get_function_by_id(function_symtab_t* symtab, int32_t 
 	//This can be NULL
 	return dynamic_array_get_at(&(symtab->id_to_function_mapping), id);
 }
+
 
 /**
  * Lookup a global variable that needs to be in the given namespace. This will
@@ -2619,8 +2621,8 @@ void print_function_record(symtab_function_record_t* record){
 	}
 
 	printf("Record: {\n");
-	printf("Name: %s,\n", record->func_name.string);
-	printf("Hash: %ld,\n", record->hash);
+	printf("Name: %s,\n", record->overload_set->name.string);
+	printf("Hash: %ld,\n", record->overload_set->hash);
 	printf("}\n");
 }
 
@@ -2856,11 +2858,11 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
  */
 dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t* function){
 	//What namespace are we in
-	function_namespace_t* namespace_contained_in = function->namespace_contained_in;
+	function_namespace_t* namespace_contained_in = function->overload_set->namespace_contained_in;
 
 	//If the function is in the default namespace there's nothing for us to do
 	if(namespace_contained_in->is_default == TRUE){
-		return clone_dynamic_string(&(function->func_name));
+		return clone_dynamic_string(&(function->overload_set->name));
 	}
 
 	//Otherwise we'll need a fresh name here
@@ -2900,7 +2902,7 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 	heap_stack_dealloc(&stack);
 
 	//Finally we can tack the function name on
-	dynamic_string_concatenate(&qualified_name, function->func_name.string);
+	dynamic_string_concatenate(&qualified_name, function->overload_set->name.string);
 	
 	return qualified_name;
 }
@@ -2980,12 +2982,17 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 			}
 
 			//Otherwise grab it out
-			symtab_function_record_t* cursor = sheaf->records[i];
+			function_overload_set_t* cursor = sheaf->records[i];
 
 			//Crawl the whole thing
 			while(cursor != NULL){
-				//Use the min priority queue to insert based on the function ID
-				min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
+				//Run through every singly member function
+				for(int32_t j = 0; j < cursor->member_functions.current_index; j++){
+					symtab_function_record_t* record = dynamic_array_get_at(&(cursor->member_functions), j);
+
+					//Use the min priority queue to insert based on the function ID
+					min_priority_queue_enqueue(&min_priority_queue, record, record->function_id);
+				}
 
 				//Bump it up
 				cursor = cursor->next;
@@ -2999,7 +3006,7 @@ void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_sym
 		symtab_function_record_t* function = min_priority_queue_dequeue(&min_priority_queue);
 
 		//Now print it's name and ID out
-		fprintf(fl, "[%d]: %s\n", function->function_id, function->func_name.string);
+		fprintf(fl, "[%d]: %s\n", function->function_id, function->overload_set->name.string);
 	}
 
 	//Dividing newline
@@ -3122,31 +3129,37 @@ static inline void construct_call_graph_adjacency_matrices(function_symtab_t* sy
 			 * populate here. Remember, every record is a linked list so we need
 			 * to explore all of the nodes
 			 */
-			symtab_function_record_t* cursor = current_namespace->records[i];
+			function_overload_set_t* cursor = current_namespace->records[i];
 
 			//So long as the cursor is not NULL
 			while(cursor != NULL){
-				//Grab the cursor's unique function ID
-				u_int32_t cursor_id = cursor->function_id;
+				//For all members inside of the overload set
+				for(int32_t j = 0; j < cursor->member_functions.current_index; j++){
+					//Grab out the function record itself
+					symtab_function_record_t* record = dynamic_array_get_at(&(cursor->member_functions), j);
 
-				//Run through all of the functions that this function itself calls
-				for(int32_t j = 0; j < cursor->called_functions.current_index; j++){
-					//Extract the called function and it's internal function type
-					symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
-					function_type_t* called_function_type = called_function->signature->internal_types.function_type;
+					//Grab the record unique function ID
+					u_int32_t record_id = record->function_id;
 
-					//Now let's get his ID
-					u_int32_t called_function_id = called_function->function_id;
+					//Run through all of the functions that this function itself calls
+					for(int32_t k = 0; k < record->called_functions.current_index; k++){
+						//Extract the called function and it's internal function type
+						symtab_function_record_t* called_function = dynamic_set_get_at(&(record->called_functions), k);
+						function_type_t* called_function_type = called_function->signature->internal_types.function_type;
 
-					//Insert this call into the adjacency matrix
-					symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
+						//Now let's get his ID
+						u_int32_t called_function_id = called_function->function_id;
 
-					/**
-					 * If this called function is an inline function, we'll need to note
-					 * this done inside of the inlined fucntion call graph as well
-					 */
-					if(called_function_type->is_inlined == TRUE){
-						symtab->inline_call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
+						//Insert this call into the adjacency matrix
+						symtab->call_graph_matrix[record_id * number_of_functions + called_function_id] = TRUE;
+
+						/**
+						 * If this called function is an inline function, we'll need to note
+						 * this done inside of the inlined fucntion call graph as well
+						 */
+						if(called_function_type->is_inlined == TRUE){
+							symtab->inline_call_graph_matrix[record_id * number_of_functions + called_function_id] = TRUE;
+						}
 					}
 				}
 
@@ -3212,48 +3225,43 @@ void finalize_function_symtab(function_symtab_t* symtab){
  * Provide a function that will destroy the function symtab completely
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
-	//For temporary holding
-	function_namespace_t* sheaf;
-	symtab_function_record_t* record;
-	symtab_function_record_t* temp;
-
 	//Run through all of the namespaces 
 	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
 		//Get the sheaf out
-		sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
+		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
 
-		//Now go through all records
+		//Now go through all overload sets
 		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			record = sheaf->records[i];
+			function_overload_set_t* overload_set = sheaf->records[i];
 
 			//We could have chaining here, so run through just in case
-			while(record != NULL){
-				temp = record;
-				record = record->next;
+			while(overload_set != NULL){
+				for(int32_t j = 0; j < overload_set->member_functions.current_index; j++){
+					symtab_function_record_t* record = dynamic_array_get_at(&(overload_set->member_functions), j);
 
-				//Destroy the call graph infrastructure
-				dynamic_set_dealloc(&(temp->called_functions));
+					//Destroy the call graph infrastructure
+					dynamic_set_dealloc(&(record->called_functions));
 
-				//Destroy the block storage
-				dynamic_array_dealloc(&(temp->function_blocks));
+					//Destroy the block storage
+					dynamic_array_dealloc(&(record->function_blocks));
 
-				//Destroy the parameters
-				dynamic_array_dealloc(&(temp->function_parameters));
+					//Destroy the parameters
+					dynamic_array_dealloc(&(record->function_parameters));
 
-				//Destroy the overload table
-				dynamic_array_dealloc(&(temp->overload_table));
+					//Dealloate the function type
+					type_dealloc(record->signature);
 
-				//Dealloate the function type
-				type_dealloc(temp->signature);
+					//Deallocate the data area itself
+					stack_data_area_dealloc(&(record->local_stack));
 
-				//Deallocate the data area itself
-				stack_data_area_dealloc(&(temp->local_stack));
+					//Destroy the label symtab if it exists
+					label_symtab_dealloc(record->user_defined_labels);
 
-				//Destroy the label symtab if it exists
-				label_symtab_dealloc(temp->user_defined_labels);
+					//Finally free the function
+					free(record);
+				}
 
-				//Finally free the function
-				free(temp);
+				overload_set = overload_set->next;
 			}
 		}
 
