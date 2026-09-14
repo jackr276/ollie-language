@@ -291,6 +291,13 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 generic_type_t* types_assignable_constant(generic_type_t* destination_type, generic_type_t* constant_source_type);
 
 /**
+ * Are two function signatures literally 100% identical? This is mainly used for assignability 
+ * and helping with overloads. There is another rule that will determine if they are equivalent
+ * enough to be considered the same, but this is the strictest rule
+ */
+u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t* b);
+
+/**
  * Function signatures must be absolutely identical for them to be considered assignable.
  * If they are not 100% the same, then they are not assignable and this rule will return false
  *
@@ -301,7 +308,7 @@ generic_type_t* types_assignable_constant(generic_type_t* destination_type, gene
  * TODO MAKE THIS BETTER - if it's public or inlined I don't think we should allow something
  * to go through based on just those being different
  */
-u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t* b);
+u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b);
 
 /**
  * Are two types *exactly* equal or not? This will account for type aliasing as well

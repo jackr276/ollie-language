@@ -14101,7 +14101,19 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			created_function_record->called = TRUE;
 		} 
 
+	/**
+	 * Remember that functions in Ollie can have overloads so we cannot just scan one function 
+	 * record, we'll need to scan every function that overloads said function inside of its
+	 * overload table
+	 */
 	} else {
+		/**
+		 * FIRST CHECK - are we equal to the base function in the record? If so 
+		 * then we know that we're either invalid or predeclaring
+		 */
+
+		//TODO
+
 		/**
 		 * If the function signatures are 100% identical, then we could either be defining
 		 * a predeclared function *OR* we have an invalid duplicate creation here. We will
