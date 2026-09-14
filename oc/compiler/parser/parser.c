@@ -14102,8 +14102,19 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		} 
 
 	} else {
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		/**
+		 *
+		 */
+		if(function_signatures_identical(new_function_signature, found_function->signature) == TRUE) {
+
+
+		/**
+		 * TODO FUNCTION OVERLOADING
+		 */
+		} else {
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+		}
 	}
 
 	/**
