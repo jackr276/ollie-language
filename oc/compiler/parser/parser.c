@@ -290,6 +290,49 @@ static inline u_int8_t does_type_require_i64_conversion(generic_type_t* type){
 
 
 /**
+ * Find a function record by searching the symtab, finding a record, and then searching the overloads
+ * array of that record to see if we have a signature match. If we do, we will return that function
+ * record. If we do not, then we return NULL
+ */
+static inline symtab_function_record_t* resolve_function_record(char* name, generic_type_t* signature, u_int8_t current_namespace_only){
+	/**
+	 * First get the raw record. We allow the caller to specify if we are doing global
+	 * lookups or namespace local lookups
+	 */
+	symtab_function_record_t* found_function = NULL;
+	if(current_namespace_only == FALSE){
+		found_function = lookup_function(function_symtab, name);
+	} else {
+		found_function = lookup_function_in_namespace(function_symtab->current, name);
+	}
+
+	//We got nothing so get out
+	if(found_function == NULL){
+		return NULL;
+	}
+
+	/**
+	 * Otherwise, we have something so we need to crawl every single record in this function
+	 * to determine which one is what we're after
+	 */
+	for(int32_t i = 0; i < found_function->overload_table.current_index; i++){
+		symtab_function_record_t* candidate = dynamic_array_get_at(&(found_function->overload_table), i);
+
+		/**
+		 * If the signatures meet our definition of equivalence, then we're done searching
+		 * and we can return the candidate record
+		 */
+		if(function_signatures_equivalent(candidate->signature, signature) == TRUE){
+			return candidate;
+		}
+	}
+
+	//If we made it here then we found nothing
+	return NULL;
+}
+
+
+/**
  * Determine the type compatibilty for an expression and coerce as needed. This rule takes into accoutn
  * whether or not the left hand and right hand node are constants
  *
@@ -14110,6 +14153,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * overload table
 	 */
 	} else {
+		//Let the helper get our function record - pass in true to restrict to namespace local
+		found_function = resolve_function_record(function_name.string, new_function_signature, TRUE);
+
+
 		/**
 		 * TODO HOW DO WE DO ERRORS????
 		 *
