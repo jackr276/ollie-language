@@ -64,7 +64,9 @@ typedef struct symtab_type_sheaf_t symtab_type_sheaf_t;
 //The namespaces of our function symtab act like a tree
 typedef struct function_namespace_t function_namespace_t;
 
-//The records in the function symtab
+//Function overload sets group functions of different types by name
+typedef struct function_overload_set_t function_overload_set_t;
+//Individual function records
 typedef struct symtab_function_record_t symtab_function_record_t;
 //The records in a variable symtab
 typedef struct symtab_variable_record_t symtab_variable_record_t;
