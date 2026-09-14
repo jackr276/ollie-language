@@ -409,10 +409,45 @@ u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b){
 		return FALSE;
 	}
 
+	//Verify that all parameters are identical
 	for(int32_t i = 0; i < a_function_type->function_parameters.current_index; i++){
+		generic_type_t* a_param = dynamic_array_get_at(&(a_function_type->function_parameters), i);
+		generic_type_t* b_param = dynamic_array_get_at(&(b_function_type->function_parameters), i);
 
+		if(types_identical(a_param, b_param) == FALSE){
+			return FALSE;
+		}
 	}
 
+	//Verify that we have the same return type
+	if(types_identical(a_function_type->return_type, b_function_type->return_type) == FALSE){
+		return FALSE;
+	}
+
+	//Error checking - order does not matter here
+	if(a_function_type->raises_errors){
+		for(int32_t i = 0; i < a_function_type->potential_errors.current_index; i++){
+			generic_type_t* a_error = dynamic_array_get_at(&(a_function_type->potential_errors), i);
+			u_int8_t found_a_error = FALSE;
+
+			//Verify that we can find this error in b as well
+			for(int32_t j = 0; j < b_function_type->potential_errors.current_index; j++){
+				generic_type_t* b_error = dynamic_array_get_at(&(b_function_type->potential_errors), i);
+
+				if(types_identical(b_error, a_error) == TRUE){
+					found_a_error = TRUE;
+					break;
+				}
+			}
+
+			//Never found it so this is not equivalent
+			if(found_a_error == FALSE){
+				return FALSE;
+			}
+		}
+	}
+
+	return TRUE;
 }
 
 
@@ -3219,7 +3254,6 @@ void add_return_type_to_signature(generic_type_t* function_signature, generic_ty
 	function_type_t* signature = function_signature->internal_types.function_type;
 
 	//If we've already added it then we're good to just move along
-	//TODO WTF IS HAPPENING HERE???
 	if(signature->return_type != NULL){
 		return;
 	}
