@@ -64,11 +64,7 @@ typedef struct symtab_type_sheaf_t symtab_type_sheaf_t;
 //The namespaces of our function symtab act like a tree
 typedef struct function_namespace_t function_namespace_t;
 
-/**
- * Function overload sets group functions that are in the same scope
- * but, with the same name, but have different types. This is what
- * function overloading is
- */
+//Function overload sets group functions of different types by name
 typedef struct function_overload_set_t function_overload_set_t;
 //Individual function records
 typedef struct symtab_function_record_t symtab_function_record_t;
@@ -151,26 +147,6 @@ typedef enum {
 
 
 /**
- * A function overload set is a set of functions(1 - many) that 
- * all share the same name, but have different types
- */
-struct function_overload_set_t {
-	//The hash of the function
-	u_int64_t hash;
-	//The name of all functions in this set
-	dynamic_string_t name;
-	//All of the functions that share in this overload set
-	dynamic_array_t member_functions;
-	//What namespace does this overload set exist in
-	function_namespace_t* namespace_contained_in;
-	//This is a hashset, so we need the pointer to deal with collisions
-	function_overload_set_t* next;
-	//The unique overload set ID
-	u_int32_t overload_set_id;
-};
-
-
-/**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
  *
@@ -193,22 +169,24 @@ struct symtab_function_record_t{
 	dynamic_array_t function_parameters;
 	//The name of the function
 	dynamic_string_t func_name;
-	/**
-	 * The parent overload set that this function belongs to
-	 */
-	function_overload_set_t* overload_set;
-	/**
-	 * The data area for the whole function. This is the *local stack*. 
-	 * There is a separate stack data area for the passed parameters
-	 */
+	//The data area for the whole function. This is the *local stack*. 
+	//There is a separate stack data area for the passed parameters
 	stack_data_area_t local_stack;
-	/**
-	 * An entire stack data area dedicated to parameters that are passed in. This is
-	 * only allocated on an as-needed basis so it's normal for it to be blank
-	 */
+	//An entire stack data area dedicated to parameters that are passed in. This is
+	//only allocated on an as-needed basis so it's normal for it to be blank
 	stack_data_area_t stack_passed_parameters;
 	//The list of all functions that this function calls out to
 	dynamic_set_t called_functions;
+	/**
+	 * A list of all overloads of this function. For ease of use we also consider
+	 * this function to be an overload of itself, so we can just scan this array
+	 * when the time comes
+	 *
+	 * This may change later on
+	 * 
+	 * TODO MAYBE A FUNCTION OVERLOAD SET HERE INSTEAD
+	 */
+	dynamic_array_t overload_table;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
 	/**
@@ -222,8 +200,6 @@ struct symtab_function_record_t{
 	void* function_entry_block;
 	//Store the top level scope for this function
 	symtab_variable_sheaf_t* top_level_scope;
-	//Unique identifier that is not a name
-	u_int32_t function_id;
 	//The line number
 	u_int32_t line_number;
 	//A bitmap for all assigned general purpose registers
@@ -232,6 +208,8 @@ struct symtab_function_record_t{
 	u_int32_t assigned_sse_registers;
 	//How many functions call this function?
 	u_int32_t called_by_count;
+	//Unique identifier that is not a name
+	u_int32_t function_id;
 	/**
 	 * For enhanced error printing - store the index where this function was defined. This
 	 * will allow us to just print out the actual source code in the event of an error
