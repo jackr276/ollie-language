@@ -14103,9 +14103,17 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 
 	} else {
 		/**
-		 *
+		 * If the function signatures are 100% identical, then we could either be defining
+		 * a predeclared function *OR* we have an invalid duplicate creation here. We will
+		 * know based on the "defined" flag
 		 */
 		if(function_signatures_identical(new_function_signature, found_function->signature) == TRUE) {
+			/**
+			 * It's already been defined so this is a pure duplicate
+			 */
+			if(found_function->defined == TRUE){
+
+			}
 
 
 		/**
