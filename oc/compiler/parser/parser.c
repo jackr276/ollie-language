@@ -14129,9 +14129,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		//Create the brand new function record
 		created_function_record = create_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 
-		//Store the signature and classify this as normal
+		//Store the signature
 		created_function_record->signature = new_function_signature;
-		created_function_record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
 
 		//Here, and only here, will we insert into the symtab
 		insert_function(function_symtab, created_function_record);
@@ -14155,6 +14154,27 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * 	3.) No signature match, we are defining a branch new overload
 		 */
 		if(overload_or_predeclared != NULL){
+
+			/**
+			 * Fail case -> this has already been defined so it may never be redefined. We will
+			 * error out in this case
+			 */
+			if(overload_or_predeclared->defined == TRUE){
+				if(function_symtab->current->is_default == TRUE){
+					sprintf(info, "Function \"%s\" has already been defined with type %s",
+							function_name.string,
+							new_function_signature->type_name.string);
+				} else {
+					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
+							function_name.string,
+							generate_fully_qualified_namespace_name(function_symtab->current).string,
+							new_function_signature->type_name.string);
+				}
+
+				print_function_name_to_buffer(info, overload_or_predeclared);
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(1);
 
@@ -14165,8 +14185,10 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * the function's overload table
 		 */
 		} else {
+			printf("HERE OVERLOAD\n");
+
 			//Create the brand new function record
-			created_function_record = create_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
+			created_function_record = create_overload_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 
 			//Store the signature and classify this as an overlaod 
 			created_function_record->signature = new_function_signature;

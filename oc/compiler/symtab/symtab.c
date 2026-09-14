@@ -1281,6 +1281,9 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 
 	//Store what dependency this comes from
 	record->dependency_graph_node = dependency_contained_in;
+	
+	//This is a normal function so flag it as such
+	record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
 
 	/**
 	 * Function overloading - every function is its own overload. To simplify
@@ -1298,6 +1301,57 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 	//And give it back
 	return record;
 }
+
+
+/**
+ * Dynamically allocate an overload function record
+ *
+ * Creating a function record here does NOT:
+ * 	- Create any function signature
+ * 	- Create any function parameters
+ */
+symtab_function_record_t* create_overload_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index){
+	//Allocate it
+	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
+
+	//Allocate the data area internally
+	stack_data_area_alloc(&(record->local_stack), STACK_TYPE_FUNCTION_LOCAL);
+
+	//Allocate the array for all function blocks
+	record->function_blocks = dynamic_array_alloc();
+
+	//Allocate this as well
+	record->function_parameters = dynamic_array_alloc();
+
+	//Copy the name over
+	record->func_name = *name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash_function(name->string);
+
+	//Throw in whether or not it's public or private
+	record->visibility = visibility;
+
+	//Store the line number
+	record->line_number = line_number;
+
+	//Allocate the list of all functions that this calls
+	record->called_functions = dynamic_set_alloc();
+
+	//Store what dependency this comes from
+	record->dependency_graph_node = dependency_contained_in;
+
+	//Flag this as an overload
+	record->function_classification = FUNCTION_CLASSIFICATION_OVERLOAD;
+
+	/**
+	 * IMPOTANT - for error printing, we will store the function's token index of definition here
+	 */
+	record->token_index_of_definition = token_index;
+
+	//And give it back
+	return record;
+}
+
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
@@ -1560,6 +1614,22 @@ u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* re
 
 	//1 = success, but there was a collision
 	return 1;
+}
+
+
+/**
+ * Add an overload to the given record and perform all needed bookkeeeping
+ */
+void add_function_overload(function_symtab_t* symtab, symtab_function_record_t* record, symtab_function_record_t* overload){
+	/**
+	 * Assign the overload a unique identifier. Once we've assigned the unique ID, bump the
+	 * overall function ID for the next go around
+	 */
+	overload->function_id = symtab->current_function_id;
+	(symtab->current_function_id)++;
+
+	//Add to the overload table
+	dynamic_array_add(&(record->overload_table), overload);
 }
 
 

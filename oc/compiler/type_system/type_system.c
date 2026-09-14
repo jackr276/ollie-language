@@ -1035,7 +1035,7 @@ u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
 	if(true_type_a->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 		return true_type_a == true_type_b ? TRUE : FALSE;
 	} else {
-		return function_signatures_identical(a, b);
+		return function_signatures_equivalent(a, b);
 	}
 }
 

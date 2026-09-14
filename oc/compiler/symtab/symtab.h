@@ -694,6 +694,15 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record);
 symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index);
 
 /**
+ * Dynamically allocate an overload function record
+ *
+ * Creating a function record here does NOT:
+ * 	- Create any function signature
+ * 	- Create any function parameters
+ */
+symtab_function_record_t* create_overload_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index);
+
+/**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
  * child of the current one
  */
@@ -754,6 +763,11 @@ symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t lin
  * Insert a function into the symbol table
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record);
+
+/**
+ * Add an overload to the given record and perform all needed bookkeeeping
+ */
+void add_function_overload(function_symtab_t* symtab, symtab_function_record_t* record, symtab_function_record_t* overload);
 
 /**
  * Insert variables into the symbol table
