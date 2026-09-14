@@ -14106,13 +14106,17 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * If the function signatures are 100% identical, then we could either be defining
 		 * a predeclared function *OR* we have an invalid duplicate creation here. We will
 		 * know based on the "defined" flag
+		 *
+		 * TODO THIS IDENTICAL RULE NEEDS TO BE MADE BETTER
 		 */
 		if(function_signatures_identical(new_function_signature, found_function->signature) == TRUE) {
 			/**
-			 * It's already been defined so this is a pure duplicate
+			 * It's already been defined so this is a pure duplicate. We will fail out here
 			 */
 			if(found_function->defined == TRUE){
-
+				sprintf(info, "Function \"%s\" has already been defined with type %s", function_name.string, new_function_signature->type_name.string);
+				print_function_name_to_buffer(info, found_function);
+				return print_and_return_error(info, parser_line_num);
 			}
 
 
