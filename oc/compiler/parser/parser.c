@@ -13902,10 +13902,13 @@ static inline u_int8_t validate_error_list_against_raised_errors(symtab_function
  * Handle the case where we declare a function. A function will always be one of the children of a declaration
  * partition
  *
- * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
+ * We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
  *
  * Remember that functions in Ollie can be overloaded, so if we have a symtab "hit" on a function that's either predeclared or not
  * it may not actually be a true hit, we'll need to get the parameter list to fully evaluate
+ *
+ * NOTE: A function that is deemed to be an "overload" does not get it's own slot inside of the symbol table. It will only live inside
+ * of the overload table
  *
  * BNF Rule: <function-definition> ::= {pub}? {inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
  */
@@ -14108,36 +14111,47 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	} else {
 		/**
-		 * FIRST CHECK - are we equal to the base function in the record? If so 
-		 * then we know that we're either invalid or predeclaring
-		 */
-
-		//TODO
-
-		/**
-		 * If the function signatures are 100% identical, then we could either be defining
-		 * a predeclared function *OR* we have an invalid duplicate creation here. We will
-		 * know based on the "defined" flag
+		 * TODO HOW DO WE DO ERRORS????
 		 *
-		 * TODO THIS IDENTICAL RULE NEEDS TO BE MADE BETTER
+		 * Run through every overload in the overload table. Remember that the very
+		 * first member in the table is the function itself. We will iterate over
+		 * the table until we find:
+		 * 	1.) A signature match that is flagged as not being defined - this is our
+		 * 		defining predeclared function case
+		 * 	2.) A signature match that is flagged as defined -> ERROR, illegal redefinition
+		 * 	3.) No signature match, we are defining a branch new overload
 		 */
-		if(function_signatures_identical(new_function_signature, found_function->signature) == TRUE) {
+		u_int8_t found_overload = FALSE;
+		u_int8_t predeclaring = FALSE;
+		symtab_function_record_t* comparing_to = NULL;
+		for(int32_t i = 0; i < found_function->overload_table.current_index; i++){
+			//Get out what we're comparing to
+			comparing_to = dynamic_array_get_at(&(found_function->overload_table), i);
+
 			/**
-			 * It's already been defined so this is a pure duplicate. We will fail out here
+			 * If the function signatures are 100% identical, then we could either be defining
+			 * a predeclared function *OR* we have an invalid duplicate creation here. We will
+			 * know based on the "defined" flag
+			 *
+			 * TODO THIS IDENTICAL RULE NEEDS TO BE MADE BETTER
 			 */
-			if(found_function->defined == TRUE){
-				sprintf(info, "Function \"%s\" has already been defined with type %s", function_name.string, new_function_signature->type_name.string);
-				print_function_name_to_buffer(info, found_function);
-				return print_and_return_error(info, parser_line_num);
+			if(function_signatures_identical(new_function_signature, comparing_to->signature) == TRUE) {
+				/**
+				 * It's already been defined so this is a pure duplicate. We will fail out here
+				 */
+				if(found_function->defined == TRUE){
+					sprintf(info, "Function \"%s\" has already been defined with type %s", function_name.string, new_function_signature->type_name.string);
+					print_function_name_to_buffer(info, found_function);
+					return print_and_return_error(info, parser_line_num);
+				}
+
+			/**
+			 * TODO FUNCTION OVERLOADING
+			 */
+			} else {
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
 			}
-
-
-		/**
-		 * TODO FUNCTION OVERLOADING
-		 */
-		} else {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
 		}
 	}
 
