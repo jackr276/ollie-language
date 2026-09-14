@@ -389,6 +389,34 @@ u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t* b){
 
 
 /**
+ * Are function signatures equivalent? This is used when we may not have
+ * an exact match but a close enough match will do just fine for us. Equivalent
+ * functions can differ in there visibility(public/private) and inlined status.
+ * Everything else must be the exact same
+ */
+u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b){
+	//Extract for convenience
+	function_type_t* a_function_type = a->internal_types.function_type;
+	function_type_t* b_function_type = b->internal_types.function_type;
+
+	//Error raising must be the same
+	if(a_function_type->raises_errors != b_function_type->raises_errors){
+		return FALSE;
+	}
+
+	//Fail out for this as well
+	if(a_function_type->function_parameters.current_index != b_function_type->function_parameters.current_index){
+		return FALSE;
+	}
+
+	for(int32_t i = 0; i < a_function_type->function_parameters.current_index; i++){
+
+	}
+
+}
+
+
+/**
  * Can two types be assigned to one another? This rule will perform implicit conversions
  * if need be to make types assignable. We are always assigning source to destination. Widening
  * type conversions will be applied to source if need be. We cannot apply widening type conversions
@@ -969,10 +997,10 @@ u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
 	 * sufficient to just compare the raw pointers to see if they're
 	 * equal or not
 	 */
-	if(true_type_a == true_type_b){
-		return TRUE;
+	if(true_type_a->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+		return true_type_a == true_type_b ? TRUE : FALSE;
 	} else {
-		return FALSE;
+		return function_signatures_identical(a, b);
 	}
 }
 
