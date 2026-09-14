@@ -13804,8 +13804,11 @@ static inline u_int8_t error_list2(ollie_token_stream_t* token_stream, generic_t
 			return print_and_return_failure(info, parser_line_num);
 		}
 
-		//Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types
-		generic_type_t* error_type = found_type->type;
+		/**
+		 * Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types
+		 * Be sure that we dealias this before going forward
+		 */
+		generic_type_t* error_type = dealias_type(found_type->type);
 		if(error_type->type_class != TYPE_CLASS_ERROR){
 			sprintf(info, "Type \"%s\" is not an error type and cannot be raised by a function as one", lookahead.lexeme.string);
 			return print_and_return_failure(info, parser_line_num);
