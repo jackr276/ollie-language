@@ -159,7 +159,7 @@ struct function_overload_set_t {
 	u_int64_t hash;
 	//The name of all functions in this set
 	dynamic_string_t name;
-	//All of the functions that share in this overload set
+	//All member functions
 	dynamic_array_t member_functions;
 	//What namespace does this overload set exist in
 	function_namespace_t* namespace_contained_in;
@@ -179,24 +179,13 @@ struct function_overload_set_t {
  * single source of truth for everything relating to a given function
  */
 struct symtab_function_record_t{
-	//The hash that we have
-	u_int64_t hash;
 	//The type of the function - we access this *a lot*
 	generic_type_t* signature;
-	//In case of collisions, we can chain these records
-	symtab_function_record_t* next;
-	//What namespace is this function in?
-	function_namespace_t* namespace_contained_in;
 	//All of the basic blocks that make up this function
 	dynamic_array_t function_blocks;
 	//The parameters for the function
 	dynamic_array_t function_parameters;
-	//The name of the function
-	dynamic_string_t func_name;
-	/**
-	 * The parent overload set that this function belongs to
-	 */
-	function_overload_set_t* overload_set;
+
 	/**
 	 * The data area for the whole function. This is the *local stack*. 
 	 * There is a separate stack data area for the passed parameters
@@ -209,6 +198,10 @@ struct symtab_function_record_t{
 	stack_data_area_t stack_passed_parameters;
 	//The list of all functions that this function calls out to
 	dynamic_set_t called_functions;
+	/**
+	 * The parent overload set that this function belongs to
+	 */
+	function_overload_set_t* overload_set;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
 	/**
@@ -217,6 +210,7 @@ struct symtab_function_record_t{
 	 */
 	symtab_variable_record_t* return_by_copy_variable;
 	//What dependency graph node does this function come from?
+	//TODO CAN WE MOVE THIS BACK TO THE OVERLOAD SET
 	dependency_graph_node_t* dependency_graph_node;
 	//Maintain a reference to the entry block
 	void* function_entry_block;
@@ -476,6 +470,9 @@ struct symtab_type_sheaf_t{
 /**
  * This structure represents a specific namespace level
  * of the function symtab
+ *
+ * The records inside of the function symtab are themselves 
+ * function overload sets
  */
 struct function_namespace_t{
 	//The actual name of this namesapce
@@ -487,7 +484,7 @@ struct function_namespace_t{
 	//All of the child namespaces that we have
 	dynamic_array_t child_namespaces;
 	//Hash table for the records
-	symtab_function_record_t* records[FUNCTION_KEYSPACE];
+	function_overload_set_t* records[FUNCTION_KEYSPACE];
 	//Is this the default sheaf?
 	u_int8_t is_default;
 };
@@ -712,8 +709,12 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record);
  * Creating a function record here does NOT:
  * 	- Create any function signature
  * 	- Create any function parameters
+ *
+ * Note that function records themselves do not contain names. Those are stored
+ * in the overload sets to which they belong. As such there is no name passed to 
+ * this function record creater
  */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index);
+symtab_function_record_t* create_function_record(dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
@@ -773,9 +774,10 @@ symtab_module_record_t* create_module_record(dependency_graph_node_t* dependency
 symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t line_number);
 
 /**
- * Insert a function into the symbol table
+ * Insert a function record into a given overload set. This assumes that the overload set
+ * is already stored properly in the symtab. We will do all required bookkeeping in this helper
  */
-u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record);
+void insert_function_into_overload_set(function_overload_set_t* overload_set, function_symtab_t* symtab, symtab_function_record_t* record);
 
 /**
  * Insert variables into the symbol table
@@ -824,19 +826,24 @@ symtab_variable_record_t* initialize_stack_pointer(type_symtab_t* types);
 symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types);
 
 /**
- * Lookup a function name in the symtab
+ * Lookup a function name in the symtab. This is done by overload set so
+ * we will not be returning an actual function pointer, but an overload
+ * set pointer
  *
  * Our lookup is always biased to the most local sheaf first, and then up the
  * chain as we go
  */
-symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name);
+function_overload_set_t* lookup_function_overload_set(function_symtab_t* symtab, char* name);
 
 /**
- * Lookup a function that needs to be in the given namespace. This will
+ * Lookup a function name that needs to be in the given namespace. This will
  * not do the normal logic where we can crawl up to see if it's in a parent
  * namespace
+ *
+ * This will return a pointer to a function overload set. The function pointers
+ * themselves are contained within
  */
-symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* namespace_to_search, char* name);
+function_overload_set_t* lookup_function_overload_set_in_namespace(function_namespace_t* namespace_to_search, char* name);
 
 /**
  * Lookup a global variable that needs to be in the given namespace. This will
