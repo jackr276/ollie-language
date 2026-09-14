@@ -140,7 +140,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
-static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
+static inline u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
@@ -7667,7 +7667,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		}
 
 		//Otherwise, we will need to parse the error list
-		u_int8_t success = error_list(token_stream, mutable_function_type, FALSE);
+		u_int8_t success = error_list(token_stream, mutable_function_type);
 
 		//If this failed out then we're done
 		if(success == FAILURE){
@@ -8891,7 +8891,7 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 			return NULL;
 		}
 
-		u_int8_t success = error_list(stream, function_type, FALSE);
+		u_int8_t success = error_list(stream, function_type);
 
 		//If this fails we're out
 		if(success == FAILURE){
@@ -12990,166 +12990,6 @@ static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elab
 
 
 /**
- * An error list will handle all of the errors in a function definition if a function has a "raises" statement. It is
- * important to note that this may not be empty. If we see the raises keyword, we need to raise at least one specific
- * error
- *
- * <error-list> = (<error>+)
- */
-static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function){
-	//Extract the internal function type
-	function_type_t* internal_function_type = function_type->internal_types.function_type;
-
-	//Only do this if we're not defining from scratch
-	if(defining_predeclared_function == FALSE){
-		internal_function_type->potential_errors = dynamic_array_alloc();
-	}
-
-	//The lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we do not see an open paren, we fail
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis required after raises keyword", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Push onto the grouping stack
-	push_token(&grouping_stack, lookahead);
-
-	//Start the error count off at 0
-	int32_t error_count = 0;
-
-	//Now we need to see at least one, but possibly many, error types in here
-	do {
-		//Get the next token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//If we don't see an ident then this is a failure
-		if(lookahead.tok != IDENT){
-			sprintf(info, "Expected to see a custom error type, but instead say \"%s\"", lexitem_to_string(&lookahead));
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-		//If we make it here we're on the right track, let's see what we can find. Remember that all
-		//types are defacto immutalbe
-		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
-
-		//We can't find it - big problem
-		if(found_type == NULL){
-			sprintf(info, "There exists no error type with the name \"%s\"", lookahead.lexeme.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-		//Get the inner type out
-		generic_type_t* error_type = found_type->type;
-
-		//Make sure that we dealias this - it is possible to alias any type
-		error_type = dealias_type(error_type);
-
-		//Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types, not just any
-		//old type
-		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" is not an error type and cannot be raised by a function as one", lookahead.lexeme.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-		/**
-		 * If we're not defining something that was predeclared, then all we need to do
-		 * is add this in
-		 */
-		if(defining_predeclared_function == FALSE){
-			//Let's first check for duplicated errors
-			for(int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
-				//Extrace it
-				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
-
-				//If they're equal at all, we fail out
-				if(types_identical(candidate, error_type) == TRUE){
-					sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FAILURE;
-				}
-			}
-
-			//Add it in
-			dynamic_array_add(&(internal_function_type->potential_errors), error_type);
-
-		} else {
-			//We have too many - we need to bail out
-			if(error_count >= internal_function_type->potential_errors.current_index){
-				sprintf(info, "Function was predeclared as only having %d errors", internal_function_type->potential_errors.current_index); 
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Extract the predeclared version
-			generic_type_t* predeclared_error = dynamic_array_get_at(&(internal_function_type->potential_errors), error_count);
-
-			//If this isn't an exact match, we fail out
-			if(predeclared_error != error_type){
-				sprintf(info, "Function was predeclared with error number %d as \"%s\", but declared with \"%s\" as error number %d", error_count + 1, predeclared_error->type_name.string, error_type->type_name.string, error_count + 1);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-		}
-
-		//Bump the error count up
-		error_count++;
-
-		//Now we can either see a comma or the closing paren
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//If we have a comma then continue
-		if(lookahead.tok == COMMA){
-			continue;
-
-		//If we have an R_PAREN then get out
-		} else if(lookahead.tok == R_PAREN){
-			break;
-
-		//Otherwise this is an error
-		} else {
-			sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-	//Loop forever until one of our exit cases is hit
-	} while(TRUE);
-
-	//Final check if we have a mismatch
-	if(defining_predeclared_function == TRUE && error_count != internal_function_type->potential_errors.current_index){
-		sprintf(info, "Mismatched error list lengths: predeclared wtih %d errors and declared with %d instead", internal_function_type->potential_errors.current_index, error_count);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//With that we are done, we can return success
-	return SUCCESS;
-}
-
-
-/**
  * Validate the parameter list for a given function type. There are a few fail
  * cases that we currently watch out for. They are:
  * 	1) Elaborative parameters must always be the very last function parameter
@@ -13475,7 +13315,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		}
 
 		//Let the helper do it
-		u_int8_t success = error_list(token_stream, function_record->signature, FALSE);
+		u_int8_t success = error_list(token_stream, function_record->signature);
 
 		//If this fails we're out
 		if(success == FAILURE){
@@ -13769,7 +13609,7 @@ static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_str
  *
  * <error-list> = (<error> {, <error>}*)
  */
-static inline u_int8_t error_list2(ollie_token_stream_t* token_stream, generic_type_t* function_type){
+static inline u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type){
 	//Extract the internal function type
 	function_type_t* internal_function_type = function_type->internal_types.function_type;
 
@@ -13898,7 +13738,7 @@ static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_str
 		}
 
 		//Now that we've made it past that, we can let the helper do the parsing for us
-		if(error_list2(token_stream, function_signature) == FAILURE){
+		if(error_list(token_stream, function_signature) == FAILURE){
 			return print_and_return_failure("Invalid error list detected in function declaration", parser_line_num);
 		}
 
