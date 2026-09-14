@@ -13861,7 +13861,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * 	3.) No signature match, we are defining a branch new overload
 		 */
 		if(overload_or_predeclared != NULL){
-
 			/**
 			 * Fail case -> this has already been defined so it may never be redefined. We will
 			 * error out in this case
@@ -13882,9 +13881,11 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
-
+			/**
+			 * Otherwise we are definining a function that has been predeclared but was never defined
+			 * previously. We will now treat this as the definition of that function
+			 */
+			created_function_record = overload_or_predeclared;
 
 		/**
 		 * We are defining a brand new overload here. Remember that overloads
@@ -13892,8 +13893,6 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * the function's overload table
 		 */
 		} else {
-			printf("HERE OVERLOAD\n");
-
 			//Create the brand new function record
 			created_function_record = create_overload_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 
