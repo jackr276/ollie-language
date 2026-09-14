@@ -1283,6 +1283,14 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 	record->dependency_graph_node = dependency_contained_in;
 
 	/**
+	 * Function overloading - every function is its own overload. To simplify
+	 * how we're going to have to look things up inside of the parser, we will
+	 * add this function 
+	 */
+	record->overload_table = dynamic_array_alloc();
+	dynamic_array_add(&(record->overload_table), record);
+
+	/**
 	 * IMPOTANT - for error printing, we will store the function's token index of definition here
 	 */
 	record->token_index_of_definition = token_index;
@@ -3258,8 +3266,8 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 				//Destroy the parameters
 				dynamic_array_dealloc(&(temp->function_parameters));
 
-				//Destroy the overloads
-				dynamic_array_dealloc(&(temp->overloads));
+				//Destroy the overload table
+				dynamic_array_dealloc(&(temp->overload_table));
 
 				//Dealloate the function type
 				type_dealloc(temp->signature);
