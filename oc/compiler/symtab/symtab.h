@@ -846,11 +846,6 @@ function_overload_set_t* lookup_function_overload_set(function_symtab_t* symtab,
 function_overload_set_t* lookup_function_overload_set_in_namespace(function_namespace_t* namespace_to_search, char* name);
 
 /**
- * Create and insert a function overload set with the given name
- */
-function_overload_set_t* create_and_insert_function_overload_set(dynamic_string_t* name, function_symtab_t* symtab);
-
-/**
  * Lookup a global variable that needs to be in the given namespace. This will
  * not do the normal logic where we can crawl up to see if it's in a parent
  * namespace

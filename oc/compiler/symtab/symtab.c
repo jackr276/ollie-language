@@ -2013,47 +2013,6 @@ function_overload_set_t* lookup_function_overload_set_in_namespace(function_name
 
 
 /**
- * Create and insert a function overload set with the given name
- */
-function_overload_set_t* create_and_insert_function_overload_set(dynamic_string_t* name, function_symtab_t* symtab){
-	//Dynamically allocate the overload set
-	function_overload_set_t* overload_set = calloc(1, sizeof(function_overload_set_t));
-
-	//Get the hash of the name
-	u_int64_t hash = hash_function(name->string);
-
-	//Store the name and hash
-	overload_set->name = clone_dynamic_string(name);
-	overload_set->hash = hash;
-	
-	//Allocate what we need
-	overload_set->namespace_contained_in = symtab->current;
-	overload_set->member_functions = dynamic_array_alloc();
-
-	/**
-	 * Now that we've created the overload set we can insert it. Remember
-	 * that we need to account for collisions and use chaining when we
-	 * do this
-	 */
-	function_overload_set_t* cursor = symtab->current->records[hash]; 
-	if(cursor == NULL){
-		symtab->current->records[hash] = overload_set;
-
-	} else {
-		//Drill down until we have the tail
-		while(cursor->next != NULL){
-			cursor = cursor->next;
-		}
-
-		//Add this at the end
-		cursor->next = overload_set;
-	}
-
-	return overload_set;
-}
-
-
-/**
  * Use the ID to function mapping to lookup a function for a given ID. This will return
  * NULL if the function cannot be found
  */
