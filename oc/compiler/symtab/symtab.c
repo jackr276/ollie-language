@@ -79,15 +79,6 @@ static inline u_int32_t increment_and_get_error_id(type_symtab_t* symtab){
 
 
 /**
- * Get the unique function ID by incrementing and returning it from the symtab
- */
-static inline u_int32_t increment_and_get_function_id(function_symtab_t* symtab){
-	(symtab->current_function_id)++;
-	return symtab->current_function_id;
-}
-
-
-/**
  * Increment and get the current lexical scope for the variable
  */
 static inline u_int32_t increment_and_get_variable_lexical_scope(){
@@ -1260,12 +1251,8 @@ void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record){
  * Creating a function record here does NOT:
  * 	- Create any function signature
  * 	- Create any function parameters
- *
- * Note that function records themselves do not contain names. Those are stored
- * in the overload sets to which they belong. As such there is no name passed to 
- * this function record creater
  */
-symtab_function_record_t* create_function_record(dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index){
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index){
 	//Allocate it
 	symtab_function_record_t* record = calloc(1, sizeof(symtab_function_record_t));
 
@@ -1278,6 +1265,11 @@ symtab_function_record_t* create_function_record(dependency_graph_node_t* depend
 	//Allocate this as well
 	record->function_parameters = dynamic_array_alloc();
 
+	//Copy the name over
+	record->func_name = *name;
+	//Hash it and store it to avoid to repeated hashing
+	record->hash = hash_function(name->string);
+
 	//Throw in whether or not it's public or private
 	record->visibility = visibility;
 
@@ -1289,6 +1281,14 @@ symtab_function_record_t* create_function_record(dependency_graph_node_t* depend
 
 	//Store what dependency this comes from
 	record->dependency_graph_node = dependency_contained_in;
+
+	/**
+	 * Function overloading - every function is its own overload. To simplify
+	 * how we're going to have to look things up inside of the parser, we will
+	 * add this function 
+	 */
+	record->overload_table = dynamic_array_alloc();
+	dynamic_array_add(&(record->overload_table), record);
 
 	/**
 	 * IMPOTANT - for error printing, we will store the function's token index of definition here
@@ -1502,12 +1502,18 @@ symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t lin
 
 
 /**
- * Insert a function record into a given overload set. This assumes that the overload set
- * is already stored properly in the symtab. We will do all required bookkeeping in this helper
+ * Insert a record into the function symbol table. This assumes that the user
+ * has already checked to see if this record exists in the table
+ *
+ * RETURNS 0 if no collision, 1 if collision
  */
-void insert_function_into_overload_set(function_overload_set_t* overload_set, function_symtab_t* symtab, symtab_function_record_t* record){
-	//Assign a unique identifier for this function
-	record->function_id = increment_and_get_function_id(symtab);
+u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record){
+	/**
+	 * Assign this a unique identifier. Once we've assigned the unique ID, bump the
+	 * overall function ID for the next go around
+	 */
+	record->function_id = symtab->current_function_id;
+	(symtab->current_function_id)++;
 
 	/**
 	 * We maintain a one-to-one mapping of index as function ID to function record
@@ -1524,11 +1530,36 @@ void insert_function_into_overload_set(function_overload_set_t* overload_set, fu
 		(symtab->inlined_function_count)++;
 	}
 
-	/**
-	 * Now all we need to do is add this to the overload set's members
-	 * and we are all done
-	 */
-	dynamic_array_add(&(overload_set->member_functions), record);
+	//Grab the current namespace
+	function_namespace_t* current = symtab->current;
+
+	//Store that this function is in this current namespace
+	record->namespace_contained_in = current;
+
+	//Get the record(or lack of one) at this hash
+	symtab_function_record_t* cursor = current->records[record->hash];
+
+	//If there's no collision
+	if(cursor == NULL){
+		//Store it and get out
+		current->records[record->hash] = record;
+
+		//No collision
+		return 0;
+	}
+
+	//Get to the very last node
+	while(cursor->next != NULL){
+		cursor = cursor->next;
+	}
+
+	//Now that cursor points to the very last node, we can add it in
+	cursor->next = record;
+	//This should be null anyways, but it never hurts to double check
+	record->next = NULL;
+
+	//1 = success, but there was a collision
+	return 1;
 }
 
 
@@ -1940,14 +1971,12 @@ symtab_variable_record_t* initialize_instruction_pointer(type_symtab_t* types){
 
 
 /**
- * Lookup a function name in the symtab. This is done by overload set so
- * we will not be returning an actual function pointer, but an overload
- * set pointer
+ * Lookup the record in the symtab that corresponds to the following name.
  *
  * Our lookup is always biased to the most local sheaf first, and then up the
  * chain as we go
  */
-function_overload_set_t* lookup_function_overload_set(function_symtab_t* symtab, char* name){
+symtab_function_record_t* lookup_function(function_symtab_t* symtab, char* name){
 	//Let's grab it's hash
 	u_int64_t h = hash_function(name); 
 
@@ -1981,14 +2010,11 @@ function_overload_set_t* lookup_function_overload_set(function_symtab_t* symtab,
 
 
 /**
- * Lookup a function name that needs to be in the given namespace. This will
+ * Lookup a function that needs to be in the given namespace. This will
  * not do the normal logic where we can crawl up to see if it's in a parent
  * namespace
- *
- * This will return a pointer to a function overload set. The function pointers
- * themselves are contained within
  */
-function_overload_set_t* lookup_function_overload_set_in_namespace(function_namespace_t* namespace_to_search, char* name){
+symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* namespace_to_search, char* name){
 	//Let's grab it's hash
 	u_int64_t h = hash_function(name); 
 
