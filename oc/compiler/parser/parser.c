@@ -14124,8 +14124,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * 		we predeclared
 	 */
 	symtab_function_record_t* created_function_record = NULL;
-	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
-	if(found_function == NULL){
+	symtab_function_record_t* original_found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
+	if(original_found_function == NULL){
 		//Create the brand new function record
 		created_function_record = create_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 
@@ -14133,19 +14133,8 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		created_function_record->signature = new_function_signature;
 		created_function_record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
 
-		/**
-		 * If we have a function named "main", then we have some special rules that we'll
-		 * need to follow. We only check for this here because the main function may *only*
-		 * be defined directly
-		 */
-		if(strcmp(function_name.string, "main") == 0){
-			if(validate_main_function(new_function_signature) == FALSE){
-				return print_and_return_error("Invalid definition for main() function", parser_line_num);
-			}
-
-			//The main function is implicitly assumed to be called always
-			created_function_record->called = TRUE;
-		} 
+		//Here, and only here, will we insert into the symtab
+		insert_function(function_symtab, created_function_record);
 
 	/**
 	 * Remember that functions in Ollie can have overloads so we cannot just scan one function 
@@ -14154,12 +14143,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	} else {
 		//Let the helper get our function record - pass in true to restrict to namespace local
-		found_function = resolve_function_record(function_name.string, new_function_signature, TRUE);
-
+		symtab_function_record_t* overload_or_predeclared = resolve_function_record(function_name.string, new_function_signature, TRUE);
 
 		/**
-		 * TODO HOW DO WE DO ERRORS????
-		 *
 		 * Run through every overload in the overload table. Remember that the very
 		 * first member in the table is the function itself. We will iterate over
 		 * the table until we find:
@@ -14168,51 +14154,51 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * 	2.) A signature match that is flagged as defined -> ERROR, illegal redefinition
 		 * 	3.) No signature match, we are defining a branch new overload
 		 */
-		u_int8_t found_overload = FALSE;
-		u_int8_t predeclaring = FALSE;
-		symtab_function_record_t* comparing_to = NULL;
-		for(int32_t i = 0; i < found_function->overload_table.current_index; i++){
-			//Get out what we're comparing to
-			comparing_to = dynamic_array_get_at(&(found_function->overload_table), i);
+		if(overload_or_predeclared != NULL){
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 
-			/**
-			 * If the function signatures are 100% identical, then we could either be defining
-			 * a predeclared function *OR* we have an invalid duplicate creation here. We will
-			 * know based on the "defined" flag
-			 *
-			 * TODO THIS IDENTICAL RULE NEEDS TO BE MADE BETTER
-			 */
-			if(function_signatures_identical(new_function_signature, comparing_to->signature) == TRUE) {
-				/**
-				 * It's already been defined so this is a pure duplicate. We will fail out here
-				 */
-				if(found_function->defined == TRUE){
-					sprintf(info, "Function \"%s\" has already been defined with type %s", function_name.string, new_function_signature->type_name.string);
-					print_function_name_to_buffer(info, found_function);
-					return print_and_return_error(info, parser_line_num);
-				}
 
-			/**
-			 * TODO FUNCTION OVERLOADING
-			 */
-			} else {
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
-			}
+		/**
+		 * We are defining a brand new overload here. Remember that overloads
+		 * do not get inserted into the symtab, but instead get stored inside of
+		 * the function's overload table
+		 */
+		} else {
+			//Create the brand new function record
+			created_function_record = create_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
+
+			//Store the signature and classify this as an overlaod 
+			created_function_record->signature = new_function_signature;
+			created_function_record->function_classification = FUNCTION_CLASSIFICATION_OVERLOAD;
+
+			//Add this into the overload table of the originla found function
+			dynamic_array_add(&(original_found_function->overload_table), created_function_record);
 		}
 	}
 
 	/**
-	 * Step 9: insert the function record
+	 * If we have a function named "main", then we have some special rules that we'll
+	 * need to follow. We only check for this here because the main function may *only*
+	 * be defined directly
+	 */
+	if(strcmp(function_name.string, "main") == 0){
+		if(validate_main_function(new_function_signature) == FALSE){
+			return print_and_return_error("Invalid definition for main() function", parser_line_num);
+		}
+
+		//The main function is implicitly assumed to be called always
+		created_function_record->called = TRUE;
+	} 
+
+	/**
+	 * Step 9: fill out the record
 	 *
-	 * Now that it's been fully created we can insert this into the symtab
-	 * and flag that it is now defined
-	 *
-	 * We'll also push the nesting level as a function on here
+	 * Now that we know we're set we can fill out the function record and
+	 * set our global variables
 	 */
 	created_function_record->line_number = current_line;
 	created_function_record->defined = TRUE;
-	insert_function(function_symtab, created_function_record);
 	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
 
 	//Flag that this is our current function
