@@ -8748,6 +8748,113 @@ static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_gl
 
 
 /**
+ * Parse and validate a parameter type list. This is intended to be used for function predeclaration and function
+ * type parsing. We expect to see either an empty (), (void), or a comma separated list of types. The types will
+ * all be added to the function signature. At the end they will be validated
+ */
+static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature){
+	lexitem_t lookahead;
+
+	//First we need to see the opening parenthesis
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected ( but saw %s instead", lexitem_to_string(&lookahead));
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+
+
+
+	//We can optionally see a void type that we need to consume
+	switch(lookahead.tok){
+		//We just need to consume this and move along
+		case VOID:
+			//Refresh the token
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			break;
+
+		//We have an empty parameter list - also totally fine
+		case R_PAREN:
+			break;
+
+		//Otherwise we'll need to actually process this
+		default:
+			//Push it back
+			push_back_token(token_stream, &parser_line_num);
+
+			//We need to at least one type in here
+			do {
+				//By default assume we haven't seen the params keyword
+				u_int8_t seen_params = FALSE;
+
+				//Refresh the lookahead
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//If we see it then flag it, else push this token back
+				if(lookahead.tok == PARAMS){
+					seen_params = TRUE;
+				} else {
+					push_back_token(token_stream, &parser_line_num);
+				}
+
+				//Now we need to see a valid type
+				generic_type_t* type = type_specifier(token_stream);
+
+				//If this is NULL, we'll error out
+				if(type == NULL){
+					return FALSE;
+				}
+
+				//If we've seen this keyword, we need to do our extra processing/validation
+				if(seen_params == TRUE){
+					//Let the helper do it
+					type = handle_elaborative_param_type(type);
+
+					//If we returned NULL that means we failed so we'll fail here too
+					if(type == NULL){
+						return FALSE;
+					}
+				}
+
+				//Add it to the mutable version
+				add_parameter_to_function_type(mutable_function_type, type);
+
+				//Let's also add it to the immutable version
+				add_parameter_to_function_type(immutable_function_type, type);
+
+				//Refresh the lookahead token
+				lookahead = get_next_token(token_stream, &parser_line_num);
+
+				//If it's a comma keep going
+				if(lookahead.tok == COMMA){
+					continue;
+
+				//This is our exit criteria
+				} else if(lookahead.tok == R_PAREN){
+					break;
+
+				//Anything else it's an error
+				} else {
+					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					num_errors++;
+					return FALSE;
+				}
+
+			//Keep going until we hit the exit condition
+			} while(TRUE);
+
+			break;
+	}
+
+}
+
+
+
+/**
  * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
  * type if we cannot find it. It is unique in this way
  *
@@ -8768,6 +8875,10 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 		//Refresh the token
 		lookahead = get_next_token(stream, &parser_line_num);
 	}
+
+
+	//TODO REPLACE WITH HELPER RULE
+
 
 	//Fail if we don't see it
 	if(lookahead.tok != L_PAREN){
@@ -13204,6 +13315,12 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
 	function_type_t* internal_function_type = new_function_signature->internal_types.function_type;
 
+	/**
+	 * Step 5: parse all parameters
+	 *
+	 * Unlike a regular function definition, predeclared functions  will never have names in their
+	 * parameter list. They will instead be a comma separated type list
+	 */
 
 
 
