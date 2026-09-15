@@ -14512,8 +14512,6 @@ static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* op
  * In Ollie, we do not allow the user to inline functions that are *directly or indirectly* recursive.
  * We only look for this after the entire file has been parsed, so now that it has, we will
  * check every function to make sure it adheres to this rule
- *
- * TODO WRONG
  */
 static inline u_int8_t validate_inlined_functions_are_non_recursive(function_symtab_t* symtab) {
 	//Use the error count so that we can do all functions at once
@@ -14532,22 +14530,31 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 			//Otherwise grab out a cursor
 			symtab_function_record_t* cursor = sheaf->records[i];
 
-			//Run through any collisions in the hashmap
+			//Run through the linked list
 			while(cursor != NULL){
-				//Extract the signature from the cursor
-				function_type_t* cursor_signature = cursor->signature->internal_types.function_type;
+				/**
+				 * Remember that each individual cursor has its own overload table
+				 * that may have more functions in it. We'll need to run through
+				 * all of these to make sure that we check every single function
+				 */
+				for(int32_t j  = 0; j < cursor->overload_table.current_index; j++){
+					symtab_function_record_t* function_record = dynamic_array_get_at(&(cursor->overload_table), j);
 
-				//We only care if this is inlined(for now)
-				if(cursor_signature->is_inlined == TRUE){
-					//Is it recursive? use the helper
-					u_int8_t is_recursive = is_function_recursive(symtab, cursor);
+					//Extract the signature from the function 
+					function_type_t* function_signature = function_record->signature->internal_types.function_type;
 
-					//This is our fail case - we may not have this
-					if(is_recursive == TRUE){
-						sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, cursor->line_number);
-						num_errors++;
-						error_count++;
+					//We only care if this is inlined(for now)
+					if(function_signature->is_inlined == TRUE){
+						//Is it recursive? use the helper
+						u_int8_t is_recursive = is_function_recursive(symtab, function_record);
+
+						//This is our fail case - we may not have this
+						if(is_recursive == TRUE){
+							sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", function_record->func_name.string);
+							print_parse_message(MESSAGE_TYPE_ERROR, info, function_record->line_number);
+							num_errors++;
+							error_count++;
+						}
 					}
 				}
 
