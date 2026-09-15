@@ -14454,8 +14454,6 @@ static generic_ast_node_t* program(dynamic_array_t* build_order){
  * program itself *unless* a special flag is passed in that is explicitly
  * saying that a linker will be used later on. In the absence of this flag
  * we need to check that all functions have been defined
- *
- * TODO NOT CORRECT
  */
 static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* options, function_symtab_t* symtab){
 	//Assume it's good to start
@@ -14480,16 +14478,27 @@ static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* op
 			//Get the record and start drilling
 			symtab_function_record_t* record = ns->records[j];
 			while(record != NULL){
-				if(record->defined == FALSE){
-					sprintf(info, "Function \"%s\" was predeclared but never defined. First declared here:", record->func_name.string);
-					print_function_name_to_buffer(info, record);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, record->line_number);
-					num_errors++;
+				/**
+				 * Remember that function records have tables that define their overloads.
+				 * Luckily each function is also in it's own overload table so we can just
+				 * iterate through them all here
+				 */
+				for(int32_t j = 0; j < record->overload_table.current_index; j++){
+					symtab_function_record_t* function = dynamic_array_get_at(&(record->overload_table), j);
 
-					//Whole thing is failing now
-					result = FAILURE;
+					//If this was never defined then we have an error
+					if(function->defined == FALSE){
+						sprintf(info, "Function \"%s\" was predeclared but never defined. First declared here:", function->func_name.string);
+						print_function_name_to_buffer(info, function);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, function->line_number);
+						num_errors++;
+
+						//Whole thing is failing now
+						result = FAILURE;
+					}
 				}
 
+				//Next in the linked list
 				record = record->next;
 			}
 		}
@@ -14503,6 +14512,8 @@ static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* op
  * In Ollie, we do not allow the user to inline functions that are *directly or indirectly* recursive.
  * We only look for this after the entire file has been parsed, so now that it has, we will
  * check every function to make sure it adheres to this rule
+ *
+ * TODO WRONG
  */
 static inline u_int8_t validate_inlined_functions_are_non_recursive(function_symtab_t* symtab) {
 	//Use the error count so that we can do all functions at once
