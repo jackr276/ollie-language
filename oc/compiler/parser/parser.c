@@ -13075,11 +13075,45 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	symtab_function_record_t* original_found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
 
 	/**
+	 * Case 1: We have an entirely original function here that whose name we've never seen.
+	 * We'll just create the function record as a regular, non-overloaded type
 	 */
+	symtab_function_record_t* created_record = NULL;
 	if(original_found_function == NULL){
+		//Create it
+		created_record = create_function_record(&function_name, current_dependency_node, visibility, current_line, token_index_of_definition);
 
+		//Store the overall signature
+		created_record->signature = new_function_signature;
+
+		//This is the only case where we are inserting something into the symtab
+		insert_function(function_symtab, created_record);
+	
 	} else {
+		symtab_function_record_t* overloaded_or_declared = resolve_function_record(function_name.string, new_function_signature, TRUE);
+		/**
+		 * Case 2: we could not resolve the function record with this specific type, meaning that
+		 * this is a brand new overload of the original function
+		 */
+		if(overloaded_or_declared == NULL){
+			//Create it
+			created_record = create_overload_function_record(&function_name, current_dependency_node, visibility, current_line, token_index_of_definition);
 
+			//Store the overall signature
+			created_record->signature = new_function_signature;
+
+			//Add this as an overload of the original function
+			add_function_overload(function_symtab, original_found_function, created_record);
+
+		/**
+		 * Case 3: COLLISION!
+		 *
+		 * We have already either predeclared or actually declared this function, in which case 
+		 * this is an illegal operation
+		 */
+		} else {
+
+		}
 	}
 
 
@@ -13886,6 +13920,13 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			 * previously. We will now treat this as the definition of that function
 			 */
 			created_function_record = overload_or_predeclared;
+
+			/**
+			 * IMPORTANT - we are actually declaring this function here, so we are going
+			 * to overwrite the old token_index_of_declaration to be the full definition's
+			 * index
+			 */
+			created_function_record->token_index_of_definition = token_index_of_definition;
 
 		/**
 		 * We are defining a brand new overload here. Remember that overloads
