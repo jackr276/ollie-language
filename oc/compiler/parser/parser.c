@@ -141,7 +141,7 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
 static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
-static inline u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type);
+static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
@@ -7562,6 +7562,8 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		add_parameter_to_function_type(immutable_function_type, parameter_type);
 	}
 
+	//TODO MAKE THIS POINT TO THE ERROR LIST
+
 
 	//Now we need to see an arrow operator
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8785,6 +8787,8 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	if(parse_parameter_type_list(stream, function_type) == FAILURE){
 		return NULL;
 	}
+
+	//TODO USE THE NEW HELPER RULE FOR THIS
 
 	//We now need to see the arrow token
 	lookahead = get_next_token(stream, &parser_line_num);
