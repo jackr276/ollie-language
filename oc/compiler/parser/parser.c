@@ -7533,10 +7533,9 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Let's see if we have a !, meaning that this function can raise an error
 	if(lookahead.tok == EXCLAMATION){
 		raises_errors = TRUE;
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}	 
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	/**
 	 * Once we've gotten past this point, we're safe to allocate this type. Function
@@ -7566,13 +7565,8 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//Now we need to see an arrow operator
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we don't see it, we fail out
 	if(lookahead.tok != ARROW){
-		//Fail out
-		print_parse_message(MESSAGE_TYPE_ERROR, "Arrow (->) required after function parameter list", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("Arrow (->) required after function parameter list", parser_line_num);
 	}
 
 	//Now we need to see a return type
@@ -7580,9 +7574,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If this is NULL, then we have an invalid return type
 	if(return_type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return type given in function type definition", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("Invalid return type given in function type definition", parser_line_num);
 	}
 
 	/**
@@ -7599,9 +7591,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	if(lookahead.tok == RAISES){
 		//If this was not flagged as a function that could raise errors, then this is invalid
 		if(raises_errors == FALSE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "The function type was not declared as able to raise errors. Use fn! if you wish to have a function type that can raise errors", parser_line_num);
-			num_errors++;
-			return FALSE;
+			return print_and_return_failure("The function type was not declared as able to raise errors. Use fn! if you wish to have a function type that can raise errors", parser_line_num);
 		}
 
 		//Otherwise, we will need to parse the error list
@@ -7609,9 +7599,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 		//If this failed out then we're done
 		if(success == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given to function pointer type", parser_line_num);
-			num_errors++;
-			return FALSE;
+			return print_and_return_failure("Invalid error list given to function pointer type", parser_line_num);
 		}
 
 		//We're going to need to copy this over from the mutable function type to the immutable one
@@ -7623,9 +7611,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If it isn't an AS keyword, we're done
 	if(lookahead.tok != AS){
-		print_parse_message(MESSAGE_TYPE_ERROR, "\"as\" keyword is required after function type definition", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("\"as\" keyword is required after function type definition", parser_line_num);
 	}
 
 	//If we make it here then we know we're good to look for an identifier
@@ -7633,9 +7619,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If this is an error, then we're going to fail out
 	if(lookahead.tok != IDENT){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as alias type", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("Invalid identifier given as alias type", parser_line_num);
 	}
 
 	//We know that it wasn't an error, but now we need to perform duplicate checking
@@ -7648,9 +7632,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If we didn't see it, then we fail out
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after definition statement", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("Semicolon required after definition statement", parser_line_num);
 	}
 
 	//Check for function name duplications
@@ -8787,168 +8769,33 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Grab onto the first token
 	lexitem_t lookahead = get_next_token(stream, &parser_line_num);;
-
-	//Does this raise errors or not?
 	if(lookahead.tok == EXCLAMATION){
 		raises_errors = TRUE;
-
-		//Refresh the token
-		lookahead = get_next_token(stream, &parser_line_num);
+	} else {
+		push_back_token(stream, &parser_line_num);
 	}
 
-	//
+	//We've gotten to the point where we can create the function pointer type
 	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
 
-
-
-
-	//TODO REPLACE WITH HELPER RULE
-
-
-	//Fail if we don't see it
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis expected", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Push it onto the grouping stack
-	push_token(&grouping_stack, lookahead);
-
-	//Once we've gotten past this point, we're safe to allocate this type. We need it to be allocated for use
-	//down the road
-
 	/**
-	 * Let's see if we have nothing in here. This is possible. We can also just see a "void"
-	 * as an alternative way of saying this function takes no parameters
+	 * Let the helper parse the parameter type list. This will do all bookkeeping and checking
+	 * needed. If it fails then there's no point in going on
 	 */
-	
-	//Grab the next token
-	lookahead = get_next_token(stream, &parser_line_num);
-
-	//We can optionally see a void type that we need to consume
-	switch(lookahead.tok){
-		//We just need to consume this and move along
-		case VOID:
-			//Refresh the token
-			lookahead = get_next_token(stream, &parser_line_num);
-			break;
-
-		//We have an empty parameter list - also totally fine
-		case R_PAREN:
-			break;
-
-		//Otherwise we'll need to actually process this
-		default:
-			//Push it back
-			push_back_token(stream, &parser_line_num);
-
-			//We need to at least one type in here
-			do {
-				//By default assume that we have not seen the params keyword
-				u_int8_t seen_params = FALSE;
-
-				//Get the next token in the stream
-				lookahead = get_next_token(stream, &parser_line_num);
-
-				//If we get here then flag it
-				if(lookahead.tok == PARAMS){
-					seen_params = TRUE;
-
-				//Otherwise push it back
-				} else {
-					push_back_token(stream, &parser_line_num);
-				}
-
-				//Now we need to see a valid type
-				generic_type_t* type = type_specifier(stream);
-
-				//If this is NULL, we'll error out
-				if(type == NULL){
-					return FALSE;
-				}
-
-				/**
-				 * If we previously saw this keyword, we'll need to add our
-				 * handling now
-				 */
-				if(seen_params == TRUE){
-					//Let the helper deal with it
-					type = handle_elaborative_param_type(type);
-
-					//Returning null signifies a failure so we fail out if that's the case
-					if(type == NULL){
-						return NULL;
-					}
-				}
-
-				//Add it to the mutable version
-				add_parameter_to_function_type(function_type, type);
-
-				//Refresh the lookahead token
-				lookahead = get_next_token(stream, &parser_line_num);
-
-				//If it's a comma keep going
-				if(lookahead.tok == COMMA){
-					continue;
-
-				//This is our exit criteria
-				} else if(lookahead.tok == R_PAREN){
-					break;
-
-				//Anything else it's an error
-				} else {
-					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FALSE;
-				}
-
-			//Keep going until we hit the exit condition
-			} while(TRUE);
-
-			break;
-	}
-
-	//Now that we're done processing the list, we need to ensure that we have a right paren
-	if(lookahead.tok != R_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Ensure that we pop the grouping stack and get a match
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	/**
-	 * Once we get down here we need to perform validations on the parameter list. The helper
-	 * will tell us whether or not we're valid
-	 */
-	if(validate_function_parameter_list(function_type) == FALSE){
+	if(parse_parameter_type_list(stream, function_type) == FAILURE){
 		return NULL;
 	}
 
 	//We now need to see the arrow token
 	lookahead = get_next_token(stream, &parser_line_num);
-
 	if(lookahead.tok != ARROW){
-		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required before return type in function declaration", parser_line_num);
-		num_errors++;
-		return NULL;
+		return print_and_return_null("\"->\" required before return type in function declaration", parser_line_num);
 	}
 
 	//Now we need to see the return type specifier
 	generic_type_t* return_type = type_specifier(stream);
-
-	//Fail out if we find a bad one
 	if(return_type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return type given to function type", parser_line_num);
-		num_errors++;
-		return NULL;
+		return print_and_return_null("Invalid return type given to function type", parser_line_num);
 	}
 
 	/**
@@ -8964,18 +8811,12 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 	if(lookahead.tok == RAISES){
 		//If we aren't raising errors, then we can't put this in
 		if(raises_errors == FALSE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "The function pointer type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
-			num_errors++;
-			return NULL;
+			return print_and_return_null("The function pointer type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
 		}
 
-		u_int8_t success = error_list(stream, function_type);
-
-		//If this fails we're out
-		if(success == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
-			num_errors++;
-			return NULL;
+		//Fail out if the error list doesn't parse
+		if(error_list(stream, function_type) == FAILURE){
+			return print_and_return_null("Invalid error list given in function pointer type", parser_line_num);
 		}
 
 	} else {
