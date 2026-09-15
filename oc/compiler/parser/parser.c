@@ -12899,8 +12899,6 @@ static inline u_int8_t validate_function_parameter_list(generic_type_t* function
  * promise that a function of this signature will exist at 
  * some point
  *
- * TODO we need to implement function overloading
- *
  * <function_predeclaration> ::= declare {pub}? {inline}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
@@ -13014,6 +13012,13 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	//For our convenience get this out
 	dynamic_string_t function_name = lookahead.lexeme;
 
+	/**
+	 * We may never predeclare the main function. If we see this then we fail out immediately
+	 */
+	if(strcmp(function_name.string, "main") == 0){
+		return print_and_return_error("The \"main\" function may never be predeclared", parser_line_num);
+	} 
+
 	//Check for duplicate variables here
 	if(do_duplicate_variables_exist(function_name.string) || do_duplicate_types_exist(function_name.string)){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
@@ -13034,11 +13039,48 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	 *
 	 * Unlike a regular function definition, predeclared functions  will never have names in their
 	 * parameter list. They will instead be a comma separated type list
+	 *
+	 * If this fails then the entire thing fails
 	 */
+	if(parse_parameter_type_list(token_stream, new_function_signature) == FAILURE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
+	/**
+	 * Step 6: parse the return type and errors(potentially)
+	 *
+	 * We can now parse the return type and error list. Again we'll let the helper
+	 * do this
+	 */
+	if(parse_function_return_type_and_error_list(token_stream, new_function_signature) == FAILURE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
+	/**
+	 * Step 7: type finalization
+	 *
+	 * If we made it to here then our parsing is done. We will finalize the function pointer
+	 * type now
+	 */
+	generate_function_pointer_type_name(new_function_signature);
 
+	/**
+	 * Step 8: function classification determination
+	 *
+	 * At this point we have a few possibilities:
+	 * 	1.) We could be predeclaring an entirely new, never-before-seen function name
+	 * 	2.) We could be predeclaring an overload of an existing function
+	 * 	3.) We could be invalidly predeclaring a function that already exists -> FAILURE
+	 */
+	symtab_function_record_t* original_found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
 
+	/**
+	 */
+	if(original_found_function == NULL){
+
+	} else {
+
+	}
 
 
 	printf("TODO NOT IMPLEMENTED\n");
