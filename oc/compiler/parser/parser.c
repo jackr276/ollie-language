@@ -8809,96 +8809,62 @@ static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_str
 		}
 	}
 
+	/**
+	 * We're going to keep going until we see the R_PAREN
+	 * token signifying the end of our rule
+	 */
 	while(TRUE){
+		//For special elaborative handling
+		u_int8_t seen_params = FALSE;
 
-	}
-
-
-
-
-
-	//We can optionally see a void type that we need to consume
-	switch(lookahead.tok){
-		//We just need to consume this and move along
-		case VOID:
-			//Refresh the token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			break;
-
-		//We have an empty parameter list - also totally fine
-		case R_PAREN:
-			break;
-
-		//Otherwise we'll need to actually process this
-		default:
-			//Push it back
+		//Refresh the lookahead to see if we've gotten params or not
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == PARAMS){
+			seen_params = TRUE;
+		} else {
 			push_back_token(token_stream, &parser_line_num);
+		}
 
-			//We need to at least one type in here
-			do {
-				//By default assume we haven't seen the params keyword
-				u_int8_t seen_params = FALSE;
+		//Now let the type specifier rule handle it
+		generic_type_t* parameter_type = type_specifier(token_stream);
+		if(parameter_type == NULL){
+			return FAILURE;
+		}
 
-				//Refresh the lookahead
-				lookahead = get_next_token(token_stream, &parser_line_num);
+		//Special elaborative param handling if appropriate
+		if(seen_params == TRUE){
+			parameter_type = handle_elaborative_param_type(parameter_type);
 
-				//If we see it then flag it, else push this token back
-				if(lookahead.tok == PARAMS){
-					seen_params = TRUE;
-				} else {
-					push_back_token(token_stream, &parser_line_num);
-				}
+			//If it didn't work then bail out
+			if(parameter_type == NULL){
+				return FAILURE;
+			}
+		}
 
-				//Now we need to see a valid type
-				generic_type_t* type = type_specifier(token_stream);
+		//Add this to the function type
+		add_parameter_to_function_type(function_signature, parameter_type);
 
-				//If this is NULL, we'll error out
-				if(type == NULL){
-					return FALSE;
-				}
-
-				//If we've seen this keyword, we need to do our extra processing/validation
-				if(seen_params == TRUE){
-					//Let the helper do it
-					type = handle_elaborative_param_type(type);
-
-					//If we returned NULL that means we failed so we'll fail here too
-					if(type == NULL){
-						return FALSE;
-					}
-				}
-
-				//Add it to the mutable version
-				add_parameter_to_function_type(mutable_function_type, type);
-
-				//Let's also add it to the immutable version
-				add_parameter_to_function_type(immutable_function_type, type);
-
-				//Refresh the lookahead token
-				lookahead = get_next_token(token_stream, &parser_line_num);
-
-				//If it's a comma keep going
-				if(lookahead.tok == COMMA){
-					continue;
-
-				//This is our exit criteria
-				} else if(lookahead.tok == R_PAREN){
-					break;
-
-				//Anything else it's an error
-				} else {
-					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FALSE;
-				}
-
-			//Keep going until we hit the exit condition
-			} while(TRUE);
-
+		//Determine whether to continue or get out
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
 			break;
+		} else {
+			sprintf(info, "Expected , or ) but saw %s instead", lexitem_to_string(&lookahead));
+			return print_and_return_failure(info, parser_line_num);
+		}
 	}
 
+	/**
+	 * We only ever get to here with an R_PAREN, let's just validate
+	 * that we match and we'll be all good
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	return SUCCESS;
 }
 
 
