@@ -7543,6 +7543,8 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	 */
 	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, MUTABLE);
 	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, NOT_MUTABLE);
+	function_type_t* internal_mutable_function_type = mutable_function_type->internal_types.function_type;
+	function_type_t* internal_immutable_function_type = immutable_function_type->internal_types.function_type;
 
 	/**
 	 * Let the helper parse the parameter list. We'll copy it over to the immutable type
@@ -7556,59 +7558,27 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	 * Now let's just copy this all over to the immutable version. This is easier and more efficient
 	 * than reprocessing the whole thing
 	 */
-	function_type_t* internal_mutable_function_type = mutable_function_type->internal_types.function_type;
 	for(int32_t i = 0; i < internal_mutable_function_type->function_parameters.current_index; i++){
 		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_mutable_function_type->function_parameters), i);
 		add_parameter_to_function_type(immutable_function_type, parameter_type);
 	}
 
-	//TODO MAKE THIS POINT TO THE ERROR LIST
 
-
-	//Now we need to see an arrow operator
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	if(lookahead.tok != ARROW){
-		return print_and_return_failure("Arrow (->) required after function parameter list", parser_line_num);
-	}
-
-	//Now we need to see a return type
-	generic_type_t* return_type = type_specifier(token_stream);
-
-	//If this is NULL, then we have an invalid return type
-	if(return_type == NULL){
-		return print_and_return_failure("Invalid return type given in function type definition", parser_line_num);
+	/**
+	 * Now let's parse the return type and our error list. We can do this using our special rule
+	 * for the mutable type and then just copy the information over to the immutable type
+	 */
+	if(parse_function_return_type_and_error_list(token_stream, mutable_function_type) == FAILURE){
+		return FAILURE;
 	}
 
 	/**
-	 * Store both of the given return types inside of the function signature. This handles all needed
-	 * bookkeeping for us already
+	 * Clone over the return type and errors if we have them
 	 */
-	add_return_type_to_signature(mutable_function_type, return_type);
-	add_return_type_to_signature(immutable_function_type, return_type);
-
-	//Refresh the token
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We can now optionally see the "raises" keyword if we raise errors
-	if(lookahead.tok == RAISES){
-		//If this was not flagged as a function that could raise errors, then this is invalid
-		if(raises_errors == FALSE){
-			return print_and_return_failure("The function type was not declared as able to raise errors. Use fn! if you wish to have a function type that can raise errors", parser_line_num);
-		}
-
-		//Otherwise, we will need to parse the error list
-		u_int8_t success = error_list(token_stream, mutable_function_type);
-
-		//If this failed out then we're done
-		if(success == FAILURE){
-			return print_and_return_failure("Invalid error list given to function pointer type", parser_line_num);
-		}
-
-		//We're going to need to copy this over from the mutable function type to the immutable one
-		immutable_function_type->internal_types.function_type->potential_errors = clone_dynamic_array(&(mutable_function_type->internal_types.function_type->potential_errors));
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
+	add_return_type_to_signature(immutable_function_type, internal_mutable_function_type->return_type);
+	if(internal_mutable_function_type->raises_errors == TRUE){
+		internal_immutable_function_type->raises_errors = TRUE;
+		internal_immutable_function_type->potential_errors = clone_dynamic_array(&(internal_mutable_function_type->potential_errors));
 	}
 
 	//If it isn't an AS keyword, we're done
