@@ -404,6 +404,11 @@ u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b){
 		return FALSE;
 	}
 
+	//Inlining status must be the same
+	if(a_function_type->is_inlined != b_function_type->is_inlined){
+		return FALSE;
+	}
+
 	//Fail out for this as well
 	if(a_function_type->function_parameters.current_index != b_function_type->function_parameters.current_index){
 		return FALSE;
@@ -426,13 +431,22 @@ u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b){
 
 	//Error checking - order does not matter here
 	if(a_function_type->raises_errors){
+		//Different length error lists means that this cannot possibly work
+		if(a_function_type->potential_errors.current_index != b_function_type->potential_errors.current_index){
+			return FALSE;
+		}
+
+		/**
+		 * Otherwise they're the smae length, so loop through both lists and verify that every value
+		 * that's in one list is also in the other
+		 */
 		for(int32_t i = 0; i < a_function_type->potential_errors.current_index; i++){
 			generic_type_t* a_error = dynamic_array_get_at(&(a_function_type->potential_errors), i);
 			u_int8_t found_a_error = FALSE;
 
 			//Verify that we can find this error in b as well
 			for(int32_t j = 0; j < b_function_type->potential_errors.current_index; j++){
-				generic_type_t* b_error = dynamic_array_get_at(&(b_function_type->potential_errors), i);
+				generic_type_t* b_error = dynamic_array_get_at(&(b_function_type->potential_errors), j);
 
 				if(types_identical(b_error, a_error) == TRUE){
 					found_a_error = TRUE;
