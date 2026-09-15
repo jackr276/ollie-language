@@ -8765,6 +8765,55 @@ static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_str
 	//Push this onto the grouping stack
 	push_token(&grouping_stack, lookahead);
 
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	switch(lookahead.tok){
+		/**
+		 * Totally valid to see an empty list. We'll just do validations
+		 * and leave
+		 */
+		case R_PAREN: {
+			//Make sure we match
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			//If we get here then we're all good
+			return SUCCESS;
+		}
+
+		/**
+		 * The user can just write (void) as a parameter list
+		 * and this is another valid way of saying no parameters
+		 */
+		case VOID: {
+			//Need to now see an R_PAREN
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok != R_PAREN){
+				sprintf(info, "Expected ) but saw %s instead", lexitem_to_string(&lookahead));
+				return print_and_return_failure(info, parser_line_num);
+			}
+
+			//Make sure we match
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			//If we get here then we're all good
+			return SUCCESS;
+		}
+
+		//Otherwise we'll let our loop handle it
+		default: {
+			push_back_token(token_stream, &parser_line_num);
+			break;
+		}
+	}
+
+	while(TRUE){
+
+	}
+
+
 
 
 
