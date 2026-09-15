@@ -13032,7 +13032,6 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	 * function overloading we're armed with a signature to compare against
 	 */
 	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
-	function_type_t* internal_function_type = new_function_signature->internal_types.function_type;
 
 	/**
 	 * Step 5: parse all parameters
@@ -13112,13 +13111,43 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		 * this is an illegal operation
 		 */
 		} else {
+			//We are trying to predeclare an already defined function - BAD
+			if(overloaded_or_declared->defined == TRUE){
+				if(function_symtab->current->is_default == TRUE){
+					sprintf(info, "Function \"%s\" has already been defined with type %s",
+							function_name.string,
+							new_function_signature->type_name.string);
+				} else {
+					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
+							function_name.string,
+							generate_fully_qualified_namespace_name(function_symtab->current).string,
+							new_function_signature->type_name.string);
+				}
 
+				print_function_name_to_buffer(info, overloaded_or_declared);
+				return print_and_return_error(info, parser_line_num);
+
+			//We have already predeclared this but did not yet define it
+			} else {
+				if(function_symtab->current->is_default == TRUE){
+					sprintf(info, "Function \"%s\" has already been predeclared with type %s",
+							function_name.string,
+							new_function_signature->type_name.string);
+				} else {
+					sprintf(info, "Function \"%s\" has already been predeclared in the namespace \"%s\" with type %s",
+							function_name.string,
+							generate_fully_qualified_namespace_name(function_symtab->current).string,
+							new_function_signature->type_name.string);
+				}
+
+				print_function_name_to_buffer(info, overloaded_or_declared);
+				return print_and_return_error(info, parser_line_num);
+			}
 		}
 	}
 
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//Null means that we succeeded ----- TODO I REALLY HATE THIS
+	return NULL;
 }
 
 
