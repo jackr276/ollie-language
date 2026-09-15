@@ -7582,6 +7582,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	}
 
 	//If it isn't an AS keyword, we're done
+	lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok != AS){
 		return print_and_return_failure("\"as\" keyword is required after function type definition", parser_line_num);
 	}
@@ -13422,7 +13423,7 @@ static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_str
 	 */
 	generic_type_t* return_type = type_specifier(token_stream);
 	if(return_type == NULL){
-		return print_and_return_failure("Invalid return type given to function. All functions, even void returning ones, must have an explicit return type", parser_line_num);
+		return print_and_return_failure("Invalid return type given to function/function signature. All functions, even void returning ones, must have an explicit return type", parser_line_num);
 	}
 
 	//Dealias it if need be and then get this into the function signature
@@ -13441,12 +13442,12 @@ static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_str
 		 * have an invalid declaration and will fail out
 		 */
 		if(internal_type->raises_errors == FALSE){
-			return print_and_return_failure("Function was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
+			return print_and_return_failure("Function/function type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
 		}
 
 		//Now that we've made it past that, we can let the helper do the parsing for us
 		if(error_list(token_stream, function_signature) == FAILURE){
-			return print_and_return_failure("Invalid error list detected in function declaration", parser_line_num);
+			return print_and_return_failure("Invalid error list detected in function declaration/function type", parser_line_num);
 		}
 
 	} else {
