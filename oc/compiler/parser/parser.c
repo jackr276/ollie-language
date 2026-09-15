@@ -8758,62 +8758,36 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 		return NULL;
 	}
 
-	//TODO USE THE NEW HELPER RULE FOR THIS
-
-	//We now need to see the arrow token
-	lookahead = get_next_token(stream, &parser_line_num);
-	if(lookahead.tok != ARROW){
-		return print_and_return_null("\"->\" required before return type in function declaration", parser_line_num);
-	}
-
-	//Now we need to see the return type specifier
-	generic_type_t* return_type = type_specifier(stream);
-	if(return_type == NULL){
-		return print_and_return_null("Invalid return type given to function type", parser_line_num);
-	}
-
 	/**
-	 * Get the return type added to the signature. This handles all internal bookkeeping
-	 * related to the function's return type
+	 * Let the helper parse the return type and error list for our function pointer. If
+	 * this fails then the whole thing fails
 	 */
-	add_return_type_to_signature(function_type, return_type);
-
-	//We can now optionally see the RAISES keyword
-	lookahead = get_next_token(stream, &parser_line_num);
-
-	//If we see the raises keyword, we have to see an error list afterwards
-	if(lookahead.tok == RAISES){
-		//If we aren't raising errors, then we can't put this in
-		if(raises_errors == FALSE){
-			return print_and_return_null("The function pointer type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
-		}
-
-		//Fail out if the error list doesn't parse
-		if(error_list(stream, function_type) == FAILURE){
-			return print_and_return_null("Invalid error list given in function pointer type", parser_line_num);
-		}
-
-	} else {
-		//Otherwise put it back
-		push_back_token(stream, &parser_line_num);
+	if(parse_function_return_type_and_error_list(stream, function_type) == FAILURE){
+		return FAILURE;
 	}
 
 	//Now we can generate the type name itself
 	generate_function_pointer_type_name(function_type);
 
-	//Once we have this down, we need to look for it inside of the type symtab. If we have it, great! If not,
-	//we'll need to make it ourselves
+	/**
+	 * Once we have this down, we need to look for it inside of the type symtab. If we have it, great! If not,
+	 * we'll need to make it ourselves
+	 */
 	symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, function_type->type_name.string, mutability);
 
-	//Unlike other type definers, this isn't disqualifying
+	/**
+	 * Unlike other type definers, this isn't disqualifying, it instead means that we've
+	 * come on a brand new type. We'll create and insert it here
+	 */
 	if(type_record == NULL){
-		//Create this type and insert it
 		type_record = create_type_record(function_type);
 		insert_type(type_symtab, type_record);
 	}
 
-	//When we get down here, we'll be returning an either pre-existing type or an entirely
-	//new one that we've made
+	/**
+	 * When we get down here, we'll be returning an either pre-existing type or an entirely
+	 * new one that we've made
+	 */
 	return type_record;
 }
 
