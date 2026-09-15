@@ -140,6 +140,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
+static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
 static inline u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
@@ -7536,16 +7537,6 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 		//Refresh the token
 		lookahead = get_next_token(token_stream, &parser_line_num);
 	}	 
-	
-	//Now we need to see an L_PAREN
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis expected", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Otherwise push this onto the grouping stack for later
-	push_token(&grouping_stack, lookahead);
 
 	/**
 	 * Once we've gotten past this point, we're safe to allocate this type. Function
@@ -7554,120 +7545,24 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, MUTABLE);
 	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, NOT_MUTABLE);
 
-	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
-	//as an alternative way of saying this function takes no parameters
-	
-	//Grab the next token
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We can optionally see a void type that we need to consume
-	switch(lookahead.tok){
-		//We just need to consume this and move along
-		case VOID:
-			//Refresh the token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			break;
-
-		//We have an empty parameter list - also totally fine
-		case R_PAREN:
-			break;
-
-		//Otherwise we'll need to actually process this
-		default:
-			//Push it back
-			push_back_token(token_stream, &parser_line_num);
-
-			//We need to at least one type in here
-			do {
-				//By default assume we haven't seen the params keyword
-				u_int8_t seen_params = FALSE;
-
-				//Refresh the lookahead
-				lookahead = get_next_token(token_stream, &parser_line_num);
-
-				//If we see it then flag it, else push this token back
-				if(lookahead.tok == PARAMS){
-					seen_params = TRUE;
-				} else {
-					push_back_token(token_stream, &parser_line_num);
-				}
-
-				//Now we need to see a valid type
-				generic_type_t* type = type_specifier(token_stream);
-
-				//If this is NULL, we'll error out
-				if(type == NULL){
-					return FALSE;
-				}
-
-				//If we've seen this keyword, we need to do our extra processing/validation
-				if(seen_params == TRUE){
-					//Let the helper do it
-					type = handle_elaborative_param_type(type);
-
-					//If we returned NULL that means we failed so we'll fail here too
-					if(type == NULL){
-						return FALSE;
-					}
-				}
-
-				//Add it to the mutable version
-				add_parameter_to_function_type(mutable_function_type, type);
-
-				//Let's also add it to the immutable version
-				add_parameter_to_function_type(immutable_function_type, type);
-
-				//Refresh the lookahead token
-				lookahead = get_next_token(token_stream, &parser_line_num);
-
-				//If it's a comma keep going
-				if(lookahead.tok == COMMA){
-					continue;
-
-				//This is our exit criteria
-				} else if(lookahead.tok == R_PAREN){
-					break;
-
-				//Anything else it's an error
-				} else {
-					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FALSE;
-				}
-
-			//Keep going until we hit the exit condition
-			} while(TRUE);
-
-			break;
-	}
-
-	//Now that we're done processing the list, we need to ensure that we have a right paren
-	if(lookahead.tok != R_PAREN){
-		//Fail out
-		print_parse_message(MESSAGE_TYPE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
-		num_errors++;
-		return FALSE;
-	}
-
-	//Ensure that we pop the grouping stack and get a match
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		//Fail out
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
-		num_errors++;
-		return FALSE;
+	/**
+	 * Let the helper parse the parameter list. We'll copy it over to the immutable type
+	 * when we're done
+	 */
+	if(parse_parameter_type_list(token_stream, mutable_function_type) == FALSE){
+		return FAILURE;
 	}
 
 	/**
-	 * Now that the parameter list is parsed in, let's do some validation to 
-	 * make sure it's all in order. If either one of our types fail
-	 * then the whole thing is bad
+	 * Now let's just copy this all over to the immutable version. This is easier and more efficient
+	 * than reprocessing the whole thing
 	 */
-	if(validate_function_parameter_list(mutable_function_type) == FALSE
-		|| validate_function_parameter_list(immutable_function_type) == FALSE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid function type detected", parser_line_num);
-		return FALSE;
+	function_type_t* internal_mutable_function_type = mutable_function_type->internal_types.function_type;
+	for(int32_t i = 0; i < internal_mutable_function_type->function_parameters.current_index; i++){
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_mutable_function_type->function_parameters), i);
+		add_parameter_to_function_type(immutable_function_type, parameter_type);
 	}
+
 
 	//Now we need to see an arrow operator
 	lookahead = get_next_token(token_stream, &parser_line_num);
@@ -8864,6 +8759,16 @@ static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_str
 		return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
 	}
 
+	/**
+	 * Now that the parameter list is parsed in, let's do some validation to 
+	 * make sure it's all in order. If either one of our types fail
+	 * then the whole thing is bad
+	 */
+	if(validate_function_parameter_list(function_signature) == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid function type detected", parser_line_num);
+		return FALSE;
+	}
+
 	return SUCCESS;
 }
 
@@ -8891,6 +8796,11 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 		lookahead = get_next_token(stream, &parser_line_num);
 	}
 
+	//
+	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
+
+
+
 
 	//TODO REPLACE WITH HELPER RULE
 
@@ -8907,7 +8817,6 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Once we've gotten past this point, we're safe to allocate this type. We need it to be allocated for use
 	//down the road
-	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
 
 	/**
 	 * Let's see if we have nothing in here. This is possible. We can also just see a "void"
