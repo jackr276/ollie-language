@@ -13079,10 +13079,137 @@ static inline u_int8_t validate_function_parameter_list(generic_type_t* function
  * <function_predeclaration> ::= declare {pub}? {inline}? fn{!}? <identifier>({param_declaration | void} {, <param_declaration}*) {raises <error-list>}? -> <type-specifier>
  *
  * NOTE: by the time we get here, we've already seen the declare keyword
- *
- *
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
+	//Freeze the line number
+	u_int32_t current_line = parser_line_num;
+	lexitem_t lookahead;
+	//Visibility is always going to default to private
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+	//By default we are not inlining
+	u_int8_t is_inlined = FALSE;
+	//By default we do not raise errors either
+	u_int8_t raises_errors = FALSE;
+	//Cache the token index of definition that we're dealing with
+	u_int32_t token_index_of_definition = token_stream->token_pointer;
+
+	/**
+	 * Step 1: determine our preamble
+	 *
+	 * Get our token out and start going through the start of
+	 * the function definition. There are a bunch of valid
+	 * combos here including:
+	 * 	pub fn
+	 * 	pub inline fn
+	 * 	inline fn
+	 * 	fn
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	switch(lookahead.tok){
+		case PUB: {
+			//Flag that it is public
+			visibility = VISIBILITY_TYPE_PUBLIC;
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case INLINE:
+					//Flag that it was inlined
+					is_inlined = TRUE;
+
+					//Get the next token and make sure it's the FN keyword
+					lookahead = get_next_token(token_stream, &parser_line_num);
+					if(lookahead.tok != FN){
+						return print_and_return_error("Expected \"fn\" after \"pub inline\"", parser_line_num);
+					}
+
+					break;
+	 
+				default:
+					return print_and_return_error("Expected \"fn\" or \"inline\" keyword after \"pub\" in function declaration", parser_line_num);
+			}
+			
+			break;
+		}
+
+		case INLINE: {
+			//This is being inlined
+			is_inlined = TRUE;
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok != FN){
+				return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			}
+
+			break;
+		}
+
+		case FN:
+			break;
+		
+		default: {
+			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+	}
+
+	/**
+	 * Step 2: error raising
+	 *
+	 * It is possible for us to see the "!" for this function, in which case that means that this function
+	 * may raise errors of any kind. If we see this, we need to consume it and flag it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	/**
+	 * Step 3: extract the function's name
+	 * 
+	 * Get the name of the function which should be next. Note that the function
+	 * name cannot, as of right now, be used to check for duplicates yet because of
+	 * overloading
+	 *
+	 * We can however check to make sure that this function is not colliding with any
+	 * existing variable or type names
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Invalid name given as function name", current_line);
+	}
+
+	//For our convenience get this out
+	dynamic_string_t function_name = lookahead.lexeme;
+
+	//Check for duplicate variables here
+	if(do_duplicate_variables_exist(function_name.string) || do_duplicate_types_exist(function_name.string)){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Step 4: Build up the function signature
+	 *
+	 * Before we can think about anything symtab related, we're going to need to completely
+	 * build up a function signature so that, when we go looking for predeclarations and/or
+	 * function overloading we're armed with a signature to compare against
+	 */
+	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
+	function_type_t* internal_function_type = new_function_signature->internal_types.function_type;
+
+
+
+
+
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
