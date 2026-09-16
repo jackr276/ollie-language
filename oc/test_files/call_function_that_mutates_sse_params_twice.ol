@@ -17,7 +17,7 @@ pub fn mutate_parameters(x:mut f32, y:f32) -> f32 {
 
 
 pub fn main() -> i32 {
-	let x:mut f32 = 15.75;
+	let x:f32 = 15.75;
 
 	//The result of this is 23.5
 	@mutate_parameters(x, 7.75);
