@@ -2026,29 +2026,21 @@ static void perform_mutability_checking(variable_symtab_t* symtab){
  * is defined but never called
  */
 static void perform_function_usage_analysis(function_symtab_t* symtab){
-	//Run thorugh all of the namespaces
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		//Grab the current sheaf to check
-		function_namespace_t* current_sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
+	/**
+	 * Run through every single function using a simple linear scan over
+	 * the id_to_function mapping table
+	 */
+	for(u_int32_t i = 0; i < symtab->current_function_id; i++){
+		symtab_function_record_t* record = dynamic_array_get_at(&(symtab->id_to_function_mapping), i);
 
-		//Now run through the keyspace in this sheaf
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			symtab_function_record_t* record = current_sheaf->records[i];
-
-			while(record != NULL){
-				/**
-				 * If a function is defined but never called, we'll warn about it
-				 */
-				if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
-					sprintf(error_info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
-					print_function_name_to_buffer(error_info, record);
-					print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
-					(*warning_count)++;
-				}
-
-				//Advance record up
-				record = record->next;
-			}
+		/**
+		 * If a function is defined but never called, we'll warn about it
+		 */
+		if(record->called == FALSE && record->defined == TRUE && record->visibility == VISIBILITY_TYPE_PRIVATE){
+			sprintf(error_info, "Function \"%s\" is defined but never called. First defined here:", record->func_name.string);
+			print_function_name_to_buffer(error_info, record);
+			print_static_analyzer_message(MESSAGE_TYPE_WARNING, error_info, record->line_number);
+			(*warning_count)++;
 		}
 	}
 }

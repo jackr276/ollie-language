@@ -1652,7 +1652,7 @@ void add_function_overload(function_symtab_t* symtab, symtab_function_record_t* 
 	dynamic_array_set_at(&(symtab->id_to_function_mapping), overload, overload->function_id);
 
 	//Store that this function is in this current namespace
-	record->namespace_contained_in = symtab->current;
+	overload->namespace_contained_in = symtab->current;
 
 	//Add to the overload table
 	dynamic_array_add(&(record->overload_table), overload);
