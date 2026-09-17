@@ -13188,8 +13188,8 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		}
 	}
 
-	//Null means that we succeeded ----- TODO I REALLY HATE THIS
-	return NULL;
+	//Return a dummy function predeclaration node
+	return ast_node_alloc(AST_NODE_TYPE_FUNC_PREDCLARATION, SIDE_TYPE_LEFT);
 }
 
 
