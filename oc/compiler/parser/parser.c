@@ -14752,24 +14752,6 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 		return;
 	}
 
-	/**
-	 * Run through all function ID's
-	 */
-	for(int32_t function_id = 0; function_id < symtab->current_function_id; function_id++){
-		//Obviously skip our own
-		if(record->function_id == function_id){
-			continue;
-		}
-
-		symtab->id
-
-
-
-
-	}
-
-
-
 	//Grab the call graph index, we will be doing a reverse lookup
 	u_int32_t flagged_function_index = record->function_id;
 
@@ -14835,32 +14817,15 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
  *
  * We will use a while change algorithm to do this to ensure that we fully propogate out
  * the entire list
- *
- *
- * TODO REWORK THIS WHOLE THING
  */
 static inline void flag_functions_that_require_initial_alignment(function_symtab_t* symtab){
 	/**
-	 * Run through all of the records in the function keyspace
+	 * We can run through everying in the flat id to function mapping to
+	 * do this efficiently
 	 */
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		//Extract the current namespace
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
-
-		//Now run through everything in that namespace
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			//Extract it
-			symtab_function_record_t* record = current_namespace->records[i];
-
-			//So long as it's not NULL keep drilling
-			while(record != NULL){
-				//Flag it
-				flag_function_for_alignment(symtab, record);
-
-				//Bump it up
-				record = record->next;
-			}
-		}
+	for(u_int32_t i = 0; i < symtab->current_function_id; i++){
+		symtab_function_record_t* record = dynamic_array_get_at(&(symtab->id_to_function_mapping), i);
+		flag_function_for_alignment(symtab, record);
 	}
 }
 
