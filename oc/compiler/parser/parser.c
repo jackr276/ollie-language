@@ -14702,9 +14702,6 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
  * and just mark everything that the flagged function is reachable from
  *
  * All functions that call this fucntion must have their initial alignment
- *
- *
- * TODO REWORK THIS ALGORITHM IT IS BAD!!!!
  */
 static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab_function_record_t* record){
 	//If it doesn't require alignment then get out
@@ -14712,48 +14709,37 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 		return;
 	}
 
-	//Grab the call graph index, we will be doing a reverse lookup
-	u_int32_t flagged_function_index = record->function_id;
-
-	//The number of functions is also the current id
+	//Extract the function count out here
 	u_int32_t function_count = symtab->current_function_id;
 
-	//Run through every namespace
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
+	/**
+	 * We will use the id to function mapping to run through every other function ID
+	 * inside of the symtab and determine if the other function can reach us
+	 */
+	for(u_int32_t other_function_id = 0; other_function_id < function_count; other_function_id++){
+		//No point in checking against ourself
+		if(other_function_id == record->function_id){
+			continue;
+		}
 
-		//For each record inside of the namespace
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			symtab_function_record_t* other = current_namespace->records[i];
-			
-			//Traverse the linked list in case of collisions
-			while(other != NULL){
-				/**
-				 * Run through the entire overload table to do this
-				 */
-				for(int32_t i = 0; i < other->overload_table.current_index; i++){
-				}
+		//Get the other record out
+		symtab_function_record_t* other_function_record = dynamic_array_get_at(&(symtab->id_to_function_mapping), other_function_id);
 
+		/**
+		 * The "other" is the row, and the record is the index, so 
+		 * we need to compute other_index * count + record_index
+		 */
+		u_int32_t index = other_function_record->function_id * function_count + record->function_id;
 
-				
-				//No point in comparing if they match
-				if(other != record){
-					/**
-					 * The "other" is the row, and the record is the index, so 
-					 * we need to compute other_index * count + record_index
-					 */
-					u_int32_t index = other->function_id * function_count + flagged_function_index;
-
-					//If this is TRUE then
-					if(symtab->call_graph_transitive_closure[index] == TRUE){
-						//Flag that the other needs initial alignment
-						other->requires_initial_alignment = TRUE;
-					}
-				}
-
-				//Bump it up
-				other = other->next;
-			}
+		/**
+		 * If this is TRUE, that means that the "other" function will 
+		 * eventually by some chain of events call this function that we've flagged
+		 * for alignment. In this case, we need to flag this other function as requiring
+		 * alignment too or else everything leading up to the given function would be
+		 * misaligned
+		 */
+		if(symtab->call_graph_transitive_closure[index] == TRUE){
+			other_function_record->requires_initial_alignment = TRUE;
 		}
 	}
 }
