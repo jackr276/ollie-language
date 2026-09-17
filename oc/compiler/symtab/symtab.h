@@ -181,10 +181,6 @@ struct symtab_function_record_t{
 	 * A list of all overloads of this function. For ease of use we also consider
 	 * this function to be an overload of itself, so we can just scan this array
 	 * when the time comes
-	 *
-	 * This may change later on
-	 * 
-	 * TODO MAYBE A FUNCTION OVERLOAD SET HERE INSTEAD
 	 */
 	dynamic_array_t overload_table;
 	//Hang onto all user defined labels for this function(may be null)

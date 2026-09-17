@@ -14702,6 +14702,9 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
  * and just mark everything that the flagged function is reachable from
  *
  * All functions that call this fucntion must have their initial alignment
+ *
+ *
+ * TODO REWORK THIS ALGORITHM IT IS BAD!!!!
  */
 static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab_function_record_t* record){
 	//If it doesn't require alignment then get out

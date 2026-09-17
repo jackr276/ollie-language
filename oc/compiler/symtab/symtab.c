@@ -11,8 +11,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include "../ast/ast.h"
-//For error printing
-#include "../utils/queue/min_priority_queue.h"
 #include "../utils/stack/heapstack.h"
 #include "../utils/constants.h"
 
@@ -3087,48 +3085,20 @@ dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t
 void print_call_graph_adjacency_matrix(FILE* fl, function_symtab_t* function_symtab){
 	fprintf(fl, "=============== Function Call Graph ========================\n");
 	
-	//We need a min priority queue for this
-	min_priority_queue_t min_priority_queue = min_priority_queue_alloc();
-
-	//Run through all of the namespaces 
-	for(int32_t _ = 0; _ < function_symtab->namespaces.current_index; _++){
-		function_namespace_t* sheaf = dynamic_array_get_at(&(function_symtab->namespaces), _);
-
-		//Run through and print all of these out first
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			//Skip ahead
-			if(sheaf->records[i] == NULL){
-				continue;
-			}
-
-			//Otherwise grab it out
-			symtab_function_record_t* cursor = sheaf->records[i];
-
-			//Crawl the whole thing
-			while(cursor != NULL){
-				//Use the min priority queue to insert based on the function ID
-				min_priority_queue_enqueue(&min_priority_queue, cursor, cursor->function_id);
-
-				//Bump it up
-				cursor = cursor->next;
-			}
-		}
-	}
-
-	//Now run through the priority queue and print the functions out
-	while(min_priority_queue_is_empty(&min_priority_queue) == FALSE){
-		//Get the function off
-		symtab_function_record_t* function = min_priority_queue_dequeue(&min_priority_queue);
+	/**
+	 * We have a flat data structure in the id mapping table that we can
+	 * use to loop over all of the functions that we've made
+	 */
+	for(u_int32_t _ = 0; _ < function_symtab->current_function_id; _++){
+		//Grab the record out
+		symtab_function_record_t* record = dynamic_array_get_at(&(function_symtab->id_to_function_mapping), _);
 
 		//Now print it's name and ID out
-		fprintf(fl, "[%d]: %s\n", function->function_id, function->func_name.string);
+		fprintf(fl, "[%d]: %s\n", record->function_id, record->func_name.string);
 	}
 
 	//Dividing newline
 	fprintf(fl, "\n");
-
-	//Now we're done so deallocate it
-	min_priority_queue_dealloc(&min_priority_queue);
 
 	//Run through the entire symtab first and print out all of the functions with their
 	//IDs for the user
@@ -3211,6 +3181,8 @@ u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record
  * Construct the call graph adjacency matrices. This includes the regular adjacency
  * matrix and the specialized inline adjacency matrix. We are able to compute them
  * both in one go
+ *
+ * TODO WRONG!!!!!!
  */
 static inline void construct_call_graph_adjacency_matrices(function_symtab_t* symtab){
 	//Extract the number of functions
