@@ -13124,6 +13124,19 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 				return print_and_return_error(info, parser_line_num);
 			}
 
+			/**
+			 * Do these two function signatures differ enough to justify overloading? They must differ in the function parameter list
+			 * in order to justify this. If they do not, then we fail out
+			 */
+			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
+				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s invalid, signatures must have different parameter lists. First defined here:",
+						original_found_function->func_name.string,
+						new_function_signature->type_name.string);
+				print_function_name_to_buffer(info, original_found_function);
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			//Create it
 			created_record = create_overload_function_record(&function_name, current_dependency_node, visibility, current_line, token_index_of_definition);
 
@@ -14046,6 +14059,19 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 							function_name.string,
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Do these two function signatures differ enough to justify overloading? They must differ in the function parameter list
+			 * in order to justify this. If they do not, then we fail out
+			 */
+			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
+				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s invalid, signatures must have different parameter lists. First defined here:",
+						original_found_function->func_name.string,
+						new_function_signature->type_name.string);
+				print_function_name_to_buffer(info, original_found_function);
 
 				return print_and_return_error(info, parser_line_num);
 			}
