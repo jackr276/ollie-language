@@ -13103,7 +13103,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			 * their visibility status. If this is different then we fail out
 			 */
 			if(original_found_function->visibility != visibility){
-				sprintf(info, "The first function %s was declared as %s so all future overloads must be declared as %s",
+				sprintf(info, "The first function \"%s\" was declared as %s so all future overloads must be declared as %s",
 							function_name.string,
 							visibility_to_string(original_found_function->signature->internal_types.function_type->visibility),
 							visibility_to_string(original_found_function->signature->internal_types.function_type->visibility));
@@ -13116,7 +13116,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			 * inlined status. If this is different then we fail out
 			 */
 			if(original_found_function_type->is_inlined != is_inlined){
-				sprintf(info, "The first function %s was declared as %s so all future overloads must be declared as %s",
+				sprintf(info, "The first function \"%s\" was declared as %s so all future overloads must be declared as %s",
 							function_name.string,
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
@@ -13984,7 +13984,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			 * their visibility status. If this is different then we fail out
 			 */
 			if(predeclared_type->visibility != visibility){
-				sprintf(info, "The function %s was predeclared as %s so the definition must be declared as %s",
+				sprintf(info, "The function \"%s\" was predeclared as %s so the definition must be declared as %s",
 							function_name.string,
 							visibility_to_string(predeclared_type->visibility),
 							visibility_to_string(predeclared_type->visibility));
@@ -13997,7 +13997,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			 * inlined status. If this is different then we fail out
 			 */
 			if(predeclared_type->is_inlined != is_inlined){
-				sprintf(info, "The function %s was predeclared as %s so the definition must be declared as %s",
+				sprintf(info, "The function \"%s\" was predeclared as %s so the definition must be declared as %s",
 							function_name.string,
 							predeclared_type->is_inlined == TRUE ? "inline": "non inline",
 							predeclared_type->is_inlined == TRUE ? "inline": "non inline");
@@ -14029,7 +14029,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			 * their overload's visibility status. If this is different then we fail out
 			 */
 			if(original_found_function_type->visibility != visibility){
-				sprintf(info, "The first function %s was declared as %s all future overloads must be declared as %s",
+				sprintf(info, "The first function \"%s\" was declared as %s all future overloads must be declared as %s",
 							function_name.string,
 							visibility_to_string(original_found_function_type->visibility),
 							visibility_to_string(original_found_function_type->visibility));
@@ -14042,7 +14042,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			 * overload's inlined status. If this is different then we fail out
 			 */
 			if(original_found_function_type->is_inlined != is_inlined){
-				sprintf(info, "The function %s edeclared as %s so all future overloads must be declared as %s",
+				sprintf(info, "The first function \"%s\" was declared as %s so all future overloads must be declared as %s",
 							function_name.string,
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
