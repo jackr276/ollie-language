@@ -14024,6 +14024,32 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * the function's overload table
 		 */
 		} else {
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between functions and
+			 * their overload's visibility status. If this is different then we fail out
+			 */
+			if(original_found_function_type->visibility != visibility){
+				sprintf(info, "The first function %s was declared as %s all future overloads must be declared as %s",
+							function_name.string,
+							visibility_to_string(original_found_function_type->visibility),
+							visibility_to_string(original_found_function_type->visibility));
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between functions and their
+			 * overload's inlined status. If this is different then we fail out
+			 */
+			if(original_found_function_type->is_inlined != is_inlined){
+				sprintf(info, "The function %s edeclared as %s so all future overloads must be declared as %s",
+							function_name.string,
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			//Create the brand new function record
 			created_function_record = create_overload_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
 

@@ -404,11 +404,6 @@ u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b){
 		return FALSE;
 	}
 
-	//Inlining status must be the same
-	if(a_function_type->is_inlined != b_function_type->is_inlined){
-		return FALSE;
-	}
-
 	//Fail out for this as well
 	if(a_function_type->function_parameters.current_index != b_function_type->function_parameters.current_index){
 		return FALSE;
