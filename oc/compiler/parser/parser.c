@@ -14611,6 +14611,9 @@ static generic_ast_node_t* program(dynamic_array_t* build_order){
  * program itself *unless* a special flag is passed in that is explicitly
  * saying that a linker will be used later on. In the absence of this flag
  * we need to check that all functions have been defined
+ *
+ * TODO REWORK
+ *
  */
 static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* options, function_symtab_t* symtab){
 	//Assume it's good to start
@@ -14669,6 +14672,9 @@ static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* op
  * In Ollie, we do not allow the user to inline functions that are *directly or indirectly* recursive.
  * We only look for this after the entire file has been parsed, so now that it has, we will
  * check every function to make sure it adheres to this rule
+ *
+ *
+ * TODO REWORK
  */
 static inline u_int8_t validate_inlined_functions_are_non_recursive(function_symtab_t* symtab) {
 	//Use the error count so that we can do all functions at once
@@ -14755,14 +14761,12 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 			continue;
 		}
 
+		symtab->id
+
 
 
 
 	}
-
-
-
-
 
 
 
@@ -14831,6 +14835,9 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
  *
  * We will use a while change algorithm to do this to ensure that we fully propogate out
  * the entire list
+ *
+ *
+ * TODO REWORK THIS WHOLE THING
  */
 static inline void flag_functions_that_require_initial_alignment(function_symtab_t* symtab){
 	/**
