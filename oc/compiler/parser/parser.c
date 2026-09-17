@@ -14737,12 +14737,34 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
  * 			
  * The algorithm relies on the transitive closure. With the transitive closure, we can do this in one pass
  * and just mark everything that the flagged function is reachable from
+ *
+ * All functions that call this fucntion must have their initial alignment
  */
 static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab_function_record_t* record){
 	//If it doesn't require alignment then get out
 	if(record->requires_initial_alignment == FALSE){
 		return;
 	}
+
+	/**
+	 * Run through all function ID's
+	 */
+	for(int32_t function_id = 0; function_id < symtab->current_function_id; function_id++){
+		//Obviously skip our own
+		if(record->function_id == function_id){
+			continue;
+		}
+
+
+
+
+	}
+
+
+
+
+
+
 
 	//Grab the call graph index, we will be doing a reverse lookup
 	u_int32_t flagged_function_index = record->function_id;
@@ -14760,6 +14782,14 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 			
 			//Traverse the linked list in case of collisions
 			while(other != NULL){
+				/**
+				 * Run through the entire overload table to do this
+				 */
+				for(int32_t i = 0; i < other->overload_table.current_index; i++){
+				}
+
+
+				
 				//No point in comparing if they match
 				if(other != record){
 					/**
