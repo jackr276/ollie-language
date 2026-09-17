@@ -461,6 +461,43 @@ u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b){
 
 
 /**
+ * Are these two functions different enough to actually overload? Remember that in order to actually
+ * overload a function, we need to have *at least one parameter in one spot be of a different type*
+ *
+ * No other differences will be considered. Return type and error raising *DO NOT COUNT*
+ */
+u_int8_t do_function_signatures_differ_enough_to_overload(generic_type_t* a, generic_type_t* b){
+	//Extract for convenience
+	function_type_t* a_function_type = a->internal_types.function_type;
+	function_type_t* b_function_type = b->internal_types.function_type;
+
+	//Easy - different list length means they can't be the same
+	if(a_function_type->function_parameters.current_index != b_function_type->function_parameters.current_index){
+		return TRUE;
+	}
+
+	//Verify that all parameters are identical
+	for(int32_t i = 0; i < a_function_type->function_parameters.current_index; i++){
+		generic_type_t* a_param = dynamic_array_get_at(&(a_function_type->function_parameters), i);
+		generic_type_t* b_param = dynamic_array_get_at(&(b_function_type->function_parameters), i);
+
+		/**
+		 * If we have at least one mismatch then we can overload just fine
+		 */
+		if(types_identical(a_param, b_param) == FALSE){
+			return TRUE;
+		}
+	}
+
+	/**
+	 * If we got here then all parameters are the exact same, this cannot be used to overload something
+	 * so we will fail out
+	 */
+	return FALSE;
+}
+
+
+/**
  * Can two types be assigned to one another? This rule will perform implicit conversions
  * if need be to make types assignable. We are always assigning source to destination. Widening
  * type conversions will be applied to source if need be. We cannot apply widening type conversions

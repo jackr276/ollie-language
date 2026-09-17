@@ -306,6 +306,14 @@ u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t* b);
 u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b);
 
 /**
+ * Are these two functions different enough to actually overload? Remember that in order to actually
+ * overload a function, we need to have *at least one parameter in one spot be of a different type*
+ *
+ * No other differences will be considered. Return type and error raising *DO NOT COUNT*
+ */
+u_int8_t do_function_signatures_differ_enough_to_overload(generic_type_t* a, generic_type_t* b);
+
+/**
  * Are two types *exactly* equal or not? This will account for type aliasing as well
  */
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
