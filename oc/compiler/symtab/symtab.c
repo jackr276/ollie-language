@@ -3181,8 +3181,6 @@ u_int8_t is_function_recursive(function_symtab_t* symtab, symtab_function_record
  * Construct the call graph adjacency matrices. This includes the regular adjacency
  * matrix and the specialized inline adjacency matrix. We are able to compute them
  * both in one go
- *
- * TODO WRONG!!!!!!
  */
 static inline void construct_call_graph_adjacency_matrices(function_symtab_t* symtab){
 	//Extract the number of functions
@@ -3200,52 +3198,30 @@ static inline void construct_call_graph_adjacency_matrices(function_symtab_t* sy
 	symtab->inline_call_graph_matrix = calloc(number_of_functions * number_of_functions, sizeof(u_int8_t));
 
 	/**
-	 * To populate the adjacency matrix, we'll need to run through literally ever function namespace 
+	 * Run through every single function ID in the symtab. This is a flat(ish) datastructure
+	 * that allows us to get everything in one go instead of looping over the symtab itself
 	 */
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
+	for(u_int32_t function_id = 0; function_id < symtab->current_function_id; function_id++){
+		symtab_function_record_t* record = dynamic_array_get_at(&(symtab->id_to_function_mapping), function_id);
 
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			//Totally possible for this to happen
-			if(current_namespace->records[i] == NULL){
-				continue;
-			}
+		//Run through all of the functions that this function itself calls
+		for(int32_t i = 0; i < record->called_functions.current_index; i++){
+			//Extract the called function and it's internal function type
+			symtab_function_record_t* called_function = dynamic_set_get_at(&(record->called_functions), i);
+			function_type_t* called_function_type = called_function->signature->internal_types.function_type;
+
+			//Now let's get his ID
+			u_int32_t called_function_id = called_function->function_id;
+
+			//Insert this call into the adjacency matrix
+			symtab->call_graph_matrix[function_id * number_of_functions + called_function_id] = TRUE;
 
 			/**
-			 * Otherwise, we actually have a space that is populated so we need to
-			 * populate here. Remember, every record is a linked list so we need
-			 * to explore all of the nodes
+			 * If this called function is an inline function, we'll need to note
+			 * this done inside of the inlined fucntion call graph as well
 			 */
-			symtab_function_record_t* cursor = current_namespace->records[i];
-
-			//So long as the cursor is not NULL
-			while(cursor != NULL){
-				//Grab the cursor's unique function ID
-				u_int32_t cursor_id = cursor->function_id;
-
-				//Run through all of the functions that this function itself calls
-				for(int32_t j = 0; j < cursor->called_functions.current_index; j++){
-					//Extract the called function and it's internal function type
-					symtab_function_record_t* called_function = dynamic_set_get_at(&(cursor->called_functions), j);
-					function_type_t* called_function_type = called_function->signature->internal_types.function_type;
-
-					//Now let's get his ID
-					u_int32_t called_function_id = called_function->function_id;
-
-					//Insert this call into the adjacency matrix
-					symtab->call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
-
-					/**
-					 * If this called function is an inline function, we'll need to note
-					 * this done inside of the inlined fucntion call graph as well
-					 */
-					if(called_function_type->is_inlined == TRUE){
-						symtab->inline_call_graph_matrix[cursor_id * number_of_functions + called_function_id] = TRUE;
-					}
-				}
-
-				//Bump it up to the next one
-				cursor = cursor->next;
+			if(called_function_type->is_inlined == TRUE){
+				symtab->inline_call_graph_matrix[function_id * number_of_functions + called_function_id] = TRUE;
 			}
 		}
 	}
