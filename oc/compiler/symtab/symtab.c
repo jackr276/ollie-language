@@ -103,6 +103,9 @@ char* visibility_to_string(visibilty_type_t visibility){
 			return "public";
 		case VISIBILITY_TYPE_PRIVATE:
 			return "private";
+		default:
+			fprintf(stderr, "Fatal internal compiler error: unrecognized visibility type");
+			exit(1);
 	}
 }
 

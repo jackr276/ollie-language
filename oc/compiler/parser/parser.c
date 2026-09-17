@@ -13089,7 +13089,10 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		insert_function(function_symtab, created_record);
 	
 	} else {
+		//Extract the function type
+		function_type_t* original_found_function_type = original_found_function->signature->internal_types.function_type;
 		symtab_function_record_t* overloaded_or_declared = resolve_function_record(function_name.string, new_function_signature, TRUE);
+
 		/**
 		 * Case 2: we could not resolve the function record with this specific type, meaning that
 		 * this is a brand new overload of the original function
@@ -13097,13 +13100,27 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		if(overloaded_or_declared == NULL){
 			/**
 			 * IMPORTANT - we do not allow for their to be a divergence between overloads and
-			 * their visibility or inlined status
+			 * their visibility status. If this is different then we fail out
 			 */
 			if(original_found_function->visibility != visibility){
 				sprintf(info, "The first function %s was declared as %s so all future overloads must be declared as %s",
 							function_name.string,
 							visibility_to_string(original_found_function->signature->internal_types.function_type->visibility),
 							visibility_to_string(original_found_function->signature->internal_types.function_type->visibility));
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between overloads and their
+			 * inlined status. If this is different then we fail out
+			 */
+			if(original_found_function_type->is_inlined != is_inlined){
+				sprintf(info, "The first function %s was declared as %s so all future overloads must be declared as %s",
+							function_name.string,
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
+
 				return print_and_return_error(info, parser_line_num);
 			}
 
