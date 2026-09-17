@@ -13940,6 +13940,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * overload table
 	 */
 	} else {
+		//Extract this for convenience
+		function_type_t* original_found_function_type = original_found_function->signature->internal_types.function_type;
+
 		//Let the helper get our function record - pass in true to restrict to namespace local
 		symtab_function_record_t* overload_or_predeclared = resolve_function_record(function_name.string, new_function_signature, TRUE);
 
@@ -13953,6 +13956,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 		 * 	3.) No signature match, we are defining a branch new overload
 		 */
 		if(overload_or_predeclared != NULL){
+			//Get the type out for convenience
+			function_type_t* predeclared_type = overload_or_predeclared->signature->internal_types.function_type;
+
 			/**
 			 * Fail case -> this has already been defined so it may never be redefined. We will
 			 * error out in this case
@@ -13970,6 +13976,32 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 				}
 
 				print_function_name_to_buffer(info, overload_or_predeclared);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between predeclarations and
+			 * their visibility status. If this is different then we fail out
+			 */
+			if(predeclared_type->visibility != visibility){
+				sprintf(info, "The function %s was predeclared as %s so the definition must be declared as %s",
+							function_name.string,
+							visibility_to_string(predeclared_type->visibility),
+							visibility_to_string(predeclared_type->visibility));
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between predeclarations and their
+			 * inlined status. If this is different then we fail out
+			 */
+			if(predeclared_type->is_inlined != is_inlined){
+				sprintf(info, "The function %s was predeclared as %s so the definition must be declared as %s",
+							function_name.string,
+							predeclared_type->is_inlined == TRUE ? "inline": "non inline",
+							predeclared_type->is_inlined == TRUE ? "inline": "non inline");
+
 				return print_and_return_error(info, parser_line_num);
 			}
 
