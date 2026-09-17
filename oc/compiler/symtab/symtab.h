@@ -570,6 +570,12 @@ struct label_symtab_t {
 
 
 /**
+ * Convert the visibility type to a string for errors
+ */
+char* visibility_to_string(visibilty_type_t visibility);
+
+
+/**
  * Create a label table for us to use. These, unlike the other types of 
  * symbol tables, are created on-demand on a per-function basis
  */

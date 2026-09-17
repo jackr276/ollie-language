@@ -95,6 +95,19 @@ static inline u_int32_t increment_and_get_type_lexical_scope(){
 
 
 /**
+ * Convert the visibility type to a string for errors
+ */
+char* visibility_to_string(visibilty_type_t visibility){
+	switch(visibility){
+		case VISIBILITY_TYPE_PUBLIC:
+			return "public";
+		case VISIBILITY_TYPE_PRIVATE:
+			return "private";
+	}
+}
+
+
+/**
  * Create a label table for us to use. These, unlike the other types of 
  * symbol tables, are created on-demand on a per-function basis
  */
