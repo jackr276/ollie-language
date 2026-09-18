@@ -2090,22 +2090,13 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	warning_count = num_warnings;
 
 	/**
-	 * 1.) Mangle the names of functions, global variables, and static variables to
-	 * ensure that they are unique in the final generated assembly. The way that
-	 * we mangle is different for each one but the bottom line is every function
-	 * and variable is guaranteed to be unique in the data segment
-	 */
-	mangle_function_names(results->function_symtab);
-	mangle_static_variable_names(&(cfg->global_variables));
-
-	/**
-	 * 2.) Convert the CFG into static single assignment(SSA) form. This form is the
+	 * 1.) Convert the CFG into static single assignment(SSA) form. This form is the
 	 * basis for all of our future checks & optimizations
 	 */
 	convert_cfg_to_ssa_form(cfg, results->variable_symtab);
 
 	/**
-	 * 3.) Populate the intialization states for all variables in
+	 * 2.) Populate the intialization states for all variables in
 	 * the CFG using a forward dataflow analysis for each and every
 	 * function. When done, all eligible variables will have thier
 	 * initialization maps fully populated
@@ -2113,7 +2104,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	perform_dataflow_analysis(cfg);
 
 	/**
-	 * 4.) Perform definite assignment and mutability analysis for the
+	 * 3.) Perform definite assignment and mutability analysis for the
 	 * entire CFG. Now that we have all of our initialization states
 	 * populated we will be able to detect use-before-intialized, maybe
 	 * use-before-intialize, mutate after initialize, and maybe mutate
@@ -2126,17 +2117,29 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	}
 
 	/**
-	 * 4.) Crawl the function symtab and generate warnings for functions
+	 * 5.) Crawl the function symtab and generate warnings for functions
 	 * that are defined but not used
 	 */
 	perform_function_usage_analysis(results->function_symtab);
 
 	/**
-	 * 5.) Perform mutability checking. Unlike definite assignment
+	 * 6.) Perform mutability checking. Unlike definite assignment
 	 * analysis there is no chance for failure here, this
 	 * just generates warnings
 	 */
 	perform_mutability_checking(results->variable_symtab);
+
+	/**
+	 * 7.) Mangle the names of functions, global variables, and static variables to
+	 * ensure that they are unique in the final generated assembly. The way that
+	 * we mangle is different for each one but the bottom line is every function
+	 * and variable is guaranteed to be unique in the data segment
+	 *
+	 * We want to do this at the very end so that the user does not see weird
+	 * mangled names for functions/variables appear in errors or warnings
+	 */
+	mangle_function_names(results->function_symtab);
+	mangle_static_variable_names(&(cfg->global_variables));
 
 	//Give back whatever result we've have
 	return result;
