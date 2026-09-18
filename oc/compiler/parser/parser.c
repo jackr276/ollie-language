@@ -2033,6 +2033,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
 
+			printf("EXPRESSION TYPE IS %s at INDEX %d\n", parameter_expression->inferred_type->type_name.string, parameter_parsing_list.current_index);
+
 			//Add this to our list that we're going to need to validate
 			dynamic_array_add(&parameter_parsing_list, parameter_expression);
 
@@ -2097,6 +2099,10 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 			//Now that we know it's safe get the current param out
 			generic_ast_node_t* current_param = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+			printf("INDICES ARE %d and %d\n", param_type_index, param_result_index);
+			printf("TYPE IS %s\n", parameter_type->type_name.string);
+			printf("PASSING TYPE IS %s\n", current_param->inferred_type->type_name.string);
 
 			/**
 			 * Do the assignment and bookkeeping. If this is NULL it means that we failed so the entire
@@ -10075,15 +10081,6 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 
 	//Holder for the jump statement type
 	generic_ast_node_t* jump_node;
-
-	/**
-	 * We will be hanging onto all of our jump statements for validation later on down
-	 * the road, but we only allocate if we absolutely need to. Now is the time
-	 * that we'll know that
-	 */
-	if(current_function_jump_statements.internal_array == NULL){
-		current_function_jump_statements = dynamic_array_alloc();
-	}
 
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(token_stream, &parser_line_num);
