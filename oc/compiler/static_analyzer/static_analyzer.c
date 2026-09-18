@@ -565,6 +565,56 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
 }
 
 
+static inline void mangle_function_names_in_namespace(function_namespace_t* namespace){
+
+}
+
+
+/**
+ * Mangle the name of a global variable in the given namespace. For example,
+ * a global variable in a namespace "ns1::ns2" will become:
+ * 		ns1::ns2::my_variable 
+ * in the generated assembly to make sure that we never have collisions
+ */
+static inline void mangle_variable_names_in_namespace(function_namespace_t* namespace, dynamic_string_t* old_name, dynamic_string_t* namespace_name){
+	//Unlike with functions, the default namespace does not concern us
+	if(namespace->is_default == TRUE){
+		return;
+	}
+
+	/**
+	 * Now let's run through the global var sheaf for this namespace. For each record,
+	 * if it's a global variable we will mangle the name with the namespace
+	 */
+	symtab_variable_sheaf_t* global_var_sheaf = namespace->related_variable_sheaf;
+	for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+		symtab_variable_record_t* variable_record = global_var_sheaf->records[j];
+
+		//They can be chained so we have to do this
+		while(variable_record != NULL){
+			//Just to be safe - we only do this to global vars
+			if(variable_record->membership != GLOBAL_VARIABLE){
+				variable_record = variable_record->next;
+				continue;
+			}
+
+			//Clear the old name buffer and cache our variable there
+			clear_dynamic_string(old_name);
+			dynamic_string_set(old_name, variable_record->var_name.string);
+
+			//We'll now set the name to be <namespace_chain>.<var_name>
+			dynamic_string_set(&(variable_record->var_name), namespace_name->string);
+			dynamic_string_concatenate(&(variable_record->var_name), ".");
+			dynamic_string_concatenate(&(variable_record->var_name), old_name->string);
+
+			//Bump it up to the next one
+			variable_record = variable_record->next;
+		}
+	}
+}
+
+
+
 /**
  * Mangle all of the function and variables names so that we can guarantee
  * uniqueness in the final assembly when the time comes
@@ -575,7 +625,7 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
  * For example: the function namespace1::namespace2::my_fn() will
  * have its name transformed into namespace1.namespace2.my_fn
  */
-static void mangle_function_names(function_symtab_t* function_symtab){
+static void mangle_variable_and_function_names(function_symtab_t* function_symtab){
 	//Allocate some buffers
 	char buffer[100];
 	dynamic_string_t old_name = dynamic_string_alloc();
@@ -596,6 +646,13 @@ static void mangle_function_names(function_symtab_t* function_symtab){
 
 		//Generate a fully qualified namespace name for us to use
 		dynamic_string_t namespace_name = generate_fully_qualified_namespace_name_for_mangling(namespace);
+
+		/**
+		 * Call out to each rule individually and pass in the reusable "old_name" dynamic string
+		 * and the reusable "namespace_name" so that we do not have to regenerate it for each
+		 * record
+		 */
+		mangle_variable_names_in_namespace(namespace, &old_name, &namespace_name);
 
 		/**
 		 * Now run through every single function record in this
@@ -637,36 +694,6 @@ static void mangle_function_names(function_symtab_t* function_symtab){
 			}
 		}
 
-		/**
-		 * Now let's run through the global var sheaf for this namespace. For each record,
-		 * if it's a global variable we will mangle the name with the namespace
-		 */
-		symtab_variable_sheaf_t* global_var_sheaf = namespace->related_variable_sheaf;
-		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
-			symtab_variable_record_t* variable_record = global_var_sheaf->records[j];
-
-			//They can be chained so we have to do this
-			while(variable_record != NULL){
-				//Just to be safe - we only do this to global vars
-				if(variable_record->membership != GLOBAL_VARIABLE){
-					variable_record = variable_record->next;
-					continue;
-				}
-
-				//Clear the old name buffer and cache our variable there
-				clear_dynamic_string(&old_name);
-				dynamic_string_set(&(old_name), variable_record->var_name.string);
-
-				//We'll now set the name to be <namespace_chain>.<var_name>
-				dynamic_string_set(&(variable_record->var_name), namespace_name.string);
-				dynamic_string_concatenate(&(variable_record->var_name), ".");
-				dynamic_string_concatenate(&(variable_record->var_name), old_name.string);
-
-				//Bump it up to the next one
-				variable_record = variable_record->next;
-			}
-
-		}
 	}
 
 	//This is useless now so we can scrap it
@@ -2138,7 +2165,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * We want to do this at the very end so that the user does not see weird
 	 * mangled names for functions/variables appear in errors or warnings
 	 */
-	mangle_function_names(results->function_symtab);
+	mangle_variable_and_function_names(results->function_symtab);
 	mangle_static_variable_names(&(cfg->global_variables));
 
 	//Give back whatever result we've have
