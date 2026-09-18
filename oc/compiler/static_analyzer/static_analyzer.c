@@ -577,7 +577,6 @@ static inline void mangle_function_names_in_namespace(function_namespace_t* name
 	 * If it's not the default namespace(most common) we add the namespace name
 	 * onto it. Otherwise if it is the default namespace we don't need to 
 	 * worry about the name
-			////TODO WHY DO WE NEED OLD_NAME????J
 	 */
 	if(namespace->is_default == FALSE){
 		/**
@@ -684,7 +683,6 @@ static inline void mangle_variable_names_in_namespace(function_namespace_t* name
 			}
 
 			//Clear the old name buffer and cache our variable there
-			////TODO WHY DO WE NEED OLD_NAME????J
 			clear_dynamic_string(old_name);
 			dynamic_string_set(old_name, variable_record->var_name.string);
 

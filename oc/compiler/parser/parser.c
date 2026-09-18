@@ -1960,19 +1960,60 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
  * A direct function call will need to account for the possibility that we have
  * an overloaded function call. As such, we cannot verify the parameter list until
  * after we've done all of the parameter parsing
+ *
+ * TODO DIFFERENT WAY OF PARSING
  */
+static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
+	//A pointer for our function name. Remember that we won't always have this
+	dynamic_string_t* function_name = NULL;
+
 //TODO
+}
 
 
 
 /**
  * An indirect function call does not need to worry at all about overloading because
  * there is only one thing that we're able to call, that being the function pointer
- * that is being called
+ * that is being called. Because of this, we are able to parse indirect function calls
+ * in a way that is completely different from direct function calls
  */
+static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
+	//A pointer for our function name. Remember that we won't always have this
+	dynamic_string_t* function_name = NULL;
+
+	//Extract the function signature and the internal function type
+	generic_type_t* function_signature = unary_expr_node->inferred_type;
+	function_type_t* internal_function_type = function_signature->internal_types.function_type;
+
+	//Allocate the indirect call node and store the unary expression as its first child
+	generic_ast_node_t* indirect_call = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
+	add_child_node(indirect_call, unary_expr_node);
+
+	/**
+	 * The inferred type is always the signature's return type. We will also store
+	 * the callee's function signature inside of the optional storage block
+	 */
+	indirect_call->inferred_type = internal_function_type->return_type;
+	indirect_call->optional_storage.callee_signature = internal_function_type;
+
 //TODO
 
+		/**
+		 * This function performs an indirect call. We do not and can not know what the function 
+		 * that results from this call is. As such, we need to be safe and now assume that we require an 
+		 * initial alignment for this function
+		 * TODO NEED TO DO THIS INDIRECT
+		 */
+		current_function->requires_initial_alignment = TRUE;
 
+		/**
+		 * IMPORTANT: indirect function calls always have a unary expression node as their first
+		 * child. This node stores what exactly we're trying to call
+		 * TODO DO THIS LATER ON
+		 */
+		add_child_node(function_call_node, unary_expression_node);
+}
 
 
 /**
@@ -1988,8 +2029,6 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
 	//The lookahead token
 	lexitem_t lookahead;
-	//A pointer for our function name. Remember that we won't always have this
-	dynamic_string_t* function_name = NULL;
 
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
@@ -2001,24 +2040,15 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		return print_and_return_error("Invalid expression given to call statement", parser_line_num);
 	}
 
-	/**
-	 * Now that we've in theory gotten either the function itself or the expression
-	 * that is equivalent to it. We will extract the function record and signature
-	 * of the underlying function to work with
-	 */
-	symtab_function_record_t* function_record = NULL;
+	//This would in theory be our function signature
 	generic_type_t* function_signature = unary_expression_node->inferred_type;
 
-	//We need to do validations before it's safe to grab this
-	function_type_t* internal_function_type = NULL;
-
 	/**
-	 * If we have an actual function record(func const), we'll create what we call
-	 * a "direct call" which will *not* have any unary expression attached to it. If
-	 * we do not, then we will make an indirect call, which *always* has a unary expression
-	 * as the first child
+	 * Now this is where our rules will have to diverge. Regular function calls have the potential to
+	 * be calling out to overloaded functions. This means that at this point in a regular function call
+	 * we cannot know which of the functions we're calling out to. However, for an indirect call we will
+	 * always know because you cannot overload variables. For this reason we will split by rule at this point
 	 */
-	generic_ast_node_t* function_call_node;
 	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT && unary_expression_node->constant_type == FUNC_CONST){
 		//Extract the function record from the constant node
 		function_record = unary_expression_node->func_record;
@@ -2046,37 +2076,18 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	} else {
 		//Validate that what we're trying to call is actually a function
-		if(function_signature->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+		if(unary_expression_node->inferred_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", function_signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Allocate this as an indirect call
-		function_call_node = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
-
-		//It's safe to populate this now
-		internal_function_type = function_signature->internal_types.function_type;
-
 		/**
-		 * This function performs an indirect call. We do not and can not know what the function 
-		 * that results from this call is. As such, we need to be safe and now assume that we require an 
-		 * initial alignment for this function
+		 * Invoke the indirect function call rule and let all future handling for this
+		 * go through that rule now
 		 */
-		current_function->requires_initial_alignment = TRUE;
-
-		/**
-		 * IMPORTANT: indirect function calls always have a unary expression node as their first
-		 * child. This node stores what exactly we're trying to call
-		 */
-		add_child_node(function_call_node, unary_expression_node);
+		return indirect_function_call(token_stream, unary_expression_node, side);
 	}
 
-	/**
-	 * The inferred type is always the signature's return type. We will also store
-	 * the callee's function signature inside of the optional storage block
-	 */
-	function_call_node->inferred_type = internal_function_type->return_type;
-	function_call_node->optional_storage.callee_signature = internal_function_type;
 
 	//Store the line number at this point
 	function_call_node->line_number = parser_line_num;
@@ -2666,7 +2677,7 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 * Since a function value is constant and never changes, we will classify this record as a constant
 		 * if we do find it. If we find nothing then we fail
 		 *
-		 * TODO there may be more than one function here
+		 * TODO there may be more than one function here stored inside of the overload table itself
 		 */
 		symtab_function_record_t* found_function = lookup_function(function_symtab, var_name);
 		if(found_function != NULL){
