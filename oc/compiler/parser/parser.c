@@ -67,6 +67,8 @@ static function_type_t* current_function_signature = NULL;
 //Maintain a list of the errors/jump statements in the current function
 static dynamic_array_t errors_raised_by_current_function;
 static dynamic_array_t current_function_jump_statements;
+//Reusable list for parsing function call parameters
+static dynamic_array_t parameter_parsing_list;
 
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
@@ -2020,10 +2022,37 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	 * parse the parameters in and then validate later
 	 */
 	while(TRUE){
-		//TODO
-		break;
+		//Invoke the "in_expression" rule to parse this parameter
+		generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+		if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Bad parameter passed to function call", parser_line_num);
+		}
 
+		//Add this to our list that we're going to need to validate
+		dynamic_array_add(&parameter_parsing_list, parameter_expression);
+
+		//Based on the lookahead we decide what to do next
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
+			break;
+		} else {
+			return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+		}
 	}
+
+	/**
+	 * The only way to get here would have been to see that R_PAREN, so now we'll
+	 * have to confirm matching
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+	}
+
+
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 
@@ -2048,6 +2077,9 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	lexitem_t lookahead;
 	//A pointer for our function name. Remember that we won't always have this
 	dynamic_string_t* function_name = NULL;
+
+	//Wipe whatever old values were in our reusable list out
+	clear_dynamic_array(&parameter_parsing_list);
 
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
@@ -14924,6 +14956,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	 */
 	errors_raised_by_current_function = dynamic_array_alloc();
 	current_function_jump_statements = dynamic_array_alloc();
+	parameter_parsing_list = dynamic_array_alloc();
 
 	//Global entry/run point, will give us a tree with the root being here
 	prog = program(build_order);
@@ -14979,6 +15012,7 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Destroy these temporary arrays
 	dynamic_array_dealloc(&current_function_jump_statements);
 	dynamic_array_dealloc(&errors_raised_by_current_function);
+	dynamic_array_dealloc(&parameter_parsing_list);
 
 	//Give back the overall result
 	return results;
