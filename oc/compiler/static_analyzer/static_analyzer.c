@@ -575,8 +575,9 @@ static void mangle_static_variable_names(dynamic_array_t* global_variables){
  * For example: the function namespace1::namespace2::my_fn() will
  * have its name transformed into namespace1.namespace2.my_fn
  */
-static void mangle_all_namespace_member_names(function_symtab_t* function_symtab){
-	//We'll need a holder for the old name
+static void mangle_function_names(function_symtab_t* function_symtab){
+	//Allocate some buffers
+	char buffer[100];
 	dynamic_string_t old_name = dynamic_string_alloc();
 
 	/**
@@ -588,6 +589,7 @@ static void mangle_all_namespace_member_names(function_symtab_t* function_symtab
 		function_namespace_t* namespace = dynamic_array_get_at(&(function_symtab->namespaces), i);
 
 		//Default namespace - we do nothing for this
+		////TODO NEED TO FIX THIS
 		if(namespace->is_default == TRUE){
 			continue;
 		}
@@ -602,16 +604,33 @@ static void mangle_all_namespace_member_names(function_symtab_t* function_symtab
 		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
 			symtab_function_record_t* function_record = namespace->records[j];
 
-			//They can be chained so we have to do this
 			while(function_record != NULL){
-				//Clear the old name holder and store the function's name
-				clear_dynamic_string(&old_name);
-				dynamic_string_set(&old_name, function_record->func_name.string);
+				/**
+				 * IMPORTANT CAVEAT - due to function overloading we need to crawl
+				 * through the entire overload table for each record and handle
+				 * those as well
+				 */
+				for(int32_t k = 0; k < function_record->overload_table.current_index; k++){
+					symtab_function_record_t* record_to_mangle = dynamic_array_get_at(&(function_record->overload_table), k);
 
-				//We'll now set the name to be <namespace_chain>.<func_name>
-				dynamic_string_set(&(function_record->func_name), namespace_name.string);
-				dynamic_string_concatenate(&(function_record->func_name), ".");
-				dynamic_string_concatenate(&(function_record->func_name), old_name.string);
+					//Clear the old name holder and store the function's name
+					clear_dynamic_string(&old_name);
+					dynamic_string_set(&old_name, record_to_mangle->func_name.string);
+
+					//We'll now set the name to be <namespace_chain>.<func_name>
+					dynamic_string_set(&(record_to_mangle->func_name), namespace_name.string);
+					dynamic_string_concatenate(&(record_to_mangle->func_name), ".");
+					dynamic_string_concatenate(&(record_to_mangle->func_name), old_name.string);
+
+					/**
+					 * If this is an overloaded function, we will need to do one final mangle
+					 * to make it fully unique by attaching the function ID onto the very end
+					 */
+					if(record_to_mangle->function_classification == FUNCTION_CLASSIFICATION_OVERLOAD){
+						sprintf(buffer, ".%d", record_to_mangle->function_id);
+						dynamic_string_concatenate(&(record_to_mangle->func_name), buffer);
+					}
+				}
 
 				//Bump up to the next one
 				function_record = function_record->next;
@@ -2076,7 +2095,7 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * we mangle is different for each one but the bottom line is every function
 	 * and variable is guaranteed to be unique in the data segment
 	 */
-	mangle_all_namespace_member_names(results->function_symtab);
+	mangle_function_names(results->function_symtab);
 	mangle_static_variable_names(&(cfg->global_variables));
 
 	/**
