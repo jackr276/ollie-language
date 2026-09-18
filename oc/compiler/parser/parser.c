@@ -67,8 +67,6 @@ static function_type_t* current_function_signature = NULL;
 //Maintain a list of the errors/jump statements in the current function
 static dynamic_array_t errors_raised_by_current_function;
 static dynamic_array_t current_function_jump_statements;
-//Reusable list for parsing function call parameters
-static dynamic_array_t parameter_parsing_list;
 
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
@@ -2013,6 +2011,9 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	//Push onto the grouping stack once we see this
 	push_token(&grouping_stack, lookahead);
 
+	//Give ourselves a parameter parsing list to use
+	dynamic_array_t parameter_parsing_list = dynamic_array_alloc();
+
 	/**
 	 * If we don't immediately see an R_PAREN we can keep parsing here. If we do see
 	 * an R_PAREN we can't go any further and we'll just skip the parsing entirely
@@ -2032,8 +2033,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
-
-			printf("EXPRESSION TYPE IS %s at INDEX %d\n", parameter_expression->inferred_type->type_name.string, parameter_parsing_list.current_index);
 
 			//Add this to our list that we're going to need to validate
 			dynamic_array_add(&parameter_parsing_list, parameter_expression);
@@ -2100,10 +2099,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			//Now that we know it's safe get the current param out
 			generic_ast_node_t* current_param = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
 
-			printf("INDICES ARE %d and %d\n", param_type_index, param_result_index);
-			printf("TYPE IS %s\n", parameter_type->type_name.string);
-			printf("PASSING TYPE IS %s\n", current_param->inferred_type->type_name.string);
-
 			/**
 			 * Do the assignment and bookkeeping. If this is NULL it means that we failed so the entire
 			 * thing fails at this point
@@ -2148,9 +2143,14 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			add_child_node(indirect_call, current_param);
 
 		} else {
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 
 		}
 	}
+
+	//We're done with this array now so destroy it
+	dynamic_array_dealloc(&parameter_parsing_list);
 
 
 	printf("TODO NOT IMPLEMENTED\n");
@@ -2177,9 +2177,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	lexitem_t lookahead;
 	//A pointer for our function name. Remember that we won't always have this
 	dynamic_string_t* function_name = NULL;
-
-	//Wipe whatever old values were in our reusable list out
-	clear_dynamic_array(&parameter_parsing_list);
 
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
@@ -15088,7 +15085,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	 */
 	errors_raised_by_current_function = dynamic_array_alloc();
 	current_function_jump_statements = dynamic_array_alloc();
-	parameter_parsing_list = dynamic_array_alloc();
 
 	//Global entry/run point, will give us a tree with the root being here
 	prog = program(build_order);
@@ -15144,7 +15140,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	//Destroy these temporary arrays
 	dynamic_array_dealloc(&current_function_jump_statements);
 	dynamic_array_dealloc(&errors_raised_by_current_function);
-	dynamic_array_dealloc(&parameter_parsing_list);
 
 	//Give back the overall result
 	return results;
