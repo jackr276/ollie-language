@@ -1966,9 +1966,6 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
  * TODO DIFFERENT WAY OF PARSING
  */
 static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
-	//A pointer for our function name. For a direct call we always know this
-	dynamic_string_t* function_name = NULL;
-
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
@@ -13193,6 +13190,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 	 * function overloading we're armed with a signature to compare against
 	 */
 	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
+	function_type_t* internal_function_type = new_function_signature->internal_types.function_type;
 
 	/**
 	 * Step 5: parse all parameters
@@ -13282,6 +13280,26 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
 
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Due to the way that elaborative stack params would muddy the waters with overloading, Ollie bans
+			 * the use of overloading with elaborative stack params on both the original and new functions
+			 *
+			 * First check the original found function
+			 */
+			if(original_found_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function \"%s\" was declared with an elaborative parameter. Functions with elaborative parameters may never be overloaded. First declared here:",
+					  	original_found_function->func_name.string);
+				print_function_name_to_buffer(info, original_found_function);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Now check the overload type
+			if(internal_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
+						new_function_signature->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -14221,6 +14239,26 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
 							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
 
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Due to the way that elaborative stack params would muddy the waters with overloading, Ollie bans
+			 * the use of overloading with elaborative stack params on both the original and new functions
+			 *
+			 * First check the original found function
+			 */
+			if(original_found_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function \"%s\" was declared with an elaborative parameter. Functions with elaborative parameters may never be overloaded. First declared here:",
+					  	original_found_function->func_name.string);
+				print_function_name_to_buffer(info, original_found_function);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Now check the overload type
+			if(internal_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
+						new_function_signature->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
