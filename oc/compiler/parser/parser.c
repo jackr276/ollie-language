@@ -2064,6 +2064,10 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	 *
 	 * NOTE: This should be a 1-to-1 mapping of type to param unless we hit the elaborative param which
 	 * requires special handling
+	 *
+	 * We have handling at the very exit of this loop to catch instances where a user may have given too
+	 * many parameters. Undersupply(too few parameters) cases will be caught inside of the loop because we
+	 * are indexing on the parameter type list
 	 */
 	int32_t param_result_index = 0;
 	int32_t param_type_index = 0;
