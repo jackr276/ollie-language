@@ -2015,6 +2015,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	dynamic_array_t parameter_parsing_list = dynamic_array_alloc();
 
 	/**
+	 * Step 1: parse all supplied function parameters into a temporary list
+	 *
 	 * If we don't immediately see an R_PAREN we can keep parsing here. If we do see
 	 * an R_PAREN we can't go any further and we'll just skip the parsing entirely
 	 */
@@ -2058,6 +2060,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	}
 
 	/**
+	 * Step 2: validate function parameter types
+	 *
 	 * Now that we have all of our parameters fully parsed in, we need to validate their types against
 	 * the function signature's parameters and handle any special bookkeeping(copy assignment, elaborative
 	 * param) that will apply
@@ -2155,9 +2159,11 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 	/**
 	 * Oversupply case - we have too many function parameters so we need
-	 * to fail out. Be careful with elaborative params in our printing
+	 * to fail out. Be careful with elaborative params in our printing. We can
+	 * detect this be seeing if we've underconsumed the param result list
+	 * with our param_result_index
 	 */
-	if(param_result_index >= function_parameter_types->current_index){
+	if(param_result_index < parameter_parsing_list.current_index){
 		if(internal_function_type->contains_elaborative_stack_param == FALSE){
 			sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
 							function_signature->type_name.string,
@@ -2177,9 +2183,51 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	//We're done with this array now so destroy it
 	dynamic_array_dealloc(&parameter_parsing_list);
 
+	/**
+	 * Step 3: parse the optional handle statement
+	 *
+	 * If we have a function that may raise errors, we are absolutely required to see the
+	 * handles statement here. If we have a function that does not return errors, then it is
+	 * completely incorrect for us to see the handles statement here. We need to handle
+	 * both cases appropriately
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == HANDLE){
+		/**
+		 * If we don't raise errors then this is never correct so fail out
+		 */
+		if(internal_function_type->raises_errors == FALSE){
+			sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+						function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+		//Now let's process the handle statement
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_signature);
+ 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid handle statement given to function call", parser_line_num);
+		}
+
+		//Otherwise let's add this to the function call
+		add_child_node(indirect_call, handle_node);
+
+	/**
+	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
+	 */
+	} else {
+		/**
+		 * If this function raises errors, then we actually
+		 * had to see this, so this is an error
+		 */
+		if(internal_function_type->raises_errors == TRUE){
+			sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+							function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	return indirect_call;
 }
