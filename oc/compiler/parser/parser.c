@@ -1964,10 +1964,11 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
  * TODO DIFFERENT WAY OF PARSING
  */
 static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
-	//A pointer for our function name. Remember that we won't always have this
+	//A pointer for our function name. For a direct call we always know this
 	dynamic_string_t* function_name = NULL;
 
-//TODO
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 }
 
 
@@ -1980,8 +1981,6 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
  */
 static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
 	lexitem_t lookahead;
-	//A pointer for our function name. Remember that we won't always have this
-	dynamic_string_t* function_name = NULL;
 
 	//Extract the function signature and the internal function type
 	generic_type_t* function_signature = unary_expr_node->inferred_type;
@@ -2021,8 +2020,12 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	 * parse the parameters in and then validate later
 	 */
 	while(TRUE){
+		//TODO
+		break;
 
 	}
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 
 	return indirect_call;
 }
@@ -2036,9 +2039,16 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
  * 
  * By the time we get here, we will have already consumed the "@" token
  *
+ * TODO I'VE LEFT THE DIRECT CALL PARSEABLE WHILE WE WORK ON INDIRECT
+ *
  * BNF Rule: <function-call> ::= @{<unary_expression>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
+	//The lookahead token
+	lexitem_t lookahead;
+	//A pointer for our function name. Remember that we won't always have this
+	dynamic_string_t* function_name = NULL;
+
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
 	 * will either give us the actual function itself *or* it will give us an expression that
@@ -2049,15 +2059,24 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		return print_and_return_error("Invalid expression given to call statement", parser_line_num);
 	}
 
-	//This would in theory be our function signature
+	/**
+	 * Now that we've in theory gotten either the function itself or the expression
+	 * that is equivalent to it. We will extract the function record and signature
+	 * of the underlying function to work with
+	 */
+	symtab_function_record_t* function_record = NULL;
 	generic_type_t* function_signature = unary_expression_node->inferred_type;
 
+	//We need to do validations before it's safe to grab this
+	function_type_t* internal_function_type = NULL;
+
 	/**
-	 * Now this is where our rules will have to diverge. Regular function calls have the potential to
-	 * be calling out to overloaded functions. This means that at this point in a regular function call
-	 * we cannot know which of the functions we're calling out to. However, for an indirect call we will
-	 * always know because you cannot overload variables. For this reason we will split by rule at this point
+	 * If we have an actual function record(func const), we'll create what we call
+	 * a "direct call" which will *not* have any unary expression attached to it. If
+	 * we do not, then we will make an indirect call, which *always* has a unary expression
+	 * as the first child
 	 */
+	generic_ast_node_t* function_call_node;
 	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT && unary_expression_node->constant_type == FUNC_CONST){
 		//Extract the function record from the constant node
 		function_record = unary_expression_node->func_record;
@@ -2085,18 +2104,32 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 
 	} else {
 		//Validate that what we're trying to call is actually a function
-		if(unary_expression_node->inferred_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+		if(function_signature->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
 			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", function_signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		/**
-		 * Invoke the indirect function call rule and let all future handling for this
-		 * go through that rule now
-		 */
 		return indirect_function_call(token_stream, unary_expression_node, side);
 	}
 
+	/**
+	 * The inferred type is always the signature's return type. We will also store
+	 * the callee's function signature inside of the optional storage block
+	 */
+	function_call_node->inferred_type = internal_function_type->return_type;
+	function_call_node->optional_storage.callee_signature = internal_function_type;
+
+	//Store the line number at this point
+	function_call_node->line_number = parser_line_num;
+	
+	//We now need to see a left parenthesis for our param list
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
+	}
+
+	//Push onto the grouping stack once we see this
+	push_token(&grouping_stack, lookahead);
 
 	/**
 	 * For parameter handling - if the function signature expects
