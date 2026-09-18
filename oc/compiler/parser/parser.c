@@ -2149,6 +2149,27 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		}
 	}
 
+	/**
+	 * Oversupply case - we have too many function parameters so we need
+	 * to fail out. Be careful with elaborative params in our printing
+	 */
+	if(param_result_index >= function_parameter_types->current_index){
+		if(internal_function_type->contains_elaborative_stack_param == FALSE){
+			sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
+							function_signature->type_name.string,
+							function_parameter_types->current_index,
+							parameter_parsing_list.current_index);
+		} else {
+			//Account for the optional elaborative param
+			sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
+							function_signature->type_name.string,
+							function_parameter_types->current_index - 1,
+							parameter_parsing_list.current_index);
+		}
+
+		return print_and_return_error(info, parser_line_num);
+	}
+
 	//We're done with this array now so destroy it
 	dynamic_array_dealloc(&parameter_parsing_list);
 
