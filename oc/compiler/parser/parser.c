@@ -2014,28 +2014,37 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	push_token(&grouping_stack, lookahead);
 
 	/**
-	 * We can now process all of our function parameters. At this moment we're not going
-	 * to check anything about them matching up to our desired types. We're just going to
-	 * parse the parameters in and then validate later
+	 * If we don't immediately see an R_PAREN we can keep parsing here. If we do see
+	 * an R_PAREN we can't go any further and we'll just skip the parsing entirely
 	 */
-	while(TRUE){
-		//Invoke the "in_expression" rule to parse this parameter
-		generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
-		if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Bad parameter passed to function call", parser_line_num);
-		}
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != R_PAREN){
+		push_back_token(token_stream, &parser_line_num);
 
-		//Add this to our list that we're going to need to validate
-		dynamic_array_add(&parameter_parsing_list, parameter_expression);
+		/**
+		 * We can now process all of our function parameters. At this moment we're not going
+		 * to check anything about them matching up to our desired types. We're just going to
+		 * parse the parameters in and then validate later
+		 */
+		while(TRUE){
+			//Invoke the "in_expression" rule to parse this parameter
+			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
+			}
 
-		//Based on the lookahead we decide what to do next
-		lookahead = get_next_token(token_stream, &parser_line_num);
-		if(lookahead.tok == COMMA){
-			continue;
-		} else if(lookahead.tok == R_PAREN){
-			break;
-		} else {
-			return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			//Add this to our list that we're going to need to validate
+			dynamic_array_add(&parameter_parsing_list, parameter_expression);
+
+			//Based on the lookahead we decide what to do next
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok == COMMA){
+				continue;
+			} else if(lookahead.tok == R_PAREN){
+				break;
+			} else {
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
 		}
 	}
 
