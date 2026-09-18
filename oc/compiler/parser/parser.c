@@ -1979,6 +1979,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
  * in a way that is completely different from direct function calls
  */
 static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
+	lexitem_t lookahead;
 	//A pointer for our function name. Remember that we won't always have this
 	dynamic_string_t* function_name = NULL;
 
@@ -1996,23 +1997,34 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	 */
 	indirect_call->inferred_type = internal_function_type->return_type;
 	indirect_call->optional_storage.callee_signature = internal_function_type;
+	indirect_call->line_number = parser_line_num;
 
-//TODO
+	/**
+	 * This function performs an indirect call. We do not and can not know what the function 
+	 * that results from this call is. As such, we need to be safe and now assume that we require an 
+	 * initial alignment for this function
+	 */
+	current_function->requires_initial_alignment = TRUE;
 
-		/**
-		 * This function performs an indirect call. We do not and can not know what the function 
-		 * that results from this call is. As such, we need to be safe and now assume that we require an 
-		 * initial alignment for this function
-		 * TODO NEED TO DO THIS INDIRECT
-		 */
-		current_function->requires_initial_alignment = TRUE;
+	//We now need to see a left parenthesis for our param list
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
+	}
 
-		/**
-		 * IMPORTANT: indirect function calls always have a unary expression node as their first
-		 * child. This node stores what exactly we're trying to call
-		 * TODO DO THIS LATER ON
-		 */
-		add_child_node(function_call_node, unary_expression_node);
+	//Push onto the grouping stack once we see this
+	push_token(&grouping_stack, lookahead);
+
+	/**
+	 * We can now process all of our function parameters. At this moment we're not going
+	 * to check anything about them matching up to our desired types. We're just going to
+	 * parse the parameters in and then validate later
+	 */
+	while(TRUE){
+
+	}
+
+	return indirect_call;
 }
 
 
@@ -2027,9 +2039,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
  * BNF Rule: <function-call> ::= @{<unary_expression>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
-	//The lookahead token
-	lexitem_t lookahead;
-
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
 	 * will either give us the actual function itself *or* it will give us an expression that
@@ -2088,18 +2097,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		return indirect_function_call(token_stream, unary_expression_node, side);
 	}
 
-
-	//Store the line number at this point
-	function_call_node->line_number = parser_line_num;
-	
-	//We now need to see a left parenthesis for our param list
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
-	}
-
-	//Push onto the grouping stack once we see this
-	push_token(&grouping_stack, lookahead);
 
 	/**
 	 * For parameter handling - if the function signature expects
