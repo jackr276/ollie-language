@@ -604,6 +604,12 @@ macro_symtab_t* macro_symtab_alloc();
 module_symtab_t* module_symtab_alloc();
 
 /**
+ * Print a function name to the "fl" file. This rule accounts for
+ * overloads and will properly print mangled names
+ */
+void print_function_name(FILE* fl, symtab_function_record_t* function);
+
+/**
  * Initialize the variable symbol table scope. It is possible that the function
  * we are contained in would be NULL for the global variable scope
  */

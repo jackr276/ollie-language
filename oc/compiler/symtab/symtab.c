@@ -93,6 +93,22 @@ static inline u_int32_t increment_and_get_type_lexical_scope(){
 
 
 /**
+ * Print a function name to the "fl" file
+ *
+ * If we have a regular function, we will just print out the raw name. If
+ * we have an overloaded function we'll mangle it with the function ID
+ */
+void print_function_name(FILE* fl, symtab_function_record_t* function){
+	//Normal just print the name out
+	if(function->function_classification == FUNCTION_CLASSIFICATION_NORMAL){
+		fprintf(fl, "%s", function->func_name.string);
+	} else {
+		fprintf(fl, "%s.%d", function->func_name.string, function->function_id);
+	}
+}
+
+
+/**
  * Convert the visibility type to a string for errors
  */
 char* visibility_to_string(visibilty_type_t visibility){
