@@ -2050,7 +2050,93 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 	}
 
+	/**
+	 * Now that we have all of our parameters fully parsed in, we need to validate their types against
+	 * the function signature's parameters and handle any special bookkeeping(copy assignment, elaborative
+	 * param) that will apply
+	 *
+	 * NOTE: This should be a 1-to-1 mapping of type to param unless we hit the elaborative param which
+	 * requires special handling
+	 */
+	int32_t param_result_index = 0;
+	int32_t param_type_index = 0;
+	dynamic_array_t* function_parameter_types = &(internal_function_type->function_parameters);
+	for(; param_type_index < internal_function_type->function_parameters.current_index; param_type_index++, param_result_index++){
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), param_type_index);
 
+		/**
+		 * Most common case by far - usually we do not have elaborative parameters
+		 */
+		if(parameter_type->type_class != TYPE_CLASS_ELABORATIVE){
+			/**
+			 * Undersupply case - we have too few function parameters so we need
+			 * to fail out. Be careful with elaborative params in our printing
+			 */
+			if(param_type_index >= parameter_parsing_list.current_index){
+				if(internal_function_type->contains_elaborative_stack_param == FALSE){
+					sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d", 
+									function_signature->type_name.string,
+									function_parameter_types->current_index,
+									parameter_parsing_list.current_index);
+				} else {
+					//Account for the optional elaborative param
+					sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d", 
+									function_signature->type_name.string,
+									function_parameter_types->current_index - 1,
+									parameter_parsing_list.current_index);
+				}
+			}
+
+			//Now that we know it's safe get the current param out
+			generic_ast_node_t* current_param = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+			/**
+			 * Do the assignment and bookkeeping. If this is NULL it means that we failed so the entire
+			 * thing fails at this point
+			 */
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
+			if(final_type == NULL){
+				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						function_signature->type_name.string,
+						(parameter_type->mutability == MUTABLE ? "mut ": ""),
+						parameter_type->type_name.string,
+						param_result_index + 1,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+			 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+			 * doing an address calculation.
+			 */
+			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
+				/**
+				 * If the right hand expression is a postfix expression *and* we are looking
+				 * to perform a memory copy assignment here, we need to flag that 
+				 * we do *not* require a dereference to make this work
+				 */
+				propogate_no_dereference_required_flag(current_param);
+			}
+
+			/**
+			 * We can now safely add this into the function call node as a child. In the function call node, 
+			 * the parameters will appear in order from left to right
+			 */
+			add_child_node(indirect_call, current_param);
+
+		} else {
+
+		}
+	}
 
 
 	printf("TODO NOT IMPLEMENTED\n");
