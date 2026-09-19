@@ -1957,6 +1957,50 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 
 
 /**
+ * A simple helper that will compare a list of parameters(mainly their types) against a function signature.
+ * We return 2 if this parameter list *could* be used to call this function *without* coercion/casting. For
+ * example f32 to i32 normally we cast, but here we don't want to do that
+ *
+ * NOTE: since this is exclusively used for overloading, we never expect to handle any elaborative parameters
+ * here
+ */
+static inline u_int8_t compare_parameter_list_against_signature(dynamic_array_t* parameter_nodes, function_type_t* signature){
+	//Maintain two separate indices for doing this
+	int32_t parameter_type_index = 0;
+	int32_t parameter_index = 0;
+
+	//Run through all of the function parameters
+	for(; parameter_type_index < signature->function_parameters.current_index; parameter_type_index++, parameter_index++){
+		/**
+		 * Undersupply case: More types than parameter nodes so we can't have this here
+		 */
+		if(parameter_type_index >= parameter_nodes->current_index){
+			return FALSE;
+		}
+
+		//Extract the parameter type and parameter node type
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), parameter_type_index);
+		generic_ast_node_t* parameter_node = dynamic_array_get_at(parameter_nodes, parameter_index);
+
+		//Different types, not a match
+		if(types_identical(parameter_type, parameter_node->inferred_type) == FALSE){
+			return FALSE;
+		}
+	}
+
+	/**
+	 * Oversupply case: more function parameters than their are types
+	 */
+	if(parameter_index != parameter_nodes->current_index){
+		return FALSE;
+	}
+
+	//IF we made it here then this worked
+	return TRUE;
+}
+
+
+/**
  * A direct function call will need to account for the possibility that we have
  * an overloaded function call. As such, we cannot verify the parameter list until
  * after we've done all of the parameter parsing
@@ -2042,8 +2086,19 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 	}
 
+
 	/**
+	 * Step 2: overloaded call handling
+	 *
+	 * Note that most functions have no overloads(overload table is at 1), so we're only going
+	 * to do this logic for those who have more than one overload. We will use our helper
+	 * to determine if any overloaded function signature is a match. If there is one, then
+	 * we'll select that. Otherwise, we'll default back to the original function that
+	 * came from the lookup
 	 */
+	if(function_record->overload_table.current_index > 1){
+
+	}
 
 
 
