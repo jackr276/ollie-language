@@ -590,15 +590,20 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 
 				//If this is still Null we found nothign
 				if(found_record == NULL){
-					sprintf(info, "No overload of function \"%s\" has a signature of %s",
+					sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
 									original_record->func_name.string,
 									destination_type->type_name.string);
 					return print_and_return_null(info, parser_line_num);
 				}
 
+				/**
+				 * Otherwise we did find it. We will need to retroactively update this
+				 * node with the correct info and type
+				 */
+				source_node->func_record = found_record;
+				source_node->inferred_type = destination_type;
 
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
+				return destination_type;
 			}
 
 			default: {
