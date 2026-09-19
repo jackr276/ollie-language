@@ -6341,6 +6341,12 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				visit_static_let_statement(expr_node);
 				return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 			}
+
+		/**
+		 * This is a dummy node type - just swallow it and move along
+		 */
+		case AST_NODE_TYPE_FUNC_PREDCLARATION:
+			return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
 			return visit_paramcount_statement(basic_block, expr_node);
@@ -10616,6 +10622,16 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 		ast_cursor = ast_cursor->next_sibling;
 	}
 
+	/**
+	 * Account for the case where we have a completely
+	 * empty compound statement. In this case we'll
+	 * just allocate a dummy block and get out
+	 */
+	if(starting_block == NULL){
+		starting_block = basic_block_alloc_and_estimate();
+		current_block = starting_block;
+	}
+
 	//If we make it down here - we still need to ensure that results are packaged properly
 	results.starting_block = starting_block;
 	results.final_block = current_block;
@@ -12117,6 +12133,12 @@ static void visit_namespace_declaration(cfg_t* cfg, generic_ast_node_t* namespac
 			case AST_NODE_TYPE_LET_STMT:
 				visit_global_let_statement(namespace_child);
 				break;
+
+			/**
+			 * This is a dummy node type - just swallow it and move along
+			 */
+			case AST_NODE_TYPE_FUNC_PREDCLARATION:
+				break;
 				
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
 			default:
@@ -12156,12 +12178,17 @@ static void visit_prog_node(cfg_t* cfg, generic_ast_node_t* prog_node){
 				visit_namespace_declaration(cfg, ast_cursor);
 				break;
 
+			/**
+			 * This is a dummy node type - just swallow it and move along
+			 */
+			case AST_NODE_TYPE_FUNC_PREDCLARATION:
+				break;
+
 			//Some very weird error if we hit here. Hard exit to avoid dev confusion
 			default:
 				printf("Fatal internal compiler error: Unrecognized node type found in global scope\n");
 				exit(1);
 		}
-
 
 		//We now advance to the next sibling
 		ast_cursor = ast_cursor->next_sibling;

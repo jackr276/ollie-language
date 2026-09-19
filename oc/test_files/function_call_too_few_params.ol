@@ -9,6 +9,7 @@ fn tester(x:i32, y:i32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [fail_to_compile]
 	//Too few parameters
 	ret @tester(3);
 }

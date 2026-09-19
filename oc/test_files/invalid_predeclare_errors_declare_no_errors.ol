@@ -10,7 +10,7 @@ pub fn my_func(x:i32, y:i32) -> i32 {
 	ret 0;
 }
 
-pub fn main() -> 32 {
+pub fn main() -> i32 {
 	OUNIT: [fail_to_compile]
 	ret 0;
 }

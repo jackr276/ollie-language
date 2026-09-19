@@ -10,7 +10,7 @@ namespace tester
 		ret 0;
 	}
 
-	pub fn duplicate() -> f32 {
+	pub fn duplicate() -> i32 {
 		ret 3.33;
 	}
 }

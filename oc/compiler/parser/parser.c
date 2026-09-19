@@ -64,14 +64,12 @@ static generic_ast_node_t* prog = NULL;
 static symtab_function_record_t* current_function = NULL;
 static function_type_t* current_function_signature = NULL;
 
-//Keep track of all of the errors that have been raised by the current function
-static dynamic_set_t errors_raised_by_current_function;
-//Array that holds all of the jump statements for our current function
+//Maintain a list of the errors/jump statements in the current function
+static dynamic_array_t errors_raised_by_current_function;
 static dynamic_array_t current_function_jump_statements;
+
 //The BFS queue for namespaces
 static heap_queue_t namespace_bfs_queue;
-//Store the overall current function scope
-static symtab_variable_sheaf_t* top_level_function_variable_scope = NULL;
 
 //Keep hold of the current dependency node that we are on
 static dependency_graph_node_t* current_dependency_node = NULL;
@@ -142,12 +140,13 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
 static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_stream, generic_type_t* struct_type);
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
-static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function);
+static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
+static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
 static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
-static u_int8_t validate_function_parameter_list(generic_type_t* function_type);
+static inline u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
 static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token_stream, symtab_type_record_t* current_type, lightstack_t* bounds_stack);
 static inline symtab_type_record_t* create_array_type_from_bounds(symtab_type_record_t* base_member_type, lightstack_t* bounds_stack, mutability_type_t mutability);
@@ -211,6 +210,45 @@ static void print_parse_message(error_message_type_t message_type, char* info, u
 	} else {
 		fprintf(stdout, "\n[FILE: %s] --> [LINE %d | COMPILER %s]: %s\n", stripped_file_name, line_num, type[message_type], info);
 	}
+}
+
+
+/**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Allocate and return an error node
+	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+}
+
+
+/**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline u_int8_t print_and_return_failure(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Print out our failure
+	return FAILURE;
+}
+
+
+/**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline void* print_and_return_null(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Give back the NULL
+	return NULL;
 }
 
 
@@ -288,6 +326,49 @@ static inline u_int8_t does_type_require_i64_conversion(generic_type_t* type){
 		default:
 			return FALSE;
 	}
+}
+
+
+/**
+ * Find a function record by searching the symtab, finding a record, and then searching the overloads
+ * array of that record to see if we have a signature match. If we do, we will return that function
+ * record. If we do not, then we return NULL
+ */
+static inline symtab_function_record_t* resolve_function_record(char* name, generic_type_t* signature, u_int8_t current_namespace_only){
+	/**
+	 * First get the raw record. We allow the caller to specify if we are doing global
+	 * lookups or namespace local lookups
+	 */
+	symtab_function_record_t* found_function = NULL;
+	if(current_namespace_only == FALSE){
+		found_function = lookup_function(function_symtab, name);
+	} else {
+		found_function = lookup_function_in_namespace(function_symtab->current, name);
+	}
+
+	//We got nothing so get out
+	if(found_function == NULL){
+		return NULL;
+	}
+
+	/**
+	 * Otherwise, we have something so we need to crawl every single record in this function
+	 * to determine which one is what we're after
+	 */
+	for(int32_t i = 0; i < found_function->overload_table.current_index; i++){
+		symtab_function_record_t* candidate = dynamic_array_get_at(&(found_function->overload_table), i);
+
+		/**
+		 * If the signatures meet our definition of equivalence, then we're done searching
+		 * and we can return the candidate record
+		 */
+		if(function_signatures_equivalent(candidate->signature, signature) == TRUE){
+			return candidate;
+		}
+	}
+
+	//If we made it here then we found nothing
+	return NULL;
 }
 
 
@@ -464,79 +545,112 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 
 
 /**
- * If a constant is a string constant, function constant, or any other kind of relative
- * address constant, then we may not convert it and we must process it using the normal
- * rules as if it were a variable. This helper sifts through a constant type and determines
- * if it is one of these exceptions
- */
-static inline u_int8_t is_constant_type_exempt_from_constant_assignment_rules(ollie_token_t constant_type){
-	switch(constant_type){
-		case STR_CONST:
-		case FUNC_CONST:
-		case REL_ADDRESS_CONST:
-				return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Can a given source node be assigned to a destination type? This logic changes based on whether or not
  * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
  * relying on types_assignable in the type system
  */
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
 	/**
-	 * If this is not a constant type or it is exempt, we use the regular types assignable path
+	 * If this is not a constant then use the regular rules to get this done
 	 */
-	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT || is_constant_type_exempt_from_constant_assignment_rules(source_node->constant_type) == TRUE){
+	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
 		return types_assignable(destination_type, source_node->inferred_type);
 
+	/**
+	 * Otherwise it is a constant. We will need to do processing based on what
+	 * kind of constant we have. Certain constants will require more work/different
+	 * treatment as compared to others
+	 */
 	} else {
-		/**
-		 * Let types_assignable run. We will need the types to all be original here in order for this
-		 * to work properly
-		 */
-		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
-
-		//If it failed then just leave now
-		if(result_type == NULL){
-			return NULL;
-		}
-
-		/**
-		 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
-		 * correlates to it properly. If we are trying to assign a constant value that is not in
-		 * the enum's range of valid values, that would cause issues down the line and we will
-		 * not allow it
-		 */
-		if(is_enum_type(destination_type) == TRUE){
-			if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							destination_type->type_name.string, source_node->constant_value.signed_int_value);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				return NULL;
+		switch(source_node->constant_type){
+			case STR_CONST:
+			case REL_ADDRESS_CONST: {
+				return types_assignable(destination_type, source_node->inferred_type);
 			}
-		} 
 
-		/**
-		 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
-		 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
-		 * but has different rules inside of Ollie
-		 */
-		if(result_type->type_class == TYPE_CLASS_POINTER){
-			result_type = immut_u64;
+			/**
+			 * Function constants need to account for overloading. It's not as simple as
+			 * just taking the function record and doing a types_assignable check on it
+			 */
+			case FUNC_CONST: {
+				//Grab the original record out and make room for the found record
+				symtab_function_record_t* original_record = source_node->func_record;
+				symtab_function_record_t* found_record = NULL;
+
+				//Run through all records until we have a match
+				for(int32_t i = 0; i < original_record->overload_table.current_index; i++){
+					symtab_function_record_t* candidate = dynamic_array_get_at(&(original_record->overload_table), i);
+
+					//As soon as we find a match we are done
+					if(types_assignable(destination_type, candidate->signature) != NULL){
+						found_record = candidate;
+						break;
+					}
+				}
+
+				//If this is still Null we found nothign
+				if(found_record == NULL){
+					sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
+									original_record->func_name.string,
+									destination_type->type_name.string);
+					return print_and_return_null(info, parser_line_num);
+				}
+
+				/**
+				 * Otherwise we did find it. We will need to retroactively update this
+				 * node with the correct info and type
+				 */
+				source_node->func_record = found_record;
+				source_node->inferred_type = destination_type;
+
+				return destination_type;
+			}
+
+			default: {
+				/**
+				 * Let types_assignable run. We will need the types to all be original here in order for this
+				 * to work properly
+				 */
+				generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
+
+				//If it failed then just leave now
+				if(result_type == NULL){
+					return NULL;
+				}
+
+				/**
+				 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
+				 * correlates to it properly. If we are trying to assign a constant value that is not in
+				 * the enum's range of valid values, that would cause issues down the line and we will
+				 * not allow it
+				 */
+				if(is_enum_type(destination_type) == TRUE){
+					if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+									destination_type->type_name.string, source_node->constant_value.signed_int_value);
+						return print_and_return_null(info, parser_line_num);
+					}
+				} 
+
+				/**
+				 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
+				 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
+				 * but has different rules inside of Ollie
+				 */
+				if(result_type->type_class == TYPE_CLASS_POINTER){
+					result_type = immut_u64;
+				}
+
+				//Reassign the constant's type at this point
+				source_node->inferred_type = result_type;
+
+				//While we're here we will coerce the constant itself
+				coerce_constant(source_node);
+
+				//Give this back
+				return result_type;
+			}
 		}
-
-		//Reassign the constant's type at this point
-		source_node->inferred_type = result_type;
-
-		//While we're here we will coerce the constant itself
-		coerce_constant(source_node);
-
-		//Give this back
-		return result_type;
 	}
 }
 
@@ -901,32 +1015,6 @@ static inline generic_type_t* determine_required_minimum_signed_integer_type_siz
 
 
 /**
- * Print out an error message. This avoids code duplicatoin becuase of how much we do this
- */
-static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t parser_line_num){
-	//Display the error
-	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
-	//Increment the number of errors
-	num_errors++;
-	//Allocate and return an error node
-	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-}
-
-
-/**
- * Print out an error message. This avoids code duplicatoin becuase of how much we do this
- */
-static inline u_int8_t print_and_return_failure(char* error_message, u_int32_t parser_line_num){
-	//Display the error
-	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
-	//Increment the number of errors
-	num_errors++;
-	//Print out our failure
-	return FAILURE;
-}
-
-
-/**
  * Handle a constant. There are 4 main types of constant, all handled by this function. A constant
  * is always the child of some parent node. We will always return the reference to the node
  * created here
@@ -1223,8 +1311,8 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 		//Otherwise we are good
 		error_id_value = error_type->internal_types.error_type_id;
 
-		//Add this into the set of all errors raised by the current function
-		dynamic_set_add(&errors_raised_by_current_function, error_type);
+		//Add this into the list of all errors raised by the current function
+		dynamic_array_add(&errors_raised_by_current_function, error_type);
 
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
@@ -1902,6 +1990,805 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 
 
 /**
+ * A simple helper that will compare a list of parameters(mainly their types) against a function signature.
+ * We return 2 if this parameter list *could* be used to call this function *without* coercion/casting. For
+ * example f32 to i32 normally we cast, but here we don't want to do that
+ *
+ * NOTE: since this is exclusively used for overloading, we never expect to handle any elaborative parameters
+ * here
+ */
+static inline u_int8_t does_parameter_list_match_signature(dynamic_array_t* parameter_nodes, function_type_t* signature){
+	//Maintain two separate indices for doing this
+	int32_t parameter_type_index = 0;
+	int32_t parameter_index = 0;
+
+	//Run through all of the function parameters
+	for(; parameter_type_index < signature->function_parameters.current_index; parameter_type_index++, parameter_index++){
+		/**
+		 * Undersupply case: More types than parameter nodes so we can't have this here
+		 */
+		if(parameter_type_index >= parameter_nodes->current_index){
+			return FALSE;
+		}
+
+		//Extract the parameter type and parameter node type
+		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), parameter_type_index);
+		generic_ast_node_t* parameter_node = dynamic_array_get_at(parameter_nodes, parameter_index);
+
+		/**
+		 * Determine if these types are "overloading equivalent". This is a very special designation
+		 * that has some leeway compared to types_identical
+		 */
+		if(types_overloading_equivalent(parameter_type, parameter_node->inferred_type) == FALSE){
+			return FALSE;
+		}
+	}
+
+	/**
+	 * Oversupply case: more function parameters than their are types
+	 */
+	if(parameter_index != parameter_nodes->current_index){
+		return FALSE;
+	}
+
+	//IF we made it here then this worked
+	return TRUE;
+}
+
+
+/**
+ * A direct function call will need to account for the possibility that we have
+ * an overloaded function call. As such, we cannot verify the parameter list until
+ * after we've done all of the parameter parsing
+ *
+ * Unlike indirect function calls, direct function calls have to deal with the decisions
+ * required in overloading. Mainly that is, based on the parameters supplied, which overloaded
+ * function best fits
+ */
+static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
+	//We'll be using these both throughout the procedure
+	lexitem_t lookahead;
+	dynamic_string_t* function_name;
+
+	/**
+	 * Get the function record out of the unary expression node. Do remember
+	 * that this is not yet the final function record because we have overloading
+	 * to deal with. Also get the name out this is the same across all overloads
+	 */
+	symtab_function_record_t* function_record = unary_expr_node->func_record;
+	function_name = &(function_record->func_name);
+
+	/**
+	 * We can allocate the node now but there's not much that we're able
+	 * to put inside of it
+	 */
+	generic_ast_node_t* direct_call = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
+	direct_call->line_number = parser_line_num;
+
+
+	//We now need to see a left parenthesis for our param list
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
+	}
+
+	//Push onto the grouping stack once we see this
+	push_token(&grouping_stack, lookahead);
+
+	//Give ourselves a parameter parsing list to use
+	dynamic_array_t parameter_parsing_list = dynamic_array_alloc();
+
+	/**
+	 * Step 1: parse all supplied function parameters into a temporary list
+	 *
+	 * If we don't immediately see an R_PAREN we can keep parsing here. If we do see
+	 * an R_PAREN we can't go any further and we'll just skip the parsing entirely
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != R_PAREN){
+		push_back_token(token_stream, &parser_line_num);
+
+		/**
+		 * We can now process all of our function parameters. At this moment we're not going
+		 * to check anything about them matching up to our desired types. We're just going to
+		 * parse the parameters in and then validate later
+		 */
+		while(TRUE){
+			//Invoke the "in_expression" rule to parse this parameter
+			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
+			}
+
+			//Add this to our list that we're going to need to validate
+			dynamic_array_add(&parameter_parsing_list, parameter_expression);
+
+			//Based on the lookahead we decide what to do next
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok == COMMA){
+				continue;
+			} else if(lookahead.tok == R_PAREN){
+				break;
+			} else {
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
+		}
+	}
+
+	/**
+	 * The only way to get here would have been to see that R_PAREN, so now we'll
+	 * have to confirm matching
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+	}
+
+	/**
+	 * Step 2: overloaded call handling
+	 *
+	 * Note that most functions have no overloads(overload table is at 1), so we're only going
+	 * to do this logic for those who have more than one overload. We will use our helper
+	 * to determine if any overloaded function signature is a match. If there is one, then
+	 * we'll select that. Otherwise, we'll default back to the original function that
+	 * came from the lookup
+	 */
+	if(function_record->overload_table.current_index > 1){
+		//Initially we didn't find a match
+		symtab_function_record_t* found_record = NULL;
+
+		//Run through everything in the overload table - we do a full scan no matter what
+		for(int32_t i = 0; i < function_record->overload_table.current_index; i++){
+			symtab_function_record_t* candidate = dynamic_array_get_at(&(function_record->overload_table), i);
+
+			/**
+			 * If they do match, then we may be good to overload here so long as we don't already have an
+			 * overload that's in the way
+			 */
+			if(does_parameter_list_match_signature(&parameter_parsing_list, candidate->signature->internal_types.function_type) == TRUE){
+				/**
+				 * If we don't have it, great. But if we've already found it then we have an ambiguous
+				 * parse and we can't have this
+				 */
+				if(found_record == NULL){
+					found_record = candidate;
+
+				//Fail case we get out heere
+				} else {
+					sprintf(info, "Ambigious overload: Function \"%s\" has more than one overload that could fit this function call:", function_name->string);
+					print_function_name_to_buffer(info, found_record);
+					print_function_name_to_buffer(info, candidate);
+					return print_and_return_error(info, parser_line_num);
+				}
+			}
+		}
+
+		/**
+		 * Only overwrite the function record if we found something. If we didn't then the regular function
+		 * record will have to do and we'll see if we can coerce our way into a match with it
+		 */
+		if(found_record != NULL){
+			function_record = found_record;
+		}
+	}
+
+	//Now that we know the function record we can get these out
+	generic_type_t* function_signature = function_record->signature;
+	function_type_t* internal_function_type = function_signature->internal_types.function_type;
+
+	/**
+	 * The inferred type is always the signature's return type. We will also store
+	 * the callee's function signature inside of the optional storage block and populate
+	 * the function now
+	 */
+	direct_call->optional_storage.callee_signature = internal_function_type;
+	direct_call->inferred_type = internal_function_type->return_type;
+	direct_call->func_record = function_record;
+
+	//Flag that we called out from the current function to this
+	add_function_call(current_function, function_record);
+	function_record->called = TRUE;
+
+	//If we are calling an inlined function then flag this
+	if(internal_function_type->is_inlined == TRUE){
+		current_function->calls_inlined_function = TRUE;
+	}
+
+	/**
+	 * Step 3: validate function parameter types
+	 *
+	 * Now that we have all of our parameters fully parsed in and we've handled all of our overloading
+	 * ambiguity, we need to validate their types against the function signature's parameters and handle
+	 * any special bookkeeping(copy assignment, elaborative param) that will apply
+	 *
+	 * NOTE: This should be a 1-to-1 mapping of type to param unless we hit the elaborative param which
+	 * requires special handling
+	 *
+	 * We have handling at the very exit of this loop to catch instances where a user may have given too
+	 * many parameters. Undersupply(too few parameters) cases will be caught inside of the loop because we
+	 * are indexing on the parameter type list
+	 */
+	int32_t param_result_index = 0;
+	int32_t param_type_index = 0;
+	dynamic_array_t* function_parameter_types = &(internal_function_type->function_parameters);
+	for(; param_type_index < function_parameter_types->current_index; param_type_index++, param_result_index++){
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), param_type_index);
+
+		/**
+		 * Most common case by far - usually we do not have elaborative parameters
+		 */
+		if(parameter_type->type_class != TYPE_CLASS_ELABORATIVE){
+			/**
+			 * Undersupply case - we have too few function parameters so we need
+			 * to fail out. Be careful with elaborative params in our printing
+			 */
+			if(param_type_index >= parameter_parsing_list.current_index){
+				if(internal_function_type->contains_elaborative_stack_param == FALSE){
+					sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
+									function_name->string,
+									function_signature->type_name.string,
+									function_parameter_types->current_index,
+									parameter_parsing_list.current_index);
+				} else {
+					//Account for the optional elaborative param
+					sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
+									function_name->string,
+									function_signature->type_name.string,
+									function_parameter_types->current_index - 1,
+									parameter_parsing_list.current_index);
+				}
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Now that we know it's safe get the current param out
+			generic_ast_node_t* current_param = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+			/**
+			 * Do the assignment and bookkeeping. If this is NULL it means that we failed so the entire
+			 * thing fails at this point
+			 */
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
+			if(final_type == NULL){
+				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+				sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						function_name->string,
+						function_signature->type_name.string,
+						(parameter_type->mutability == MUTABLE ? "mut ": ""),
+						parameter_type->type_name.string,
+						param_result_index + 1,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+			 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+			 * doing an address calculation.
+			 */
+			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
+				/**
+				 * If the right hand expression is a postfix expression *and* we are looking
+				 * to perform a memory copy assignment here, we need to flag that 
+				 * we do *not* require a dereference to make this work
+				 */
+				propogate_no_dereference_required_flag(current_param);
+			}
+
+			/**
+			 * We can now safely add this into the function call node as a child. In the function call node, 
+			 * the parameters will appear in order from left to right
+			 */
+			add_child_node(direct_call, current_param);
+
+		/**
+		 * For elaborative parameters we will need to do more work. Also let's remember that an elaborative
+		 * parameter is always the last thing in a function's parameter list, so when we're done with this
+		 * we can simply fail out
+		 */
+		} else {
+			/**
+			 * Get the amount that we have in our elaborative parameter list by seeing how
+			 * far we have left to go
+			 */
+			int32_t elaborative_param_count = param_result_index - parameter_parsing_list.current_index;
+
+			/**
+			 * We have more than one elaborative param, so we will have to run through and add them all
+			 * to what we call an "elaborative parameter statement" node. We will also do all type checking,
+			 * pass by copy handling, etc
+			 */
+			if(elaborative_param_count != 0) {
+				//These always have a special node no matter what
+				generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
+
+				//Extract the elaborated type - this is what we'll be comparing to
+				generic_type_t* type_being_elaborated = parameter_type->internal_types.elaborates;
+
+				/**
+				 * Now we need to run through everything remaining in the parameter result list and 
+				 * process each one
+				 */
+				for(; param_result_index < parameter_parsing_list.current_index; param_result_index++){
+					generic_ast_node_t* param_expression = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+					//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
+					generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, param_expression);
+
+					//If this is null, it means that our check failed
+					if(final_type == NULL){
+						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
+								type_being_elaborated->type_name.string,
+								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								param_expression->inferred_type->type_name.string);
+
+						return print_and_return_error(info, parser_line_num);
+					}
+
+					/**
+					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+					 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+					 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+					 * doing an address calculation.
+					 */
+					if(is_copy_assignment_required(type_being_elaborated, param_expression->inferred_type) == TRUE){
+						/**
+						 * If the right hand expression is a postfix expression *and* we are looking
+						 * to perform a memory copy assignment here, we need to flag that 
+						 * we do *not* require a dereference to make this work
+						 */
+						propogate_no_dereference_required_flag(param_expression);
+					}
+
+					//Add this to the overarching elaborative param node
+					add_child_node(elaborative_param_node, param_expression);
+				}
+
+				//Finally add the constructed elaborative param call to the overall call node
+				add_child_node(direct_call, elaborative_param_node);
+
+			/**
+			 * If we have nothing, we are still required to make the node and put it in our child node
+			 * list. Elaborative params, even empty ones, always have some setup overhead that needs to
+			 * be taken into account
+			 */
+			} else {
+				generic_ast_node_t* elaborative_param_node = create_empty_elaborative_param(parameter_type);
+				add_child_node(direct_call, elaborative_param_node);
+			}
+		}
+	}
+
+	/**
+	 * Oversupply case - we have too many function parameters so we need
+	 * to fail out. Be careful with elaborative params in our printing. We can
+	 * detect this be seeing if we've underconsumed the param result list
+	 * with our param_result_index
+	 */
+	if(param_result_index < parameter_parsing_list.current_index){
+		if(internal_function_type->contains_elaborative_stack_param == FALSE){
+			sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
+							function_name->string,
+							function_signature->type_name.string,
+							function_parameter_types->current_index,
+							parameter_parsing_list.current_index);
+		} else {
+			//Account for the optional elaborative param
+			sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
+							function_name->string,
+							function_signature->type_name.string,
+							function_parameter_types->current_index - 1,
+							parameter_parsing_list.current_index);
+		}
+
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//We're done with this array now so destroy it
+	dynamic_array_dealloc(&parameter_parsing_list);
+
+	/**
+	 * Step 3: parse the optional handle statement
+	 *
+	 * If we have a function that may raise errors, we are absolutely required to see the
+	 * handles statement here. If we have a function that does not return errors, then it is
+	 * completely incorrect for us to see the handles statement here. We need to handle
+	 * both cases appropriately
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == HANDLE){
+		/**
+		 * If we don't raise errors then this is never correct so fail out
+		 */
+		if(internal_function_type->raises_errors == FALSE){
+			sprintf(info, "Function \"%s\" of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+						function_name->string,
+						function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Now let's process the handle statement
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_signature);
+ 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid handle statement given to function call", parser_line_num);
+		}
+
+		//Otherwise let's add this to the function call
+		add_child_node(direct_call, handle_node);
+
+	/**
+	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
+	 */
+	} else {
+		/**
+		 * If this function raises errors, then we actually
+		 * had to see this, so this is an error
+		 */
+		if(internal_function_type->raises_errors == TRUE){
+			sprintf(info, "Function \"%s\" of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+							function_name->string,
+							function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	return direct_call;
+}
+
+
+
+/**
+ * An indirect function call does not need to worry at all about overloading because
+ * there is only one thing that we're able to call, that being the function pointer
+ * that is being called. Because of this, we are able to parse indirect function calls
+ * in a way that is completely different from direct function calls
+ */
+static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
+	lexitem_t lookahead;
+
+	//Extract the function signature and the internal function type
+	generic_type_t* function_signature = unary_expr_node->inferred_type;
+	function_type_t* internal_function_type = function_signature->internal_types.function_type;
+
+	//Allocate the indirect call node and store the unary expression as its first child
+	generic_ast_node_t* indirect_call = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
+	add_child_node(indirect_call, unary_expr_node);
+
+	/**
+	 * The inferred type is always the signature's return type. We will also store
+	 * the callee's function signature inside of the optional storage block
+	 */
+	indirect_call->inferred_type = internal_function_type->return_type;
+	indirect_call->optional_storage.callee_signature = internal_function_type;
+	indirect_call->line_number = parser_line_num;
+
+	/**
+	 * This function performs an indirect call. We do not and can not know what the function 
+	 * that results from this call is. As such, we need to be safe and now assume that we require an 
+	 * initial alignment for this function
+	 */
+	current_function->requires_initial_alignment = TRUE;
+
+	//We now need to see a left parenthesis for our param list
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
+	}
+
+	//Push onto the grouping stack once we see this
+	push_token(&grouping_stack, lookahead);
+
+	//Give ourselves a parameter parsing list to use
+	dynamic_array_t parameter_parsing_list = dynamic_array_alloc();
+
+	/**
+	 * Step 1: parse all supplied function parameters into a temporary list
+	 *
+	 * If we don't immediately see an R_PAREN we can keep parsing here. If we do see
+	 * an R_PAREN we can't go any further and we'll just skip the parsing entirely
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != R_PAREN){
+		push_back_token(token_stream, &parser_line_num);
+
+		/**
+		 * We can now process all of our function parameters. At this moment we're not going
+		 * to check anything about them matching up to our desired types. We're just going to
+		 * parse the parameters in and then validate later
+		 */
+		while(TRUE){
+			//Invoke the "in_expression" rule to parse this parameter
+			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
+			}
+
+			//Add this to our list that we're going to need to validate
+			dynamic_array_add(&parameter_parsing_list, parameter_expression);
+
+			//Based on the lookahead we decide what to do next
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok == COMMA){
+				continue;
+			} else if(lookahead.tok == R_PAREN){
+				break;
+			} else {
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
+		}
+	}
+
+	/**
+	 * The only way to get here would have been to see that R_PAREN, so now we'll
+	 * have to confirm matching
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+	}
+
+	/**
+	 * Step 2: validate function parameter types
+	 *
+	 * Now that we have all of our parameters fully parsed in, we need to validate their types against
+	 * the function signature's parameters and handle any special bookkeeping(copy assignment, elaborative
+	 * param) that will apply
+	 *
+	 * NOTE: This should be a 1-to-1 mapping of type to param unless we hit the elaborative param which
+	 * requires special handling
+	 *
+	 * We have handling at the very exit of this loop to catch instances where a user may have given too
+	 * many parameters. Undersupply(too few parameters) cases will be caught inside of the loop because we
+	 * are indexing on the parameter type list
+	 */
+	int32_t param_result_index = 0;
+	int32_t param_type_index = 0;
+	dynamic_array_t* function_parameter_types = &(internal_function_type->function_parameters);
+	for(; param_type_index < function_parameter_types->current_index; param_type_index++, param_result_index++){
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), param_type_index);
+
+		/**
+		 * Most common case by far - usually we do not have elaborative parameters
+		 */
+		if(parameter_type->type_class != TYPE_CLASS_ELABORATIVE){
+			/**
+			 * Undersupply case - we have too few function parameters so we need
+			 * to fail out. Be careful with elaborative params in our printing
+			 */
+			if(param_type_index >= parameter_parsing_list.current_index){
+				if(internal_function_type->contains_elaborative_stack_param == FALSE){
+					sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
+									function_signature->type_name.string,
+									function_parameter_types->current_index,
+									parameter_parsing_list.current_index);
+				} else {
+					//Account for the optional elaborative param
+					sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
+									function_signature->type_name.string,
+									function_parameter_types->current_index - 1,
+									parameter_parsing_list.current_index);
+				}
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Now that we know it's safe get the current param out
+			generic_ast_node_t* current_param = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+			/**
+			 * Do the assignment and bookkeeping. If this is NULL it means that we failed so the entire
+			 * thing fails at this point
+			 */
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
+			if(final_type == NULL){
+				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						function_signature->type_name.string,
+						(parameter_type->mutability == MUTABLE ? "mut ": ""),
+						parameter_type->type_name.string,
+						param_result_index + 1,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+			 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+			 * doing an address calculation.
+			 */
+			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
+				/**
+				 * If the right hand expression is a postfix expression *and* we are looking
+				 * to perform a memory copy assignment here, we need to flag that 
+				 * we do *not* require a dereference to make this work
+				 */
+				propogate_no_dereference_required_flag(current_param);
+			}
+
+			/**
+			 * We can now safely add this into the function call node as a child. In the function call node, 
+			 * the parameters will appear in order from left to right
+			 */
+			add_child_node(indirect_call, current_param);
+
+		/**
+		 * For elaborative parameters we will need to do more work. Also let's remember that an elaborative
+		 * parameter is always the last thing in a function's parameter list, so when we're done with this
+		 * we can simply fail out
+		 */
+		} else {
+			/**
+			 * Get the amount that we have in our elaborative parameter list by seeing how
+			 * far we have left to go
+			 */
+			int32_t elaborative_param_count = param_result_index - parameter_parsing_list.current_index;
+
+			/**
+			 * We have more than one elaborative param, so we will have to run through and add them all
+			 * to what we call an "elaborative parameter statement" node. We will also do all type checking,
+			 * pass by copy handling, etc
+			 */
+			if(elaborative_param_count != 0) {
+				//These always have a special node no matter what
+				generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
+
+				//Extract the elaborated type - this is what we'll be comparing to
+				generic_type_t* type_being_elaborated = parameter_type->internal_types.elaborates;
+
+				/**
+				 * Now we need to run through everything remaining in the parameter result list and 
+				 * process each one
+				 */
+				for(; param_result_index < parameter_parsing_list.current_index; param_result_index++){
+					generic_ast_node_t* param_expression = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+					//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
+					generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, param_expression);
+
+					//If this is null, it means that our check failed
+					if(final_type == NULL){
+						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
+								type_being_elaborated->type_name.string,
+								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								param_expression->inferred_type->type_name.string);
+
+						return print_and_return_error(info, parser_line_num);
+					}
+
+					/**
+					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+					 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+					 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+					 * doing an address calculation.
+					 */
+					if(is_copy_assignment_required(type_being_elaborated, param_expression->inferred_type) == TRUE){
+						/**
+						 * If the right hand expression is a postfix expression *and* we are looking
+						 * to perform a memory copy assignment here, we need to flag that 
+						 * we do *not* require a dereference to make this work
+						 */
+						propogate_no_dereference_required_flag(param_expression);
+					}
+
+					//Add this to the overarching elaborative param node
+					add_child_node(elaborative_param_node, param_expression);
+				}
+
+				//Finally add the constructed elaborative param call to the overall call node
+				add_child_node(indirect_call, elaborative_param_node);
+
+			/**
+			 * If we have nothing, we are still required to make the node and put it in our child node
+			 * list. Elaborative params, even empty ones, always have some setup overhead that needs to
+			 * be taken into account
+			 */
+			} else {
+				generic_ast_node_t* elaborative_param_node = create_empty_elaborative_param(parameter_type);
+				add_child_node(indirect_call, elaborative_param_node);
+			}
+		}
+	}
+
+	/**
+	 * Oversupply case - we have too many function parameters so we need
+	 * to fail out. Be careful with elaborative params in our printing. We can
+	 * detect this be seeing if we've underconsumed the param result list
+	 * with our param_result_index
+	 */
+	if(param_result_index < parameter_parsing_list.current_index){
+		if(internal_function_type->contains_elaborative_stack_param == FALSE){
+			sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
+							function_signature->type_name.string,
+							function_parameter_types->current_index,
+							parameter_parsing_list.current_index);
+		} else {
+			//Account for the optional elaborative param
+			sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
+							function_signature->type_name.string,
+							function_parameter_types->current_index - 1,
+							parameter_parsing_list.current_index);
+		}
+
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//We're done with this array now so destroy it
+	dynamic_array_dealloc(&parameter_parsing_list);
+
+	/**
+	 * Step 3: parse the optional handle statement
+	 *
+	 * If we have a function that may raise errors, we are absolutely required to see the
+	 * handles statement here. If we have a function that does not return errors, then it is
+	 * completely incorrect for us to see the handles statement here. We need to handle
+	 * both cases appropriately
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == HANDLE){
+		/**
+		 * If we don't raise errors then this is never correct so fail out
+		 */
+		if(internal_function_type->raises_errors == FALSE){
+			sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+						function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Now let's process the handle statement
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_signature);
+ 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid handle statement given to function call", parser_line_num);
+		}
+
+		//Otherwise let's add this to the function call
+		add_child_node(indirect_call, handle_node);
+
+	/**
+	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
+	 */
+	} else {
+		/**
+		 * If this function raises errors, then we actually
+		 * had to see this, so this is an error
+		 */
+		if(internal_function_type->raises_errors == TRUE){
+			sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+							function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	return indirect_call;
+}
+
+
+/**
  * Function calls always come after an "@" and can have the function itself expressed as a unary
  * expression. The unary expression will either work its way down into an actual function itself
  * or some kind of expression(identifier, array, struct access, etc.) that has a function type
@@ -1912,11 +2799,6 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
  * BNF Rule: <function-call> ::= @{<unary_expression>}({<in_expression>}?{, <in_expression>}*){<handle-statement>}?
  */
 static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, side_type_t side){
-	//The lookahead token
-	lexitem_t lookahead;
-	//A pointer for our function name. Remember that we won't always have this
-	dynamic_string_t* function_name = NULL;
-
 	/**
 	 * The very first thing that we do see should be a unary expression. This unary expression
 	 * will either give us the actual function itself *or* it will give us an expression that
@@ -1928,356 +2810,25 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	}
 
 	/**
-	 * Now that we've in theory gotten either the function itself or the expression
-	 * that is equivalent to it. We will extract the function record and signature
-	 * of the underlying function to work with
-	 */
-	symtab_function_record_t* function_record = NULL;
-	generic_type_t* function_signature = unary_expression_node->inferred_type;
-
-	//We need to do validations before it's safe to grab this
-	function_type_t* internal_function_type = NULL;
-
-	/**
 	 * If we have an actual function record(func const), we'll create what we call
 	 * a "direct call" which will *not* have any unary expression attached to it. If
 	 * we do not, then we will make an indirect call, which *always* has a unary expression
 	 * as the first child
 	 */
-	generic_ast_node_t* function_call_node;
-	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT && unary_expression_node->constant_type == FUNC_CONST){
-		//Extract the function record from the constant node
-		function_record = unary_expression_node->func_record;
+	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
+			&& unary_expression_node->constant_type == FUNC_CONST){
 
-		//Allocate and tack the function record on
-		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
-		function_call_node->func_record = function_record;
-
-		//Add an edge on the direct call graph
-		add_function_call(current_function, function_record);
-		
-		//Flag that this was called
-		function_record->called = TRUE;
-
-		//In this instance store the function name
-		function_name = &(function_record->func_name);
-
-		//It's safe to grab this now
-		internal_function_type = function_signature->internal_types.function_type;
-
-		//If we are calling an inlined function then flag this
-		if(internal_function_type->is_inlined == TRUE){
-			current_function->calls_inlined_function = TRUE;
-		}
+		return direct_function_call(token_stream, unary_expression_node, side);
 
 	} else {
 		//Validate that what we're trying to call is actually a function
-		if(function_signature->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
-			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", function_signature->type_name.string);
+		if(unary_expression_node->inferred_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", unary_expression_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
-		//Allocate this as an indirect call
-		function_call_node = ast_node_alloc(AST_NODE_TYPE_INDIRECT_FUNCTION_CALL, side);
-
-		//It's safe to populate this now
-		internal_function_type = function_signature->internal_types.function_type;
-
-		/**
-		 * This function performs an indirect call. We do not and can not know what the function 
-		 * that results from this call is. As such, we need to be safe and now assume that we require an 
-		 * initial alignment for this function
-		 */
-		current_function->requires_initial_alignment = TRUE;
-
-		/**
-		 * IMPORTANT: indirect function calls always have a unary expression node as their first
-		 * child. This node stores what exactly we're trying to call
-		 */
-		add_child_node(function_call_node, unary_expression_node);
+		return indirect_function_call(token_stream, unary_expression_node, side);
 	}
-
-	/**
-	 * The inferred type is always the signature's return type. We will also store
-	 * the callee's function signature inside of the optional storage block
-	 */
-	function_call_node->inferred_type = internal_function_type->return_type;
-	function_call_node->optional_storage.callee_signature = internal_function_type;
-
-	//Store the line number at this point
-	function_call_node->line_number = parser_line_num;
-	
-	//We now need to see a left parenthesis for our param list
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
-	}
-
-	//Push onto the grouping stack once we see this
-	push_token(&grouping_stack, lookahead);
-
-	/**
-	 * For parameter handling - if the function signature expects
-	 * parameters, then we can do our parameter processing. Meanwhile
-	 * if it does not, we can save some work here and just look for
-	 * the R_PAREN
-	 */
-	dynamic_array_t* function_parameter_types = &(internal_function_type->function_parameters);
-	if(function_parameter_types->current_index > 0){
-		//The number of parameters that we've seen
-		int32_t params_seen = 0;
-
-		//So long as we don't see the R_PAREN we aren't done
-		do {
-			//A node to hold our current parameter, NULLED out for safety
-			generic_ast_node_t* current_param = NULL;
-
-			//Record that we saw one more parameter
-			params_seen++;
-
-			//We'll let the error below handle this, we just don't want to segfault
-			if(params_seen > internal_function_type->function_parameters.current_index){
-				break;
-			}
-
-			//Grab the current function param
-			generic_type_t* param_type = dynamic_array_get_at(function_parameter_types, params_seen - 1);
-
-			/**
-			 * For an elaborative param, we need to sort of pause here and accumulate.
-			 * Elaborative params can have 0 to many things inside of them so inside
-			 * of a function call like this, we need to account for that
-			 */
-			if(param_type->type_class != TYPE_CLASS_ELABORATIVE){
-				//Parameters are in the form of a ternary expression
-				current_param = in_expression(token_stream, side);
-
-				//We now have an error of some kind
-				if(current_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-					return print_and_return_error("Bad parameter passed to function call", parser_line_num);
-				}
-
-				//Let's see if we're even able to assign this here
-				generic_type_t* final_type = is_ast_node_assignable_to_destination_type(param_type, current_param);
-
-				//If this is null, it means that our check failed
-				if(final_type == NULL){
-					//Let's first generate the types_assignable failure message
-					generate_types_assignable_failure_message(info, current_param->inferred_type, param_type);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
-					//Following that we'll generate another error message to make it more clear
-					if(function_name != NULL){
-						sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-								function_name->string, 
-								function_signature->type_name.string,
-								(param_type->mutability == MUTABLE ? "mut ": ""),
-								param_type->type_name.string, params_seen,
-								//Print the mut keyword if we need it
-								(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-								current_param->inferred_type->type_name.string, function_signature->type_name.string);
-					} else {
-						sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-								function_signature->type_name.string,
-								(param_type->mutability == MUTABLE ? "mut ": ""),
-								param_type->type_name.string, params_seen,
-								//Print the mut keyword if we need it
-								(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-								current_param->inferred_type->type_name.string, function_signature->type_name.string);
-					}
-
-					//Use the helper to return this
-					return print_and_return_error(info, parser_line_num);
-				}
-
-				/**
-				 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
-				 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
-				 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
-				 * doing an address calculation.
-				 */
-				if(is_copy_assignment_required(param_type, current_param->inferred_type) == TRUE){
-					/**
-					 * If the right hand expression is a postfix expression *and* we are looking
-					 * to perform a memory copy assignment here, we need to flag that 
-					 * we do *not* require a dereference to make this work
-					 */
-					propogate_no_dereference_required_flag(current_param);
-				}
-
-				//We can now safely add this into the function call node as a child. In the function call node, 
-				//the parameters will appear in order from left to right
-				add_child_node(function_call_node, current_param);
-
-			/**
-			 * If the type that we have is an elaborative param type then we'll handle that now. Do note that
-			 * this method of parsing is not going to handle the edge case where we decide to put nothing
-			 * in for the the elaborative param type. We will have a catch for that down below
-			 */
-			} else {
-				//Helper gives back an error or an elaborative param if it worked
-				generic_ast_node_t* elaborative_param_node = handle_elaborative_param_parsing(token_stream, param_type, side);
-
-				//Fail up if we get here
-				if(elaborative_param_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-					return print_and_return_error("Invalid elaborative parameter detected", parser_line_num);
-				}
-
-				//This is a child
-				add_child_node(function_call_node, elaborative_param_node);
-			}
-
-			//Refresh the token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//Comma we continue
-			if(lookahead.tok == COMMA){
-				continue;
-			//R_PAREN we break
-			} else if(lookahead.tok == R_PAREN){
-				break;
-			} else {
-				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
-			}
-
-		//Infinite loop unless we hit a breakout condition
-		} while (TRUE);
-
-		//Once we get here, we do need to finally verify that the closing R_PAREN matched the opening one
-		if(pop_token(&grouping_stack).tok != L_PAREN){
-			return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
-		}
-
-		/**
-		 * EDGE CASE: for elaborative params, if we find that the function parameters 
-		 * are one less than what we expect, that's a sign that we may have an
-		 * empty elaborative param. We still have to handle this, so now is
-		 * the time to pick up on that
-		 */
-		if(params_seen == function_parameter_types->current_index - 1){
-			//Extract it - let's see if it is elaborative
-			generic_type_t* final_param_type = dynamic_array_get_from_back(function_parameter_types);
-
-			//If it is then this is ok, we will handle accordingly
-			if(final_param_type->type_class == TYPE_CLASS_ELABORATIVE){
-				generic_ast_node_t* empty_elaborative_param = create_empty_elaborative_param(final_param_type);
-
-				//Add it in and bump the param count so we pass the next check
-				add_child_node(function_call_node, empty_elaborative_param);
-				params_seen++;
-			}
-		}
-
-		/**
-		 * Any otherwise errors, if we have a mismatch between what the function takes and what we want, throw an error
-		 */
-		if(params_seen != function_parameter_types->current_index){
-			if(function_name != NULL){
-				sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d", 
-				  				function_name->string,
-								function_signature->type_name.string,
-								function_parameter_types->current_index,
-								params_seen);
-			} else {
-				sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d", 
-								function_signature->type_name.string,
-								function_parameter_types->current_index,
-								params_seen);
-			}
-
-			return print_and_return_error(info, parser_line_num);
-		}
-
-	/**
-	 * If we hit this case that means that we expect 0 parameters, so we will check to see if the call obeys
-	 * that and if not we leave
-	 */
-	} else {
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-		
-		//If it's not an R_PAREN, then we fail
-		if(lookahead.tok != R_PAREN){
-			if(function_name != NULL){
-				sprintf(info, "Function \"%s\" of type \"%s\" expects 0 parameters",
-								function_name->string,
-								function_signature->type_name.string);
-			} else {
-				sprintf(info, "Function of type \"%s\" expects 0 parameters",
-								function_signature->type_name.string);
-			}
-
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Otherwise if it was fine, we'll now pop the grouping stack
-		pop_token(&grouping_stack);
-	}
-
-	/**
-	 * If we have a function that may raise errors, we are absolutely required to see the
-	 * handles statement here. If we have a function that does not return errors, then it is
-	 * completely incorrect for us to see the handles statement here. We need to handle
-	 * both cases appropriately
-	 */
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	if(lookahead.tok == HANDLE){
-		/**
-		 * If we don't raise errors then this is never correct so
-		 * fail out
-		 */
-		if(internal_function_type->raises_errors == FALSE){
-			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
-							function_record->func_name.string,
-							function_signature->type_name.string);
-
-			} else {
-				sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
-							function_signature->type_name.string);
-			}
-
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Now let's process the handle statement
-		generic_ast_node_t* handle_node = handle_statement(token_stream, function_signature);
-
-		//If this fails then we fail out
- 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid handle statement given to function call", parser_line_num);
-		}
-
-		//Otherwise let's add this to the function call
-		add_child_node(function_call_node, handle_node);
-
-	/**
-	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
-	 */
-	} else {
-		//Push it back
-		push_back_token(token_stream, &parser_line_num);
-
-		/**
-		 * If this function raises errors, then we actually
-		 * had to see this, so this is an error
-		 */
-		if(internal_function_type->raises_errors == TRUE){
-			if(function_record != NULL){
-				sprintf(info, "Function \"%s\" of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function", 
-								function_record->func_name.string,
-								function_signature->type_name.string);
-
-			} else {
-				sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
-								function_signature->type_name.string);
-			}
-
-			return print_and_return_error(info, parser_line_num);
-		}
-	}
-
-	return function_call_node;
 }
 
 
@@ -2591,6 +3142,9 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 *
 		 * Since a function value is constant and never changes, we will classify this record as a constant
 		 * if we do find it. If we find nothing then we fail
+		 *
+		 * NOTE: the "inferred_type" that we stamp on this is not necessarily correct because of overloading,
+		 * the actual type will need to be resolved once we do our lookups
 		 */
 		symtab_function_record_t* found_function = lookup_function(function_symtab, var_name);
 		if(found_function != NULL){
@@ -7457,20 +8011,9 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	//Let's see if we have a !, meaning that this function can raise an error
 	if(lookahead.tok == EXCLAMATION){
 		raises_errors = TRUE;
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}	 
-	
-	//Now we need to see an L_PAREN
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis expected", parser_line_num);
-		num_errors++;
-		return FAILURE;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
 	}
-
-	//Otherwise push this onto the grouping stack for later
-	push_token(&grouping_stack, lookahead);
 
 	/**
 	 * Once we've gotten past this point, we're safe to allocate this type. Function
@@ -7478,184 +8021,48 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 	 */
 	generic_type_t* mutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, MUTABLE);
 	generic_type_t* immutable_function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, NOT_MUTABLE);
+	function_type_t* internal_mutable_function_type = mutable_function_type->internal_types.function_type;
+	function_type_t* internal_immutable_function_type = immutable_function_type->internal_types.function_type;
 
-	//Let's see if we have nothing in here. This is possible. We can also just see a "void"
-	//as an alternative way of saying this function takes no parameters
-	
-	//Grab the next token
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We can optionally see a void type that we need to consume
-	switch(lookahead.tok){
-		//We just need to consume this and move along
-		case VOID:
-			//Refresh the token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			break;
-
-		//We have an empty parameter list - also totally fine
-		case R_PAREN:
-			break;
-
-		//Otherwise we'll need to actually process this
-		default:
-			//Push it back
-			push_back_token(token_stream, &parser_line_num);
-
-			//We need to at least one type in here
-			do {
-				//By default assume we haven't seen the params keyword
-				u_int8_t seen_params = FALSE;
-
-				//Refresh the lookahead
-				lookahead = get_next_token(token_stream, &parser_line_num);
-
-				//If we see it then flag it, else push this token back
-				if(lookahead.tok == PARAMS){
-					seen_params = TRUE;
-				} else {
-					push_back_token(token_stream, &parser_line_num);
-				}
-
-				//Now we need to see a valid type
-				generic_type_t* type = type_specifier(token_stream);
-
-				//If this is NULL, we'll error out
-				if(type == NULL){
-					return FALSE;
-				}
-
-				//If we've seen this keyword, we need to do our extra processing/validation
-				if(seen_params == TRUE){
-					//Let the helper do it
-					type = handle_elaborative_param_type(type);
-
-					//If we returned NULL that means we failed so we'll fail here too
-					if(type == NULL){
-						return FALSE;
-					}
-				}
-
-				//Add it to the mutable version
-				add_parameter_to_function_type(mutable_function_type, type);
-
-				//Let's also add it to the immutable version
-				add_parameter_to_function_type(immutable_function_type, type);
-
-				//Refresh the lookahead token
-				lookahead = get_next_token(token_stream, &parser_line_num);
-
-				//If it's a comma keep going
-				if(lookahead.tok == COMMA){
-					continue;
-
-				//This is our exit criteria
-				} else if(lookahead.tok == R_PAREN){
-					break;
-
-				//Anything else it's an error
-				} else {
-					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FALSE;
-				}
-
-			//Keep going until we hit the exit condition
-			} while(TRUE);
-
-			break;
-	}
-
-	//Now that we're done processing the list, we need to ensure that we have a right paren
-	if(lookahead.tok != R_PAREN){
-		//Fail out
-		print_parse_message(MESSAGE_TYPE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
-		num_errors++;
-		return FALSE;
-	}
-
-	//Ensure that we pop the grouping stack and get a match
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		//Fail out
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
-		num_errors++;
-		return FALSE;
+	/**
+	 * Let the helper parse the parameter list. We'll copy it over to the immutable type
+	 * when we're done
+	 */
+	if(parse_parameter_type_list(token_stream, mutable_function_type) == FALSE){
+		return FAILURE;
 	}
 
 	/**
-	 * Now that the parameter list is parsed in, let's do some validation to 
-	 * make sure it's all in order. If either one of our types fail
-	 * then the whole thing is bad
+	 * Now let's just copy this all over to the immutable version. This is easier and more efficient
+	 * than reprocessing the whole thing
 	 */
-	if(validate_function_parameter_list(mutable_function_type) == FALSE
-		|| validate_function_parameter_list(immutable_function_type) == FALSE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid function type detected", parser_line_num);
-		return FALSE;
+	for(int32_t i = 0; i < internal_mutable_function_type->function_parameters.current_index; i++){
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_mutable_function_type->function_parameters), i);
+		add_parameter_to_function_type(immutable_function_type, parameter_type);
 	}
 
-	//Now we need to see an arrow operator
-	lookahead = get_next_token(token_stream, &parser_line_num);
 
-	//If we don't see it, we fail out
-	if(lookahead.tok != ARROW){
-		//Fail out
-		print_parse_message(MESSAGE_TYPE_ERROR, "Arrow (->) required after function parameter list", parser_line_num);
-		num_errors++;
-		return FALSE;
-	}
-
-	//Now we need to see a return type
-	generic_type_t* return_type = type_specifier(token_stream);
-
-	//If this is NULL, then we have an invalid return type
-	if(return_type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return type given in function type definition", parser_line_num);
-		num_errors++;
-		return FALSE;
+	/**
+	 * Now let's parse the return type and our error list. We can do this using our special rule
+	 * for the mutable type and then just copy the information over to the immutable type
+	 */
+	if(parse_function_return_type_and_error_list(token_stream, mutable_function_type) == FAILURE){
+		return FAILURE;
 	}
 
 	/**
-	 * Store both of the given return types inside of the function signature. This handles all needed
-	 * bookkeeping for us already
+	 * Clone over the return type and errors if we have them
 	 */
-	add_return_type_to_signature(mutable_function_type->internal_types.function_type, return_type);
-	add_return_type_to_signature(immutable_function_type->internal_types.function_type, return_type);
-
-	//Refresh the token
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We can now optionally see the "raises" keyword if we raise errors
-	if(lookahead.tok == RAISES){
-		//If this was not flagged as a function that could raise errors, then this is invalid
-		if(raises_errors == FALSE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "The function type was not declared as able to raise errors. Use fn! if you wish to have a function type that can raise errors", parser_line_num);
-			num_errors++;
-			return FALSE;
-		}
-
-		//Otherwise, we will need to parse the error list
-		u_int8_t success = error_list(token_stream, mutable_function_type, FALSE);
-
-		//If this failed out then we're done
-		if(success == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given to function pointer type", parser_line_num);
-			num_errors++;
-			return FALSE;
-		}
-
-		//We're going to need to copy this over from the mutable function type to the immutable one
-		immutable_function_type->internal_types.function_type->potential_errors = clone_dynamic_array(&(mutable_function_type->internal_types.function_type->potential_errors));
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
+	add_return_type_to_signature(immutable_function_type, internal_mutable_function_type->return_type);
+	if(internal_mutable_function_type->raises_errors == TRUE){
+		internal_immutable_function_type->raises_errors = TRUE;
+		internal_immutable_function_type->potential_errors = clone_dynamic_array(&(internal_mutable_function_type->potential_errors));
 	}
 
 	//If it isn't an AS keyword, we're done
+	lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok != AS){
-		print_parse_message(MESSAGE_TYPE_ERROR, "\"as\" keyword is required after function type definition", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("\"as\" keyword is required after function type definition", parser_line_num);
 	}
 
 	//If we make it here then we know we're good to look for an identifier
@@ -7663,9 +8070,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If this is an error, then we're going to fail out
 	if(lookahead.tok != IDENT){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid identifier given as alias type", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("Invalid identifier given as alias type", parser_line_num);
 	}
 
 	//We know that it wasn't an error, but now we need to perform duplicate checking
@@ -7678,9 +8083,7 @@ static u_int8_t function_pointer_definer(ollie_token_stream_t* token_stream){
 
 	//If we didn't see it, then we fail out
 	if(lookahead.tok != SEMICOLON){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Semicolon required after definition statement", parser_line_num);
-		num_errors++;
-		return FALSE;
+		return print_and_return_failure("Semicolon required after definition statement", parser_line_num);
 	}
 
 	//Check for function name duplications
@@ -8673,6 +9076,138 @@ static u_int8_t error_definer(ollie_token_stream_t* token_stream, u_int8_t in_gl
 
 
 /**
+ * Parse and validate a parameter type list. This is intended to be used for function predeclaration and function
+ * type parsing. We expect to see either an empty (), (void), or a comma separated list of types. The types will
+ * all be added to the function signature. At the end they will be validated
+ */
+static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature){
+	lexitem_t lookahead;
+
+	//First we need to see the opening parenthesis
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		sprintf(info, "Expected ( but saw %s instead", lexitem_to_string(&lookahead));
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	switch(lookahead.tok){
+		/**
+		 * Totally valid to see an empty list. We'll just do validations
+		 * and leave
+		 */
+		case R_PAREN: {
+			//Make sure we match
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			//If we get here then we're all good
+			return SUCCESS;
+		}
+
+		/**
+		 * The user can just write (void) as a parameter list
+		 * and this is another valid way of saying no parameters
+		 */
+		case VOID: {
+			//Need to now see an R_PAREN
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok != R_PAREN){
+				sprintf(info, "Expected ) but saw %s instead", lexitem_to_string(&lookahead));
+				return print_and_return_failure(info, parser_line_num);
+			}
+
+			//Make sure we match
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			//If we get here then we're all good
+			return SUCCESS;
+		}
+
+		//Otherwise we'll let our loop handle it
+		default: {
+			push_back_token(token_stream, &parser_line_num);
+			break;
+		}
+	}
+
+	/**
+	 * We're going to keep going until we see the R_PAREN
+	 * token signifying the end of our rule
+	 */
+	while(TRUE){
+		//For special elaborative handling
+		u_int8_t seen_params = FALSE;
+
+		//Refresh the lookahead to see if we've gotten params or not
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == PARAMS){
+			seen_params = TRUE;
+		} else {
+			push_back_token(token_stream, &parser_line_num);
+		}
+
+		//Now let the type specifier rule handle it
+		generic_type_t* parameter_type = type_specifier(token_stream);
+		if(parameter_type == NULL){
+			return FAILURE;
+		}
+
+		//Special elaborative param handling if appropriate
+		if(seen_params == TRUE){
+			parameter_type = handle_elaborative_param_type(parameter_type);
+
+			//If it didn't work then bail out
+			if(parameter_type == NULL){
+				return FAILURE;
+			}
+		}
+
+		//Add this to the function type
+		add_parameter_to_function_type(function_signature, parameter_type);
+
+		//Determine whether to continue or get out
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
+			break;
+		} else {
+			sprintf(info, "Expected , or ) but saw %s instead", lexitem_to_string(&lookahead));
+			return print_and_return_failure(info, parser_line_num);
+		}
+	}
+
+	/**
+	 * We only ever get to here with an R_PAREN, let's just validate
+	 * that we match and we'll be all good
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	/**
+	 * Now that the parameter list is parsed in, let's do some validation to 
+	 * make sure it's all in order. If either one of our types fail
+	 * then the whole thing is bad
+	 */
+	if(validate_function_parameter_list(function_signature) == FALSE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid function type detected", parser_line_num);
+		return FALSE;
+	}
+
+	return SUCCESS;
+}
+
+
+
+/**
  * Handle all of the parsing for a function pointer type. Note that this rule will create the function pointer
  * type if we cannot find it. It is unique in this way
  *
@@ -8685,210 +9220,53 @@ static symtab_type_record_t* handle_function_pointer_type_parsing(ollie_token_st
 
 	//Grab onto the first token
 	lexitem_t lookahead = get_next_token(stream, &parser_line_num);;
-
-	//Does this raise errors or not?
 	if(lookahead.tok == EXCLAMATION){
 		raises_errors = TRUE;
-
-		//Refresh the token
-		lookahead = get_next_token(stream, &parser_line_num);
+	} else {
+		push_back_token(stream, &parser_line_num);
 	}
 
-	//Fail if we don't see it
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis expected", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Push it onto the grouping stack
-	push_token(&grouping_stack, lookahead);
-
-	//Once we've gotten past this point, we're safe to allocate this type. We need it to be allocated for use
-	//down the road
+	//We've gotten to the point where we can create the function pointer type
 	generic_type_t* function_type = create_function_pointer_type(FALSE, FALSE, parser_line_num, raises_errors, mutability);
 
 	/**
-	 * Let's see if we have nothing in here. This is possible. We can also just see a "void"
-	 * as an alternative way of saying this function takes no parameters
+	 * Let the helper parse the parameter type list. This will do all bookkeeping and checking
+	 * needed. If it fails then there's no point in going on
 	 */
-	
-	//Grab the next token
-	lookahead = get_next_token(stream, &parser_line_num);
-
-	//We can optionally see a void type that we need to consume
-	switch(lookahead.tok){
-		//We just need to consume this and move along
-		case VOID:
-			//Refresh the token
-			lookahead = get_next_token(stream, &parser_line_num);
-			break;
-
-		//We have an empty parameter list - also totally fine
-		case R_PAREN:
-			break;
-
-		//Otherwise we'll need to actually process this
-		default:
-			//Push it back
-			push_back_token(stream, &parser_line_num);
-
-			//We need to at least one type in here
-			do {
-				//By default assume that we have not seen the params keyword
-				u_int8_t seen_params = FALSE;
-
-				//Get the next token in the stream
-				lookahead = get_next_token(stream, &parser_line_num);
-
-				//If we get here then flag it
-				if(lookahead.tok == PARAMS){
-					seen_params = TRUE;
-
-				//Otherwise push it back
-				} else {
-					push_back_token(stream, &parser_line_num);
-				}
-
-				//Now we need to see a valid type
-				generic_type_t* type = type_specifier(stream);
-
-				//If this is NULL, we'll error out
-				if(type == NULL){
-					return FALSE;
-				}
-
-				/**
-				 * If we previously saw this keyword, we'll need to add our
-				 * handling now
-				 */
-				if(seen_params == TRUE){
-					//Let the helper deal with it
-					type = handle_elaborative_param_type(type);
-
-					//Returning null signifies a failure so we fail out if that's the case
-					if(type == NULL){
-						return NULL;
-					}
-				}
-
-				//Add it to the mutable version
-				add_parameter_to_function_type(function_type, type);
-
-				//Refresh the lookahead token
-				lookahead = get_next_token(stream, &parser_line_num);
-
-				//If it's a comma keep going
-				if(lookahead.tok == COMMA){
-					continue;
-
-				//This is our exit criteria
-				} else if(lookahead.tok == R_PAREN){
-					break;
-
-				//Anything else it's an error
-				} else {
-					sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FALSE;
-				}
-
-			//Keep going until we hit the exit condition
-			} while(TRUE);
-
-			break;
-	}
-
-	//Now that we're done processing the list, we need to ensure that we have a right paren
-	if(lookahead.tok != R_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Right parenthesis required after parameter list declaration", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Ensure that we pop the grouping stack and get a match
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected in parameter list declaration", parser_line_num);
-		num_errors++;
+	if(parse_parameter_type_list(stream, function_type) == FAILURE){
 		return NULL;
 	}
 
 	/**
-	 * Once we get down here we need to perform validations on the parameter list. The helper
-	 * will tell us whether or not we're valid
+	 * Let the helper parse the return type and error list for our function pointer. If
+	 * this fails then the whole thing fails
 	 */
-	if(validate_function_parameter_list(function_type) == FALSE){
-		return NULL;
-	}
-
-	//We now need to see the arrow token
-	lookahead = get_next_token(stream, &parser_line_num);
-
-	if(lookahead.tok != ARROW){
-		print_parse_message(MESSAGE_TYPE_ERROR, "\"->\" required before return type in function declaration", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Now we need to see the return type specifier
-	generic_type_t* return_type = type_specifier(stream);
-
-	//Fail out if we find a bad one
-	if(return_type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return type given to function type", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	/**
-	 * Get the return type added to the signature. This handles all internal bookkeeping
-	 * related to the function's return type
-	 */
-	add_return_type_to_signature(function_type->internal_types.function_type, return_type);
-
-	//We can now optionally see the RAISES keyword
-	lookahead = get_next_token(stream, &parser_line_num);
-
-	//If we see the raises keyword, we have to see an error list afterwards
-	if(lookahead.tok == RAISES){
-		//If we aren't raising errors, then we can't put this in
-		if(raises_errors == FALSE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "The function pointer type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-		u_int8_t success = error_list(stream, function_type, FALSE);
-
-		//If this fails we're out
-		if(success == FAILURE){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid error list given in function pointer type", parser_line_num);
-			num_errors++;
-			return NULL;
-		}
-
-	} else {
-		//Otherwise put it back
-		push_back_token(stream, &parser_line_num);
+	if(parse_function_return_type_and_error_list(stream, function_type) == FAILURE){
+		return FAILURE;
 	}
 
 	//Now we can generate the type name itself
 	generate_function_pointer_type_name(function_type);
 
-	//Once we have this down, we need to look for it inside of the type symtab. If we have it, great! If not,
-	//we'll need to make it ourselves
+	/**
+	 * Once we have this down, we need to look for it inside of the type symtab. If we have it, great! If not,
+	 * we'll need to make it ourselves
+	 */
 	symtab_type_record_t* type_record = lookup_type_name_only(type_symtab, function_type->type_name.string, mutability);
 
-	//Unlike other type definers, this isn't disqualifying
+	/**
+	 * Unlike other type definers, this isn't disqualifying, it instead means that we've
+	 * come on a brand new type. We'll create and insert it here
+	 */
 	if(type_record == NULL){
-		//Create this type and insert it
 		type_record = create_type_record(function_type);
 		insert_type(type_symtab, type_record);
 	}
 
-	//When we get down here, we'll be returning an either pre-existing type or an entirely
-	//new one that we've made
+	/**
+	 * When we get down here, we'll be returning an either pre-existing type or an entirely
+	 * new one that we've made
+	 */
 	return type_record;
 }
 
@@ -10009,15 +10387,6 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 	//Holder for the jump statement type
 	generic_ast_node_t* jump_node;
 
-	/**
-	 * We will be hanging onto all of our jump statements for validation later on down
-	 * the road, but we only allocate if we absolutely need to. Now is the time
-	 * that we'll know that
-	 */
-	if(current_function_jump_statements.internal_array == NULL){
-		current_function_jump_statements = dynamic_array_alloc();
-	}
-
 	//One last tripping point befor we create the node, we do need to see a semicolon
 	lookahead = get_next_token(token_stream, &parser_line_num);
 
@@ -10467,8 +10836,8 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 		//Otherwise we are good
 		error_id_value = error_type->internal_types.error_type_id;
 
-		//Add this into the set of all errors raised by the current function
-		dynamic_set_add(&errors_raised_by_current_function, error_type);
+		//Add this into the list of all errors raised by the current function
+		dynamic_array_add(&errors_raised_by_current_function, error_type);
 
 	} else {
 		//Since we're just raising a generic error, we use the generic error id
@@ -12927,171 +13296,6 @@ static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_globa
 
 
 /**
- * We need to go through and check all of the jump statements that we have in the function. If any
- * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
- */
-static inline u_int8_t check_jump_labels(){
-	//Run through all of these statements
-	for(int32_t i=  0; i < current_function_jump_statements.current_index; i++){
-		//Extract the one we need
-		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
-
-		//Let's see if we can find the label that this one is jumping to
-		char* name = current_jump_statement->string_value.string;
-
-		symtab_label_record_t* jumping_to_label = lookup_label(current_function->user_defined_labels, name);
-
-		//Didn't find it, so we fail out
-		if(jumping_to_label == NULL){
-			sprintf(info, "No label %s exists in function %s", name, current_function->func_name.string);
-			num_errors++;
-			print_parse_message(MESSAGE_TYPE_ERROR, info, current_jump_statement->line_number);
-			return FAILURE;
-		}
-
-		//Store this label record inside of the jump node for later
-		current_jump_statement->optional_storage.label_record = jumping_to_label;
-	}
-
-	//If we get here then they all worked
-	return SUCCESS;
-}
-
-
-/**
- * If a user puts an error in a raises statement but then fails to raise that error inside of
- * the actual function, then we are going to be mandating entirely useless checks down the
- * road. We need to account for this by validating that every error inside of the
- * raises statement is actually raised by the function
- */
-static u_int8_t validate_error_list_against_raised_errors(symtab_function_record_t* function){
-	//Extract what we require to be checked
-	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
-
-	//Run through all of the mandatory checked errors
-	for(int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
-		//Extract the error that we require
-		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
-
-		//Assume by default that it's missing
-		u_int8_t raised_by_function = FALSE;
-
-		//Now let's go through all of the errors that are raised and check those
-		for(int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
-			//Extract the error that we raised
-			generic_type_t* raised_error = dynamic_set_get_at(&errors_raised_by_current_function, j);
-
-			//If these are identical, then we set the flag and get out
-			if(types_identical(raised_error, mandatory_error) == TRUE){
-				raised_by_function = TRUE;
-				break;
-			}
-		}
-
-		//Is it raised by the function? If not we've got an error
-		if(raised_by_function == FALSE){
-			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
-		   					function->func_name.string, mandatory_error->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-	}
-
-	//If we made it all of the way down here then we are good
-	return SUCCESS;
-
-}
-
-
-/**
- * Perform validation on the parameter & return type & order
- * for the main function
- */
-static u_int8_t validate_main_function(generic_type_t* type){
-	//Let's extract the signature first for convenience
-	function_type_t* signature = type->internal_types.function_type;
-
-	//If the main function is not public, then we fail
-	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
-		print_parse_message(MESSAGE_TYPE_ERROR, "The main function must be prefixed with the \"pub\" keyword", parser_line_num);
-		num_errors++;
-		return FALSE;
-	}
-
-	/**
-	 * The name function may not be declared in anything that
-	 * is not the default namespace. So if we see that
-	 * the current namespace is not default, we fail out
-	 */
-	if(function_symtab->current->is_default == FALSE){
-		sprintf(info, "The main function was found declared inside the namespace \"%s\". The main function may only be declared inside of the top level namespace.",
-		  				function_symtab->current->namespace_name.string);
-		num_errors++;
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		return FALSE;
-	}
-
-	//For storing parameter types
-	generic_type_t* parameter_type;
-
-	//Let's first validate the parameter count. The main function can
-	//either have 0 or 2 parameters
-	
-	switch(signature->function_parameters.current_index){
-		//This is allowed
-		case 0:
-			break;
-
-		//If we have two, we need to validate the type of each parameter
-		case 2:
-			//Extract the first parameter
-			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 0);
-			
-			//If it isn't a basic type and it isn't an i32, we fail
-			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
-				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
-			}
-
-			//Now let's grab the second parameter
-			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 1);
-
-			//This must be a char** type. If it's not, we fail out
-			if(is_type_string_array(parameter_type) == FALSE){
-				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
-			}
-
-			//If we make it all the way down here, then we know that we're set
-			break;
-
-		//We'll print an error and leave if this is the case
-		default:
-			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", type->type_name.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FALSE;
-	}
-
-	//Finally, we'll validate the return type of the main function. It must also always be an i32
-	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
-		sprintf(info, "The main function must return a value of type i32, instead was given: %s", type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FALSE;
-	}
-
-	//If we make it here, then we know it's true
-	return TRUE;
-}
-
-
-/**
  * Handle an elaborative param type. This includes error checking
  * to see if the type is valid, and checking to see if we've already created
  * an elaborative param of the given type to avoid duplicates
@@ -13123,325 +13327,12 @@ static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elab
 
 
 /**
- * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
- * top lexical scope for the function itself. Like all rules, it returns a reference to the
- * root of the subtree that it creates
- *
- * This rule will return a symtab variable record that represents the parameter it made. If will return
- * NULL if an error occurs
- *
- * We can optionally see the "params" keyword here to denote that this is actually
- * a variable length, specifically stack passed array of values of a given type. We know
- * that the params parameter must also be the absolute last parameter given to us
- * for a function
- *
- * BNF Rule: <parameter-declaration> ::= <identifier> : {params}? <type-specifier>
- */
-static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* token_stream, u_int16_t* current_gen_purpose_param, u_int16_t* current_sse_param){
-	//Lookahead token
-	lexitem_t lookahead;
-	//Did we see the params keyword or not
-	u_int8_t params_seen = FALSE;
-	//Save where we have the token pointer index of declaration
-	u_int32_t token_pointer_index_of_declaration = token_stream->token_pointer;
-
-	//Now we can optionally see the constant keyword here
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If it didn't work we fail immediately
-	if(lookahead.tok != IDENT){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Expected identifier in function parameter declaration", parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Now we must perform all needed duplication checks for the name
-	dynamic_string_t name = lookahead.lexeme;
-
-	//Check that it isn't some duplicated variable name
-	symtab_variable_record_t* found_var = lookup_variable_local_scope(variable_symtab, name.string);
-
-	//Fail out here
-	if(found_var != NULL){
-		sprintf(info, "Attempt to redefine variable \"%s\". First defined here:", name.string);
-		print_variable_name_to_buffer(info, found_var);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return NULL;
-	}
-
-	//Check for a duplicated type
-	if(do_duplicate_types_exist(name.string) == TRUE){
-		return NULL;
-	}
-
-	//Now we need to see a colon
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If it isn't a colon, we're out
-	if(lookahead.tok != COLON){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Colon required between type specifier and identifier in paramter declaration", parser_line_num);
-		num_errors++;
-		//Return NULL to signify failure
-		return NULL;
-	}
-
-	/**
-	 * There is a chance that we could be seeing the "params" keyword here
-	 * to denote that we have an elaborative stack param. This is only valid in 
-	 * the context of a function signature which is why we must see it here
-	 */
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Flag this if we see it
-	if(lookahead.tok == PARAMS){
-		params_seen = TRUE;
-
-	//Otherwise put it back
-	} else {
-		push_back_token(token_stream, &parser_line_num);
-	}
-
-	//We are now required to see a valid type specifier node
-	generic_type_t* type = type_specifier(token_stream);
-	
-	//If the node fails, we'll just send the error up the chain
-	if(type == NULL){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid type specifier given to function parameter", parser_line_num);
-		num_errors++;
-		//It's already an error, just propogate it up
-		return NULL;
-	}
-
-	//If this is an incomplete type, then we also fail
-	if(type->type_complete == FALSE){
-		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		//It's already an error, just propogate it up
-		return NULL;
-	}
-
-	/**
-	 * Once we get here, we have actually seen an entire valid parameter 
-	 * declaration. It is now incumbent on us to store it in the variable 
-	 * symbol table
-	 */
-	symtab_variable_record_t* param_record = create_variable_record(&name, current_function, current_dependency_node, parser_line_num, token_pointer_index_of_declaration);
-
-	/**
-	 * If we've seen the params keyword now is the time
-	 * to update the type to be an elaborative type
-	 */
-	if(params_seen == TRUE){
-		//Let the handler deal with it
-		type = handle_elaborative_param_type(type);
-
-		//Null is an error, fail out
-		if(type == NULL){
-			return NULL;
-		}
-	}
-
-	//It is a function parameter
-	param_record->membership = FUNCTION_PARAMETER;
-	//Store the type as well, very important
-	param_record->type_defined_as = type;
-
-	/**
-	 * So long as this type is *not* passed by copy, we will include
-	 * it in our parameter counts
-	 */
-	if(is_type_stack_passed_by_copy(type) == FALSE){
-		//Most common case, not a floating point so it counts as general-purpose
-		if(IS_FLOATING_POINT(type) == FALSE){
-			param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
-
-			//Bump it for the next go about
-			(*current_gen_purpose_param)++;
-		} else {
-			param_record->class_relative_function_parameter_order = *current_sse_param;
-
-			//Bump it for the next go about
-			(*current_sse_param)++;
-		}
-	}
-
-	//We've now built up our param record, so we'll give add it to the symtab
-	insert_variable(variable_symtab, param_record);
-
-	//Give the variable back
-	return param_record;
-}
-
-
-/**
- * An error list will handle all of the errors in a function definition if a function has a "raises" statement. It is
- * important to note that this may not be empty. If we see the raises keyword, we need to raise at least one specific
- * error
- *
- * <error-list> = (<error>+)
- */
-static u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type, u_int8_t defining_predeclared_function){
-	//Extract the internal function type
-	function_type_t* internal_function_type = function_type->internal_types.function_type;
-
-	//Only do this if we're not defining from scratch
-	if(defining_predeclared_function == FALSE){
-		internal_function_type->potential_errors = dynamic_array_alloc();
-	}
-
-	//The lookahead token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we do not see an open paren, we fail
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Opening parenthesis required after raises keyword", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Push onto the grouping stack
-	push_token(&grouping_stack, lookahead);
-
-	//Start the error count off at 0
-	int32_t error_count = 0;
-
-	//Now we need to see at least one, but possibly many, error types in here
-	do {
-		//Get the next token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//If we don't see an ident then this is a failure
-		if(lookahead.tok != IDENT){
-			sprintf(info, "Expected to see a custom error type, but instead say \"%s\"", lexitem_to_string(&lookahead));
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-		//If we make it here we're on the right track, let's see what we can find. Remember that all
-		//types are defacto immutalbe
-		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
-
-		//We can't find it - big problem
-		if(found_type == NULL){
-			sprintf(info, "There exists no error type with the name \"%s\"", lookahead.lexeme.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-		//Get the inner type out
-		generic_type_t* error_type = found_type->type;
-
-		//Make sure that we dealias this - it is possible to alias any type
-		error_type = dealias_type(error_type);
-
-		//Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types, not just any
-		//old type
-		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" is not an error type and cannot be raised by a function as one", lookahead.lexeme.string);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-		/**
-		 * If we're not defining something that was predeclared, then all we need to do
-		 * is add this in
-		 */
-		if(defining_predeclared_function == FALSE){
-			//Let's first check for duplicated errors
-			for(int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
-				//Extrace it
-				generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
-
-				//If they're equal at all, we fail out
-				if(types_identical(candidate, error_type) == TRUE){
-					sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FAILURE;
-				}
-			}
-
-			//Add it in
-			dynamic_array_add(&(internal_function_type->potential_errors), error_type);
-
-		} else {
-			//We have too many - we need to bail out
-			if(error_count >= internal_function_type->potential_errors.current_index){
-				sprintf(info, "Function was predeclared as only having %d errors", internal_function_type->potential_errors.current_index); 
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Extract the predeclared version
-			generic_type_t* predeclared_error = dynamic_array_get_at(&(internal_function_type->potential_errors), error_count);
-
-			//If this isn't an exact match, we fail out
-			if(predeclared_error != error_type){
-				sprintf(info, "Function was predeclared with error number %d as \"%s\", but declared with \"%s\" as error number %d", error_count + 1, predeclared_error->type_name.string, error_type->type_name.string, error_count + 1);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-		}
-
-		//Bump the error count up
-		error_count++;
-
-		//Now we can either see a comma or the closing paren
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-		//If we have a comma then continue
-		if(lookahead.tok == COMMA){
-			continue;
-
-		//If we have an R_PAREN then get out
-		} else if(lookahead.tok == R_PAREN){
-			break;
-
-		//Otherwise this is an error
-		} else {
-			sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
-			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-			num_errors++;
-			return FAILURE;
-		}
-
-	//Loop forever until one of our exit cases is hit
-	} while(TRUE);
-
-	//Final check if we have a mismatch
-	if(defining_predeclared_function == TRUE && error_count != internal_function_type->potential_errors.current_index){
-		sprintf(info, "Mismatched error list lengths: predeclared wtih %d errors and declared with %d instead", internal_function_type->potential_errors.current_index, error_count);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//With that we are done, we can return success
-	return SUCCESS;
-}
-
-
-/**
  * Validate the parameter list for a given function type. There are a few fail
  * cases that we currently watch out for. They are:
- * 	21) Elaborative parameters must always be the very last function parameter
- * 	32) There may not be more than one elaborative parameter per function
+ * 	1) Elaborative parameters must always be the very last function parameter
+ * 	2) There may not be more than one elaborative parameter per function
  */
-static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
+static inline u_int8_t validate_function_parameter_list(generic_type_t* function_type){
 	//Grab the internal function type out
 	function_type_t* internal_type = function_type->internal_types.function_type;
 
@@ -13473,232 +13364,6 @@ static u_int8_t validate_function_parameter_list(generic_type_t* function_type){
 
 
 /**
- * A paramater list will handle all of the parameters in a function definition. It is important
- * to note that a parameter list may very well be empty, and that this rule will handle that case.
- * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
- *
- * <parameter-list> ::= (<parameter-declaration> { ,<parameter-declaration>}*)
- */
-static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_function_record_t* function_record, u_int8_t defining_predeclared_function){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//This is the internal function type, extracted for convenience
-	generic_type_t* function_type = function_record->signature;
-	function_type_t* internal_function_type = function_type->internal_types.function_type;
-	
-	//Now we need to see a valid parentheis
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we didn't find it, no point in going further
-	if(lookahead.tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Left parenthesis expected before parameter list", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Otherwise, we'll push this onto the list to check for later
-	push_token(&grouping_stack, lookahead);
-
-	//Now let's see what we have as the token. If it's an R_PAREN, we know that we're
-	//done here and we'll just return an empty list
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	switch(lookahead.tok){
-		//If we see an R_PAREN immediately, we can check and leave
-		case R_PAREN:
-			//If we have a mismatch, we can return these
-			if(pop_token(&grouping_stack).tok != L_PAREN){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//If we're validating, let's check and ensure that the defined type also has no params
-			if(defining_predeclared_function == TRUE){
-				//If we have a mismatch, we fail out
-				if(internal_function_type->function_parameters.current_index != 0){
-					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->function_parameters.current_index);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FAILURE;
-				}
-			}
-
-			//Otherwise we're fine, so return the list node
-			return SUCCESS;
-
-		//This is a possibility, we could see (void) as a valid declaration of no parameters
-		case VOID:
-			//We now need to see a closing R_PAREN
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//Fail out if we don't see this
-			if(lookahead.tok != R_PAREN){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected after void parameter list declaration", parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Also check for grouping
-			if(pop_token(&grouping_stack).tok != L_PAREN){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//If we're validating, let's check and ensure that the defined type also has no params
-			if(defining_predeclared_function == TRUE){
-				//If we have a mismatch, we fail out
-				if(internal_function_type->function_parameters.current_index != 0){
-					sprintf(info, "Predeclared function %s has %d parameters, not 0", function_record->func_name.string, internal_function_type->function_parameters.current_index);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FAILURE;
-				}
-			}
-
-			//Give back the parameter list node
-			return SUCCESS;
-			
-		//By default just put it back and get out
-		default:
-			push_back_token(token_stream, &parser_line_num);
-			break;
-	}
-
-	//Start off at 1 for both of these
-	u_int16_t general_purpose_parameter_number = 1;
-	u_int16_t sse_parameter_number = 1;
-	//We also maintain one with no split, just the absolute number
-	u_int16_t absolute_parameter_number = 1;
-
-	//We'll keep going as long as we see more commas
-	do{
-		//We must first see a valid parameter declaration
-		symtab_variable_record_t* parameter = parameter_declaration(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
-
-		//It's invalid, we'll just send it up the chain
-		if(parameter == NULL){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid parameter declaration found in parameter list", parser_line_num);
-			num_errors++;
-			return FAILURE;;
-		}
-
-		//If we're not defining a predeclared function, we need to add this parameter in
-		if(defining_predeclared_function == FALSE){
-			//Let the helper add it in
-			add_parameter_to_function_type(function_type, parameter->type_defined_as);
-
-		//If we get here, we need to validate that the type that was declared is
-		//the same as the one originally given
-		} else {
-			//Check if we've got too many parameters
-			if(absolute_parameter_number > internal_function_type->function_parameters.current_index){
-				sprintf(info, "Function %s was defined with only %d parameters", function_record->func_name.string, internal_function_type->function_parameters.current_index);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Extract for validations
-			generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), absolute_parameter_number - 1);
-
-			//We need to ensure that the mutability levels match here
-			if(parameter_type->mutability == MUTABLE && parameter->type_defined_as->mutability == NOT_MUTABLE){
-				sprintf(info, "Parameter %s was defined as immutable, but predeclared as mutable", parameter->var_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-
-			//The other option for a mismatch
-			} else if(parameter_type->mutability == NOT_MUTABLE && parameter->type_defined_as->mutability == MUTABLE){
-				sprintf(info, "Parameter %s was defined as mutable, but predeclared as immutable", parameter->var_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//If the mutability levels are off, we fail out
-			if(parameter_type->mutability != parameter->type_defined_as->mutability){
-				sprintf(info, "Mutability mismatch for parameter %d", absolute_parameter_number);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Grab the defined type out
-			generic_type_t* declared_type = dealias_type(parameter_type);
-			//And this type
-			generic_type_t* defined_type = dealias_type(parameter->type_defined_as);
-
-			//If these 2 don't match, we fail
-			if(defined_type != declared_type){
-				sprintf(info, "Parameter %d was defined with type \"%s\", but declared with type \"%s\"",  absolute_parameter_number, defined_type->type_name.string, declared_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FAILURE;
-			}
-
-			//Otherwise if we survive to here, then we're good
-		}
-
-		//Once we're here, we can add the function parameter in
-		add_function_parameter(function_record, parameter);
-
-		//We made it here, so we've seen one more absolute number
-		absolute_parameter_number++;
-
-		//Refresh the lookahead token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We keep going as long as we see commas
-	} while(lookahead.tok == COMMA);
-
-	//If we're predeclaring, we need to check that the parameter count matches
-	if(defining_predeclared_function == TRUE && function_record->function_parameters.current_index != internal_function_type->function_parameters.current_index){
-		sprintf(info, "Function %s was declared with %d parameters, but was only defined with %d", function_record->func_name.string, internal_function_type->function_parameters.current_index, function_record->function_parameters.current_index);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Once we reach here, we need to check for the R_PAREN
-	if(lookahead.tok != R_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Closing parenthesis expected after parameter list", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	//Otherwise it worked, so we need to check matching
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		print_parse_message(MESSAGE_TYPE_ERROR, "Unmatched parenthesis detected", parser_line_num);
-		num_errors++;
-		return FAILURE;
-	}
-
-	/**
-	 * Once we are fully done with all of our parameters, we will need to finalize the alignment
-	 * on the given stack data area. This ensures that the overall size is going to be 8-byte
-	 * aligned, and that all of the padding if needed is present
-	 */
-	if(function_record->signature->internal_types.function_type->contains_stack_params == TRUE){
-		align_stack_data_area(&(function_record->stack_passed_parameters));
-	}
-
-	/**
-	 * Validate the function parameter list using our helper
-	 */
-	if(validate_function_parameter_list(function_type) == FALSE){
-		return FAILURE;
-	}
-
-	//If we make it down here then this all worked, so
-	return SUCCESS;
-}
-
-
-/**
  * A function predeclaration allows the user to basically
  * promise that a function of this signature will exist at 
  * some point
@@ -13708,328 +13373,21 @@ static u_int8_t parameter_list(ollie_token_stream_t* token_stream, symtab_functi
  * NOTE: by the time we get here, we've already seen the declare keyword
  */
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream){
-	//Is this an inline function? Assume no by default
-	u_int8_t is_inlined = FALSE;
-	//Does this funtion raise errors? We know based on the ! after the fn keyword
-	u_int8_t raises_errors = FALSE;
-	//What is the visibility? By default it's private
-	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;	
-	//Save this to add into the record later
-	u_int32_t token_index_of_definition = token_stream->token_pointer;
-
-	//Get the first token in the stream
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-
-	/**
-	 * When we start parsing we have quite a few combos to account for.Some
-	 * valid examples are:
-	 * 		pub inline fn
-	 * 		pub fn
-	 * 		inline fn
-	 * 		fn
-	 */
-	switch(lookahead.tok){
-		//Inline request for a function
-		case INLINE:
-			//This is being inlined
-			is_inlined = TRUE;
-
-			//Refresh the lookahead token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//If we don't see the FN then we're done
-			if(lookahead.tok != FN){
-				return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
-			}
-
-			break;
-
-		//Request to make a fucntion public
-		case PUB:
-			//Flag that we are public
-			visibility = VISIBILITY_TYPE_PUBLIC;
-
-			//Refresh the lookahaed token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			switch(lookahead.tok){
-				//We have an inlined public function
-				case INLINE:
-					//Flag that we are inlined
-					is_inlined = TRUE;
-
-					//We now need to see the FN token
-					lookahead = get_next_token(token_stream, &parser_line_num);
-					if(lookahead.tok != FN){
-						return print_and_return_error("Expected \"fn\" after \"pub inline\" in function declaration", parser_line_num);
-					}
-					
-					break;
-
-				//Regular public function we just leave
-				case FN:
-					break;
-
-				default:
-					return print_and_return_error("Expected \"fn\" or \"inline\" after \"pub\" in function declaration", parser_line_num);
-			}
-
-			break;
-
-		//Nothing more to do here, just leave
-		case FN:
-			break;
-		
-		//It would be bizarre if we got here, but just in case
-		default:
-			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
-			return print_and_return_error(info, parser_line_num);
-	}
-
-	//Following this, we need to see an identifier
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we see an exclaimation point, then this function raises errors
-	if(lookahead.tok == EXCLAMATION){
-		raises_errors = TRUE;
-
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
-	}
-
-	//If it's not an ident, we leave
-	if(lookahead.tok != IDENT){
-		return print_and_return_error("Identifier required after fn keyword in function predeclaration", parser_line_num);
-	}
-
-	//Now we need to check for duplicated names. We'll do this for
-	dynamic_string_t function_name = lookahead.lexeme;
-
-	//Try to find it in this namespace
-	symtab_function_record_t* found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
-
-	//Fail out if found
-	if(found_function != NULL){
-		//Is it in the default namespace here or not?
-		if(function_symtab->current->is_default == TRUE){
-			sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", found_function->func_name.string);
-		} else {
-			sprintf(info, "A function with name \"%s\" has already been defined in the namespace \"%s\". First defined here:",
-		   					found_function->func_name.string,
-		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
-		}
-
-		print_function_name_to_buffer(info, found_function);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Now duplicated variables
-	if(do_duplicate_variables_exist(function_name.string) == TRUE){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	} 
-
-	//Check for duplicate types
-	if(do_duplicate_types_exist(function_name.string) == TRUE){
-		//Create and return an error node
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-	}
-
-	//The main function may not be predeclared
-	if(strcmp(function_name.string, "main") == 0){
-		return print_and_return_error("The main function may not be predeclared", parser_line_num);
-	}
-
-	//Now that we've survived up to here, we can make the actual record
-	symtab_function_record_t* function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
-
-	//Now we need to see an lparen to begin the parameters
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we don't see it, we fail out
-	if(lookahead.tok != L_PAREN){
-		return print_and_return_error("Left parenthesis expected after function name", parser_line_num);
-	}
-
-	//Add this onto the grouping stack
-	push_token(&grouping_stack, lookahead);
-
-	//Now we can begin processing our parameters
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We must check some edge cases here
-	switch(lookahead.tok){
-		case VOID:
-			//We now need to see an RPAREn
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			
-			//We now need to see an R_PAREN
-			if(lookahead.tok != R_PAREN){
-				return print_and_return_error("Right parenthesis required after void parameter declaration", parser_line_num);
-			}
-
-			break;
-
-		//We'll just hop out
-		case R_PAREN:
-			break;
-
-		//By default we can just leave
-		default:
-			push_back_token(token_stream, &parser_line_num);
-
-			//Keep processing so long as we keep seeing commas
-			do {
-				//By default assume we have not seen this
-				u_int8_t seen_params = FALSE;
-
-				//Grab the next token - we could see a "params"
-				lookahead = get_next_token(token_stream, &parser_line_num);
-
-				//Flag that we've seen the params keyword, otherwise push it back
-				if(lookahead.tok == PARAMS){
-					seen_params = TRUE;
-
-				} else {
-					push_back_token(token_stream, &parser_line_num);
-				}
-
-				//Now we need to see a valid type
-				generic_type_t* type = type_specifier(token_stream);
-
-				//If this is NULL, we'll error out
-				if(type == NULL){
-					return print_and_return_error("Invalid parameter type given", parser_line_num);
-				}
-
-				//If we have seen the params type, then handle it here
-				if(seen_params == TRUE){
-					//Helper deals with it
-					type = handle_elaborative_param_type(type);
-
-					//If it's null it failed, so we fail out
-					if(type == NULL){
-						return print_and_return_error("Invlaid elaborative parameter declaration", parser_line_num);
-					}
-				}
-
-				//Let the helper add the type in
-				add_parameter_to_function_type(function_record->signature, type);
-
-				//Refresh the lookahead token
-				lookahead = get_next_token(token_stream, &parser_line_num);
-
-			} while(lookahead.tok == COMMA);
-
-			//Now that we're done processing the list, we need to ensure that we have a right paren
-			if(lookahead.tok != R_PAREN){
-				return print_and_return_error("Right parenthesis required after parameter list declaration", parser_line_num);
-			}
-
-			break;
-	}
-
-	/**
-	 * By the time we get down here we have seen the right parenthesis in some way or form
-	 * so we don't need to worry about finding it again
-	 */
-	if(pop_token(&grouping_stack).tok != L_PAREN){
-		return print_and_return_error("Unmatched parenthesis detected", parser_line_num);
-	}
-
-	/**
-	 * Once we're done with all of the parameters, let's validate the parameter
-	 * list to ensure that we aren't breaking any rules
-	 */
-	if(validate_function_parameter_list(function_record->signature) == FALSE){
-		sprintf(info, "Invalid parameter list for function \"%s\"", function_name.string);
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Following this, we need to see the -> symbol
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we don't see it, we fail
-	if(lookahead.tok != ARROW){
-		return print_and_return_error("-> expected after function parameter list", parser_line_num);
-	}
-
-	//Now we need to see a valid type specifier
-	generic_type_t* return_type = type_specifier(token_stream);
-
-	//Fail out if bad
-	if(return_type == NULL){
-		return print_and_return_error("Invalid return type given", parser_line_num);
-	}
-
-	/**
-	 * Add the return type to the function. The helper takes care of any/all internal
-	 * bookkeeping that needs to be done for it
-	 */
-	add_return_type_to_signature(function_record->signature->internal_types.function_type, return_type);
-
-	//We can now optionally see the RAISES keyword
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we see the raises keyword, we have to see an error list afterwards
-	if(lookahead.tok == RAISES){
-		if(raises_errors == FALSE){
-			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Let the helper do it
-		u_int8_t success = error_list(token_stream, function_record->signature, FALSE);
-
-		//If this fails we're out
-		if(success == FAILURE){
-			return print_and_return_error("Invalid error list given in function pointer type", parser_line_num);
-		}
-
-	} else {
-		//Otherwise put it back
-		push_back_token(token_stream, &parser_line_num);
-	}
-
-	//Generate the name for the function pointer type here
-	generate_function_pointer_type_name(function_record->signature);
-
-	//Otherwise this all worked. We can add this function to the symtab
-	insert_function(function_symtab, function_record);
-	
-	//A null return means that we succeeded
-	return NULL;
-}
-
-
-/**
- * Handle the case where we declare a function. A function will always be one of the children of a declaration
- * partition
- *
- * NOTE: We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
- *
- * BNF Rule: <function-definition> ::= {pub}? {inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
- */
-static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
 	//Freeze the line number
 	u_int32_t current_line = parser_line_num;
-	//Lookahead token
 	lexitem_t lookahead;
-	//Have we predeclared this function
-	u_int8_t defining_predeclared_function = FALSE;
-	//Is it the main function?
-	u_int8_t is_main_function = FALSE;
-	//Function visitibility level
+	//Visibility is always going to default to private
 	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
-	//Is this function inlined? By default no
+	//By default we are not inlining
 	u_int8_t is_inlined = FALSE;
-	//Does this funtion raise errors? We know based on the ! after the fn keyword
+	//By default we do not raise errors either
 	u_int8_t raises_errors = FALSE;
-	//Does this function maintain a specific error list with the "raise" keyword
-	u_int8_t specific_error_list = FALSE;
-
 	//Cache the token index of definition that we're dealing with
 	u_int32_t token_index_of_definition = token_stream->token_pointer;
 
 	/**
+	 * Step 1: determine our preamble
+	 *
 	 * Get our token out and start going through the start of
 	 * the function definition. There are a bunch of valid
 	 * combos here including:
@@ -14040,7 +13398,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
 	switch(lookahead.tok){
-		case PUB:
+		case PUB: {
 			//Flag that it is public
 			visibility = VISIBILITY_TYPE_PUBLIC;
 
@@ -14068,8 +13426,9 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			}
 			
 			break;
+		}
 
-		case INLINE:
+		case INLINE: {
 			//This is being inlined
 			is_inlined = TRUE;
 
@@ -14080,153 +13439,1200 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			}
 
 			break;
+		}
 
 		case FN:
 			break;
 		
-		default:
+		default: {
 			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
 			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
 	/**
+	 * Step 2: error raising
+	 *
 	 * It is possible for us to see the "!" for this function, in which case that means that this function
 	 * may raise errors of any kind. If we see this, we need to consume it and flag it here
 	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	//If we see this it means that we can raise errors
 	if(lookahead.tok == EXCLAMATION){
 		raises_errors = TRUE;
-
-	//Otherwise put it back
 	} else {
 		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//We also need to mark that we're in a function using the nesting stack
-	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
-
 	/**
-	 * Since most functions do not use user defined jumps, we will initialize
-	 * this to be NULL here and only allocate when the need arises
+	 * Step 3: extract the function's name
+	 * 
+	 * Get the name of the function which should be next. Note that the function
+	 * name cannot, as of right now, be used to check for duplicates yet because of
+	 * overloading
+	 *
+	 * We can however check to make sure that this function is not colliding with any
+	 * existing variable or type names
 	 */
-	current_function_jump_statements = INITIALIZE_DYNAMIC_ARRAY;
-
-	/**
-	 * We also have the AST function node, this will be intialized immediately
-	 * It also requires a symtab record of the function, but this will be assigned
-	 * later once we have it
-	 */
-	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
-
-	//Now we must see a valid identifier as the name
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we have a failure here, we're done for
 	if(lookahead.tok != IDENT){
 		return print_and_return_error("Invalid name given as function name", current_line);
 	}
 
-	//Otherwise, we could still have a failure here if this is any kind of duplicate
-	//Grab a reference for convenience
+	//For our convenience get this out
 	dynamic_string_t function_name = lookahead.lexeme;
 
-	//Now we must perform all of our symtable checks. Parameters may not share names with types, functions or variables
-	symtab_function_record_t* function_record = lookup_function_in_namespace(function_symtab->current, function_name.string);
+	/**
+	 * We may never predeclare the main function. If we see this then we fail out immediately
+	 */
+	if(strcmp(function_name.string, "main") == 0){
+		return print_and_return_error("The \"main\" function may never be predeclared", parser_line_num);
+	} 
 
-	//Fail out if found and it's already been defined
-	if(function_record != NULL && function_record->defined == TRUE){
-		//Is it in the default namespace here or not?
-		if(function_symtab->current->is_default == TRUE){
-			sprintf(info, "A function with name \"%s\" has already been defined. First defined here:", function_record->func_name.string);
-		} else {
-			sprintf(info, "A function with name \"%s\" has already been defined in the namespace \"%s\". First defined here:",
-		   					function_record->func_name.string,
-		   					generate_fully_qualified_namespace_name(function_symtab->current).string);
-		}
-		print_function_name_to_buffer(info, function_record);
-		return print_and_return_error(info, parser_line_num);
+	//Check for duplicate variables here
+	if(do_duplicate_variables_exist(function_name.string) || do_duplicate_types_exist(function_name.string)){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-
-	//If the function record is NULL, that means we're defining completely fresh
-	if(function_record == NULL){
-		//Check for duplicate variables here
-		if(do_duplicate_variables_exist(function_name.string) == TRUE){
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		//Check for duplicate types
-		if(do_duplicate_types_exist(function_name.string) == TRUE){
-			//Create and return an error node
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		//Now that we know it's fine, we can first create the record. There is still more to add in here, but we can at least start it
-		function_record = create_function_record(&function_name, current_dependency_node, visibility, is_inlined, raises_errors, parser_line_num, token_index_of_definition);
-
-		//We'll put the function into the symbol table
-		//since we now know that everything worked
-		insert_function(function_symtab, function_record);
-
-		//We'll also flag that this is the current function
-		current_function = function_record;
-		current_function_signature = function_record->signature->internal_types.function_type;
-
-		/**
-		 * If this is the main function, we will record it as having been called by the operating 
-		 * system
-		 */
-		if(strcmp("main", function_name.string) == 0){
-			//It is the main function
-			is_main_function = TRUE;
-		}
-
-	//If we get here, we know that we're defining a predeclared function
-	} else {
-		defining_predeclared_function = TRUE;
-		current_function = function_record;
-		current_function_signature = function_record->signature->internal_types.function_type;
-
-		//Let's now check - if the is_public's don't match here, we can fail already
-		if(current_function_signature->visibility == VISIBILITY_TYPE_PUBLIC && visibility == VISIBILITY_TYPE_PRIVATE){
-			sprintf(info, "Function \"%s\" was predeclared as public, but defined as private", function_record->func_name.string);
-			return print_and_return_error(info, parser_line_num);
-
-		//Other case, still a failure
-		} else if(current_function_signature->visibility == VISIBILITY_TYPE_PRIVATE && visibility == VISIBILITY_TYPE_PUBLIC){
-			sprintf(info, "Function \"%s\" was predeclared as private, but defined as public", function_record->func_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		if(current_function_signature->is_inlined == TRUE && is_inlined == FALSE){
-			sprintf(info, "Function \"%s\" was predeclared as inline. Please add the inline keyword to the declaration", function_record->func_name.string);
-			return print_and_return_error(info, parser_line_num);
-
-		} else if(current_function_signature->is_inlined == FALSE && is_inlined == TRUE){
-			sprintf(info, "Function \"%s\" was not predeclared as inline. Please add the inline keyword to the forward declaration", function_record->func_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Check the matching case for raises errors
-		if(current_function_signature->raises_errors == TRUE && raises_errors == FALSE){
-			sprintf(info, "Function \"%s\" was predeclared as raising errors. Please add the ! signifier to the declaration", function_record->func_name.string);
-			return print_and_return_error(info, parser_line_num);
-
-		} else if(current_function_signature->raises_errors == FALSE && raises_errors == TRUE){
-			sprintf(info, "Function \"%s\" was not predeclared as not raising errors. Please add the ! signifier to the forward declaration", function_record->func_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-	}
-
-	//Associate this with the function node
-	function_node->func_record = function_record;
-
-	//Extract the signature for ease of use
-	function_type_t* function_signature = function_record->signature->internal_types.function_type;
 
 	/**
+	 * Step 4: Build up the function signature
+	 *
+	 * Before we can think about anything symtab related, we're going to need to completely
+	 * build up a function signature so that, when we go looking for predeclarations and/or
+	 * function overloading we're armed with a signature to compare against
+	 */
+	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
+	function_type_t* internal_function_type = new_function_signature->internal_types.function_type;
+
+	/**
+	 * Step 5: parse all parameters
+	 *
+	 * Unlike a regular function definition, predeclared functions  will never have names in their
+	 * parameter list. They will instead be a comma separated type list
+	 *
+	 * If this fails then the entire thing fails
+	 */
+	if(parse_parameter_type_list(token_stream, new_function_signature) == FAILURE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Step 6: parse the return type and errors(potentially)
+	 *
+	 * We can now parse the return type and error list. Again we'll let the helper
+	 * do this
+	 */
+	if(parse_function_return_type_and_error_list(token_stream, new_function_signature) == FAILURE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Step 7: type finalization
+	 *
+	 * If we made it to here then our parsing is done. We will finalize the function pointer
+	 * type now
+	 */
+	generate_function_pointer_type_name(new_function_signature);
+
+	/**
+	 * Step 8: function classification determination
+	 *
+	 * At this point we have a few possibilities:
+	 * 	1.) We could be predeclaring an entirely new, never-before-seen function name
+	 * 	2.) We could be predeclaring an overload of an existing function
+	 * 	3.) We could be invalidly predeclaring a function that already exists -> FAILURE
+	 */
+	symtab_function_record_t* original_found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
+
+	/**
+	 * Case 1: We have an entirely original function here that whose name we've never seen.
+	 * We'll just create the function record as a regular, non-overloaded type
+	 */
+	symtab_function_record_t* created_record = NULL;
+	if(original_found_function == NULL){
+		//Create it
+		created_record = create_function_record(&function_name, current_dependency_node, visibility, current_line, token_index_of_definition);
+
+		//Store the overall signature
+		created_record->signature = new_function_signature;
+
+		//This is the only case where we are inserting something into the symtab
+		insert_function(function_symtab, created_record);
+	
+	} else {
+		//Extract the function type
+		function_type_t* original_found_function_type = original_found_function->signature->internal_types.function_type;
+		symtab_function_record_t* overloaded_or_declared = resolve_function_record(function_name.string, new_function_signature, TRUE);
+
+		/**
+		 * Case 2: we could not resolve the function record with this specific type, meaning that
+		 * this is a brand new overload of the original function
+		 */
+		if(overloaded_or_declared == NULL){
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between overloads and
+			 * their visibility status. If this is different then we fail out
+			 */
+			if(original_found_function->visibility != visibility){
+				sprintf(info, "The first function \"%s\" was declared as %s so all future overloads must be declared as %s",
+							function_name.string,
+							visibility_to_string(original_found_function->signature->internal_types.function_type->visibility),
+							visibility_to_string(original_found_function->signature->internal_types.function_type->visibility));
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between overloads and their
+			 * inlined status. If this is different then we fail out
+			 */
+			if(original_found_function_type->is_inlined != is_inlined){
+				sprintf(info, "The first function \"%s\" was declared as %s so all future overloads must be declared as %s",
+							function_name.string,
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Due to the way that elaborative stack params would muddy the waters with overloading, Ollie bans
+			 * the use of overloading with elaborative stack params on both the original and new functions
+			 *
+			 * First check the original found function
+			 */
+			if(original_found_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function \"%s\" was declared with an elaborative parameter. Functions with elaborative parameters may never be overloaded. First declared here:",
+					  	original_found_function->func_name.string);
+				print_function_name_to_buffer(info, original_found_function);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Now check the overload type
+			if(internal_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
+						new_function_signature->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Do these two function signatures differ enough to justify overloading? They must differ in the function parameter list
+			 * in order to justify this. If they do not, then we fail out
+			 */
+			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
+				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s is invalid, signatures must have different parameter lists. First defined here:",
+						original_found_function->func_name.string,
+						new_function_signature->type_name.string);
+				print_function_name_to_buffer(info, original_found_function);
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Create it
+			created_record = create_overload_function_record(&function_name, current_dependency_node, visibility, current_line, token_index_of_definition);
+
+			//Store the overall signature
+			created_record->signature = new_function_signature;
+
+			//Add this as an overload of the original function
+			add_function_overload(function_symtab, original_found_function, created_record);
+
+		/**
+		 * Case 3: COLLISION!
+		 *
+		 * We have already either predeclared or actually declared this function, in which case 
+		 * this is an illegal operation
+		 */
+		} else {
+			//We are trying to predeclare an already defined function - BAD
+			if(overloaded_or_declared->defined == TRUE){
+				if(function_symtab->current->is_default == TRUE){
+					sprintf(info, "Function \"%s\" has already been defined with type %s",
+							function_name.string,
+							new_function_signature->type_name.string);
+				} else {
+					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
+							function_name.string,
+							generate_fully_qualified_namespace_name(function_symtab->current).string,
+							new_function_signature->type_name.string);
+				}
+
+				print_function_name_to_buffer(info, overloaded_or_declared);
+				return print_and_return_error(info, parser_line_num);
+
+			//We have already predeclared this but did not yet define it
+			} else {
+				if(function_symtab->current->is_default == TRUE){
+					sprintf(info, "Function \"%s\" has already been predeclared with type %s",
+							function_name.string,
+							new_function_signature->type_name.string);
+				} else {
+					sprintf(info, "Function \"%s\" has already been predeclared in the namespace \"%s\" with type %s",
+							function_name.string,
+							generate_fully_qualified_namespace_name(function_symtab->current).string,
+							new_function_signature->type_name.string);
+				}
+
+				print_function_name_to_buffer(info, overloaded_or_declared);
+				return print_and_return_error(info, parser_line_num);
+			}
+		}
+	}
+
+	//Return a dummy function predeclaration node
+	return ast_node_alloc(AST_NODE_TYPE_FUNC_PREDCLARATION, SIDE_TYPE_LEFT);
+}
+
+
+/**
+ * A parameter declaration is a fancy kind of variable. It is stored in the symtable at the 
+ * top lexical scope for the function itself. Like all rules, it returns a reference to the
+ * root of the subtree that it creates
+ *
+ * This rule will return a symtab variable record that represents the parameter it made. If will return
+ * NULL if an error occurs. 
+ *
+ * NOTE: this function will *NEVER* save the symtab variable that it creates. This is done later
+ * once we determine that a new function record needs to be made
+ *
+ * We can optionally see the "params" keyword here to denote that this is actually
+ * a variable length, specifically stack passed array of values of a given type. We know
+ * that the params parameter must also be the absolute last parameter given to us
+ * for a function
+ *
+ * BNF Rule: <parameter-declaration> ::= <identifier> : {params}? <type-specifier>
+ */
+static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* token_stream, int32_t* current_gen_purpose_param, int32_t* current_sse_param){
+	//Lookahead token
+	lexitem_t lookahead;
+	//Did we see the params keyword or not
+	u_int8_t params_seen = FALSE;
+	//Save where we have the token pointer index of declaration
+	u_int32_t token_pointer_index_of_declaration = token_stream->token_pointer;
+
+	//We need to first see an identifier
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != IDENT){
+		return print_and_return_null("Expected identifier in function parameter declaration", parser_line_num);
+	}
+
+	//Extract for convenience - can NOT be a pointer
+	dynamic_string_t name = lookahead.lexeme;
+
+	//Validate that we don't have duplicate types
+	if(do_duplicate_types_exist(name.string) == TRUE){
+		return NULL;
+	}
+
+	//If it isn't a colon, we're out
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != COLON){
+		return print_and_return_null("Colon required between type specifier and identifier in paramter declaration", parser_line_num);
+	}
+
+	/**
+	 * There is a chance that we could be seeing the "params" keyword here
+	 * to denote that we have an elaborative stack param. This is only valid in 
+	 * the context of a function signature which is why we must see it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == PARAMS){
+		params_seen = TRUE;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	//We are now required to see a valid type specifier node
+	generic_type_t* type = type_specifier(token_stream);
+	
+	//If the node fails, we'll just send the error up the chain
+	if(type == NULL){
+		return print_and_return_null("Invalid type specifier given to function parameter", parser_line_num);
+	}
+
+	//Must be an incomplete type, if it's not then we're out
+	if(type->type_complete == FALSE){
+		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
+		return print_and_return_null(info, parser_line_num);
+	}
+
+	/**
+	 * Once we get here, we have actually seen an entire valid parameter 
+	 * declaration. It is now incumbent on us to store it in the variable 
+	 * symbol table
+	 */
+	symtab_variable_record_t* param_record = create_variable_record(&name, NULL, current_dependency_node, parser_line_num, token_pointer_index_of_declaration);
+
+	/**
+	 * If we've seen the params keyword now is the time
+	 * to update the type to be an elaborative type
+	 */
+	if(params_seen == TRUE){
+		type = handle_elaborative_param_type(type);
+
+		if(type == NULL){
+			return NULL;
+		}
+	}
+
+	//Flag that this is a function parameter store the type
+	param_record->membership = FUNCTION_PARAMETER;
+	param_record->type_defined_as = type;
+
+	/**
+	 * So long as this type is *not* passed by copy, we will include
+	 * it in our parameter counts. Pass by copy 
+	 */
+	if(is_type_stack_passed_by_copy(type) == FALSE){
+		//Most common case, not a floating point so it counts as general-purpose
+		if(IS_FLOATING_POINT(type) == FALSE){
+			param_record->class_relative_function_parameter_order = *current_gen_purpose_param;
+
+			//Bump it for the next go about
+			(*current_gen_purpose_param)++;
+
+		} else {
+			param_record->class_relative_function_parameter_order = *current_sse_param;
+
+			//Bump it for the next go about
+			(*current_sse_param)++;
+		}
+	}
+
+	//Give the variable back
+	return param_record;
+}
+
+
+/**
+ * A paramater list will handle all of the parameters in a function definition. It is important
+ * to note that a parameter list may very well be empty, and that this rule will handle that case.
+ * Regardless of the number of parameters(maximum of 6), a paramter list node will always be returned
+ *
+ * This rule will create symtab variables for each parameter, but it will *NOT INSERT THEM*. They need to
+ * be inserted/have their "function defined in" updated once the function record is created
+ *
+ * NOTE: it is expected that the "created_parameters" array has already been allocated
+ *
+ * <parameter-list> ::= (<identifier> : <type-specifier> { ,{<identifier> : <type-specifier>}*)
+ */
+static inline u_int8_t parse_function_parameters(ollie_token_stream_t* token_stream, generic_type_t* function_signature, dynamic_array_t* parameter_list){
+	//No parenthesis - fail out
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_failure("Left parenthesis expected before parameter list", parser_line_num);
+	}
+
+	//Otherwise, we'll push this onto the list to check for later
+	push_token(&grouping_stack, lookahead);
+
+	/**
+	 * Now let's see what we have as the token. If it's an R_PAREN, we know that we're
+	 * done here and we'll just return an empty list. We cou
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	switch(lookahead.tok){
+		/**
+		 * Case 1: we have a parameter list like: pub fn my_fn() ... that's just empty,
+		 * in which case we can just leave out now
+		 */
+		case R_PAREN: {
+			//Just make sure that we have the matching L_PAREN
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			return SUCCESS;
+		}
+
+		/**
+		 * Case 2: Ollie supports parameter declarations like: pub fn my_fn(void)... as an
+		 * alternative way to declare an empty list. If that is the case then we can also 
+		 * come through and return early
+		 */
+		case VOID: {
+			lookahead = get_next_token(token_stream, &parser_line_num);
+
+			//Validate that we have closing parenthesis
+			if(lookahead.tok != R_PAREN){
+				return print_and_return_failure("Closing parenthesis expected after void parameter list declaration", parser_line_num);
+			}
+
+			//Validate parenthesis matching
+			if(pop_token(&grouping_stack).tok != L_PAREN){
+				return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+			}
+
+			return SUCCESS;
+		}
+			
+		/**
+		 * Case 3: we actually have some parameter here so we're going to need
+		 * to push back the token for future processing
+		 */
+		default: {
+			push_back_token(token_stream, &parser_line_num);
+			break;
+		}
+	}
+
+	/**
+	 * We will be maintaining both the class relative(SSE/gen purpose)
+	 * and absolute parameter number orderings for everything
+	 */
+	int32_t general_purpose_parameter_number = 1;
+	int32_t sse_parameter_number = 1;
+	int32_t absolute_parameter_number = 1;
+
+	/**
+	 * Keep parsing so long as we don't see the lone ")" at the very end signifying that we're done
+	 */
+	while(TRUE){
+		//We must first see a valid parameter declaration
+		symtab_variable_record_t* parameter = parameter_declaration(token_stream, &general_purpose_parameter_number, &sse_parameter_number);
+
+		//Fail out if we're invalid
+		if(parameter == NULL){
+			return print_and_return_failure("Invalid parameter declaration found in parameter list", parser_line_num);
+		}
+
+		/**
+		 * We need to validate that there are no duplicated parameter names inside
+		 * of the parameter list. We can't rely on the symtab to do that for us
+		 * because we parse these before the symtab is in play
+		 */
+		for(int32_t i= 0; i < parameter_list->current_index; i++){
+			symtab_variable_record_t* duplicate = dynamic_array_get_at(parameter_list, i);
+
+			//Cannot have any duplicates
+			if(dynamic_strings_equal(&(duplicate->var_name), &(parameter->var_name)) == TRUE){
+				sprintf(info, "Parameter list already contains a parameter with name \"%s\"", parameter->var_name.string);
+				return print_and_return_failure(info, parser_line_num);
+			}
+		}
+
+		//We've seen one more absolute parameter
+		absolute_parameter_number++;
+
+		//Add the type to the signature 
+		add_parameter_to_function_type(function_signature, parameter->type_defined_as);
+
+		//Store the variable itself inside of our list of function parameters
+		dynamic_array_add(parameter_list, parameter);
+
+		//Refresh the lookahead token and use it to determine our next move
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == COMMA){
+			continue;
+
+		} else if(lookahead.tok == R_PAREN){
+			break;
+
+		} else {
+			sprintf(info, "Expected ) or , after function parameter declaration but say %s instead", lexitem_to_string(&lookahead));
+			return print_and_return_failure(info, parser_line_num);
+		}
+	}
+
+	//We only get here if we say an R_PAREN, make sure we match though
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	/**
+	 * Finally perform validations on our parameter list. We know that the only
+	 * accepatable place for an elaborative parameter is as the very last parameter
+	 * in the function itself
+	 */
+	return validate_function_parameter_list(function_signature);
+}
+
+
+/**
+ * An error list will handle all of the errors in a function definition if a function has a "raises" statement. It is
+ * important to note that this may not be empty. If we see the raises keyword, we need to raise at least one specific
+ * error
+ *
+ * <error-list> = (<error> {, <error>}*)
+ */
+static inline u_int8_t error_list(ollie_token_stream_t* token_stream, generic_type_t* function_type){
+	//Extract the internal function type
+	function_type_t* internal_function_type = function_type->internal_types.function_type;
+
+	//We'll need to allocate the list of potential errors
+	internal_function_type->potential_errors = dynamic_array_alloc();
+
+	//If we do not see an open paren, we fail
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_failure("Opening parenthesis required after raises keyword", parser_line_num);
+	}
+
+	//Push onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	/**
+	 * Run through until we stop seeing errors. We'll know when
+	 * to stop once we don't see a comma anymore
+	 */
+	while(TRUE){
+		//Refresh the token - we should see an identifier
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok != IDENT){
+			sprintf(info, "Expected to see a custom error type, but instead say \"%s\"", lexitem_to_string(&lookahead));
+			return print_and_return_failure(info, parser_line_num);
+		}
+
+		//This should be a type - if it's not then fail out
+		symtab_type_record_t* found_type = lookup_type_name_only(type_symtab, lookahead.lexeme.string, NOT_MUTABLE);
+		if(found_type == NULL){
+			sprintf(info, "There exists no error type with the name \"%s\"", lookahead.lexeme.string);
+			return print_and_return_failure(info, parser_line_num);
+		}
+
+		/**
+		 * Otherwise we did find it - but is it an ERROR? Remember we are only allowed to raise error types
+		 * Be sure that we dealias this before going forward
+		 */
+		generic_type_t* error_type = dealias_type(found_type->type);
+		if(error_type->type_class != TYPE_CLASS_ERROR){
+			sprintf(info, "Type \"%s\" is not an error type and cannot be raised by a function as one", lookahead.lexeme.string);
+			return print_and_return_failure(info, parser_line_num);
+		}
+
+		/**
+		 * We cannot put the same error in this list twice, so before adding scan through
+		 * and verify that these are unique
+		 */
+		for(int32_t i = 0; i < internal_function_type->potential_errors.current_index; i++){
+			generic_type_t* candidate = dynamic_array_get_at(&(internal_function_type->potential_errors), i);
+
+			//If they're equal at all, we fail out
+			if(types_identical(candidate, error_type) == TRUE){
+				sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
+				return print_and_return_failure(info, parser_line_num);
+			}
+		}
+
+		//All fine to add it in now
+		dynamic_array_add(&(internal_function_type->potential_errors), error_type);
+
+		//Now we can either see a comma or the closing paren
+		lookahead = get_next_token(token_stream, &parser_line_num);
+		if(lookahead.tok == COMMA){
+			continue;
+		} else if(lookahead.tok == R_PAREN){
+			break;
+		} else {
+			sprintf(info, "Expected , or ) but got \"%s\"", lexitem_to_string(&lookahead));
+			return print_and_return_failure(info, parser_line_num);
+		}
+	}
+
+	//We can only ever get here if we saw the R_PAREN. Make sure we can match it
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_failure("Unmatched parenthesis detected", parser_line_num);
+	}
+
+	//With that we are done, we can return success
+	return SUCCESS;
+}
+
+
+/**
+ * Handle the parsing for the function return type and any errors that we raise.
+ * By the time we get here we have already successfully parsed all of the function
+ * parameters so all that we should need to parse are the arrow, type specifier, and
+ * the raises error list
+ */
+static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature){
+	//Hang onto the internal type for our convenience
+	function_type_t* internal_type = function_signature->internal_types.function_type;
+
+	//First we need to see the return arrow(->)
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != ARROW){
+		return print_and_return_failure("Arrow(->) required after parameter-list in function", parser_line_num);
+	}
+
+	/**
+	 * Now if we get here, we must see a valid type specifier
+	 * The type specifier rule already does existence checking for us
+	 */
+	generic_type_t* return_type = type_specifier(token_stream);
+	if(return_type == NULL){
+		return print_and_return_failure("Invalid return type given to function/function signature. All functions, even void returning ones, must have an explicit return type", parser_line_num);
+	}
+
+	//Dealias it if need be and then get this into the function signature
+	return_type = dealias_type(return_type);
+	add_return_type_to_signature(function_signature, return_type);
+
+	/**
+	 * Now we can process the error raising if appropriate. We will also
+	 * validate that the fn keyword has the needed "!" if we are raising
+	 * errors
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == RAISES){
+		/**
+		 * If we didn't denote that this could raise errors with the ! after fn, we
+		 * have an invalid declaration and will fail out
+		 */
+		if(internal_type->raises_errors == FALSE){
+			return print_and_return_failure("Function/function type was not declared as a function that may return errors. Declare using \"fn!\" to do this", parser_line_num);
+		}
+
+		//Now that we've made it past that, we can let the helper do the parsing for us
+		if(error_list(token_stream, function_signature) == FAILURE){
+			return print_and_return_failure("Invalid error list detected in function declaration/function type", parser_line_num);
+		}
+
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	//We made it here so we're set
+	return SUCCESS;
+}
+
+
+/**
+ * Perform validation on the parameter & return type & order for the main function
+ *
+ * The allowed signatures are either:
+ * 1.)	pub fn main() -> i32 ..
+ * 2.)  pub fn main(<>:i32, <>:char**) -> i32
+ */
+static inline u_int8_t validate_main_function(generic_type_t* function_signature){
+	//Let's extract the signature first for convenience
+	function_type_t* signature = function_signature->internal_types.function_type;
+
+	//If the main function is not public, then we fail
+	if(signature->visibility == VISIBILITY_TYPE_PRIVATE){
+		return print_and_return_failure("The main function must be prefixed with the \"pub\" keyword", parser_line_num);
+	}
+
+	/**
+	 * The name function may not be declared in anything that
+	 * is not the default namespace. So if we see that
+	 * the current namespace is not default, we fail out
+	 */
+	if(function_symtab->current->is_default == FALSE){
+		sprintf(info, "The main function was found declared inside the namespace \"%s\". The main function may only be declared inside of the top level namespace.",
+		  				function_symtab->current->namespace_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+	
+	/**
+	 * The main function may have no parameters *OR* it could have
+	 * two parameters. Any other count is invalid. There are conditions
+	 * on what the first 2 parameters may be
+	 */
+	switch(signature->function_parameters.current_index){
+		case 0: {
+			break;
+		}
+
+		case 2: {
+			//Extract the first parameter
+			generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), 0);
+			
+			//If it isn't a basic type and it isn't an i32, we fail
+			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
+				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", function_signature->type_name.string);
+				return print_and_return_failure(info, parser_line_num);
+			}
+
+			//Now let's grab the second parameter
+			parameter_type = dynamic_array_get_at(&(signature->function_parameters), 1);
+
+			//This must be a char** type. If it's not, we fail out
+			if(is_type_string_array(parameter_type) == FALSE){
+				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", function_signature->type_name.string);
+				return print_and_return_failure(info, parser_line_num);
+			}
+
+			break;
+		}
+
+		default: {
+			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", function_signature->type_name.string);
+			return print_and_return_failure(info, parser_line_num);
+		}
+	}
+
+	//Finally, we'll validate the return type of the main function. It must also always be an i32
+	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
+		sprintf(info, "The main function must return a value of type i32, instead was given: %s", function_signature->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	return TRUE;
+}
+
+
+/**
+ * We need to go through and check all of the jump statements that we have in the function. If any
+ * one of these jump statements is trying to jump to a label that does not exist, then we need to fail out
+ */
+static inline u_int8_t check_jump_labels(){
+	//Run through all of these statements
+	for(int32_t i=  0; i < current_function_jump_statements.current_index; i++){
+		//Extract the one we need
+		generic_ast_node_t* current_jump_statement = dynamic_array_get_at(&(current_function_jump_statements), i);
+
+		//Let's see if we can find the label that this one is jumping to
+		char* name = current_jump_statement->string_value.string;
+
+		symtab_label_record_t* jumping_to_label = lookup_label(current_function->user_defined_labels, name);
+
+		//Didn't find it, so we fail out
+		if(jumping_to_label == NULL){
+			sprintf(info, "No label %s exists in function %s", name, current_function->func_name.string);
+			return print_and_return_failure(info, current_jump_statement->line_number);
+		}
+
+		//Store this label record inside of the jump node for later
+		current_jump_statement->optional_storage.label_record = jumping_to_label;
+	}
+
+	//If we get here then they all worked
+	return SUCCESS;
+}
+
+
+/**
+ * If a user puts an error in a raises statement but then fails to raise that error inside of
+ * the actual function, then we are going to be mandating entirely useless checks down the
+ * road. We need to account for this by validating that every error inside of the
+ * raises statement is actually raised by the function
+ */
+static inline u_int8_t validate_error_list_against_raised_errors(symtab_function_record_t* function){
+	//Extract what we require to be checked
+	dynamic_array_t* mandatory_checked_errors = &(function->signature->internal_types.function_type->potential_errors);
+
+	//Run through all of the mandatory checked errors
+	for(int32_t i = 0; i < mandatory_checked_errors->current_index; i++){
+		//Extract the error that we require
+		generic_type_t* mandatory_error = dynamic_array_get_at(mandatory_checked_errors, i);
+
+		//Assume by default that it's missing
+		u_int8_t raised_by_function = FALSE;
+
+		//Now let's go through all of the errors that are raised and check those
+		for(int32_t j = 0; j < errors_raised_by_current_function.current_index; j++){
+			//Extract the error that we raised
+			generic_type_t* raised_error = dynamic_array_get_at(&errors_raised_by_current_function, j);
+
+			//If these are identical, then we set the flag and get out
+			if(types_identical(raised_error, mandatory_error) == TRUE){
+				raised_by_function = TRUE;
+				break;
+			}
+		}
+
+		//Is it raised by the function? If not we've got an error
+		if(raised_by_function == FALSE){
+			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
+		   					function->func_name.string, mandatory_error->type_name.string);
+			return print_and_return_failure(info, parser_line_num);
+		}
+	}
+
+	return SUCCESS;
+}
+
+
+/**
+ * Handle the case where we declare a function. A function will always be one of the children of a declaration
+ * partition
+ *
+ * We have already consumed the FUNC keyword by the time we arrive here, so we will not look for it in this function
+ *
+ * Remember that functions in Ollie can be overloaded, so if we have a symtab "hit" on a function that's either predeclared or not
+ * it may not actually be a true hit, we'll need to get the parameter list to fully evaluate
+ *
+ * NOTE: A function that is deemed to be an "overload" does not get it's own slot inside of the symbol table. It will only live inside
+ * of the overload table
+ *
+ * BNF Rule: <function-definition> ::= {pub}? {inline}? fn{!}? <identifer> {<parameter-list> -> <type-specifier> {raises <error-list>} <compound-statement>
+ */
+static generic_ast_node_t* function_definition(ollie_token_stream_t* token_stream){
+	//Freeze the line number
+	u_int32_t current_line = parser_line_num;
+	lexitem_t lookahead;
+	//Visibility is always going to default to private
+	visibilty_type_t visibility = VISIBILITY_TYPE_PRIVATE;
+	//By default we are not inlining
+	u_int8_t is_inlined = FALSE;
+	//By default we do not raise errors either
+	u_int8_t raises_errors = FALSE;
+	//Cache the token index of definition that we're dealing with
+	u_int32_t token_index_of_definition = token_stream->token_pointer;
+
+	/**
+	 * Step 1: determine our preamble
+	 *
+	 * Get our token out and start going through the start of
+	 * the function definition. There are a bunch of valid
+	 * combos here including:
+	 * 	pub fn
+	 * 	pub inline fn
+	 * 	inline fn
+	 * 	fn
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	switch(lookahead.tok){
+		case PUB: {
+			//Flag that it is public
+			visibility = VISIBILITY_TYPE_PUBLIC;
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			switch(lookahead.tok){
+				//This is good, break out
+				case FN:
+					break;
+
+				case INLINE:
+					//Flag that it was inlined
+					is_inlined = TRUE;
+
+					//Get the next token and make sure it's the FN keyword
+					lookahead = get_next_token(token_stream, &parser_line_num);
+					if(lookahead.tok != FN){
+						return print_and_return_error("Expected \"fn\" after \"pub inline\"", parser_line_num);
+					}
+
+					break;
+	 
+				default:
+					return print_and_return_error("Expected \"fn\" or \"inline\" keyword after \"pub\" in function declaration", parser_line_num);
+			}
+			
+			break;
+		}
+
+		case INLINE: {
+			//This is being inlined
+			is_inlined = TRUE;
+
+			//Go based on the lookahead. We will catch some common errors and provide helpful warnings
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok != FN){
+				return print_and_return_error("Expected \"fn\" keyword after \"inline\" in function declaration", parser_line_num);
+			}
+
+			break;
+		}
+
+		case FN:
+			break;
+		
+		default: {
+			sprintf(info, "Expected \"pub\", \"inline\" or \"fn\" keywords, but got: %s\n", lookahead.lexeme.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+	}
+
+	/**
+	 * Step 2: error raising
+	 *
+	 * It is possible for us to see the "!" for this function, in which case that means that this function
+	 * may raise errors of any kind. If we see this, we need to consume it and flag it here
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == EXCLAMATION){
+		raises_errors = TRUE;
+	} else {
+		push_back_token(token_stream, &parser_line_num);
+	}
+
+	/**
+	 * Step 3: extract the function's name
+	 * 
+	 * Get the name of the function which should be next. Note that the function
+	 * name cannot, as of right now, be used to check for duplicates yet because of
+	 * overloading
+	 *
+	 * We can however check to make sure that this function is not colliding with any
+	 * existing variable or type names
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != IDENT){
+		return print_and_return_error("Invalid name given as function name", current_line);
+	}
+
+	//For our convenience get this out
+	dynamic_string_t function_name = lookahead.lexeme;
+
+	//Check for duplicate variables here
+	if(do_duplicate_variables_exist(function_name.string) || do_duplicate_types_exist(function_name.string)){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Step 4: Build up the function signature
+	 *
+	 * Before we can think about anything symtab related, we're going to need to completely
+	 * build up a function signature so that, when we go looking for predeclarations and/or
+	 * function overloading we're armed with a signature to compare against
+	 */
+	generic_type_t* new_function_signature = create_function_pointer_type(visibility, is_inlined, current_line, raises_errors, NOT_MUTABLE);
+	function_type_t* internal_function_type = new_function_signature->internal_types.function_type;
+
+	/**
+	 * Step 5: Parse function parameters
+	 *
+	 * Parse all of the function parameters inside of the signature. Since we do not
+	 * yet have a function type to put them in, we will locally store the created
+	 * symtab variable records inside of a dynamic array that we will use if we
+	 * have a match in the end
+	 */
+	dynamic_array_t function_parameters = dynamic_array_alloc();
+	if(parse_function_parameters(token_stream, new_function_signature, &function_parameters) == FALSE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Step 6: Parse the return type and error list
+	 *
+	 * We should now be able to get the return type and any error
+	 * raising types out and add that to the signature as well
+	 */
+	if(parse_function_return_type_and_error_list(token_stream, new_function_signature) == FALSE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * Step 7: create the function type string
+	 *
+	 * Now that we've got the return type and parameters in we can
+	 * create the function signature
+	 */
+	generate_function_pointer_type_name(new_function_signature);
+
+	/**
+	 * Step 8: Creation/updating of the function's symtab record
+	 *
+	 * There are 3 options for every given function definition that we need
+	 * to account for:
+	 * 	1.) We are defining a completely new function - if we cannot find anything
+	 * 		during our symtab lookup then we fall here
+	 * 	2.) We are overloading an existing function - if we find a function but it has
+	 * 		a different signature than our expected one, we fall here
+	 * 	3.) We are defining a function that has already been predeclared - we fall
+	 * 		here if we find a function whose signature is an exact match of what
+	 * 		we predeclared
+	 */
+	symtab_function_record_t* created_function_record = NULL;
+	symtab_function_record_t* original_found_function = lookup_function_in_namespace(function_symtab->current, function_name.string);
+	if(original_found_function == NULL){
+		//Create the brand new function record
+		created_function_record = create_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
+
+		//Store the signature
+		created_function_record->signature = new_function_signature;
+
+		//Here, and only here, will we insert into the symtab
+		insert_function(function_symtab, created_function_record);
+
+	/**
+	 * Remember that functions in Ollie can have overloads so we cannot just scan one function 
+	 * record, we'll need to scan every function that overloads said function inside of its
+	 * overload table
+	 */
+	} else {
+		//Extract this for convenience
+		function_type_t* original_found_function_type = original_found_function->signature->internal_types.function_type;
+
+		//Let the helper get our function record - pass in true to restrict to namespace local
+		symtab_function_record_t* overload_or_predeclared = resolve_function_record(function_name.string, new_function_signature, TRUE);
+
+		/**
+		 * Run through every overload in the overload table. Remember that the very
+		 * first member in the table is the function itself. We will iterate over
+		 * the table until we find:
+		 * 	1.) A signature match that is flagged as not being defined - this is our
+		 * 		defining predeclared function case
+		 * 	2.) A signature match that is flagged as defined -> ERROR, illegal redefinition
+		 * 	3.) No signature match, we are defining a branch new overload
+		 */
+		if(overload_or_predeclared != NULL){
+			//Get the type out for convenience
+			function_type_t* predeclared_type = overload_or_predeclared->signature->internal_types.function_type;
+
+			/**
+			 * Fail case -> this has already been defined so it may never be redefined. We will
+			 * error out in this case
+			 */
+			if(overload_or_predeclared->defined == TRUE){
+				if(function_symtab->current->is_default == TRUE){
+					sprintf(info, "Function \"%s\" has already been defined with type %s",
+							function_name.string,
+							new_function_signature->type_name.string);
+				} else {
+					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
+							function_name.string,
+							generate_fully_qualified_namespace_name(function_symtab->current).string,
+							new_function_signature->type_name.string);
+				}
+
+				print_function_name_to_buffer(info, overload_or_predeclared);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between predeclarations and
+			 * their visibility status. If this is different then we fail out
+			 */
+			if(predeclared_type->visibility != visibility){
+				sprintf(info, "The function \"%s\" was predeclared as %s so the definition must be declared as %s",
+							function_name.string,
+							visibility_to_string(predeclared_type->visibility),
+							visibility_to_string(predeclared_type->visibility));
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between predeclarations and their
+			 * inlined status. If this is different then we fail out
+			 */
+			if(predeclared_type->is_inlined != is_inlined){
+				sprintf(info, "The function \"%s\" was predeclared as %s so the definition must be declared as %s",
+							function_name.string,
+							predeclared_type->is_inlined == TRUE ? "inline": "non inline",
+							predeclared_type->is_inlined == TRUE ? "inline": "non inline");
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Otherwise we are definining a function that has been predeclared but was never defined
+			 * previously. We will now treat this as the definition of that function
+			 */
+			created_function_record = overload_or_predeclared;
+
+			/**
+			 * IMPORTANT - we are actually declaring this function here, so we are going
+			 * to overwrite the old token_index_of_declaration to be the full definition's
+			 * index
+			 */
+			created_function_record->token_index_of_definition = token_index_of_definition;
+
+		/**
+		 * We are defining a brand new overload here. Remember that overloads
+		 * do not get inserted into the symtab, but instead get stored inside of
+		 * the function's overload table
+		 */
+		} else {
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between functions and
+			 * their overload's visibility status. If this is different then we fail out
+			 */
+			if(original_found_function_type->visibility != visibility){
+				sprintf(info, "The first function \"%s\" was declared as %s all future overloads must be declared as %s",
+							function_name.string,
+							visibility_to_string(original_found_function_type->visibility),
+							visibility_to_string(original_found_function_type->visibility));
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * IMPORTANT - we do not allow for their to be a divergence between functions and their
+			 * overload's inlined status. If this is different then we fail out
+			 */
+			if(original_found_function_type->is_inlined != is_inlined){
+				sprintf(info, "The first function \"%s\" was declared as %s so all future overloads must be declared as %s",
+							function_name.string,
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline",
+							original_found_function_type->is_inlined == TRUE ? "inline": "non inline");
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Due to the way that elaborative stack params would muddy the waters with overloading, Ollie bans
+			 * the use of overloading with elaborative stack params on both the original and new functions
+			 *
+			 * First check the original found function
+			 */
+			if(original_found_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function \"%s\" was declared with an elaborative parameter. Functions with elaborative parameters may never be overloaded. First declared here:",
+					  	original_found_function->func_name.string);
+				print_function_name_to_buffer(info, original_found_function);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Now check the overload type
+			if(internal_function_type->contains_elaborative_stack_param == TRUE){
+				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
+						new_function_signature->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * Do these two function signatures differ enough to justify overloading? They must differ in the function parameter list
+			 * in order to justify this. If they do not, then we fail out
+			 */
+			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
+				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s is invalid, signatures must have different parameter lists. First defined here:",
+						original_found_function->func_name.string,
+						new_function_signature->type_name.string);
+				print_function_name_to_buffer(info, original_found_function);
+
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Create the brand new function record
+			created_function_record = create_overload_function_record(&function_name, current_dependency_node, visibility, parser_line_num, token_index_of_definition);
+
+			//Store the signature and classify this as an overlaod 
+			created_function_record->signature = new_function_signature;
+			created_function_record->function_classification = FUNCTION_CLASSIFICATION_OVERLOAD;
+
+			//Add this as an overload of our original found function
+			add_function_overload(function_symtab, original_found_function, created_function_record);
+		}
+	}
+
+	/**
+	 * If we have a function named "main", then we have some special rules that we'll
+	 * need to follow. We only check for this here because the main function may *only*
+	 * be defined directly
+	 */
+	if(strcmp(function_name.string, "main") == 0){
+		if(validate_main_function(new_function_signature) == FALSE){
+			return print_and_return_error("Invalid definition for main() function", parser_line_num);
+		}
+
+		//The main function is implicitly assumed to be called always
+		created_function_record->called = TRUE;
+	} 
+
+	/**
+	 * Step 9: fill out the record
+	 *
+	 * Now that we know we're set we can fill out the function record and
+	 * set our global variables
+	 */
+	created_function_record->line_number = current_line;
+	created_function_record->defined = TRUE;
+	push_nesting_level(&nesting_stack, NESTING_FUNCTION);
+
+	//Flag that this is our current function
+	current_function = created_function_record;
+	current_function_signature = internal_function_type;
+
+	/**
+	 * Step 10: add the parameters in
+	 *
+	 * IMPORTANT - now that we've created the function type we need to properly add
+	 * all of the function parameters to this function type. There is a lot of internal
+	 * bookkeeping that happens when we do this which is why we only do it now
+	 *
 	 * We'll need to initialize a new variable scope here. This variable scope is designed
 	 * so that we include the function parameters in it. We need to remember to close
 	 * this once we leave
@@ -14235,227 +14641,105 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 	 * record will store a reference to this. In the future if we go to inline, we will
 	 * use this variable scope for all new variable creation
 	 */
-	initialize_variable_scope(variable_symtab, function_record, function_symtab->current);
-	function_record->top_level_scope = variable_symtab->current;
+	initialize_variable_scope(variable_symtab, created_function_record, function_symtab->current);
+	created_function_record->top_level_scope = variable_symtab->current;
 
-	/**
-	 * IMPORTANT: we need to hang onto this overarching function scope
-	 * for future uses/lookups
-	 */
-	top_level_function_variable_scope = variable_symtab->current;
+	//Run through and add them all in
+	for(int32_t i = 0; i < function_parameters.current_index; i++){
+		symtab_variable_record_t* function_parameter = dynamic_array_get_at(&function_parameters, i);
 
-	/**
-	 * Now we must ensure that we see a valid parameter list. It is important to note that
-	 * parameter lists can be empty, but whatever we have here we'll have to add in
-	 * Parameter list parent is the function node
-	 */
-	u_int8_t status = parameter_list(token_stream, function_record, defining_predeclared_function);
-
-	//We have a bad parameter list, we just fail out
-	if(status == FAILURE){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		//Insert it into the symtab and add it to the function record
+		insert_variable(variable_symtab, function_parameter);
+		add_function_parameter(created_function_record, function_parameter);
 	}
 
 	/**
-	 * At this point, we can either see an error symbol or we can see the
-	 * "raises" keyword denoting that we want to see an error list
-	 */
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If it isn't an arrow, we're out of here
-	if(lookahead.tok != ARROW){
-		return print_and_return_error("Arrow(->) required after parameter-list in function", parser_line_num);
-	}
-
-	/**
-	 * Now if we get here, we must see a valid type specifier
-	 * The type specifier rule already does existence checking for us
-	 */
-	generic_type_t* return_type = type_specifier(token_stream);
-
-	//If we failed, bail out
-	if(return_type == NULL){
-		return print_and_return_error("Invalid return type given to function. All functions, even void ones, must have an explicit return type", parser_line_num);
-	}
-
-	/**
-	 * Grab the type record. A reference to this will be stored in the function symbol table. Make sure
-	 * that we first dealias it
-	 */
-	generic_type_t* type = dealias_type(return_type);
-
-	//If we're defining a function that was previously implicit, the types have to match exactly
-	if(defining_predeclared_function == TRUE){
-		if(strcmp(type->type_name.string, function_signature->return_type->type_name.string) != 0){
-			sprintf(info, "Function \"%s\" was predeclared with a return type of \"%s\", this may not be altered. First defined here:", function_name.string, function_signature->return_type->type_name.string);
-			print_function_name_to_buffer(info, function_record);
-			return print_and_return_error(info, parser_line_num);
-		}
-	}
-
-	/**
-	 * Store the return type inside of the function record *and* inside of the 
-	 * function's signature. The return type adder handles everything that
-	 * is needed for the internal bookkeeping
-	 */
-	add_return_type_to_signature(function_signature, type);
-
-	/**
-	 * Since a returned-by-copy value will *always* have the memory address to copy to
+	 * Step 11: return by copy remediation
+	 *
+	 * IMPORTANT Since a returned-by-copy value will *always* have the memory address to copy to
 	 * passed into the function via %rdi, it is essential that we go through and update
 	 * the symtab_function_record here as well as all of the parameters. Edge case that
 	 * we are looking out for: if we had 6 GP params, now we have 7, and the last one
 	 * is pushed over the edge to be a stack param. We need to make the adjustment for all
 	 * of them, as well as for their function_parameter_order
 	 */
-	if(function_signature->returns_by_copy == TRUE){
-		remediate_return_by_copy_gp_parameters(function_record, function_signature);
+	if(internal_function_type->returns_by_copy == TRUE){
+		remediate_return_by_copy_gp_parameters(created_function_record);
 	}
-
-	//We can optionally see the raises keyword here
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Process error raising
-	if(lookahead.tok == RAISES){
-		//If we didn't denote that this could raise errors with the ! after fn, we
-		//need to fail out here
-		if(raises_errors == FALSE){
-			sprintf(info, "Function \"%s\" was not declared as a function that may return errors. Declare using \"fn!\" to do this", function_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Set this flag as true for down the road
-		specific_error_list = TRUE;
-
-		/**
-		 * What if we're defining a predeclared function that did not have the "raises" keyword on it? If so then this is wrong
-		 */
-		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index == 0){
-			sprintf(info, "Function \"%s\" was not declared as raising specific errors. \"raises\" is invalid in this context. Predeclared as type: %s",
-		   					function_record->func_name.string, function_record->signature->type_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Wipe the slate clean for this function - we'll start tracking again here
-		clear_dynamic_set(&errors_raised_by_current_function);
-
-		//Now that we've made it past that, we can let the helper do the parsing for us
-		u_int8_t success = error_list(token_stream, function_record->signature, defining_predeclared_function);
-
-		//Fail out if bad
-		if(success == FAILURE){
-			return print_and_return_error("Invalid error list detected in function declaration", parser_line_num);
-		}
-
-	} else {
-		/**
-		 * What if we're defining a predeclared function that *did* ave the "raises" keyword on it? If so then this is wrong
-		 */
-		if(defining_predeclared_function == TRUE && function_record->signature->internal_types.function_type->potential_errors.current_index != 0){
-			sprintf(info, "Function \"%s\" was declared as raising specific errors. \"raises\" is required in this context. Predeclared as type: %s",
-		   					function_record->func_name.string, function_record->signature->type_name.string);
-		 	return print_and_return_error(info, parser_line_num);
-		}
-
-		//Otherwise put it back
-		push_back_token(token_stream, &parser_line_num);
-	}
-
-	//Now that the function record has been finalized, we'll need to produce the type name
-	generate_function_pointer_type_name(function_record->signature);
-
-	//If we're dealing with the main function, we need to validate that the parameter order, visibility
-	//of the function, and return type are valid
-	if(is_main_function == TRUE && validate_main_function(function_record->signature) == FALSE){
-		//Error out here
-		return print_and_return_error("Invalid definition for main() function", parser_line_num);
-	}
-
-	//Some housekeeping, if there were previously deferred statements, we want them out
-	deferred_stmts_node = NULL;
 
 	/**
+	 * Step 12: build the function body
+	 *
+	 * Now that we have everything set up we are ready to build the body. This is ultimately
+	 * a compound statement so we will be using that rule to do this. Before doing this,
+	 * we will be clearing out the old deferred statement node, errors raised and current jump
+	 * statements nodes
+	 *
 	 * When we see our compound statement here, we will pass a flag in of false to indicate
 	 * that we do not want to fully open up a new variable scope. We already have a fresh variable scope opened pu
 	 * that has all of our function parameters in it. Ollie disallows copying function parameters in the opening
 	 * scope of a function definition, so we want them to all be in the same variable scope
 	 */
-	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, FALSE);
+	deferred_stmts_node = NULL;
+	clear_dynamic_array(&errors_raised_by_current_function);
+	clear_dynamic_array(&current_function_jump_statements);
 
-	//If this fails we'll just pass it through
+	/**
+	 * Invoke the helper and make sure to pass in FALSE because we do *NOT*
+	 * want to create a new variable scope
+	 */
+	generic_ast_node_t* compound_stmt_node = compound_statement(token_stream, FALSE);
 	if(compound_stmt_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return compound_stmt_node;
 	}
 
-	//This function was defined
-	function_record->defined = TRUE;
-
-	//Where was this function defined
-	function_record->line_number = current_line;
-
-	//If this function is a void return type, we need to manually insert
-	//a ret statement at the very end, if there isn't one already
-	//Let's drill down to the very end
-	generic_ast_node_t* cursor = compound_stmt_node->first_child;
-
-	//We could have an entirely null function body
-	if(cursor != NULL){
-		//So long as we don't see ret statements here, we keep going
-		while(cursor->next_sibling != NULL && cursor->ast_node_type != AST_NODE_TYPE_RET_STMT){
-			//Advance
-			cursor = cursor->next_sibling;
-		}
-
-		//If we get here we know that it worked, so we'll add it in as a child
-		add_child_node(function_node, compound_stmt_node);
-	
-		//We now need to check and see if our jump statements are actually valid
-		if(check_jump_labels() == FAILURE){
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		/**
-		 * If a function raises a specific error list, then we can check
-		 * and see what errors actually were raised(we maintain this in a list)
-		 * and validate that every error in that error clause was raised at least 
-		 * once. Remember that the raises list mandates that all callers check those
-		 * errors, so something being in there and not being raised is an issue
-		 */
-		if(specific_error_list == TRUE){
-			//If this fails then we are done
-			if(validate_error_list_against_raised_errors(function_record) == FAILURE){
-				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-
-			}
-		}
-
-	} else {
-		sprintf(info, "Function %s has no body", function_record->func_name.string);
+	//Warn if we have no body
+	if(compound_stmt_node->first_child == NULL){
+		sprintf(info, "Function %s has no body", function_name.string);
 		print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 	}
 
-	//If this is the main funcition, it has been called implicitly
-	if(is_main_function == TRUE){
-		//Mark that it's been called
-		function_record->called = TRUE;
+	/**
+	 * Step 13: final validations
+	 *
+	 * We need to validate the jump labels and raised errors(if any of either exist). We'll
+	 * let the dedicated rules handle this
+	 */
+	if(check_jump_labels() == FAILURE || validate_error_list_against_raised_errors(created_function_record) == FALSE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
-	
-	//Destroy the jump statements if need be
-	dynamic_array_dealloc(&current_function_jump_statements);
 
-	//Store the line number
-	function_node->line_number = current_line;
+	/**
+	 * Make sure to align the stack passed parameter region if we do
+	 * have them
+	 */
+	if(internal_function_type->contains_stack_params == TRUE){
+		align_stack_data_area(&(created_function_record->stack_passed_parameters));
+	}
 
-	//Close the variable scope that we opened for the parameter list/compound statement
+	/**
+	 * Step 14: final bookkeeping
+	 *
+	 * We're all done so now we can close out the original variable scope that we made
+	 * and pop the nesting level. We'll also NULL out the current function type and the 
+	 * signature
+	 */
 	finalize_variable_scope(variable_symtab);
-
-	//This is now out of date so scrap it
-	top_level_function_variable_scope = NULL;
-
-	//Remove the nesting level now that we're not in a function
 	pop_nesting_level(&nesting_stack);
+	dynamic_array_dealloc(&function_parameters);
+	current_function = NULL;
+	current_function_signature = NULL;
 
-	//All good so we can get out
+	/**
+	 * Step 15: package up and return
+	 *
+	 * Create the final AST function definition node, add the compound statement as a child,
+	 * and get out
+	 */
+	generic_ast_node_t* function_node = ast_node_alloc(AST_NODE_TYPE_FUNC_DEF, SIDE_TYPE_LEFT);
+	function_node->line_number = current_line;
+	function_node->func_record = created_function_record;
+	add_child_node(function_node, compound_stmt_node);
 	return function_node;
 }
 
@@ -14878,27 +15162,23 @@ static inline u_int8_t validate_all_functions_are_defined(compiler_options_t* op
 		return result;
 	}
 
-	//Run through all namespaces
-	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
-		function_namespace_t* ns = dynamic_array_get_at(&(symtab->namespaces), i);
+	/**
+	 * To check everything we can do a simple linear scan of all records
+	 * inside of the id to function record map
+	 */
+	for(u_int32_t i = 0; i < symtab->current_function_id; i++){
+		//Extract the record
+		symtab_function_record_t* record = dynamic_array_get_at(&(symtab->id_to_function_mapping), i);
 
-		//For all key slots in the namespace
-		for(int32_t j = 0; j < FUNCTION_KEYSPACE; j++){
-			//Get the record and start drilling
-			symtab_function_record_t* record = ns->records[j];
-			while(record != NULL){
-				if(record->defined == FALSE){
-					sprintf(info, "Function \"%s\" was predeclared but never defined. First declared here:", record->func_name.string);
-					print_function_name_to_buffer(info, record);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, record->line_number);
-					num_errors++;
+		//If this was never defined then we have an error
+		if(record->defined == FALSE){
+			sprintf(info, "Function \"%s\" was predeclared but never defined. First declared here:", record->func_name.string);
+			print_function_name_to_buffer(info, record);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, record->line_number);
+			num_errors++;
 
-					//Whole thing is failing now
-					result = FAILURE;
-				}
-
-				record = record->next;
-			}
+			//Whole thing is failing now
+			result = FAILURE;
 		}
 	}
 
@@ -14915,40 +15195,27 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
 	//Use the error count so that we can do all functions at once
 	u_int32_t error_count = 0;
 
-	//Run through every namespace
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		function_namespace_t* sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
+	/**
+	 * To do this efficiently we can perform a linear scan over all of the function
+	 * records in the symtab using the id to function mapping table
+	 */
+	for(u_int32_t i = 0; i < symtab->current_function_id; i++){
+		symtab_function_record_t* record = dynamic_array_get_at(&(symtab->id_to_function_mapping), i);
+		
+		//Extract the signature from the function 
+		function_type_t* function_signature = record->signature->internal_types.function_type;
 
-		//Now for every record in the namespace
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			if(sheaf->records[i] == NULL){
-				continue;
-			}
+		//We only care if this is inlined(for now)
+		if(function_signature->is_inlined == TRUE){
+			//Is it recursive? use the helper
+			u_int8_t is_recursive = is_function_recursive(symtab, record);
 
-			//Otherwise grab out a cursor
-			symtab_function_record_t* cursor = sheaf->records[i];
-
-			//Run through any collisions in the hashmap
-			while(cursor != NULL){
-				//Extract the signature from the cursor
-				function_type_t* cursor_signature = cursor->signature->internal_types.function_type;
-
-				//We only care if this is inlined(for now)
-				if(cursor_signature->is_inlined == TRUE){
-					//Is it recursive? use the helper
-					u_int8_t is_recursive = is_function_recursive(symtab, cursor);
-
-					//This is our fail case - we may not have this
-					if(is_recursive == TRUE){
-						sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", cursor->func_name.string);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, cursor->line_number);
-						num_errors++;
-						error_count++;
-					}
-				}
-
-				//Bump it up
-				cursor = cursor->next;
+			//This is our fail case - we may not have this
+			if(is_recursive == TRUE){
+				sprintf(info, "Function \"%s\" is defined as \"inline\" but is directly or indirectly recursive. Remove the inline keyword", record->func_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, record->line_number);
+				num_errors++;
+				error_count++;
 			}
 		}
 	}
@@ -14969,6 +15236,8 @@ static inline u_int8_t validate_inlined_functions_are_non_recursive(function_sym
  * 			
  * The algorithm relies on the transitive closure. With the transitive closure, we can do this in one pass
  * and just mark everything that the flagged function is reachable from
+ *
+ * All functions that call this fucntion must have their initial alignment
  */
 static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab_function_record_t* record){
 	//If it doesn't require alignment then get out
@@ -14976,40 +15245,37 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
 		return;
 	}
 
-	//Grab the call graph index, we will be doing a reverse lookup
-	u_int32_t flagged_function_index = record->function_id;
-
-	//The number of functions is also the current id
+	//Extract the function count out here
 	u_int32_t function_count = symtab->current_function_id;
 
-	//Run through every namespace
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
+	/**
+	 * We will use the id to function mapping to run through every other function ID
+	 * inside of the symtab and determine if the other function can reach us
+	 */
+	for(u_int32_t other_function_id = 0; other_function_id < function_count; other_function_id++){
+		//No point in checking against ourself
+		if(other_function_id == record->function_id){
+			continue;
+		}
 
-		//For each record inside of the namespace
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			symtab_function_record_t* other = current_namespace->records[i];
-			
-			//Traverse the linked list in case of collisions
-			while(other != NULL){
-				//No point in comparing if they match
-				if(other != record){
-					/**
-					 * The "other" is the row, and the record is the index, so 
-					 * we need to compute other_index * count + record_index
-					 */
-					u_int32_t index = other->function_id * function_count + flagged_function_index;
+		//Get the other record out
+		symtab_function_record_t* other_function_record = dynamic_array_get_at(&(symtab->id_to_function_mapping), other_function_id);
 
-					//If this is TRUE then
-					if(symtab->call_graph_transitive_closure[index] == TRUE){
-						//Flag that the other needs initial alignment
-						other->requires_initial_alignment = TRUE;
-					}
-				}
+		/**
+		 * The "other" is the row, and the record is the index, so 
+		 * we need to compute other_index * count + record_index
+		 */
+		u_int32_t index = other_function_record->function_id * function_count + record->function_id;
 
-				//Bump it up
-				other = other->next;
-			}
+		/**
+		 * If this is TRUE, that means that the "other" function will 
+		 * eventually by some chain of events call this function that we've flagged
+		 * for alignment. In this case, we need to flag this other function as requiring
+		 * alignment too or else everything leading up to the given function would be
+		 * misaligned
+		 */
+		if(symtab->call_graph_transitive_closure[index] == TRUE){
+			other_function_record->requires_initial_alignment = TRUE;
 		}
 	}
 }
@@ -15036,26 +15302,12 @@ static inline void flag_function_for_alignment(function_symtab_t* symtab, symtab
  */
 static inline void flag_functions_that_require_initial_alignment(function_symtab_t* symtab){
 	/**
-	 * Run through all of the records in the function keyspace
+	 * We can run through everying in the flat id to function mapping to
+	 * do this efficiently
 	 */
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		//Extract the current namespace
-		function_namespace_t* current_namespace = dynamic_array_get_at(&(symtab->namespaces), _);
-
-		//Now run through everything in that namespace
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			//Extract it
-			symtab_function_record_t* record = current_namespace->records[i];
-
-			//So long as it's not NULL keep drilling
-			while(record != NULL){
-				//Flag it
-				flag_function_for_alignment(symtab, record);
-
-				//Bump it up
-				record = record->next;
-			}
-		}
+	for(u_int32_t i = 0; i < symtab->current_function_id; i++){
+		symtab_function_record_t* record = dynamic_array_get_at(&(symtab->id_to_function_mapping), i);
+		flag_function_for_alignment(symtab, record);
 	}
 }
 
@@ -15134,8 +15386,13 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	 * important of these messages is extra errors in the raises clause that are never used. To support
 	 * this, we maintain a global list of all the errors that the function raises. To save on allocation
 	 * overhead, we'll just keep one of these for the lifetime of the parser
+	 *
+	 * For any/all functions that have jump statements, we'll need to do validations on them in the
+	 * end so we'll maintain an array of jump statements that we add to and clear out for each function
+	 * to avoid the allocation overhead
 	 */
-	errors_raised_by_current_function = dynamic_set_alloc();
+	errors_raised_by_current_function = dynamic_array_alloc();
+	current_function_jump_statements = dynamic_array_alloc();
 
 	//Global entry/run point, will give us a tree with the root being here
 	prog = program(build_order);
@@ -15188,8 +15445,9 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	nesting_stack_dealloc(&nesting_stack);
 	heap_queue_dealloc(&namespace_bfs_queue);
 
-	//We're done with the errors too
-	dynamic_set_dealloc(&errors_raised_by_current_function);
+	//Destroy these temporary arrays
+	dynamic_array_dealloc(&current_function_jump_statements);
+	dynamic_array_dealloc(&errors_raised_by_current_function);
 
 	//Give back the overall result
 	return results;

@@ -3,13 +3,15 @@
 * This file will test the parser's ability to detect mismatches in parameter list length
 */
 
-fn tester(x:i32, y:i32) -> i32 {
-	ret x - y;
+fn tester() -> i32 {
+	ret 5;
 }
 
 
 pub fn main() -> i32 {
-	OUNIT: [fail_to_compile]
+	let ptr:fn() -> i32 = tester;
+
 	//Too many parameters
-	ret @tester(3, 4, 5);
+	OUNIT: [fail_to_compile]
+	ret @ptr(5, 6, 7);
 }

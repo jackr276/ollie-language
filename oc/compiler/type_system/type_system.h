@@ -291,9 +291,40 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 generic_type_t* types_assignable_constant(generic_type_t* destination_type, generic_type_t* constant_source_type);
 
 /**
+ * Are two function signatures literally 100% identical? This is mainly used for assignability 
+ * and helping with overloads. There is another rule that will determine if they are equivalent
+ * enough to be considered the same, but this is the strictest rule
+ */
+u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t* b);
+
+/**
+ * Are function signatures equivalent? This is used when we may not have
+ * an exact match but a close enough match will do just fine for us. Equivalent
+ * functions can differ in there visibility(public/private) and inlined status.
+ * Everything else must be the exact same
+ */
+u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b);
+
+/**
+ * Are these two functions different enough to actually overload? Remember that in order to actually
+ * overload a function, we need to have *at least one parameter in one spot be of a different type*
+ *
+ * No other differences will be considered. Return type and error raising *DO NOT COUNT*
+ */
+u_int8_t do_function_signatures_differ_enough_to_overload(generic_type_t* a, generic_type_t* b);
+
+/**
  * Are two types *exactly* equal or not? This will account for type aliasing as well
  */
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
+
+/**
+ * Are two types basically equivalent for function overloading? This is a middle
+ * ground between types_identical, which is very strict, and types_assignable, which
+ * is very lenient. Only basic types are going to be allowed to differ, but for example,
+ * an i8 in an i32 slot is going to be considered equivalent
+ */
+u_int8_t types_overloading_equivalent(generic_type_t* destination, generic_type_t* source);
 
 /**
  * Dynamically allocate and create a basic type
@@ -453,7 +484,7 @@ generic_type_t* create_function_pointer_type(visibilty_type_t visibility, u_int8
  * the is_void_type flag, as well as anything that needs to happen if we are returning a stack
  * passed return value
  */
-void add_return_type_to_signature(function_type_t* signature, generic_type_t* return_type);
+void add_return_type_to_signature(generic_type_t* function_signature, generic_type_t* return_type);
 
 /**
  * Compute the operand type for a logical and/or operation

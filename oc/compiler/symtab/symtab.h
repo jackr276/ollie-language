@@ -64,7 +64,9 @@ typedef struct symtab_type_sheaf_t symtab_type_sheaf_t;
 //The namespaces of our function symtab act like a tree
 typedef struct function_namespace_t function_namespace_t;
 
-//The records in the function symtab
+//Function overload sets group functions of different types by name
+typedef struct function_overload_set_t function_overload_set_t;
+//Individual function records
 typedef struct symtab_function_record_t symtab_function_record_t;
 //The records in a variable symtab
 typedef struct symtab_variable_record_t symtab_variable_record_t;
@@ -134,6 +136,17 @@ typedef enum {
 
 
 /**
+ * Is this function a regular function or is it a
+ * function that either is overloaded or is an overload
+ * of a different function?
+ */
+typedef enum {
+	FUNCTION_CLASSIFICATION_NORMAL,
+	FUNCTION_CLASSIFICATION_OVERLOAD
+} function_classification_t;
+
+
+/**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
  *
@@ -164,6 +177,12 @@ struct symtab_function_record_t{
 	stack_data_area_t stack_passed_parameters;
 	//The list of all functions that this function calls out to
 	dynamic_set_t called_functions;
+	/**
+	 * A list of all overloads of this function. For ease of use we also consider
+	 * this function to be an overload of itself, so we can just scan this array
+	 * when the time comes
+	 */
+	dynamic_array_t overload_table;
 	//Hang onto all user defined labels for this function(may be null)
 	label_symtab_t* user_defined_labels;
 	/**
@@ -192,6 +211,14 @@ struct symtab_function_record_t{
 	 * will allow us to just print out the actual source code in the event of an error
 	 */
 	u_int32_t token_index_of_definition;
+	/**
+	 * What kind of function is this? As of right now
+	 * there are 2 kinds: regular and overloaded
+	 * Overloaded functions will need to have their
+	 * names mangled when we do the final printout
+	 * to avoid collisions
+	 */
+	function_classification_t function_classification;
 	//Has it been defined?(done to allow for predeclaration)(0 = declared only, 1 = defined)
 	u_int8_t defined;
 	//Has it ever been called?
@@ -539,6 +566,12 @@ struct label_symtab_t {
 
 
 /**
+ * Convert the visibility type to a string for errors
+ */
+char* visibility_to_string(visibilty_type_t visibility);
+
+
+/**
  * Create a label table for us to use. These, unlike the other types of 
  * symbol tables, are created on-demand on a per-function basis
  */
@@ -569,6 +602,12 @@ macro_symtab_t* macro_symtab_alloc();
  * Initialize a symbol table for build system modules
  */
 module_symtab_t* module_symtab_alloc();
+
+/**
+ * Print a function name to the "fl" file. This rule accounts for
+ * overloads and will properly print mangled names
+ */
+void print_function_name(FILE* fl, symtab_function_record_t* function);
 
 /**
  * Initialize the variable symbol table scope. It is possible that the function
@@ -651,12 +690,25 @@ void add_function_parameter(symtab_function_record_t* function_record, symtab_va
  * is pushed over the edge to be a stack param. We need to make the adjustment for all
  * of them, as well as for their function_parameter_order
  */
-void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record, function_type_t* signature);
+void remediate_return_by_copy_gp_parameters(symtab_function_record_t* record);
 
 /**
- * Make a function record
+ * Dynamically allocate a function record
+ *
+ * Creating a function record here does NOT:
+ * 	- Create any function signature
+ * 	- Create any function parameters
  */
-symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int8_t is_inlined, u_int8_t raises_errors, u_int32_t line_number, u_int32_t token_index);
+symtab_function_record_t* create_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index);
+
+/**
+ * Dynamically allocate an overload function record
+ *
+ * Creating a function record here does NOT:
+ * 	- Create any function signature
+ * 	- Create any function parameters
+ */
+symtab_function_record_t* create_overload_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index);
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
@@ -719,6 +771,11 @@ symtab_label_record_t* create_label_record(dynamic_string_t* name, u_int32_t lin
  * Insert a function into the symbol table
  */
 u_int8_t insert_function(function_symtab_t* symtab, symtab_function_record_t* record);
+
+/**
+ * Add an overload to the given record and perform all needed bookkeeeping
+ */
+void add_function_overload(function_symtab_t* symtab, symtab_function_record_t* record, symtab_function_record_t* overload);
 
 /**
  * Insert variables into the symbol table
