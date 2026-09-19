@@ -537,59 +537,58 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 
 	} else {
 		/**
-		 * TODO ALL OF THE OVERLOADING STUFF IS GONNA BE DONE HERE FOR FUNCTION POINTERS
+		 * If this is not a function constant, then we'll go through our normal strategy to make
+		 * this work properly. Function constants require special handling due to overloading
 		 */
+		if(source_node->constant_type != FUNC_CONST){
+			/**
+			 * Let types_assignable run. We will need the types to all be original here in order for this
+			 * to work properly
+			 */
+			generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
-
-
-
-
-
-
-
-		/**
-		 * Let types_assignable run. We will need the types to all be original here in order for this
-		 * to work properly
-		 */
-		generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
-
-		//If it failed then just leave now
-		if(result_type == NULL){
-			return NULL;
-		}
-
-		/**
-		 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
-		 * correlates to it properly. If we are trying to assign a constant value that is not in
-		 * the enum's range of valid values, that would cause issues down the line and we will
-		 * not allow it
-		 */
-		if(is_enum_type(destination_type) == TRUE){
-			if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-							destination_type->type_name.string, source_node->constant_value.signed_int_value);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			//If it failed then just leave now
+			if(result_type == NULL){
 				return NULL;
 			}
-		} 
 
-		/**
-		 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
-		 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
-		 * but has different rules inside of Ollie
-		 */
-		if(result_type->type_class == TYPE_CLASS_POINTER){
-			result_type = immut_u64;
+			/**
+			 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
+			 * correlates to it properly. If we are trying to assign a constant value that is not in
+			 * the enum's range of valid values, that would cause issues down the line and we will
+			 * not allow it
+			 */
+			if(is_enum_type(destination_type) == TRUE){
+				if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+								destination_type->type_name.string, source_node->constant_value.signed_int_value);
+					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+					return NULL;
+				}
+			} 
+
+			/**
+			 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
+			 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
+			 * but has different rules inside of Ollie
+			 */
+			if(result_type->type_class == TYPE_CLASS_POINTER){
+				result_type = immut_u64;
+			}
+
+			//Reassign the constant's type at this point
+			source_node->inferred_type = result_type;
+
+			//While we're here we will coerce the constant itself
+			coerce_constant(source_node);
+
+			//Give this back
+			return result_type;
+
+		} else {
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 		}
-
-		//Reassign the constant's type at this point
-		source_node->inferred_type = result_type;
-
-		//While we're here we will coerce the constant itself
-		coerce_constant(source_node);
-
-		//Give this back
-		return result_type;
 	}
 }
 
@@ -3114,7 +3113,8 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 * Since a function value is constant and never changes, we will classify this record as a constant
 		 * if we do find it. If we find nothing then we fail
 		 *
-		 * TODO there may be more than one function here stored inside of the overload table itself
+		 * NOTE: the "inferred_type" that we stamp on this is not necessarily correct because of overloading,
+		 * the actual type will need to be resolved once we do our lookups
 		 */
 		symtab_function_record_t* found_function = lookup_function(function_symtab, var_name);
 		if(found_function != NULL){
