@@ -2217,7 +2217,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 					add_child_node(elaborative_param_node, param_expression);
 				}
 
-
+				//Finally add the constructed elaborative param call to the overall call node
+				add_child_node(indirect_call, elaborative_param_node);
 
 			/**
 			 * If we have nothing, we are still required to make the node and put it in our child node
@@ -2228,104 +2229,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				generic_ast_node_t* elaborative_param_node = create_empty_elaborative_param(parameter_type);
 				add_child_node(indirect_call, elaborative_param_node);
 			}
-
-
-			//Get the first lookahead - we need to test if we have an empty elaborative param here
-			lookahead = get_next_token(token_stream, &parser_line_num);
-
-			//We don't have an empty elaborated param here - so we will process everything that we see
-			if(lookahead.tok != R_PAREN){
-				//Push this token back for processing
-				push_back_token(token_stream, &parser_line_num);
-
-				//Keep track of how many we've got in here
-				u_int32_t elaborated_param_count = 0;
-
-				//Forever loop until we hit the R_PAREN
-				do {
-					//Handle the actual parameter
-					generic_ast_node_t* elaborated_param = in_expression(token_stream, side);
-
-					//It failed so we just get out here
-					if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-						return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
-					}
-
-					//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
-					generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, elaborated_param);
-
-					//If this is null, it means that our check failed
-					if(final_type == NULL){
-						//Let's first generate the types_assignable failure message
-						generate_types_assignable_failure_message(info, elaborated_param->inferred_type, type_being_elaborated);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
-						//Following that we'll generate another error message to make it more clear
-						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
-								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-								type_being_elaborated->type_name.string,
-								(elaborated_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-								elaborated_param->inferred_type->type_name.string);
-
-						return print_and_return_error(info, parser_line_num);
-					}
-
-					/**
-					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
-					 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
-					 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
-					 * doing an address calculation.
-					 */
-					if(is_copy_assignment_required(type_being_elaborated, elaborated_param->inferred_type) == TRUE){
-						/**
-						 * If the right hand expression is a postfix expression *and* we are looking
-						 * to perform a memory copy assignment here, we need to flag that 
-						 * we do *not* require a dereference to make this work
-						 */
-						propogate_no_dereference_required_flag(elaborated_param);
-					}
-
-					//This counts as one more elaborated param
-					elaborated_param_count++;
-
-					//Add this in as a child to the parent elaborated param node
-					add_child_node(elaborative_param_node, elaborated_param);
-					
-					//Grab the lookahead token
-					lookahead = get_next_token(token_stream, &parser_line_num);
-					
-					//Comma - keep going to the next param
-					if(lookahead.tok == COMMA){
-						continue;
-
-					//Termination condition
-					} else if(lookahead.tok == R_PAREN){
-						//This will be handled by the helper rule
-						push_back_token(token_stream, &parser_line_num);
-
-						//Get out of here now
-						break;
-
-					//Otherwise we have some issue here
-					} else {
-						sprintf(info, "Commas are required between elaborative function parameters in function call");
-						return print_and_return_error(info, parser_line_num);
-					}
-
-				} while(TRUE);
-
-			/**
-			 * Otherwise we have an entirely empty elaborative param here. We'll just use the helper
-			 * to create an empty one and that'll be all. Note that we do still have to push back the R_PAREN
-			 * because we need to process it later
-			 */
-			} else {
-				push_back_token(token_stream, &parser_line_num);
-			}
-
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
-
 		}
 	}
 
