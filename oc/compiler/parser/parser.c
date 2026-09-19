@@ -537,6 +537,17 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 
 	} else {
 		/**
+		 * TODO ALL OF THE OVERLOADING STUFF IS GONNA BE DONE HERE FOR FUNCTION POINTERS
+		 */
+
+
+
+
+
+
+
+
+		/**
 		 * Let types_assignable run. We will need the types to all be original here in order for this
 		 * to work properly
 		 */
@@ -2121,7 +2132,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 				//Fail case we get out heere
 				} else {
-					sprintf(info, "Function \"%s\" has more than one overload that could fit this function call:", function_name->string);
+					sprintf(info, "Ambigious overload: Function \"%s\" has more than one overload that could fit this function call:", function_name->string);
 					print_function_name_to_buffer(info, found_record);
 					print_function_name_to_buffer(info, candidate);
 					return print_and_return_error(info, parser_line_num);
