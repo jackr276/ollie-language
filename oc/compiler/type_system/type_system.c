@@ -431,7 +431,7 @@ static u_int8_t struct_types_identical(generic_type_t* struct_a, generic_type_t*
  * spot overall, and they have the same size
  */
 static u_int8_t union_types_identical(generic_type_t* union_a, generic_type_t* union_b){
-	//May not both be structs so account for that
+	//May not both be unions so account for that
 	if(union_a->type_class != union_b->type_class){
 		return NULL;
 	}
@@ -441,8 +441,8 @@ static u_int8_t union_types_identical(generic_type_t* union_a, generic_type_t* u
 	}
 
 	//Get both member lists
-	dynamic_array_t* union_a_members = &(union_a->internal_types.struct_table);
-	dynamic_array_t* union_b_members = &(union_b->internal_types.struct_table);
+	dynamic_array_t* union_a_members = &(union_a->internal_types.union_table);
+	dynamic_array_t* union_b_members = &(union_b->internal_types.union_table);
 
 	//Differnt sizes means no
 	if(union_a_members->current_index != union_b_members->current_index){
@@ -452,6 +452,49 @@ static u_int8_t union_types_identical(generic_type_t* union_a, generic_type_t* u
 	for(int32_t i = 0; i < union_a_members->current_index; i++){
 		symtab_variable_record_t* a_member = dynamic_array_get_at(union_a_members, i);
 		symtab_variable_record_t* b_member = dynamic_array_get_at(union_b_members, i);
+
+		//Fail out if different
+		if(a_member != b_member){
+			return FAILURE;
+		}
+	}
+
+	//Otherwise if we made it here we're good
+	return SUCCESS;
+}
+
+
+/**
+ * Two enum types being identical means that every member is the same and in the same
+ * spot overall, and they have the same size
+ */
+static u_int8_t enum_types_identical(generic_type_t* enum_a, generic_type_t* enum_b){
+	//May not both be enums so account for that
+	if(enum_a->type_class != enum_b->type_class){
+		return NULL;
+	}
+
+	if(enum_a->type_size != enum_b->type_size){
+		return FAILURE;
+	}
+
+	//Different internals means it's bad
+	if(enum_a->internal_values.enum_integer_type != enum_b->internal_values.enum_integer_type){
+		return FAILURE;
+	}
+
+	//Get both member lists
+	dynamic_array_t* enum_a_members = &(enum_a->internal_types.enumeration_table);
+	dynamic_array_t* enum_b_members = &(enum_b->internal_types.enumeration_table);
+
+	//Differnt sizes means no
+	if(enum_a_members->current_index != enum_b_members->current_index){
+		return FAILURE;
+	}
+
+	for(int32_t i = 0; i < enum_a_members->current_index; i++){
+		symtab_variable_record_t* a_member = dynamic_array_get_at(enum_a_members, i);
+		symtab_variable_record_t* b_member = dynamic_array_get_at(enum_b_members, i);
 
 		//Fail out if different
 		if(a_member != b_member){
@@ -559,45 +602,20 @@ static inline u_int8_t types_identical_ignore_mutability(generic_type_t* a, gene
 		case TYPE_CLASS_FUNCTION_SIGNATURE:
 			return function_signatures_equivalent(a, b);
 
-			
-
-	}
-
-
-		/**
-		 * This is a simpler case - constructs can only be assigned
-		 * if they're the exact same. We do not need to worry about
-		 * mutability here because struct assignment is always a copy,
-		 * so the destination won't be the same as the source anyway
-		 */
 		case TYPE_CLASS_STRUCT:
-			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				return destination_type;
-			}
+			return struct_types_identical(a, b);
 
-			return NULL;
+		case TYPE_CLASS_UNION:
+			return union_types_identical(a, b);
 
 		/**
-		 * The same goes for a union type. They are assignable if they are the exact same. Mutability
-		 * also does not matter because this is always a direct copy
+		 * Really should not be in here for arrays/pointers, redirect
+		 * to the real helper
 		 */
-		case TYPE_CLASS_UNION:
-			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				return destination_type;
-			}
+		case TYPE_CLASS_POINTER:
+		case TYPE_CLASS_ARRAY:
+			return types_identical(a, b);
 
-			return NULL;
-
-
-	/**
-	 * We may eventually elaborate more on this, but for right now, it is
-	 * sufficient to just compare the raw pointers to see if they're
-	 * equal or not
-	 */
-	if(true_type_a->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
-		return true_type_a == true_type_b ? TRUE : FALSE;
-	} else {
-		return function_signatures_equivalent(a, b);
 	}
 }
 
