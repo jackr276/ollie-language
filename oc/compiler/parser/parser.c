@@ -2091,7 +2091,6 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
 	}
 
-
 	/**
 	 * Step 2: overloaded call handling
 	 *
@@ -2162,10 +2161,250 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		current_function->calls_inlined_function = TRUE;
 	}
 
+	/**
+	 * Step 3: validate function parameter types
+	 *
+	 * Now that we have all of our parameters fully parsed in and we've handled all of our overloading
+	 * ambiguity, we need to validate their types against the function signature's parameters and handle
+	 * any special bookkeeping(copy assignment, elaborative param) that will apply
+	 *
+	 * NOTE: This should be a 1-to-1 mapping of type to param unless we hit the elaborative param which
+	 * requires special handling
+	 *
+	 * We have handling at the very exit of this loop to catch instances where a user may have given too
+	 * many parameters. Undersupply(too few parameters) cases will be caught inside of the loop because we
+	 * are indexing on the parameter type list
+	 */
+	int32_t param_result_index = 0;
+	int32_t param_type_index = 0;
+	dynamic_array_t* function_parameter_types = &(internal_function_type->function_parameters);
+	for(; param_type_index < function_parameter_types->current_index; param_type_index++, param_result_index++){
+		generic_type_t* parameter_type = dynamic_array_get_at(&(internal_function_type->function_parameters), param_type_index);
 
+		/**
+		 * Most common case by far - usually we do not have elaborative parameters
+		 */
+		if(parameter_type->type_class != TYPE_CLASS_ELABORATIVE){
+			/**
+			 * Undersupply case - we have too few function parameters so we need
+			 * to fail out. Be careful with elaborative params in our printing
+			 */
+			if(param_type_index >= parameter_parsing_list.current_index){
+				if(internal_function_type->contains_elaborative_stack_param == FALSE){
+					sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
+									function_signature->type_name.string,
+									function_parameter_types->current_index,
+									parameter_parsing_list.current_index);
+				} else {
+					//Account for the optional elaborative param
+					sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
+									function_signature->type_name.string,
+									function_parameter_types->current_index - 1,
+									parameter_parsing_list.current_index);
+				}
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			//Now that we know it's safe get the current param out
+			generic_ast_node_t* current_param = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+			/**
+			 * Do the assignment and bookkeeping. If this is NULL it means that we failed so the entire
+			 * thing fails at this point
+			 */
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
+			if(final_type == NULL){
+				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						function_signature->type_name.string,
+						(parameter_type->mutability == MUTABLE ? "mut ": ""),
+						parameter_type->type_name.string,
+						param_result_index + 1,
+						//Print the mut keyword if we need it
+						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
+						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+
+				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+			 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+			 * doing an address calculation.
+			 */
+			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
+				/**
+				 * If the right hand expression is a postfix expression *and* we are looking
+				 * to perform a memory copy assignment here, we need to flag that 
+				 * we do *not* require a dereference to make this work
+				 */
+				propogate_no_dereference_required_flag(current_param);
+			}
+
+			/**
+			 * We can now safely add this into the function call node as a child. In the function call node, 
+			 * the parameters will appear in order from left to right
+			 */
+			add_child_node(direct_call, current_param);
+
+		/**
+		 * For elaborative parameters we will need to do more work. Also let's remember that an elaborative
+		 * parameter is always the last thing in a function's parameter list, so when we're done with this
+		 * we can simply fail out
+		 */
+		} else {
+			/**
+			 * Get the amount that we have in our elaborative parameter list by seeing how
+			 * far we have left to go
+			 */
+			int32_t elaborative_param_count = param_result_index - parameter_parsing_list.current_index;
+
+			/**
+			 * We have more than one elaborative param, so we will have to run through and add them all
+			 * to what we call an "elaborative parameter statement" node. We will also do all type checking,
+			 * pass by copy handling, etc
+			 */
+			if(elaborative_param_count != 0) {
+				//These always have a special node no matter what
+				generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
+
+				//Extract the elaborated type - this is what we'll be comparing to
+				generic_type_t* type_being_elaborated = parameter_type->internal_types.elaborates;
+
+				/**
+				 * Now we need to run through everything remaining in the parameter result list and 
+				 * process each one
+				 */
+				for(; param_result_index < parameter_parsing_list.current_index; param_result_index++){
+					generic_ast_node_t* param_expression = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+					//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
+					generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, param_expression);
+
+					//If this is null, it means that our check failed
+					if(final_type == NULL){
+						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
+								type_being_elaborated->type_name.string,
+								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								param_expression->inferred_type->type_name.string);
+
+						return print_and_return_error(info, parser_line_num);
+					}
+
+					/**
+					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+					 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+					 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+					 * doing an address calculation.
+					 */
+					if(is_copy_assignment_required(type_being_elaborated, param_expression->inferred_type) == TRUE){
+						/**
+						 * If the right hand expression is a postfix expression *and* we are looking
+						 * to perform a memory copy assignment here, we need to flag that 
+						 * we do *not* require a dereference to make this work
+						 */
+						propogate_no_dereference_required_flag(param_expression);
+					}
+
+					//Add this to the overarching elaborative param node
+					add_child_node(elaborative_param_node, param_expression);
+				}
+
+				//Finally add the constructed elaborative param call to the overall call node
+				add_child_node(direct_call, elaborative_param_node);
+
+			/**
+			 * If we have nothing, we are still required to make the node and put it in our child node
+			 * list. Elaborative params, even empty ones, always have some setup overhead that needs to
+			 * be taken into account
+			 */
+			} else {
+				generic_ast_node_t* elaborative_param_node = create_empty_elaborative_param(parameter_type);
+				add_child_node(direct_call, elaborative_param_node);
+			}
+		}
+	}
+
+	/**
+	 * Oversupply case - we have too many function parameters so we need
+	 * to fail out. Be careful with elaborative params in our printing. We can
+	 * detect this be seeing if we've underconsumed the param result list
+	 * with our param_result_index
+	 */
+	if(param_result_index < parameter_parsing_list.current_index){
+		if(internal_function_type->contains_elaborative_stack_param == FALSE){
+			sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
+							function_signature->type_name.string,
+							function_parameter_types->current_index,
+							parameter_parsing_list.current_index);
+		} else {
+			//Account for the optional elaborative param
+			sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
+							function_signature->type_name.string,
+							function_parameter_types->current_index - 1,
+							parameter_parsing_list.current_index);
+		}
+
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//We're done with this array now so destroy it
+	dynamic_array_dealloc(&parameter_parsing_list);
+
+	/**
+	 * Step 3: parse the optional handle statement
+	 *
+	 * If we have a function that may raise errors, we are absolutely required to see the
+	 * handles statement here. If we have a function that does not return errors, then it is
+	 * completely incorrect for us to see the handles statement here. We need to handle
+	 * both cases appropriately
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok == HANDLE){
+		/**
+		 * If we don't raise errors then this is never correct so fail out
+		 */
+		if(internal_function_type->raises_errors == FALSE){
+			sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+						function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Now let's process the handle statement
+		generic_ast_node_t* handle_node = handle_statement(token_stream, function_signature);
+ 		if(handle_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid handle statement given to function call", parser_line_num);
+		}
+
+		//Otherwise let's add this to the function call
+		add_child_node(direct_call, handle_node);
+
+	/**
+	 * Otherwise we didn't see it, but we need to validate that we didn't need to see it
+	 */
+	} else {
+		/**
+		 * If this function raises errors, then we actually
+		 * had to see this, so this is an error
+		 */
+		if(internal_function_type->raises_errors == TRUE){
+			sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+							function_signature->type_name.string);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Push it back
+		push_back_token(token_stream, &parser_line_num);
+	}
 
 	return direct_call;
 }
