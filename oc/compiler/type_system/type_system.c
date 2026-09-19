@@ -570,12 +570,8 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 				return NULL;
 			}
 
-			//Otherwise, we'll need to use the helper rule to determine if it's equivalent
-			if(function_signatures_identical(destination_type, true_source_type) == TRUE){
-				return destination_type;
-			} else {
-				return NULL;
-			}
+			//Are the signatures identical or not?
+			return function_signatures_identical(destination_type, true_source_type) == TRUE ? destination_type : NULL;
 			
 		//Enum's can internally be any unsigned integer
 		case TYPE_CLASS_ENUMERATED:

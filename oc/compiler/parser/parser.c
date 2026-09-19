@@ -506,88 +506,79 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 
 
 /**
- * If a constant is a string constant, function constant, or any other kind of relative
- * address constant, then we may not convert it and we must process it using the normal
- * rules as if it were a variable. This helper sifts through a constant type and determines
- * if it is one of these exceptions
- */
-static inline u_int8_t is_constant_type_exempt_from_constant_assignment_rules(ollie_token_t constant_type){
-	switch(constant_type){
-		case STR_CONST:
-		case FUNC_CONST:
-		case REL_ADDRESS_CONST:
-				return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Can a given source node be assigned to a destination type? This logic changes based on whether or not
  * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
  * relying on types_assignable in the type system
  */
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
 	/**
-	 * If this is not a constant type or it is exempt, we use the regular types assignable path
+	 * If this is not a constant then use the regular rules to get this done
 	 */
-	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT || is_constant_type_exempt_from_constant_assignment_rules(source_node->constant_type) == TRUE){
+	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
 		return types_assignable(destination_type, source_node->inferred_type);
 
+	/**
+	 * Otherwise it is a constant. We will need to do processing based on what
+	 * kind of constant we have. Certain constants will require more work/different
+	 * treatment as compared to others
+	 */
 	} else {
-		/**
-		 * If this is not a function constant, then we'll go through our normal strategy to make
-		 * this work properly. Function constants require special handling due to overloading
-		 */
-		if(source_node->constant_type != FUNC_CONST){
-			/**
-			 * Let types_assignable run. We will need the types to all be original here in order for this
-			 * to work properly
-			 */
-			generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
-
-			//If it failed then just leave now
-			if(result_type == NULL){
-				return NULL;
+		switch(source_node->constant_type){
+			case STR_CONST:
+			case REL_ADDRESS_CONST: {
+				return types_assignable(destination_type, source_node->inferred_type);
 			}
 
-			/**
-			 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
-			 * correlates to it properly. If we are trying to assign a constant value that is not in
-			 * the enum's range of valid values, that would cause issues down the line and we will
-			 * not allow it
-			 */
-			if(is_enum_type(destination_type) == TRUE){
-				if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
-					sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-								destination_type->type_name.string, source_node->constant_value.signed_int_value);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+			case FUNC_CONST: {
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+			}
+
+			default: {
+				/**
+				 * Let types_assignable run. We will need the types to all be original here in order for this
+				 * to work properly
+				 */
+				generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
+
+				//If it failed then just leave now
+				if(result_type == NULL){
 					return NULL;
 				}
-			} 
 
-			/**
-			 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
-			 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
-			 * but has different rules inside of Ollie
-			 */
-			if(result_type->type_class == TYPE_CLASS_POINTER){
-				result_type = immut_u64;
+				/**
+				 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
+				 * correlates to it properly. If we are trying to assign a constant value that is not in
+				 * the enum's range of valid values, that would cause issues down the line and we will
+				 * not allow it
+				 */
+				if(is_enum_type(destination_type) == TRUE){
+					if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+									destination_type->type_name.string, source_node->constant_value.signed_int_value);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+						return NULL;
+					}
+				} 
+
+				/**
+				 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
+				 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
+				 * but has different rules inside of Ollie
+				 */
+				if(result_type->type_class == TYPE_CLASS_POINTER){
+					result_type = immut_u64;
+				}
+
+				//Reassign the constant's type at this point
+				source_node->inferred_type = result_type;
+
+				//While we're here we will coerce the constant itself
+				coerce_constant(source_node);
+
+				//Give this back
+				return result_type;
 			}
-
-			//Reassign the constant's type at this point
-			source_node->inferred_type = result_type;
-
-			//While we're here we will coerce the constant itself
-			coerce_constant(source_node);
-
-			//Give this back
-			return result_type;
-
-		} else {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
 		}
 	}
 }
