@@ -395,7 +395,7 @@ u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t* b){
 static u_int8_t struct_types_identical(generic_type_t* struct_a, generic_type_t* struct_b){
 	//May not both be structs so account for that
 	if(struct_a->type_class != struct_b->type_class){
-		return NULL;
+		return FAILURE;
 	}
 
 	if(struct_a->type_size != struct_b->type_size){
@@ -433,7 +433,7 @@ static u_int8_t struct_types_identical(generic_type_t* struct_a, generic_type_t*
 static u_int8_t union_types_identical(generic_type_t* union_a, generic_type_t* union_b){
 	//May not both be unions so account for that
 	if(union_a->type_class != union_b->type_class){
-		return NULL;
+		return FAILURE;
 	}
 
 	if(union_a->type_size != union_b->type_size){
@@ -471,7 +471,7 @@ static u_int8_t union_types_identical(generic_type_t* union_a, generic_type_t* u
 static u_int8_t enum_types_identical(generic_type_t* enum_a, generic_type_t* enum_b){
 	//May not both be enums so account for that
 	if(enum_a->type_class != enum_b->type_class){
-		return NULL;
+		return FAILURE;
 	}
 
 	if(enum_a->type_size != enum_b->type_size){
@@ -608,6 +608,9 @@ static inline u_int8_t types_identical_ignore_mutability(generic_type_t* a, gene
 		case TYPE_CLASS_UNION:
 			return union_types_identical(a, b);
 
+		case TYPE_CLASS_ENUMERATED:
+			return enum_types_identical(a, b);
+
 		/**
 		 * Really should not be in here for arrays/pointers, redirect
 		 * to the real helper
@@ -616,6 +619,15 @@ static inline u_int8_t types_identical_ignore_mutability(generic_type_t* a, gene
 		case TYPE_CLASS_ARRAY:
 			return types_identical(a, b);
 
+		/**
+		 * For basic types we can just go by the basic type token
+		 */
+		case TYPE_CLASS_BASIC:
+			return a->basic_type_token == b->basic_type_token ? TRUE : FALSE;
+
+		//Anything else is an auto-no
+		default:
+			return FALSE;
 	}
 }
 
@@ -752,12 +764,7 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 			//Go based on what the source it
 			switch(true_source_type->type_class){
 				case TYPE_CLASS_ENUMERATED:
-					//These need to be the exact same, otherwise this will not work
-					if(destination_type == true_source_type){
-						return destination_type;
-					} else {
-						return NULL;
-					}
+					return enum_types_identical(destination_type, true_source_type) == TRUE ? destination_type : NULL;
 
 				//If we have a basic type, we can just compare it with the enum's internal int
 				case TYPE_CLASS_BASIC:
@@ -1232,6 +1239,9 @@ static generic_type_t* pointer_types_compatible_ignore_mutability(generic_type_t
 
 /**
  * Are two types *exactly* equal or not? This will account for type aliasing as well
+ *
+ * NOTE: this will also factor in mutability differences, which is not desirable for a lot of
+ * our use cases
  */
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
 	//Let's first dealias both types

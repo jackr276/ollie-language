@@ -315,6 +315,9 @@ u_int8_t do_function_signatures_differ_enough_to_overload(generic_type_t* a, gen
 
 /**
  * Are two types *exactly* equal or not? This will account for type aliasing as well
+ *
+ * NOTE: this will also factor in mutability differences, which is not desirable for a lot of
+ * our use cases
  */
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
 
