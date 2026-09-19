@@ -1961,9 +1961,43 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
  * an overloaded function call. As such, we cannot verify the parameter list until
  * after we've done all of the parameter parsing
  *
- * TODO DIFFERENT WAY OF PARSING
+ * Unlike indirect function calls, direct function calls have to deal with the decisions
+ * required in overloading. Mainly that is, based on the parameters supplied, which overloaded
+ * function best fits
  */
 static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* token_stream, generic_ast_node_t* unary_expr_node, side_type_t side){
+	//We'll be using these both throughout the procedure
+	lexitem_t lookahead;
+	dynamic_string_t* function_name;
+
+	/**
+	 * Get the function record out of the unary expression node. Do remember
+	 * that this is not yet the final function record because we have overloading
+	 * to deal with
+	 */
+	symtab_function_record_t* function_record = unary_expr_node->func_record;
+
+	//Allocate and tack the function record on
+	function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
+	function_call_node->func_record = function_record;
+
+	//Add an edge on the direct call graph
+	add_function_call(current_function, function_record);
+	
+	//Flag that this was called
+	function_record->called = TRUE;
+
+	//In this instance store the function name
+	function_name = &(function_record->func_name);
+
+	//It's safe to grab this now
+	internal_function_type = function_signature->internal_types.function_type;
+
+	//If we are calling an inlined function then flag this
+	if(internal_function_type->is_inlined == TRUE){
+		current_function->calls_inlined_function = TRUE;
+	}
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
@@ -2337,52 +2371,20 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	}
 
 	/**
-	 * Now that we've in theory gotten either the function itself or the expression
-	 * that is equivalent to it. We will extract the function record and signature
-	 * of the underlying function to work with
-	 */
-	symtab_function_record_t* function_record = NULL;
-	generic_type_t* function_signature = unary_expression_node->inferred_type;
-
-	//We need to do validations before it's safe to grab this
-	function_type_t* internal_function_type = NULL;
-
-	/**
 	 * If we have an actual function record(func const), we'll create what we call
 	 * a "direct call" which will *not* have any unary expression attached to it. If
 	 * we do not, then we will make an indirect call, which *always* has a unary expression
 	 * as the first child
 	 */
-	generic_ast_node_t* function_call_node;
-	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT && unary_expression_node->constant_type == FUNC_CONST){
-		//Extract the function record from the constant node
-		function_record = unary_expression_node->func_record;
+	if(unary_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
+			&& unary_expression_node->constant_type == FUNC_CONST){
 
-		//Allocate and tack the function record on
-		function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
-		function_call_node->func_record = function_record;
-
-		//Add an edge on the direct call graph
-		add_function_call(current_function, function_record);
-		
-		//Flag that this was called
-		function_record->called = TRUE;
-
-		//In this instance store the function name
-		function_name = &(function_record->func_name);
-
-		//It's safe to grab this now
-		internal_function_type = function_signature->internal_types.function_type;
-
-		//If we are calling an inlined function then flag this
-		if(internal_function_type->is_inlined == TRUE){
-			current_function->calls_inlined_function = TRUE;
-		}
+		return direct_function_call(token_stream, unary_expression_node, side);
 
 	} else {
 		//Validate that what we're trying to call is actually a function
-		if(function_signature->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
-			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", function_signature->type_name.string);
+		if(unary_expression_node->inferred_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", unary_expression_node->inferred_type->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
