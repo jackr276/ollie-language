@@ -1977,11 +1977,92 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 	 */
 	symtab_function_record_t* function_record = unary_expr_node->func_record;
 
-	//Allocate and tack the function record on
-	function_call_node = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
-	function_call_node->func_record = function_record;
+	/**
+	 * We can allocate the node now but there's not much that we're able
+	 * to put inside of it TODO ADD EVERYTHING IN HERE ONCE WE KNOW
+	 */
+	generic_ast_node_t* direct_call = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
+	direct_call->line_number = parser_line_num;
+
+
+	//We now need to see a left parenthesis for our param list
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_PAREN){
+		return print_and_return_error("Left parenthesis expected in function call statement", parser_line_num);
+	}
+
+	//Push onto the grouping stack once we see this
+	push_token(&grouping_stack, lookahead);
+
+	//Give ourselves a parameter parsing list to use
+	dynamic_array_t parameter_parsing_list = dynamic_array_alloc();
+
+	/**
+	 * Step 1: parse all supplied function parameters into a temporary list
+	 *
+	 * If we don't immediately see an R_PAREN we can keep parsing here. If we do see
+	 * an R_PAREN we can't go any further and we'll just skip the parsing entirely
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != R_PAREN){
+		push_back_token(token_stream, &parser_line_num);
+
+		/**
+		 * We can now process all of our function parameters. At this moment we're not going
+		 * to check anything about them matching up to our desired types. We're just going to
+		 * parse the parameters in and then validate later
+		 */
+		while(TRUE){
+			//Invoke the "in_expression" rule to parse this parameter
+			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
+			}
+
+			//Add this to our list that we're going to need to validate
+			dynamic_array_add(&parameter_parsing_list, parameter_expression);
+
+			//Based on the lookahead we decide what to do next
+			lookahead = get_next_token(token_stream, &parser_line_num);
+			if(lookahead.tok == COMMA){
+				continue;
+			} else if(lookahead.tok == R_PAREN){
+				break;
+			} else {
+				return print_and_return_error("Commas must be used to separate parameters in function call", parser_line_num);
+			}
+		}
+	}
+
+	/**
+	 * The only way to get here would have been to see that R_PAREN, so now we'll
+	 * have to confirm matching
+	 */
+	if(pop_token(&grouping_stack).tok != L_PAREN){
+		return print_and_return_error("Unmatched parenthesis detected in function call", parser_line_num);
+	}
+
+	/**
+	 */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	//Add an edge on the direct call graph
+	//TODO LATER ON
 	add_function_call(current_function, function_record);
 	
 	//Flag that this was called
@@ -2000,6 +2081,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
+
+	return direct_call;
 }
 
 
