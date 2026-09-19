@@ -1964,7 +1964,7 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
  * NOTE: since this is exclusively used for overloading, we never expect to handle any elaborative parameters
  * here
  */
-static inline u_int8_t compare_parameter_list_against_signature(dynamic_array_t* parameter_nodes, function_type_t* signature){
+static inline u_int8_t does_parameter_list_match_signature(dynamic_array_t* parameter_nodes, function_type_t* signature){
 	//Maintain two separate indices for doing this
 	int32_t parameter_type_index = 0;
 	int32_t parameter_index = 0;
@@ -1983,6 +1983,10 @@ static inline u_int8_t compare_parameter_list_against_signature(dynamic_array_t*
 		generic_ast_node_t* parameter_node = dynamic_array_get_at(parameter_nodes, parameter_index);
 
 		//Different types, not a match
+		//
+		//
+		//
+		//TODO THIS NEEDS TO BE BETTER
 		if(types_identical(parameter_type, parameter_node->inferred_type) == FALSE){
 			return FALSE;
 		}
@@ -2017,9 +2021,10 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 	/**
 	 * Get the function record out of the unary expression node. Do remember
 	 * that this is not yet the final function record because we have overloading
-	 * to deal with
+	 * to deal with. Also get the name out this is the same across all overloads
 	 */
 	symtab_function_record_t* function_record = unary_expr_node->func_record;
+	function_name = &(function_record->func_name);
 
 	/**
 	 * We can allocate the node now but there's not much that we're able
@@ -2097,7 +2102,42 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 	 * came from the lookup
 	 */
 	if(function_record->overload_table.current_index > 1){
+		//Initially we didn't find a match
+		symtab_function_record_t* found_record = NULL;
 
+		//Run through everything in the overload table - we do a full scan no matter what
+		for(int32_t i = 0; i < function_record->overload_table.current_index; i++){
+			symtab_function_record_t* candidate = dynamic_array_get_at(&(function_record->overload_table), i);
+
+			/**
+			 * If they do match, then we may be good to overload here so long as we don't already have an
+			 * overload that's in the way
+			 */
+			if(does_parameter_list_match_signature(&parameter_parsing_list, candidate->signature->internal_types.function_type) == TRUE){
+				/**
+				 * If we don't have it, great. But if we've already found it then we have an ambiguous
+				 * parse and we can't have this
+				 */
+				if(found_record != NULL){
+					found_record = candidate;
+
+				//Fail case we get out heere
+				} else {
+					sprintf(info, "Function \"%s\" has more than one overload that could fit this function call:", function_name->string);
+					print_function_name_to_buffer(info, found_record);
+					print_function_name_to_buffer(info, candidate);
+					return print_and_return_error(info, parser_line_num);
+				}
+			}
+		}
+
+		/**
+		 * Only overwrite the function record if we found something. If we didn't then the regular function
+		 * record will have to do and we'll see if we can coerce our way into a match with it
+		 */
+		if(found_record != NULL){
+			function_record = found_record;
+		}
 	}
 
 
