@@ -2162,7 +2162,61 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 */
 			int32_t elaborative_param_count = param_result_index - parameter_parsing_list.current_index;
 
+			/**
+			 * We have more than one elaborative param, so we will have to run through and add them all
+			 * to what we call an "elaborative parameter statement" node. We will also do all type checking,
+			 * pass by copy handling, etc
+			 */
 			if(elaborative_param_count != 0) {
+				//These always have a special node no matter what
+				generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
+
+				//Extract the elaborated type - this is what we'll be comparing to
+				generic_type_t* type_being_elaborated = parameter_type->internal_types.elaborates;
+
+				/**
+				 * Now we need to run through everything remaining in the parameter result list and 
+				 * process each one
+				 */
+				for(; param_result_index < parameter_parsing_list.current_index; param_result_index++){
+					generic_ast_node_t* param_expression = dynamic_array_get_at(&parameter_parsing_list, param_result_index);
+
+					//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
+					generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, param_expression);
+
+					//If this is null, it means that our check failed
+					if(final_type == NULL){
+						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
+								type_being_elaborated->type_name.string,
+								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
+								param_expression->inferred_type->type_name.string);
+
+						return print_and_return_error(info, parser_line_num);
+					}
+
+					/**
+					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+					 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+					 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+					 * doing an address calculation.
+					 */
+					if(is_copy_assignment_required(type_being_elaborated, param_expression->inferred_type) == TRUE){
+						/**
+						 * If the right hand expression is a postfix expression *and* we are looking
+						 * to perform a memory copy assignment here, we need to flag that 
+						 * we do *not* require a dereference to make this work
+						 */
+						propogate_no_dereference_required_flag(param_expression);
+					}
+
+					//Add this to the overarching elaborative param node
+					add_child_node(elaborative_param_node, param_expression);
+				}
+
 
 
 			/**
@@ -2175,11 +2229,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				add_child_node(indirect_call, elaborative_param_node);
 			}
 
-			//These always have a special node no matter what
-			generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
-
-			//Extract the elaborated type - this is what we'll be comparing to
-			generic_type_t* type_being_elaborated = elaborative_param_type->internal_types.elaborates;
 
 			//Get the first lookahead - we need to test if we have an empty elaborative param here
 			lookahead = get_next_token(token_stream, &parser_line_num);
