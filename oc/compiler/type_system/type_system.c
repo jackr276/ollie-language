@@ -426,8 +426,41 @@ static u_int8_t struct_types_identical(generic_type_t* struct_a, generic_type_t*
 }
 
 
+/**
+ * Two union types being identical means that every member is the same and in the same
+ * spot overall, and they have the same size
+ */
 static u_int8_t union_types_identical(generic_type_t* union_a, generic_type_t* union_b){
+	//May not both be structs so account for that
+	if(union_a->type_class != union_b->type_class){
+		return NULL;
+	}
 
+	if(union_a->type_size != union_b->type_size){
+		return FAILURE;
+	}
+
+	//Get both member lists
+	dynamic_array_t* union_a_members = &(union_a->internal_types.struct_table);
+	dynamic_array_t* union_b_members = &(union_b->internal_types.struct_table);
+
+	//Differnt sizes means no
+	if(union_a_members->current_index != union_b_members->current_index){
+		return FAILURE;
+	}
+
+	for(int32_t i = 0; i < union_a_members->current_index; i++){
+		symtab_variable_record_t* a_member = dynamic_array_get_at(union_a_members, i);
+		symtab_variable_record_t* b_member = dynamic_array_get_at(union_b_members, i);
+
+		//Fail out if different
+		if(a_member != b_member){
+			return FAILURE;
+		}
+	}
+
+	//Otherwise if we made it here we're good
+	return SUCCESS;
 }
 
 
