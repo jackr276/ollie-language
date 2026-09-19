@@ -2223,13 +2223,15 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 */
 			if(param_type_index >= parameter_parsing_list.current_index){
 				if(internal_function_type->contains_elaborative_stack_param == FALSE){
-					sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
+					sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
+									function_name->string,
 									function_signature->type_name.string,
 									function_parameter_types->current_index,
 									parameter_parsing_list.current_index);
 				} else {
 					//Account for the optional elaborative param
-					sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
+					sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
+									function_name->string,
 									function_signature->type_name.string,
 									function_parameter_types->current_index - 1,
 									parameter_parsing_list.current_index);
@@ -2250,7 +2252,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
-				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+				sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						function_name->string,
 						function_signature->type_name.string,
 						(parameter_type->mutability == MUTABLE ? "mut ": ""),
 						parameter_type->type_name.string,
@@ -2374,13 +2377,15 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 	 */
 	if(param_result_index < parameter_parsing_list.current_index){
 		if(internal_function_type->contains_elaborative_stack_param == FALSE){
-			sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
+			sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
+							function_name->string,
 							function_signature->type_name.string,
 							function_parameter_types->current_index,
 							parameter_parsing_list.current_index);
 		} else {
 			//Account for the optional elaborative param
-			sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
+			sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
+							function_name->string,
 							function_signature->type_name.string,
 							function_parameter_types->current_index - 1,
 							parameter_parsing_list.current_index);
