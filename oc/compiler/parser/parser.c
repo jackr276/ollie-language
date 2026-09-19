@@ -1982,12 +1982,11 @@ static inline u_int8_t does_parameter_list_match_signature(dynamic_array_t* para
 		generic_type_t* parameter_type = dynamic_array_get_at(&(signature->function_parameters), parameter_type_index);
 		generic_ast_node_t* parameter_node = dynamic_array_get_at(parameter_nodes, parameter_index);
 
-		//Different types, not a match
-		//
-		//
-		//
-		//TODO THIS NEEDS TO BE BETTER
-		if(types_identical(parameter_type, parameter_node->inferred_type) == FALSE){
+		/**
+		 * Determine if these types are "overloading equivalent". This is a very special designation
+		 * that has some leeway compared to types_identical
+		 */
+		if(types_overloading_equivalent(parameter_type, parameter_node->inferred_type) == FALSE){
 			return FALSE;
 		}
 	}
