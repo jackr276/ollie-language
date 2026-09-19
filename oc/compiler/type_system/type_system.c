@@ -481,6 +481,8 @@ u_int8_t do_function_signatures_differ_enough_to_overload(generic_type_t* a, gen
 		generic_type_t* a_param = dynamic_array_get_at(&(a_function_type->function_parameters), i);
 		generic_type_t* b_param = dynamic_array_get_at(&(b_function_type->function_parameters), i);
 
+		//TODO WE NEED TO IGNORE MUTABILITY
+
 		/**
 		 * If we have at least one mismatch then we can overload just fine
 		 */
