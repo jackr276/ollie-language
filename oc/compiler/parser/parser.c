@@ -2411,7 +2411,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		 * If we don't raise errors then this is never correct so fail out
 		 */
 		if(internal_function_type->raises_errors == FALSE){
-			sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+			sprintf(info, "Function \"%s\" of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
+						function_name->string,
 						function_signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -2434,7 +2435,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		 * had to see this, so this is an error
 		 */
 		if(internal_function_type->raises_errors == TRUE){
-			sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+			sprintf(info, "Function \"%s\" of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
+							function_name->string,
 							function_signature->type_name.string);
 			return print_and_return_error(info, parser_line_num);
 		}
