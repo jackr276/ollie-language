@@ -9,7 +9,9 @@ fn tester(x:i32, y:i32) -> i32 {
 
 
 pub fn main() -> i32 {
+	let ptr:fn(i32, i32) -> i32 = tester;
+
+	//Too few parameters
 	OUNIT: [fail_to_compile]
-	//Too many parameters
-	ret @tester(3, 4, 5);
+	ret @ptr(3);
 }

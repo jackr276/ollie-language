@@ -15,5 +15,5 @@ fn my_fn(x:i32) -> i32 {
 
 pub fn main() -> i32 {
 	OUNIT: [fail_to_compile]
-	ret @my_fn();
+	ret @my_fn(5);
 }
