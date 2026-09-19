@@ -2028,7 +2028,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 	/**
 	 * We can allocate the node now but there's not much that we're able
-	 * to put inside of it TODO ADD EVERYTHING IN HERE ONCE WE KNOW
+	 * to put inside of it
 	 */
 	generic_ast_node_t* direct_call = ast_node_alloc(AST_NODE_TYPE_FUNCTION_CALL, side);
 	direct_call->line_number = parser_line_num;
@@ -2140,39 +2140,29 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		}
 	}
 
+	//Now that we know the function record we can get these out
+	generic_type_t* function_signature = function_record->signature;
+	function_type_t* internal_function_type = function_signature->internal_types.function_type;
 
+	/**
+	 * The inferred type is always the signature's return type. We will also store
+	 * the callee's function signature inside of the optional storage block and populate
+	 * the function now
+	 */
+	direct_call->inferred_type = function_signature;
+	direct_call->optional_storage.callee_signature = internal_function_type;
+	direct_call->func_record = function_record;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	//Add an edge on the direct call graph
-	//TODO LATER ON
+	//Flag that we called out from the current function to this
 	add_function_call(current_function, function_record);
-	
-	//Flag that this was called
 	function_record->called = TRUE;
-
-	//In this instance store the function name
-	function_name = &(function_record->func_name);
-
-	//It's safe to grab this now
-	internal_function_type = function_signature->internal_types.function_type;
 
 	//If we are calling an inlined function then flag this
 	if(internal_function_type->is_inlined == TRUE){
 		current_function->calls_inlined_function = TRUE;
 	}
+
+
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
@@ -2569,12 +2559,6 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 		return indirect_function_call(token_stream, unary_expression_node, side);
 	}
 
-	/**
-	 * The inferred type is always the signature's return type. We will also store
-	 * the callee's function signature inside of the optional storage block
-	 */
-	function_call_node->inferred_type = internal_function_type->return_type;
-	function_call_node->optional_storage.callee_signature = internal_function_type;
 
 	//Store the line number at this point
 	function_call_node->line_number = parser_line_num;
