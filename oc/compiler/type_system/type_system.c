@@ -389,6 +389,49 @@ u_int8_t function_signatures_identical(generic_type_t* a, generic_type_t* b){
 
 
 /**
+ * Two struct types being identical means that every member is the same and in the same
+ * spot overall, and they have the same size
+ */
+static u_int8_t struct_types_identical(generic_type_t* struct_a, generic_type_t* struct_b){
+	//May not both be structs so account for that
+	if(struct_a->type_class != struct_b->type_class){
+		return NULL;
+	}
+
+	if(struct_a->type_size != struct_b->type_size){
+		return FAILURE;
+	}
+
+	//Get both member lists
+	dynamic_array_t* struct_a_members = &(struct_a->internal_types.struct_table);
+	dynamic_array_t* struct_b_members = &(struct_b->internal_types.struct_table);
+
+	//Differnt sizes means no
+	if(struct_a_members->current_index != struct_b_members->current_index){
+		return FAILURE;
+	}
+
+	for(int32_t i = 0; i < struct_a_members->current_index; i++){
+		symtab_variable_record_t* a_member = dynamic_array_get_at(struct_a_members, i);
+		symtab_variable_record_t* b_member = dynamic_array_get_at(struct_b_members, i);
+
+		//Fail out if different
+		if(a_member != b_member){
+			return FAILURE;
+		}
+	}
+
+	//Otherwise if we made it here we're good
+	return SUCCESS;
+}
+
+
+static u_int8_t union_types_identical(generic_type_t* union_a, generic_type_t* union_b){
+
+}
+
+
+/**
  * Are function signatures equivalent? This is used when we may not have
  * an exact match but a close enough match will do just fine for us. Equivalent
  * functions can differ in there visibility(public/private) and inlined status.
@@ -632,22 +675,14 @@ generic_type_t* types_assignable(generic_type_t* destination_type, generic_type_
 		 * so the destination won't be the same as the source anyway
 		 */
 		case TYPE_CLASS_STRUCT:
-			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				return destination_type;
-			}
-
-			return NULL;
+			return struct_types_identical(destination_type, source_type) == TRUE ? destination_type : NULL;
 
 		/**
 		 * The same goes for a union type. They are assignable if they are the exact same. Mutability
 		 * also does not matter because this is always a direct copy
 		 */
 		case TYPE_CLASS_UNION:
-			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
-				return destination_type;
-			}
-
-			return NULL;
+			return union_types_identical(destination_type, source_type) == TRUE ? destination_type : NULL;
 
 		/**
 		 * A function signature type is a very special case in terms of assignability
