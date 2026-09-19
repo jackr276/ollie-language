@@ -2117,7 +2117,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				 * If we don't have it, great. But if we've already found it then we have an ambiguous
 				 * parse and we can't have this
 				 */
-				if(found_record != NULL){
+				if(found_record == NULL){
 					found_record = candidate;
 
 				//Fail case we get out heere
@@ -2148,8 +2148,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 	 * the callee's function signature inside of the optional storage block and populate
 	 * the function now
 	 */
-	direct_call->inferred_type = function_signature;
 	direct_call->optional_storage.callee_signature = internal_function_type;
+	direct_call->inferred_type = internal_function_type->return_type;
 	direct_call->func_record = function_record;
 
 	//Flag that we called out from the current function to this

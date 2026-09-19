@@ -26,6 +26,9 @@ fn sub(x:f64, y:f64) -> f64 {
 
 
 pub fn main() -> i32 {
-	OUNIT: [exit_status = 3]
-	ret @sub(6, 3);
+	let x:f64 = 6.55;
+	let y:f64 = 5.55;
+
+	OUNIT: [exit_status = 1]
+	ret <i32>@sub(x, y);
 }

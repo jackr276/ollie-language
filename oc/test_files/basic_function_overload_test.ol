@@ -21,8 +21,8 @@ fn add(x:i8, y:i8) -> i8 {
 
 
 pub fn main() -> i32 {
-	let x:i32 = 5;
-	let y:i32 = 6;
+	let x:f32 = 5;
+	let y:f32 = 6;
 
 	OUNIT: [exit_status = 11]
 	ret @add(x, y);
