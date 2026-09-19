@@ -214,6 +214,45 @@ static void print_parse_message(error_message_type_t message_type, char* info, u
 
 
 /**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Allocate and return an error node
+	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+}
+
+
+/**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline u_int8_t print_and_return_failure(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Print out our failure
+	return FAILURE;
+}
+
+
+/**
+ * Print out an error message. This avoids code duplicatoin becuase of how much we do this
+ */
+static inline void* print_and_return_null(char* error_message, u_int32_t parser_line_num){
+	//Display the error
+	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
+	//Increment the number of errors
+	num_errors++;
+	//Give back the NULL
+	return NULL;
+}
+
+
+/**
  * Is a given type an enum type - accounting for all aliasing
  */
 static inline u_int8_t is_enum_type(generic_type_t* type){
@@ -529,7 +568,35 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 				return types_assignable(destination_type, source_node->inferred_type);
 			}
 
+			/**
+			 * Function constants need to account for overloading. It's not as simple as
+			 * just taking the function record and doing a types_assignable check on it
+			 */
 			case FUNC_CONST: {
+				//Grab the original record out and make room for the found record
+				symtab_function_record_t* original_record = source_node->func_record;
+				symtab_function_record_t* found_record = NULL;
+
+				//Run through all records until we have a match
+				for(int32_t i = 0; i < original_record->overload_table.current_index; i++){
+					symtab_function_record_t* candidate = dynamic_array_get_at(&(original_record->overload_table), i);
+
+					//As soon as we find a match we are done
+					if(types_assignable(destination_type, candidate->signature) != NULL){
+						found_record = candidate;
+						break;
+					}
+				}
+
+				//If this is still Null we found nothign
+				if(found_record == NULL){
+					sprintf(info, "No overload of function \"%s\" has a signature of %s",
+									original_record->func_name.string,
+									destination_type->type_name.string);
+					return print_and_return_null(info, parser_line_num);
+				}
+
+
 				printf("TODO NOT IMPLEMENTED\n");
 				exit(1);
 			}
@@ -556,8 +623,7 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 					if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
 						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
 									destination_type->type_name.string, source_node->constant_value.signed_int_value);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-						return NULL;
+						return print_and_return_null(info, parser_line_num);
 					}
 				} 
 
@@ -940,45 +1006,6 @@ static inline generic_type_t* determine_required_minimum_signed_integer_type_siz
 
 	//Otherwise, we need 64 bits
 	return immut_i64;
-}
-
-
-/**
- * Print out an error message. This avoids code duplicatoin becuase of how much we do this
- */
-static generic_ast_node_t* print_and_return_error(char* error_message, u_int32_t parser_line_num){
-	//Display the error
-	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
-	//Increment the number of errors
-	num_errors++;
-	//Allocate and return an error node
-	return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-}
-
-
-/**
- * Print out an error message. This avoids code duplicatoin becuase of how much we do this
- */
-static inline u_int8_t print_and_return_failure(char* error_message, u_int32_t parser_line_num){
-	//Display the error
-	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
-	//Increment the number of errors
-	num_errors++;
-	//Print out our failure
-	return FAILURE;
-}
-
-
-/**
- * Print out an error message. This avoids code duplicatoin becuase of how much we do this
- */
-static inline void* print_and_return_null(char* error_message, u_int32_t parser_line_num){
-	//Display the error
-	print_parse_message(MESSAGE_TYPE_ERROR, error_message, parser_line_num);
-	//Increment the number of errors
-	num_errors++;
-	//Give back the NULL
-	return NULL;
 }
 
 
