@@ -3799,6 +3799,14 @@ void generate_function_pointer_type_name(generic_type_t* function_pointer_type){
  * This will also go through and try to create a more helpful error 
  */
 void generate_types_assignable_failure_message(char* info, generic_type_t* source_type, generic_type_t* destination_type){
+	/**
+	 * For function pointers if this happened it's an invalid attempt to use an overload so display that
+	 */
+	if(destination_type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE && source_type->type_class == TYPE_CLASS_FUNCTION_SIGNATURE){
+		sprintf(info, "Invalid attempt to use function overload");
+		return;
+	}
+
 	//Grab the mutability levels as strings for our use
 	char* source_mutability = source_type->mutability == MUTABLE ? "mut " : "";
 	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut " : "";
