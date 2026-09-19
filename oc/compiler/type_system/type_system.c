@@ -1087,6 +1087,70 @@ u_int8_t types_identical(generic_type_t* a, generic_type_t* b){
 
 
 /**
+ * Are two types basically equivalent for function overloading? This is a middle
+ * ground between types_identical, which is very strict, and types_assignable, which
+ * is very lenient. Only basic types are going to be allowed to differ, but for example,
+ * an i8 in an i32 slot is going to be considered equivalent
+ */
+u_int8_t types_overloading_equivalent(generic_type_t* destination, generic_type_t* source){
+	//Let's first dealias both types
+	generic_type_t* true_destination = dealias_type(destination);
+	generic_type_t* true_source = dealias_type(source);
+
+	//Unequal type classes is an automatic false
+	if(true_destination->type_class != true_source->type_class){
+		return FALSE;
+	}
+
+	/**
+	 * Step 1: traditional types_identical logic that compares these
+	 * two types. If this step gives us a TRUE then we're done
+	 */
+	u_int8_t equivalent = FALSE;
+	if(true_destination->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+		equivalent =  true_destination == true_source ? TRUE : FALSE;
+	} else {
+		equivalent = function_signatures_equivalent(true_destination, true_source);
+	}
+
+	//We already have our true so get out
+	if(equivalent == TRUE){
+		return TRUE;
+	}
+
+	/**
+	 * Step 2: for basic types we do something a bit special. If the
+	 * basic types would be assignable without changing register class
+	 * (SSE/gen purpose), then we'll consider them equivalent
+	 */
+	if(true_destination->type_class == TYPE_CLASS_BASIC){
+		/**
+		 * Case 1: non-float to non-float -> compare sizes
+		 * Case 2: non-float to float -> false
+		 * Case 3: float to non-float -> false
+		 * Case 4: float to float -> compare sizes
+		 */
+		if(IS_FLOATING_POINT(true_destination) == FALSE){
+			if(IS_FLOATING_POINT(true_source) == FALSE){
+				equivalent = true_destination->type_size >= true_source->type_size ? TRUE : FALSE;
+			} else {
+				equivalent = FALSE;
+			}
+
+		} else {
+			if(IS_FLOATING_POINT(true_source) == FALSE){
+				equivalent = FALSE;
+			} else {
+				equivalent = true_destination->type_size >= true_source->type_size ? TRUE : FALSE;
+			}
+		}
+	}
+
+	return equivalent;
+}
+
+
+/**
  * Convert a given basic type to the unsigned version of itself. We will *not*
  * perform any size manipulation here
  *

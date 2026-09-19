@@ -319,6 +319,14 @@ u_int8_t do_function_signatures_differ_enough_to_overload(generic_type_t* a, gen
 u_int8_t types_identical(generic_type_t* a, generic_type_t* b);
 
 /**
+ * Are two types basically equivalent for function overloading? This is a middle
+ * ground between types_identical, which is very strict, and types_assignable, which
+ * is very lenient. Only basic types are going to be allowed to differ, but for example,
+ * an i8 in an i32 slot is going to be considered equivalent
+ */
+u_int8_t types_overloading_equivalent(generic_type_t* destination, generic_type_t* source);
+
+/**
  * Dynamically allocate and create a basic type
 */
 generic_type_t* create_basic_type(char* type_name, ollie_token_t basic_type, mutability_type_t mutability);
