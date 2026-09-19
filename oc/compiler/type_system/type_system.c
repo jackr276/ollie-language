@@ -461,6 +461,72 @@ u_int8_t function_signatures_equivalent(generic_type_t* a, generic_type_t* b){
 
 
 /**
+ * Are two types identical ignoring their mutability? We use this specifically for our inlining
+ * rule on parameter types that are not arrays and pointers because the mutability is not a big enough
+ * difference to matter
+ */
+static inline u_int8_t types_identical_ignore_mutability(generic_type_t* a, generic_type_t* b){
+	//Let's first dealias both types
+	generic_type_t* true_type_a = dealias_type(a);
+	generic_type_t* true_type_b = dealias_type(b);
+
+	//Unequal type classes is an automatic false
+	if(true_type_a->type_class != true_type_b->type_class){
+		return FALSE;
+	}
+
+	//Special rules based on type class
+	switch(true_type_a->type_class){
+		/**
+		 * Function signatures are a different story
+		 */
+		case TYPE_CLASS_FUNCTION_SIGNATURE:
+			return function_signatures_equivalent(a, b);
+
+			
+
+	}
+
+
+		/**
+		 * This is a simpler case - constructs can only be assigned
+		 * if they're the exact same. We do not need to worry about
+		 * mutability here because struct assignment is always a copy,
+		 * so the destination won't be the same as the source anyway
+		 */
+		case TYPE_CLASS_STRUCT:
+			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
+				return destination_type;
+			}
+
+			return NULL;
+
+		/**
+		 * The same goes for a union type. They are assignable if they are the exact same. Mutability
+		 * also does not matter because this is always a direct copy
+		 */
+		case TYPE_CLASS_UNION:
+			if(strcmp(destination_type->type_name.string, true_source_type->type_name.string) == 0){
+				return destination_type;
+			}
+
+			return NULL;
+
+
+	/**
+	 * We may eventually elaborate more on this, but for right now, it is
+	 * sufficient to just compare the raw pointers to see if they're
+	 * equal or not
+	 */
+	if(true_type_a->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
+		return true_type_a == true_type_b ? TRUE : FALSE;
+	} else {
+		return function_signatures_equivalent(a, b);
+	}
+}
+
+
+/**
  * Are these two functions different enough to actually overload? Remember that in order to actually
  * overload a function, we need to have *at least one parameter in one spot be of a different type*
  *
@@ -481,12 +547,32 @@ u_int8_t do_function_signatures_differ_enough_to_overload(generic_type_t* a, gen
 		generic_type_t* a_param = dynamic_array_get_at(&(a_function_type->function_parameters), i);
 		generic_type_t* b_param = dynamic_array_get_at(&(b_function_type->function_parameters), i);
 
-		//TODO WE NEED TO IGNORE MUTABILITY
+		//There are special comparison rules based on type
+		u_int8_t result = FALSE;
+		switch(a_param->type_class){
+			/**
+			 * For array and pointer types, mutability actually is enough
+			 * to determine a difference because these are passed by reference
+			 * and a mutable one could result in outside mutation/side effects
+			 */
+			case TYPE_CLASS_POINTER:
+			case TYPE_CLASS_ARRAY:
+				result = types_identical(a_param, b_param);
+				break;
+
+			/**
+			 * Everything else is not though, so we need to
+			 * use a special rule that ignores all mutability
+			 */
+			default:
+				result = types_identical_ignore_mutability(a_param, b_param);
+				break;
+		}
 
 		/**
 		 * If we have at least one mismatch then we can overload just fine
 		 */
-		if(types_identical(a_param, b_param) == FALSE){
+		if(result == FALSE){
 			return TRUE;
 		}
 	}
