@@ -862,6 +862,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
 
 			//Will be null if we have a failure
+			// TODO DONT THINK WE NEED THIS ALLJkdd
 			if(final_type == NULL){
 				generate_types_assignable_failure_message(info, initializer_node->inferred_type, target_type);
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
@@ -878,6 +879,8 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
  * Can a given source node be assigned to a destination type? This logic changes based on whether or not
  * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
  * relying on types_assignable in the type system
+ *
+ * TODO SHOULD WE PUT THE FAILURE MESSAGES IN HERE??
  */
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
 	switch(source_node->ast_node_type){
@@ -13125,6 +13128,11 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 * for recursive validation, so that we can handle recursive initialization
 	 */
 	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(type_spec, initializer_node);
+	//TODO WE'RE GOING TO BREAK THE ERROR OUT TO BE IN THIS RULE ABOVE
+	//If the return type is NULL, we fail out here
+	if(return_type == NULL){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
 	/**
 	 * For static and global variables, we cannot initialize to anything
@@ -13135,11 +13143,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		if(is_intializer_node_all_constant(initializer_node) == FALSE){
 			return print_and_return_error("Initializer contains one or more values that are not compile-time constants", parser_line_num);
 		}
-	}
-
-	//If the return type is NULL, we fail out here
-	if(return_type == NULL){
-		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
