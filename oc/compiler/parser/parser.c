@@ -862,10 +862,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
 
 			//Will be null if we have a failure
-			// TODO DONT THINK WE NEED THIS ALLJkdd
 			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, initializer_node->inferred_type, target_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				return NULL;
 			}
 			
@@ -902,7 +899,16 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 			switch(source_node->constant_type){
 				case STR_CONST:
 				case REL_ADDRESS_CONST: {
-					return types_assignable(destination_type, source_node->inferred_type);
+					//Get the type out
+					generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
+
+					//Fail out with the types_assignable error
+					if(final_type == NULL){
+						generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+						return print_and_return_null(info, parser_line_num);
+					}
+
+					return final_type;
 				}
 
 				/**
@@ -950,9 +956,10 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 					 */
 					generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
-					//If it failed then just leave now
+					//If it failed then just leave now with the generated error message
 					if(result_type == NULL){
-						return NULL;
+						generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+						return print_and_return_null(info, parser_line_num);
 					}
 
 					/**
@@ -2088,10 +2095,6 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 			//If this is null, it means that our check failed
 			if(final_type == NULL){
-				//Let's first generate the types_assignable failure message
-				generate_types_assignable_failure_message(info, elaborated_param->inferred_type, type_being_elaborated);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 				//Following that we'll generate another error message to make it more clear
 				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
 						(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
@@ -2591,9 +2594,6 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 				sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 						function_name->string,
 						function_signature->type_name.string,
@@ -2665,9 +2665,6 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
 								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 								type_being_elaborated->type_name.string,
@@ -2935,9 +2932,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 						function_signature->type_name.string,
 						(parameter_type->mutability == MUTABLE ? "mut ": ""),
@@ -3008,9 +3002,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
 								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 								type_being_elaborated->type_name.string,
@@ -4044,9 +4035,7 @@ loop_end:
 
 		//If they're not, we fail here
 		if(final_type == NULL){
-			//Let the helper generate
-			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
-			return print_and_return_error(info, parser_line_num);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		/**
@@ -4133,8 +4122,7 @@ loop_end:
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
-			return print_and_return_error(info, parser_line_num);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//We'll also want to create a complete, distinct copy of the subtree here
