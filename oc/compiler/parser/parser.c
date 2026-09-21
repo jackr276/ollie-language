@@ -718,6 +718,8 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
  *
  * Returns an error node if bad. If good, we return a string initializer node with the string constant
  * node as its child
+ *
+ * TODO CLEANUP THIS IS A MESS
  */
 static generic_ast_node_t* validate_and_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
 	//Let's first validate that this array actually is a char[]
@@ -4033,7 +4035,6 @@ loop_end:
 
 	//Let's now see if we have compatible types
 	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
-	generic_type_t* right_hand_type = expr->inferred_type;
 
 	//What is our final type?
 	generic_type_t* final_type = NULL;
@@ -4054,7 +4055,7 @@ loop_end:
 		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
 		 * doing an address calculation.
 		 */
-		if(is_copy_assignment_required(left_hand_type, right_hand_type) == TRUE){
+		if(is_copy_assignment_required(left_hand_type, expr->inferred_type) == TRUE){
 			/**
 			 * If the left hand unary is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 
@@ -4103,13 +4104,19 @@ loop_end:
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name.string, operator_token_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s",
+					left_hand_type->type_name.string,
+					operator_token_to_string(assignment_operator));
+
 			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Let's also see if the right hand type is valid
-		if(is_binary_operation_valid_for_type(right_hand_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name.string, operator_token_to_string(assignment_operator));
+		if(is_binary_operation_valid_for_type(expr->inferred_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
+			sprintf(info, "Type %s is invalid for operation %s",
+					expr->inferred_type->type_name.string,
+					operator_token_to_string(assignment_operator));
+
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -4146,7 +4153,11 @@ loop_end:
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_token_to_string(assignment_operator));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					left_hand_duplicate->inferred_type->type_name.string,
+					expr->inferred_type->type_name.string,
+					operator_token_to_string(assignment_operator));
+
 			return print_and_return_error(info, parser_line_num);
 		}
 

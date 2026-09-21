@@ -3428,6 +3428,12 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent);
 
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+
 		//By default, we're emitting some kind of expression here
 		default:
 			return emit_expression(basic_block, primary_parent);
