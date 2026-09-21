@@ -865,12 +865,35 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		 */
 		case AST_NODE_TYPE_CONSTANT:{
 			switch(source_node->constant_type){
-				case STR_CONST:
-				case REL_ADDRESS_CONST: {
-					//Get the type out
-					generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
+				/**
+				 * String constants are a bit special. This may very well be an initializer
+				 * if we're trying to assign it to an array type, so we'll need to check for
+				 * that
+				 */
+				case STR_CONST: {
+					/**
+					 * If the target type is not an array then we'll process this normally. However
+					 * if the target type is an array we likely have an initializer here, so we'll
+					 * handle it with the initializer helper
+					 */
+					if(destination_type->type_class != TYPE_CLASS_ARRAY){
+						//Call out to the helper
+						generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
+						if(final_type == NULL){
+							generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+							return print_and_return_null(info, parser_line_num);
+						}
 
-					//Fail out with the types_assignable error
+						return final_type;
+
+					} else {
+						return validate_initializer_types(destination_type, source_node);
+					}
+				}
+
+				case REL_ADDRESS_CONST: {
+					//Call out to the helper
+					generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
 					if(final_type == NULL){
 						generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
 						return print_and_return_null(info, parser_line_num);
