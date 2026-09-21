@@ -548,16 +548,13 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 		return;
 	}
 
-	generic_ast_node_t* ternary_cursor;
-
 	switch(node->ast_node_type){
 		/**
 		 * For a ternary expression we need to flag the left and right children
 		 * as not requiring any kind of dereference
 		 */
-		case AST_NODE_TYPE_TERNARY_EXPRESSION:
-			//First we have the expression
-			ternary_cursor = node->first_child;
+		case AST_NODE_TYPE_TERNARY_EXPRESSION: {
+			generic_ast_node_t* ternary_cursor = node->first_child;
 
 			//Then the left child which we flag first
 			ternary_cursor = ternary_cursor->next_sibling;
@@ -572,14 +569,16 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 			propogate_no_dereference_required_flag(ternary_cursor);
 
 			return;
+		}
 
 		/**
 		 * Flag here that we do not need a dereference on the 
 		 * postfix expression if we have one
 		 */
-		case AST_NODE_TYPE_POSTFIX_EXPR:
+		case AST_NODE_TYPE_POSTFIX_EXPR: {
 			node->dereference_needed = FALSE;
 			return;
+		}
 
 		//Whatever this is we aren't interested
 		default:
@@ -876,13 +875,14 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
  * Can a given source node be assigned to a destination type? This logic changes based on whether or not
  * the given source node is or is not a constant, which is why we have this special rule instead of exclusively
  * relying on types_assignable in the type system
- *
- * TODO SHOULD WE PUT THE FAILURE MESSAGES IN HERE??
  */
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
 	switch(source_node->ast_node_type){
 		/**
 		 * Initializer nodes require special validations using the initializer list
+		 *
+		 * Unlike the other values, this is the only case where we will not generate
+		 * any special failure message if we get here
 		 */
 		case AST_NODE_TYPE_STRING_INITIALIZER:
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
@@ -1002,6 +1002,16 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		 */
 		default: {
 			return types_assignable(destination_type, source_node->inferred_type);
+			//First let this rule handle it
+			generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
+
+			//If we have a failure then generate the error message
+			if(final_type == NULL){
+				generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+				return print_and_return_null(info, parser_line_num);
+			}
+
+			return final_type;
 		}
 	}
 }
@@ -7360,6 +7370,9 @@ static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
  * Is the given constant node eligible for the in statement comparator type? This is slightly different than
  * the other rules because we know that we will always have a constant, and there are some unique restrictions
  * here like us not being able to mix floats and enums 
+ *
+ *
+ * TODO UPDATE ALL THIS
  */
 static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* in_comparator_type, generic_ast_node_t* constant_node){
 	//Needed local variables
