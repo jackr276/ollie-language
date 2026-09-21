@@ -931,11 +931,16 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 						}
 					}
 
-					//If this is still Null we found nothign
+					//If this is still Null we found nothing
 					if(found_record == NULL){
+						//First print out this error
 						sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
 										original_record->func_name.string,
 										destination_type->type_name.string);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+						//Then the generic one we always have
+						generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
 						return print_and_return_null(info, parser_line_num);
 					}
 
@@ -970,8 +975,13 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 					 */
 					if(is_enum_type(destination_type) == TRUE){
 						if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+							//First print out this failure
 							sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
 										destination_type->type_name.string, source_node->constant_value.signed_int_value);
+							print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+							//Then the types assignable failure
+							generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
 							return print_and_return_null(info, parser_line_num);
 						}
 					} 
@@ -1001,7 +1011,6 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 		 * If this is not a constant or initializer then use the regular rules to get this done
 		 */
 		default: {
-			return types_assignable(destination_type, source_node->inferred_type);
 			//First let this rule handle it
 			generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
 
