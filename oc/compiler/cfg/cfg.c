@@ -11368,6 +11368,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 	switch(initializer->ast_node_type){
 		//Array init list - goes to the helper
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			printf("HERE\n\n");
 			//Initialized to an array
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
 
@@ -11381,6 +11382,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 		
 		//Should be our most common case - we just have a constant
 		case AST_NODE_TYPE_CONSTANT:
+			printf("HERE\n\n");
 			//Initialized to a constant
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
 
@@ -11391,6 +11393,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 		//Let the helper take over with this one as well
 		case AST_NODE_TYPE_STRING_INITIALIZER:
+			printf("HERE\n\n");
 			//This is a special kind of constant
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
 
@@ -11400,6 +11403,7 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			printf("HERE\n\n");
 			//Initialized to a struct
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRUCT;
 

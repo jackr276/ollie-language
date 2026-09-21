@@ -13133,7 +13133,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 */
 	if(membership == STATIC_VARIABLE || membership == GLOBAL_VARIABLE){
 		if(is_intializer_node_all_constant(initializer_node) == FALSE){
-			return print_and_return_null("Initializer contains one or more values that are not compile-time constants", parser_line_num);
+			return print_and_return_error("Initializer contains one or more values that are not compile-time constants", parser_line_num);
 		}
 	}
 
