@@ -871,106 +871,118 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
  * relying on types_assignable in the type system
  */
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
-	/**
-	 * If this is not a constant then use the regular rules to get this done
-	 */
-	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-		return types_assignable(destination_type, source_node->inferred_type);
+	switch(source_node->ast_node_type){
+		/**
+		 * Initializer nodes require special validations using the initializer list
+		 */
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:{
+			return validate_initializer_types(destination_type, source_node);
+		}
 
-	/**
-	 * Otherwise it is a constant. We will need to do processing based on what
-	 * kind of constant we have. Certain constants will require more work/different
-	 * treatment as compared to others
-	 */
-	} else {
-		switch(source_node->constant_type){
-			case STR_CONST:
-			case REL_ADDRESS_CONST: {
-				return types_assignable(destination_type, source_node->inferred_type);
-			}
+		/**
+		 * Otherwise it is a constant. We will need to do processing based on what
+		 * kind of constant we have. Certain constants will require more work/different
+		 * treatment as compared to others
+		 */
+		case AST_NODE_TYPE_CONSTANT:{
+			switch(source_node->constant_type){
+				case STR_CONST:
+				case REL_ADDRESS_CONST: {
+					return types_assignable(destination_type, source_node->inferred_type);
+				}
 
-			/**
-			 * Function constants need to account for overloading. It's not as simple as
-			 * just taking the function record and doing a types_assignable check on it
-			 */
-			case FUNC_CONST: {
-				//Grab the original record out and make room for the found record
-				symtab_function_record_t* original_record = source_node->func_record;
-				symtab_function_record_t* found_record = NULL;
+				/**
+				 * Function constants need to account for overloading. It's not as simple as
+				 * just taking the function record and doing a types_assignable check on it
+				 */
+				case FUNC_CONST: {
+					//Grab the original record out and make room for the found record
+					symtab_function_record_t* original_record = source_node->func_record;
+					symtab_function_record_t* found_record = NULL;
 
-				//Run through all records until we have a match
-				for(int32_t i = 0; i < original_record->overload_table.current_index; i++){
-					symtab_function_record_t* candidate = dynamic_array_get_at(&(original_record->overload_table), i);
+					//Run through all records until we have a match
+					for(int32_t i = 0; i < original_record->overload_table.current_index; i++){
+						symtab_function_record_t* candidate = dynamic_array_get_at(&(original_record->overload_table), i);
 
-					//As soon as we find a match we are done
-					if(types_assignable(destination_type, candidate->signature) != NULL){
-						found_record = candidate;
-						break;
+						//As soon as we find a match we are done
+						if(types_assignable(destination_type, candidate->signature) != NULL){
+							found_record = candidate;
+							break;
+						}
 					}
-				}
 
-				//If this is still Null we found nothign
-				if(found_record == NULL){
-					sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
-									original_record->func_name.string,
-									destination_type->type_name.string);
-					return print_and_return_null(info, parser_line_num);
-				}
-
-				/**
-				 * Otherwise we did find it. We will need to retroactively update this
-				 * node with the correct info and type
-				 */
-				source_node->func_record = found_record;
-				source_node->inferred_type = destination_type;
-
-				return destination_type;
-			}
-
-			default: {
-				/**
-				 * Let types_assignable run. We will need the types to all be original here in order for this
-				 * to work properly
-				 */
-				generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
-
-				//If it failed then just leave now
-				if(result_type == NULL){
-					return NULL;
-				}
-
-				/**
-				 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
-				 * correlates to it properly. If we are trying to assign a constant value that is not in
-				 * the enum's range of valid values, that would cause issues down the line and we will
-				 * not allow it
-				 */
-				if(is_enum_type(destination_type) == TRUE){
-					if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
-						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-									destination_type->type_name.string, source_node->constant_value.signed_int_value);
+					//If this is still Null we found nothign
+					if(found_record == NULL){
+						sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
+										original_record->func_name.string,
+										destination_type->type_name.string);
 						return print_and_return_null(info, parser_line_num);
 					}
-				} 
 
-				/**
-				 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
-				 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
-				 * but has different rules inside of Ollie
-				 */
-				if(result_type->type_class == TYPE_CLASS_POINTER){
-					result_type = immut_u64;
+					/**
+					 * Otherwise we did find it. We will need to retroactively update this
+					 * node with the correct info and type
+					 */
+					source_node->func_record = found_record;
+					source_node->inferred_type = destination_type;
+
+					return destination_type;
 				}
 
-				//Reassign the constant's type at this point
-				source_node->inferred_type = result_type;
+				default: {
+					/**
+					 * Let types_assignable run. We will need the types to all be original here in order for this
+					 * to work properly
+					 */
+					generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
 
-				//While we're here we will coerce the constant itself
-				coerce_constant(source_node);
+					//If it failed then just leave now
+					if(result_type == NULL){
+						return NULL;
+					}
 
-				//Give this back
-				return result_type;
+					/**
+					 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
+					 * correlates to it properly. If we are trying to assign a constant value that is not in
+					 * the enum's range of valid values, that would cause issues down the line and we will
+					 * not allow it
+					 */
+					if(is_enum_type(destination_type) == TRUE){
+						if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+							sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+										destination_type->type_name.string, source_node->constant_value.signed_int_value);
+							return print_and_return_null(info, parser_line_num);
+						}
+					} 
+
+					/**
+					 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
+					 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
+					 * but has different rules inside of Ollie
+					 */
+					if(result_type->type_class == TYPE_CLASS_POINTER){
+						result_type = immut_u64;
+					}
+
+					//Reassign the constant's type at this point
+					source_node->inferred_type = result_type;
+
+					//While we're here we will coerce the constant itself
+					coerce_constant(source_node);
+
+					//Give this back
+					return result_type;
+				}
 			}
+		}
+
+		/**
+		 * If this is not a constant or initializer then use the regular rules to get this done
+		 */
+		default: {
+			return types_assignable(destination_type, source_node->inferred_type);
 		}
 	}
 }
@@ -13093,10 +13105,10 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	/**
 	 * Store the return type here after we do all needed validations. This rule allows 
 	 * for recursive validation, so that we can handle recursive initialization
-	 *
-	 * TODO THIS SHOULD BE BROKEN OUT
 	 */
-	generic_type_t* return_type = validate_initializer_types(type_spec, initializer_node, membership);
+	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(type_spec, initializer_node);
+
+	//TODO ALL ADDITIONAL CHECKS NEEDED HERE FOR MEMBERSHIP
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
