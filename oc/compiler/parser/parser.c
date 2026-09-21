@@ -142,9 +142,10 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
 static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
 static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
+static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
-static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
 static inline u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
@@ -540,6 +541,326 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 		//Whatever this is we aren't interested
 		default:
 			return;
+	}
+}
+
+
+/**
+ * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
+ */
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
+	//Grab the member type here out as well
+	generic_type_t* member_type = array_type->internal_types.member_type;
+
+	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
+	u_int32_t num_members = array_type->internal_values.num_members;
+
+	//Let's also keep a record of the number of members that we've seen in total
+	u_int32_t initializer_list_members = 0;
+
+	//Grab a cursor to iterate over the children of the initializer list
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+
+	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
+	//to the given array type
+	while(cursor != NULL){
+		//We'll use the same top level initialization check for this rule as well
+		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
+
+		//If these fail, then we're done here. No need for an error message, they'll have already been printed
+		if(final_type == NULL){
+			return FALSE;
+		}
+
+		//Increment the member count by 1
+		initializer_list_members++;
+
+		//Push this up to the next sibling
+		cursor = cursor->next_sibling;
+	}
+
+	/**
+	 * The final check down here has 2 options:
+	 * 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
+	 * 2.) The length was set, in which case, we validate the length here
+	 */
+	if(num_members != 0){
+		//Validate that they match here
+		if(num_members != initializer_list_members){
+			sprintf(info, "Attempt to assign %d members to an array of size %d", initializer_list_members, num_members);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
+			return FALSE;
+		}
+	//Otherwise, we'll need to set the number of members accordingly here
+	} else {
+		array_type->internal_values.num_members = initializer_list_members;
+
+		//Reup the acutal size here
+		array_type->type_size = initializer_list_members * array_type->internal_types.member_type->type_size;
+
+		//Flag that this is now a complete type
+		array_type->type_complete = TRUE;
+	}
+
+	//If we make it here, then we can set the type of the initializer list to match the array
+	initializer_list_node->inferred_type = array_type;
+
+	//If we made it here, then we know that we're good
+	return TRUE;
+}
+
+
+/**
+ * Struct initializers, unlike array intializers, only have one way of working. The user needs to properly define all of the
+ * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
+ * up
+ */
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
+	//We'll need to extract the struct table and that max index that it holds
+	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
+
+	//The number of fields that were defined in the type is here
+	u_int32_t num_fields = struct_table.current_index;
+
+	//Initialize a cursor to the initializer list node itself
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+
+	//Keep a count of how many fields we've seen
+	u_int32_t seen_count = 0;
+
+	//Run through every node in here
+	while(cursor != NULL){
+		//If we exceed the number of fields given, we error out
+		if(seen_count > num_fields){
+			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_count);
+			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
+			return FALSE;
+		}
+
+		//Grab the variable out
+		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
+
+		//Recursively call the initializer processor rule. This allows us to handle nested initializations
+		generic_type_t* final_type = validate_initializer_types(variable->type_defined_as, cursor, membership);
+
+		//Let's check to see if the types are assignable
+		if(final_type == NULL){
+			return FALSE;
+		}
+
+		//Increment this counter
+		seen_count++;
+
+		//Advance to the next sibling
+		cursor = cursor->next_sibling;
+	}
+
+	//One final validation - we need to check if the field counts match
+	if(num_fields != seen_count){
+		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_count);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
+		return FALSE;
+	}
+
+	//Set the struct type here accordingly
+	initializer_list_node->inferred_type = struct_type; 
+
+	//If we made it here, then we know that we're good
+	return TRUE;
+}
+
+
+/**
+ * There are two options that we could see for a string initializer:
+ *
+ * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
+ * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
+ *
+ * Returns an error node if bad. If good, we return a string initializer node with the string constant
+ * node as its child
+ */
+static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
+	//Let's first validate that this array actually is a char[]
+	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
+		//Print out the full error message
+		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
+
+		//Fail out here
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	//Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
+	//we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant
+	
+	//A dynamic string stores a string lenght, it does not account for the null terminator. As such, we'll need to have the null terminator
+	//accounted for by adding 1 to it
+	u_int32_t length = string_constant->string_value.current_length + 1;
+	
+	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
+	//lenght of the array to be whatever we have in here
+	if(array_type->internal_values.num_members == 0){
+		//Set the number of members
+		array_type->internal_values.num_members = length;
+
+		//Since these are all chars, the size of the array is just the length
+		array_type->type_size = length;
+	} else {
+		//If these are different, then we fail out
+		if(array_type->internal_values.num_members != length){
+			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array_type->internal_values.num_members, length);
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		//Otherwise we're all set
+	}
+
+	//Reassign the class here from a constant to a string initializer
+	string_constant->ast_node_type = AST_NODE_TYPE_STRING_INITIALIZER;
+
+	//Reassign the type to match what was sent in
+	string_constant->inferred_type = array_type;
+
+	//And give this node back
+	return string_constant;
+}
+
+
+/**
+ * Top level initializer value for type validation
+ */
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
+	//Dealias this just to be safe
+	target_type = dealias_type(target_type);
+
+	//By default, we assume we will fail. The validation step will need to prove us wrong
+	u_int8_t validation_succeeded = FALSE;
+
+	//Based on what the class of this initializer node is, there are several different
+	//paths that we can take
+	switch(initializer_node->ast_node_type){
+		//If it's in error itself, we just leave
+		case AST_NODE_TYPE_ERR_NODE:
+			//Throw an error here
+			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid expression given as intializer", parser_line_num);
+			//Return null to mean failure
+			return NULL;
+
+		//An array initializer list has a special checking function
+		//that we must use
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
+			if(target_type->type_class != TYPE_CLASS_ARRAY){
+				sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				//Null signifies failure
+				return NULL;
+			}
+
+			//Run the validation step for the intializer list
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, membership);
+
+			//If this didn't work we fail out
+			if(validation_succeeded == FALSE){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid array intializer given", initializer_node->line_number);
+				return NULL;
+			}
+
+			//Give back the return type
+			return target_type;
+			
+		//A struct initializer list also has it's own special checking function that we must use
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
+			if(target_type->type_class != TYPE_CLASS_STRUCT){
+				sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", target_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				//Null signifies failure
+				return NULL;
+			}
+
+			//Run the validation step for a struct
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, membership);
+
+			//If this didn't work we fail out
+			if(validation_succeeded == FALSE){
+				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
+				return NULL;
+			}
+
+			//Give back the return type
+			return target_type;
+			
+		//Otherwise we'll just take the standard path
+		default:
+			/**
+			 * If we have a string constant, there's a chance that we could be seeing a string
+			 * initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
+			 * the helper deal with it
+			 */
+			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
+				&& initializer_node->constant_type == STR_CONST
+				&& target_type->type_class == TYPE_CLASS_ARRAY){
+				
+				//Dynamically set the initializer node here in the helper function
+				initializer_node = validate_or_set_bounds_for_string_initializer(target_type, initializer_node);
+
+				//If it's an error, we need to fail out now
+				if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					//Throw it up the chain by return null
+					return NULL;
+				}
+
+				/**
+				 * Otherwise we'll just break out. The initializer node will have been properly
+				 * set by the function above
+				 */
+				return target_type;
+			}
+
+			/**
+			 * For static and global variables, we cannot initialize to anything
+			 * that is not a constant. Failure to enforce this will lead
+			 * to invalid assembly so we check here
+			 */
+			switch(membership){
+				case STATIC_VARIABLE:
+				case GLOBAL_VARIABLE:
+					//Not a constant is invalid
+					if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+						print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
+						num_errors++;
+						return NULL;
+					}
+					
+					break;
+
+				default:
+					break;
+			}
+
+			/**
+			 * If we somehow get here and we have either an array type
+			 * this is incorrect. This type can only be initialized using
+			 * the initializer strategy
+			 */
+			if(target_type->type_class == TYPE_CLASS_ARRAY){
+				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				return NULL;
+			}
+
+			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
+
+			//Will be null if we have a failure
+			if(final_type == NULL){
+				generate_types_assignable_failure_message(info, initializer_node->inferred_type, target_type);
+				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+				return NULL;
+			}
+			
+			//Give back the return type
+			return final_type;
 	}
 }
 
@@ -12619,326 +12940,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//All declarations return a node, but most of them won't ever show up in the CFG
 	return declaration_node;
-}
-
-
-/**
- * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
- */
-static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
-	//Grab the member type here out as well
-	generic_type_t* member_type = array_type->internal_types.member_type;
-
-	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
-	u_int32_t num_members = array_type->internal_values.num_members;
-
-	//Let's also keep a record of the number of members that we've seen in total
-	u_int32_t initializer_list_members = 0;
-
-	//Grab a cursor to iterate over the children of the initializer list
-	generic_ast_node_t* cursor = initializer_list_node->first_child;
-
-	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
-	//to the given array type
-	while(cursor != NULL){
-		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
-
-		//If these fail, then we're done here. No need for an error message, they'll have already been printed
-		if(final_type == NULL){
-			return FALSE;
-		}
-
-		//Increment the member count by 1
-		initializer_list_members++;
-
-		//Push this up to the next sibling
-		cursor = cursor->next_sibling;
-	}
-
-	/**
-	 * The final check down here has 2 options:
-	 * 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
-	 * 2.) The length was set, in which case, we validate the length here
-	 */
-	if(num_members != 0){
-		//Validate that they match here
-		if(num_members != initializer_list_members){
-			sprintf(info, "Attempt to assign %d members to an array of size %d", initializer_list_members, num_members);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-			return FALSE;
-		}
-	//Otherwise, we'll need to set the number of members accordingly here
-	} else {
-		array_type->internal_values.num_members = initializer_list_members;
-
-		//Reup the acutal size here
-		array_type->type_size = initializer_list_members * array_type->internal_types.member_type->type_size;
-
-		//Flag that this is now a complete type
-		array_type->type_complete = TRUE;
-	}
-
-	//If we make it here, then we can set the type of the initializer list to match the array
-	initializer_list_node->inferred_type = array_type;
-
-	//If we made it here, then we know that we're good
-	return TRUE;
-}
-
-
-/**
- * Struct initializers, unlike array intializers, only have one way of working. The user needs to properly define all of the
- * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
- * up
- */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
-	//We'll need to extract the struct table and that max index that it holds
-	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
-
-	//The number of fields that were defined in the type is here
-	u_int32_t num_fields = struct_table.current_index;
-
-	//Initialize a cursor to the initializer list node itself
-	generic_ast_node_t* cursor = initializer_list_node->first_child;
-
-	//Keep a count of how many fields we've seen
-	u_int32_t seen_count = 0;
-
-	//Run through every node in here
-	while(cursor != NULL){
-		//If we exceed the number of fields given, we error out
-		if(seen_count > num_fields){
-			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-			return FALSE;
-		}
-
-		//Grab the variable out
-		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
-
-		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_initializer_types(variable->type_defined_as, cursor, membership);
-
-		//Let's check to see if the types are assignable
-		if(final_type == NULL){
-			return FALSE;
-		}
-
-		//Increment this counter
-		seen_count++;
-
-		//Advance to the next sibling
-		cursor = cursor->next_sibling;
-	}
-
-	//One final validation - we need to check if the field counts match
-	if(num_fields != seen_count){
-		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-		return FALSE;
-	}
-
-	//Set the struct type here accordingly
-	initializer_list_node->inferred_type = struct_type; 
-
-	//If we made it here, then we know that we're good
-	return TRUE;
-}
-
-
-/**
- * There are two options that we could see for a string initializer:
- *
- * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
- * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
- *
- * Returns an error node if bad. If good, we return a string initializer node with the string constant
- * node as its child
- */
-static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
-	//Let's first validate that this array actually is a char[]
-	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
-		//Print out the full error message
-		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
-
-		//Fail out here
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
-	//we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant
-	
-	//A dynamic string stores a string lenght, it does not account for the null terminator. As such, we'll need to have the null terminator
-	//accounted for by adding 1 to it
-	u_int32_t length = string_constant->string_value.current_length + 1;
-	
-	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
-	//lenght of the array to be whatever we have in here
-	if(array_type->internal_values.num_members == 0){
-		//Set the number of members
-		array_type->internal_values.num_members = length;
-
-		//Since these are all chars, the size of the array is just the length
-		array_type->type_size = length;
-	} else {
-		//If these are different, then we fail out
-		if(array_type->internal_values.num_members != length){
-			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array_type->internal_values.num_members, length);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Otherwise we're all set
-	}
-
-	//Reassign the class here from a constant to a string initializer
-	string_constant->ast_node_type = AST_NODE_TYPE_STRING_INITIALIZER;
-
-	//Reassign the type to match what was sent in
-	string_constant->inferred_type = array_type;
-
-	//And give this node back
-	return string_constant;
-}
-
-
-/**
- * Top level initializer value for type validation
- */
-static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
-	//Dealias this just to be safe
-	target_type = dealias_type(target_type);
-
-	//By default, we assume we will fail. The validation step will need to prove us wrong
-	u_int8_t validation_succeeded = FALSE;
-
-	//Based on what the class of this initializer node is, there are several different
-	//paths that we can take
-	switch(initializer_node->ast_node_type){
-		//If it's in error itself, we just leave
-		case AST_NODE_TYPE_ERR_NODE:
-			//Throw an error here
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid expression given as intializer", parser_line_num);
-			//Return null to mean failure
-			return NULL;
-
-		//An array initializer list has a special checking function
-		//that we must use
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
-			if(target_type->type_class != TYPE_CLASS_ARRAY){
-				sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Null signifies failure
-				return NULL;
-			}
-
-			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, membership);
-
-			//If this didn't work we fail out
-			if(validation_succeeded == FALSE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid array intializer given", initializer_node->line_number);
-				return NULL;
-			}
-
-			//Give back the return type
-			return target_type;
-			
-		//A struct initializer list also has it's own special checking function that we must use
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
-			if(target_type->type_class != TYPE_CLASS_STRUCT){
-				sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Null signifies failure
-				return NULL;
-			}
-
-			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, membership);
-
-			//If this didn't work we fail out
-			if(validation_succeeded == FALSE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
-				return NULL;
-			}
-
-			//Give back the return type
-			return target_type;
-			
-		//Otherwise we'll just take the standard path
-		default:
-			/**
-			 * If we have a string constant, there's a chance that we could be seeing a string
-			 * initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
-			 * the helper deal with it
-			 */
-			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
-				&& initializer_node->constant_type == STR_CONST
-				&& target_type->type_class == TYPE_CLASS_ARRAY){
-				
-				//Dynamically set the initializer node here in the helper function
-				initializer_node = validate_or_set_bounds_for_string_initializer(target_type, initializer_node);
-
-				//If it's an error, we need to fail out now
-				if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-					//Throw it up the chain by return null
-					return NULL;
-				}
-
-				/**
-				 * Otherwise we'll just break out. The initializer node will have been properly
-				 * set by the function above
-				 */
-				return target_type;
-			}
-
-			/**
-			 * For static and global variables, we cannot initialize to anything
-			 * that is not a constant. Failure to enforce this will lead
-			 * to invalid assembly so we check here
-			 */
-			switch(membership){
-				case STATIC_VARIABLE:
-				case GLOBAL_VARIABLE:
-					//Not a constant is invalid
-					if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-						print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
-						num_errors++;
-						return NULL;
-					}
-					
-					break;
-
-				default:
-					break;
-			}
-
-			/**
-			 * If we somehow get here and we have either an array type
-			 * this is incorrect. This type can only be initialized using
-			 * the initializer strategy
-			 */
-			if(target_type->type_class == TYPE_CLASS_ARRAY){
-				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				return NULL;
-			}
-
-			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
-			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
-
-			//Will be null if we have a failure
-			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, initializer_node->inferred_type, target_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				return NULL;
-			}
-			
-			//Give back the return type
-			return final_type;
-	}
 }
 
 
