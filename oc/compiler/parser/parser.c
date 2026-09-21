@@ -592,44 +592,35 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
 	/**
-	 * The user 
-	 *
-	 * TODO
+	 * The user is trying to initialize a non-array with an array type we hard fail
 	 */
-	if(target_type->type_class != TYPE_CLASS_ARRAY){
-		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Null signifies failure
-		return NULL;
+	if(array_type->type_class != TYPE_CLASS_ARRAY){
+		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", array_type->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
 	}
 
-
-
-
-	//Grab the member type here out as well
+	/**
+	 * Get the member type and expected number of members out
+	 */
 	generic_type_t* member_type = array_type->internal_types.member_type;
-
-	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
 	u_int32_t num_members = array_type->internal_values.num_members;
+	u_int32_t seen_initializer_list_members = 0;
 
-	//Let's also keep a record of the number of members that we've seen in total
-	u_int32_t initializer_list_members = 0;
-
-	//Grab a cursor to iterate over the children of the initializer list
+	/**
+	 * Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
+	 * to the given array type
+	 */
 	generic_ast_node_t* cursor = initializer_list_node->first_child;
-
-	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
-	//to the given array type
 	while(cursor != NULL){
-		//Let the regular assignability rule handle this
-		if(is_ast_node_assignable_to_destination_type(member_type, cursor) == NULL){
+		/**
+		 * Recursively call out to the validator type here to process this
+		 */
+		if(validate_initializer_types(member_type, cursor) == NULL){
 			return FALSE;
 		}
 
-		//Increment the member count by 1
-		initializer_list_members++;
-
-		//Push this up to the next sibling
+		//Increment and push to the next sibling
+		seen_initializer_list_members++;
 		cursor = cursor->next_sibling;
 	}
 
@@ -640,17 +631,15 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	 */
 	if(num_members != 0){
 		//Validate that they match here
-		if(num_members != initializer_list_members){
-			sprintf(info, "Attempt to assign %d members to an array of size %d", initializer_list_members, num_members);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-			return FALSE;
+		if(num_members != seen_initializer_list_members){
+			sprintf(info, "Attempt to assign %d members to an array of size %d", seen_initializer_list_members, num_members);
+			return print_and_return_failure(info, parser_line_num);
 		}
+
 	//Otherwise, we'll need to set the number of members accordingly here
 	} else {
-		array_type->internal_values.num_members = initializer_list_members;
-
-		//Reup the acutal size here
-		array_type->type_size = initializer_list_members * array_type->internal_types.member_type->type_size;
+		array_type->internal_values.num_members = seen_initializer_list_members;
+		array_type->type_size = seen_initializer_list_members * array_type->internal_types.member_type->type_size;
 
 		//Flag that this is now a complete type
 		array_type->type_complete = TRUE;
@@ -658,8 +647,6 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 
 	//If we make it here, then we can set the type of the initializer list to match the array
 	initializer_list_node->inferred_type = array_type;
-
-	//If we made it here, then we know that we're good
 	return TRUE;
 }
 
