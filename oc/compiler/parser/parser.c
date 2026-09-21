@@ -7379,15 +7379,10 @@ static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
  * Is the given constant node eligible for the in statement comparator type? This is slightly different than
  * the other rules because we know that we will always have a constant, and there are some unique restrictions
  * here like us not being able to mix floats and enums 
- *
- *
- * TODO UPDATE ALL THIS
  */
 static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* in_comparator_type, generic_ast_node_t* constant_node){
-	//Needed local variables
-	generic_type_t* result_type;
+	//Extract now for convenience
 	generic_type_t* constant_node_type = constant_node->inferred_type;
-
 
 	switch(in_comparator_type->type_class){
 		/**
@@ -7396,7 +7391,7 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 		 * 	1.) No floats - enum types must be compatible enums or integers
 		 * 	2.) If we have raw constants, then we need to make sure that they are potential values
 		 */
-		case TYPE_CLASS_ENUMERATED:
+		case TYPE_CLASS_ENUMERATED: {
 			/**
 			 * Option 1: Our constant came from an enum.
 			 * If they have the literal exact same enum type, then we're good.
@@ -7409,9 +7404,7 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 					sprintf(info, "Attempt to use separate enum type %s in comparison with enum %s",
 			 						constant_node_type->type_name.string,
 			 						in_comparator_type->type_name.string);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FALSE;
+					return print_and_return_failure(info, parser_line_num);
 				}
 			}
 
@@ -7420,24 +7413,18 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			 * as we don't have a floating point number
 			 */
 			if(IS_FLOATING_POINT(constant_node_type) == TRUE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Floating point values may not be used in in statement with enum comparator", parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure("Floating point values may not be used in in statement with enum comparator", parser_line_num);
 			}
 
 			/**
 			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
 			 */
-			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
-			
-			//Fail out if we get a bad result
+			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
 								constant_node_type->type_name.string,
 								in_comparator_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure(info, parser_line_num);
 			}
 
 			//Once we're done we can assign and coerce our constant here
@@ -7450,43 +7437,36 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			 */
 			if(does_enum_contain_integer_member(in_comparator_type, constant_node->constant_value.signed_int_value) == FALSE){
 				sprintf(info, "Enum type %s contains no member that maps to integer value %d", in_comparator_type->type_name.string, constant_node->constant_value.signed_int_value);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure(info, parser_line_num);
 			}
 
 			//If we survived to here then this worked
 			return TRUE;
+		}
 
 		/**
 		 * For basic types we really just rely on the types_assignable_constant rule
 		 */
-		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_BASIC: {
 			/**
 			 * If our constant node was an enum, we bar it from being compared with floating point
 			 * values
 			 */
 			if(constant_node->optional_storage.enum_type != NULL){
 				if(IS_FLOATING_POINT(in_comparator_type) == TRUE){
-					print_parse_message(MESSAGE_TYPE_ERROR, "Enums may not be used in in statement with floating point comparator", parser_line_num);
-					num_errors++;
-					return FALSE;
+					return print_and_return_failure("Enums may not be used in in statement with floating point comparator", parser_line_num);
 				}
 			}
 
 			/**
 			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
 			 */
-			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
-			
-			//Fail out if we get a bad result
+			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
 								constant_node_type->type_name.string,
 								in_comparator_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure(info, parser_line_num);
 			}
 
 			//Once we're done we can assign and coerce our constant here
@@ -7495,11 +7475,13 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 
 			//If we survived to here then this worked
 			return TRUE;
+		}
 
 		//This should be impossible
-		default:
+		default: {
 			printf("Fatal internal compiler error. Invalid in comparator type detected\n");
 			exit(1);
+		}
 	}
 }
 
