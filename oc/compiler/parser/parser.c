@@ -331,6 +331,49 @@ static inline u_int8_t does_type_require_i64_conversion(generic_type_t* type){
 
 
 /**
+ * Is a given initializer node made up of all constants? This is needed for global
+ * variables and the like
+ *
+ * NOTE: this rule is recursive
+ */
+static u_int8_t is_intializer_node_all_constant(generic_ast_node_t* initializer_node){
+	switch(initializer_node->ast_node_type){
+		/**
+		 * For a struct/array initializer list we'll validate all child nodes recursively
+		 */
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST: {
+			generic_ast_node_t* child_cursor = initializer_node->first_child;
+			while(child_cursor != NULL){
+				//Fail out on the first one
+				if(is_intializer_node_all_constant(child_cursor) == FALSE){
+					return FALSE;
+				}
+
+				child_cursor = child_cursor->next_sibling;
+			}
+
+			return TRUE;
+		}
+
+		/**
+		 * Strings are always constant
+		 */
+		case AST_NODE_TYPE_STRING_INITIALIZER: {
+			return TRUE;
+		}
+
+		/**
+		 * Anything else just check if it's consant or not
+		 */
+		default: {
+			return initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+		}
+	}
+}
+
+
+/**
  * Find a function record by searching the symtab, finding a record, and then searching the overloads
  * array of that record to see if we have a signature match. If we do, we will return that function
  * record. If we do not, then we return NULL
@@ -13089,13 +13132,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 * to invalid assembly so we check here
 	 */
 	if(membership == STATIC_VARIABLE || membership == GLOBAL_VARIABLE){
-		//Not a constant is invalid
-		//TODO NEED SPECIAL RULE
-		if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-			print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
-			num_errors++;
-			return NULL;
-			return pr;
+		if(is_intializer_node_all_constant(initializer_node) == FALSE){
+			return print_and_return_null("Initializer contains one or more values that are not compile-time constants", parser_line_num);
 		}
 	}
 
