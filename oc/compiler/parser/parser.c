@@ -732,13 +732,6 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 	//Based on what the class of this initializer node is, there are several different
 	//paths that we can take
 	switch(initializer_node->ast_node_type){
-		//If it's in error itself, we just leave
-		case AST_NODE_TYPE_ERR_NODE:
-			//Throw an error here
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid expression given as intializer", parser_line_num);
-			//Return null to mean failure
-			return NULL;
-
 		//An array initializer list has a special checking function
 		//that we must use
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
@@ -810,29 +803,6 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				 */
 				return target_type;
 			}
-
-			/**
-			 * For static and global variables, we cannot initialize to anything
-			 * that is not a constant. Failure to enforce this will lead
-			 * to invalid assembly so we check here
-			 *
-			 * TODO BREAK THIS OUT INTO LOCAL AREAS
-			switch(membership){
-				case STATIC_VARIABLE:
-				case GLOBAL_VARIABLE:
-					//Not a constant is invalid
-					if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-						print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
-						num_errors++;
-						return NULL;
-					}
-					
-					break;
-
-				default:
-					break;
-			}
-			 */
 
 			/**
 			 * If we somehow get here and we have either an array type
@@ -7231,131 +7201,6 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 }
 
 
-
-/**
- * An array initializer is a set of one or more initializers in between
- * [], separated by commas
- *
- * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
- *
- * REMEMBER: by the time that we've arrived here, we've already seen and consumed the
- * first [ token
- */
-static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream, side_type_t side){
-	//Lookahead token for parsing
-	lexitem_t lookahead;
-
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	if(lookahead.tok != L_BRACKET){
-		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
-	}
-
-	//Push this onto the grouping stack
-	push_token(&grouping_stack, lookahead);
-
-	//Let's first allocate our initializer node. The initializer node will store
-	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
-
-	//Store the line number
-	initializer_list_node->line_number = parser_line_num;
-
-	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
-	//to process
-	do{
-		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
-
-		//If this is an error, then the whole thing is invalid
-		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid initializer given in array initializer", parser_line_num);
-		}
-
-		//Add this in as a child of the initializer list
-		add_child_node(initializer_list_node, initializer_node);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//So long as we keep seeing commas, we continue
-	} while(lookahead.tok == COMMA);
-
-	//Once we reach down here, we need to check and see if we have the closing bracket that would
-	//mark a valid end for us
-	if(lookahead.tok != R_BRACKET){
-		return print_and_return_error("Closing bracket(]) required at the end of array initializer", parser_line_num);
-	}
-
-	//Pop the grouping stack and ensure it matches
-	if(pop_token(&grouping_stack).tok != L_BRACKET){
-		return print_and_return_error("Unmatched brackets detected in array initializer", parser_line_num);
-	}
-
-	//Give back the intializer list node
-	return initializer_list_node;
-}
-
-
-/**
- * A struct initializer is a set of one or more initializers in between
- * [], separated by commas
- *
- * BNF Rule: <struct-initializer> ::= {<intializer>{, <initializer>}*}
- */
-static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream, side_type_t side){
-	//Lookahead token for parsing
-	lexitem_t lookahead;
-
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	if(lookahead.tok != L_CURLY){
-		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
-	}
-
-	//Push this onto the grouping stack
-	push_token(&grouping_stack, lookahead);
-
-	//Let's first allocate our initializer node. The initializer node will store
-	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
-
-	//Store the line number
-	initializer_list_node->line_number = parser_line_num;
-
-	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
-	//to process
-	do{
-		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
-
-		//If this is an error, then the whole thing is invalid
-		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid initializer given in struct initializer", parser_line_num);
-		}
-
-		//Add this in as a child of the initializer list
-		add_child_node(initializer_list_node, initializer_node);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//So long as we keep seeing commas, we continue
-	} while(lookahead.tok == COMMA);
-
-	//Once we reach down here, we need to check and see if we have the closing bracket that would
-	//mark a valid end for us
-	if(lookahead.tok != R_CURLY){
-		return print_and_return_error("Closing curly brace(}) required at the end of struct initializer", parser_line_num);
-	}
-
-	//Pop the grouping stack and ensure it matches
-	if(pop_token(&grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched brackets detected in struct initializer", parser_line_num);
-	}
-
-	//Give back the intializer list node
-	return initializer_list_node;
-}
-
 /**
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
@@ -7898,6 +7743,136 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 
 
 /**
+ * An array initializer is a set of one or more initializers in between
+ * [], separated by commas
+ *
+ * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
+ *
+ * REMEMBER: by the time that we've arrived here, we've already seen and consumed the
+ * first [ token
+ *
+ * TODO CLEAN THIS UP
+ */
+static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream, side_type_t side){
+	//Lookahead token for parsing
+	lexitem_t lookahead;
+
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_BRACKET){
+		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Let's first allocate our initializer node. The initializer node will store
+	//all of our ternary expressions inside of it as children
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
+
+	//Store the line number
+	initializer_list_node->line_number = parser_line_num;
+
+	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	//to process
+	do{
+		//We now must see an initializer node
+		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
+
+		//If this is an error, then the whole thing is invalid
+		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in array initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//So long as we keep seeing commas, we continue
+	} while(lookahead.tok == COMMA);
+
+	//Once we reach down here, we need to check and see if we have the closing bracket that would
+	//mark a valid end for us
+	if(lookahead.tok != R_BRACKET){
+		return print_and_return_error("Closing bracket(]) required at the end of array initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(&grouping_stack).tok != L_BRACKET){
+		return print_and_return_error("Unmatched brackets detected in array initializer", parser_line_num);
+	}
+
+	//Give back the intializer list node
+	return initializer_list_node;
+}
+
+
+/**
+ * A struct initializer is a set of one or more initializers in between
+ * [], separated by commas
+ *
+ * TODO CLEAN THIS UP
+ *
+ * BNF Rule: <struct-initializer> ::= {<intializer>{, <initializer>}*}
+ */
+static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream, side_type_t side){
+	//Lookahead token for parsing
+	lexitem_t lookahead;
+
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_CURLY){
+		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	//Let's first allocate our initializer node. The initializer node will store
+	//all of our ternary expressions inside of it as children
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
+
+	//Store the line number
+	initializer_list_node->line_number = parser_line_num;
+
+	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	//to process
+	do{
+		//We now must see an initializer node
+		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
+
+		//If this is an error, then the whole thing is invalid
+		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in struct initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	//So long as we keep seeing commas, we continue
+	} while(lookahead.tok == COMMA);
+
+	//Once we reach down here, we need to check and see if we have the closing bracket that would
+	//mark a valid end for us
+	if(lookahead.tok != R_CURLY){
+		return print_and_return_error("Closing curly brace(}) required at the end of struct initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Unmatched brackets detected in struct initializer", parser_line_num);
+	}
+
+	//Give back the intializer list node
+	return initializer_list_node;
+}
+
+
+
+/**
  * An initializer can either decay into an expression chain or it can turn into an initializer of
  * some kind(string or list)
  *
@@ -7908,22 +7883,25 @@ static generic_ast_node_t* initializer_expression(ollie_token_stream_t* token_st
 	
 	switch(lookahead.tok){
 		//A left bracket symbol means that we're encountering an array initializer
-		case L_BRACKET:
+		case L_BRACKET: {
 			push_back_token(token_stream, &parser_line_num);
 			return array_initializer(token_stream, side);
+		}
 
 		//An L_CURLY signifies the start of a struct initializer
-		case L_CURLY:
+		case L_CURLY: {
 			push_back_token(token_stream, &parser_line_num);
 			return struct_initializer(token_stream, side);
+		}
 
 		/**
 		 * By default, we haven't found anything in here that would indicate we'll need an initializer.
 		 * As such, we'll push the token back and call the ternary expression rule
 		 */
-		default:
+		default: {
 			push_back_token(token_stream, &parser_line_num);
 			return in_expression(token_stream, side);
+		}
 	}
 }
 
@@ -13094,6 +13072,10 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 
 	//Now we need to see a valid initializer
 	generic_ast_node_t* initializer_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid expression given as intializer", parser_line_num);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 	
 	/**
 	 * Store the return type here after we do all needed validations. This rule allows 
@@ -13101,7 +13083,21 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 */
 	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(type_spec, initializer_node);
 
-	//TODO ALL ADDITIONAL CHECKS NEEDED HERE FOR MEMBERSHIP
+	/**
+	 * For static and global variables, we cannot initialize to anything
+	 * that is not a constant. Failure to enforce this will lead
+	 * to invalid assembly so we check here
+	 */
+	if(membership == STATIC_VARIABLE || membership == GLOBAL_VARIABLE){
+		//Not a constant is invalid
+		//TODO NEED SPECIAL RULE
+		if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
+			print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
+			num_errors++;
+			return NULL;
+			return pr;
+		}
+	}
 
 	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
