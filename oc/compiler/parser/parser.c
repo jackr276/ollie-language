@@ -591,6 +591,21 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+	/**
+	 * The user 
+	 *
+	 * TODO
+	 */
+	if(target_type->type_class != TYPE_CLASS_ARRAY){
+		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		//Null signifies failure
+		return NULL;
+	}
+
+
+
+
 	//Grab the member type here out as well
 	generic_type_t* member_type = array_type->internal_types.member_type;
 
@@ -655,6 +670,16 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * up
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
+	//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
+	if(target_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", target_type->type_name.string);
+		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+		//Null signifies failure
+		return NULL;
+	}
+
+
+
 	//We'll need to extract the struct table and that max index that it holds
 	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
 
@@ -715,7 +740,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
  * Returns an error node if bad. If good, we return a string initializer node with the string constant
  * node as its child
  */
-static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
+static generic_ast_node_t* validate_and_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
 	//Let's first validate that this array actually is a char[]
 	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
 		//Print out the full error message
@@ -762,7 +787,11 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 
 
 /**
- * Top level initializer value for type validation
+ * Top level initializer value for type validation. Each sub-initializer type has its own rule, and those rules 
+ * will be called out to where appropriate. The exception is the string initializer which is a bit unique, see
+ * more below
+ *
+ * This function will return NULL if a failure occurs
  */
 static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
 	//Dealias this just to be safe
@@ -771,56 +800,26 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 	//By default, we assume we will fail. The validation step will need to prove us wrong
 	u_int8_t validation_succeeded = FALSE;
 
-	//Based on what the class of this initializer node is, there are several different
-	//paths that we can take
 	switch(initializer_node->ast_node_type){
-		//An array initializer list has a special checking function
-		//that we must use
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
-			if(target_type->type_class != TYPE_CLASS_ARRAY){
-				sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Null signifies failure
-				return NULL;
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST: {
+			if(validate_types_for_array_initializer_list(target_type, initializer_node) == FALSE){
+				return print_and_return_null("Invalid array initialzier given", parser_line_num);
 			}
 
-			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node);
-
-			//If this didn't work we fail out
-			if(validation_succeeded == FALSE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid array intializer given", initializer_node->line_number);
-				return NULL;
-			}
-
-			//Give back the return type
+			//Always give back the target type
 			return target_type;
+		}
 			
-		//A struct initializer list also has it's own special checking function that we must use
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
-			if(target_type->type_class != TYPE_CLASS_STRUCT){
-				sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Null signifies failure
-				return NULL;
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST: {
+			if(validate_types_for_struct_initializer_list(target_type, initializer_node) == FALSE){
+				return print_and_return_null("Invalid struct intializer given", initializer_node->line_number);
 			}
 
-			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node);
-
-			//If this didn't work we fail out
-			if(validation_succeeded == FALSE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
-				return NULL;
-			}
-
-			//Give back the return type
+			//Always give back the target type
 			return target_type;
+		}
 			
-		//Otherwise we'll just take the standard path
-		default:
+		default: {
 			/**
 			 * If we have a string constant, there's a chance that we could be seeing a string
 			 * initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
@@ -829,20 +828,15 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
 				&& initializer_node->constant_type == STR_CONST
 				&& target_type->type_class == TYPE_CLASS_ARRAY){
-				
-				//Dynamically set the initializer node here in the helper function
-				initializer_node = validate_or_set_bounds_for_string_initializer(target_type, initializer_node);
-
-				//If it's an error, we need to fail out now
+				/**
+				 * Call out to this helper rule to do all the underlying work for us. If
+				 * this returns successfully the initializer will be 100% correct
+				 */
+				initializer_node = validate_and_set_bounds_for_string_initializer(target_type, initializer_node);
 				if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-					//Throw it up the chain by return null
 					return NULL;
 				}
 
-				/**
-				 * Otherwise we'll just break out. The initializer node will have been properly
-				 * set by the function above
-				 */
 				return target_type;
 			}
 
@@ -851,22 +845,20 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			 * this is incorrect. This type can only be initialized using
 			 * the initializer strategy
 			 */
-			if(target_type->type_class == TYPE_CLASS_ARRAY){
+			if(target_type->type_class == TYPE_CLASS_ARRAY || target_type->type_class == TYPE_CLASS_STRUCT){
 				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				return NULL;
+				return print_and_return_null(info, parser_line_num);
 			}
 
 			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
-
-			//Will be null if we have a failure
 			if(final_type == NULL){
 				return NULL;
 			}
 			
 			//Give back the return type
 			return final_type;
+		}
 	}
 }
 
