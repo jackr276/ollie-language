@@ -1197,7 +1197,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = initializer(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1464,7 +1464,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			push_back_token(token_stream, &parser_line_num);
 
 			//Now we can invoke the helper
-			result_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
+			result_node = initializer(token_stream, SIDE_TYPE_RIGHT);
 
 			//If this fails then we're done
 			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1734,7 +1734,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 		//Forever loop until we hit the R_PAREN
 		do {
 			//Handle the actual parameter
-			generic_ast_node_t* elaborated_param = in_expression(token_stream, side);
+			generic_ast_node_t* elaborated_param = initializer(token_stream, side);
 
 			//It failed so we just get out here
 			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -2095,7 +2095,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		 */
 		while(TRUE){
 			//Invoke the "in_expression" rule to parse this parameter
-			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			generic_ast_node_t* parameter_expression = initializer(token_stream, side);
 			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
@@ -2511,7 +2511,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		 */
 		while(TRUE){
 			//Invoke the "in_expression" rule to parse this parameter
-			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			generic_ast_node_t* parameter_expression = initializer(token_stream, side);
 			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
@@ -3632,7 +3632,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 loop_end:
 	//If whatever our operator here is is not an assignment operator, we can just use the in expression rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
-		return in_expression(token_stream, SIDE_TYPE_RIGHT);
+		return initializer(token_stream, SIDE_TYPE_RIGHT);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -3674,7 +3674,10 @@ loop_end:
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Holder for our expression
+	/**
+	 * Holder for our expression. Note that if we're doing compressed equality
+	 * we can't use anything with initializers
+	 */
 	generic_ast_node_t* expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail case here
@@ -4151,8 +4154,10 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Now we are required to see a valid constant expression representing what
-	//the actual index is.
+	/**
+	 * Now we are required to see a valid constant expression representing what
+	 * the actual index is.
+	 */
 	generic_ast_node_t* expr = in_expression(token_stream, side);
 
 	//If we fail, automatic exit here
@@ -7570,6 +7575,37 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 
 
 /**
+ * An initializer can either decay into an expression chain or it can turn into an initializer of
+ * some kind(string or list)
+ *
+ * BNF Rule: <initializer> ::= <in_expression> | <array_initializer> | <struct_initializer>
+ */
+static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	switch(lookahead.tok){
+		//A left bracket symbol means that we're encountering an array initializer
+		case L_BRACKET:
+			push_back_token(token_stream, &parser_line_num);
+			return array_initializer(token_stream, side);
+
+		//An L_CURLY signifies the start of a struct initializer
+		case L_CURLY:
+			push_back_token(token_stream, &parser_line_num);
+			return struct_initializer(token_stream, side);
+
+		/**
+		 * By default, we haven't found anything in here that would indicate we'll need an initializer.
+		 * As such, we'll push the token back and call the ternary expression rule
+		 */
+		default:
+			push_back_token(token_stream, &parser_line_num);
+			return in_expression(token_stream, side);
+	}
+}
+
+
+/**
  * Handle an anonymous struct declaration. Unlike regular structs, anonymous declarations have *no* name. They are never
  * stored in the symtab either, these are exclusively structs that belong inside of the type system
  *
@@ -10157,7 +10193,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
  * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
  * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
  *
- * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else if statement}* {else-statement}?
+ * BNF Rule: <if-statement> ::= if( <in_expression> ) then <compound-statement> {else if statement}* {else-statement}?
  */
 static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//Lookahead tokens
@@ -10677,8 +10713,10 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
+	/**
+	 * For return statements we could see an intializer or an expression
+	 */
+	generic_ast_node_t* expr_node = initializer(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -12924,43 +12962,12 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
 
 
 /**
- * An initializer can either decay into an expression chain or it can turn into an initializer of
- * some kind(string or list)
- *
- * BNF Rule: <initializer> ::= <in_expression> | <initializer_list>
- */
-static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	switch(lookahead.tok){
-		//A left bracket symbol means that we're encountering an array initializer
-		case L_BRACKET:
-			push_back_token(token_stream, &parser_line_num);
-			return array_initializer(token_stream, side);
-
-		//An L_CURLY signifies the start of a struct initializer
-		case L_CURLY:
-			push_back_token(token_stream, &parser_line_num);
-			return struct_initializer(token_stream, side);
-
-		/**
-		 * By default, we haven't found anything in here that would indicate we'll need an initializer.
-		 * As such, we'll push the token back and call the ternary expression rule
-		 */
-		default:
-			push_back_token(token_stream, &parser_line_num);
-			return in_expression(token_stream, side);
-	}
-}
-
-
-/**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {pub | static}? <identifier> : <type-specifier> := <in_expression>
+ * BNF Rule: <let-statement> ::= let {pub | static}? <identifier> : <type-specifier> := <initializer>
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//Freeze the line number
@@ -13088,6 +13095,8 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	/**
 	 * Store the return type here after we do all needed validations. This rule allows 
 	 * for recursive validation, so that we can handle recursive initialization
+	 *
+	 * TODO THIS SHOULD BE BROKEN OUT
 	 */
 	generic_type_t* return_type = validate_initializer_types(type_spec, initializer_node, membership);
 
