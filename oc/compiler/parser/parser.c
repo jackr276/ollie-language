@@ -3315,6 +3315,8 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
  * 									| typesize(<type-name>)
  * 									| paramcount(<identifier>)
  * 									| <function-call>
+ * 									| <array-initializer>
+ * 									| <struct-initializer>
  */
 static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Grab the next token, we'll multiplex on this
@@ -6915,6 +6917,14 @@ static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream,
 	//Lookahead token for parsing
 	lexitem_t lookahead;
 
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_BRACKET){
+		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
 	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
@@ -6968,6 +6978,14 @@ static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream
 	//Lookahead token for parsing
 	lexitem_t lookahead;
 
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_CURLY){
+		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
 	//Let's first allocate our initializer node. The initializer node will store
 	//all of our ternary expressions inside of it as children
 	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
@@ -7009,43 +7027,6 @@ static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream
 	//Give back the intializer list node
 	return initializer_list_node;
 }
-
-
-/**
- * An initializer can either decay into an expression chain or it can turn into an initializer of
- * some kind(string or list)
- *
- * BNF Rule: <initializer> ::= <in_expression> | <initializer_list>
- */
-static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
-	//Grab the next token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	switch(lookahead.tok){
-		//A left bracket symbol means that we're encountering an array initializer
-		case L_BRACKET:
-			//Push this onto the grouping stack
-			push_token(&grouping_stack, lookahead);
-
-			//Let the helper handle it
-			return array_initializer(token_stream, side);
-
-		//An L_CURLY signifies the start of a struct initializer
-		case L_CURLY:
-			//Push this onto the grouping stack for matching later
-			push_token(&grouping_stack, lookahead);
-
-			//Let the helper handle it
-			return struct_initializer(token_stream, side);
-
-		//By default, we haven't found anything in here that would indicate we'll need an initializer.
-		//As such, we'll push the token back and call the ternary expression rule
-		default:
-			push_back_token(token_stream, &parser_line_num);
-			return in_expression(token_stream, side);
-	}
-}
-
 
 /**
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
@@ -12938,6 +12919,37 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
 			return TRUE;
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * An initializer can either decay into an expression chain or it can turn into an initializer of
+ * some kind(string or list)
+ *
+ * BNF Rule: <initializer> ::= <in_expression> | <initializer_list>
+ */
+static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	switch(lookahead.tok){
+		//A left bracket symbol means that we're encountering an array initializer
+		case L_BRACKET:
+			push_back_token(token_stream, &parser_line_num);
+			return array_initializer(token_stream, side);
+
+		//An L_CURLY signifies the start of a struct initializer
+		case L_CURLY:
+			push_back_token(token_stream, &parser_line_num);
+			return struct_initializer(token_stream, side);
+
+		/**
+		 * By default, we haven't found anything in here that would indicate we'll need an initializer.
+		 * As such, we'll push the token back and call the ternary expression rule
+		 */
+		default:
+			push_back_token(token_stream, &parser_line_num);
+			return in_expression(token_stream, side);
 	}
 }
 
