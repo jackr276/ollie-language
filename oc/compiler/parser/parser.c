@@ -134,7 +134,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
+static generic_ast_node_t* initializer_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
@@ -1197,7 +1197,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = initializer(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1464,7 +1464,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			push_back_token(token_stream, &parser_line_num);
 
 			//Now we can invoke the helper
-			result_node = initializer(token_stream, SIDE_TYPE_RIGHT);
+			result_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 			//If this fails then we're done
 			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1734,7 +1734,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 		//Forever loop until we hit the R_PAREN
 		do {
 			//Handle the actual parameter
-			generic_ast_node_t* elaborated_param = initializer(token_stream, side);
+			generic_ast_node_t* elaborated_param = initializer_expression(token_stream, side);
 
 			//It failed so we just get out here
 			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -2095,7 +2095,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		 */
 		while(TRUE){
 			//Invoke the "in_expression" rule to parse this parameter
-			generic_ast_node_t* parameter_expression = initializer(token_stream, side);
+			generic_ast_node_t* parameter_expression = initializer_expression(token_stream, side);
 			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
@@ -2511,7 +2511,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		 */
 		while(TRUE){
 			//Invoke the "in_expression" rule to parse this parameter
-			generic_ast_node_t* parameter_expression = initializer(token_stream, side);
+			generic_ast_node_t* parameter_expression = initializer_expression(token_stream, side);
 			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
@@ -3632,7 +3632,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 loop_end:
 	//If whatever our operator here is is not an assignment operator, we can just use the in expression rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
-		return initializer(token_stream, SIDE_TYPE_RIGHT);
+		return initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -3674,11 +3674,8 @@ loop_end:
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	/**
-	 * Holder for our expression. Note that if we're doing compressed equality
-	 * we can't use anything with initializers
-	 */
-	generic_ast_node_t* expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
+	//Parse the initializer_expression
+	generic_ast_node_t* expr = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -6941,7 +6938,7 @@ static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream,
 	//to process
 	do{
 		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer(token_stream, side);
+		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
 
 		//If this is an error, then the whole thing is invalid
 		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7002,7 +6999,7 @@ static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream
 	//to process
 	do{
 		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer(token_stream, side);
+		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
 
 		//If this is an error, then the whole thing is invalid
 		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -7580,7 +7577,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
  *
  * BNF Rule: <initializer> ::= <in_expression> | <array_initializer> | <struct_initializer>
  */
-static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
+static generic_ast_node_t* initializer_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	
 	switch(lookahead.tok){
@@ -10716,7 +10713,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	/**
 	 * For return statements we could see an intializer or an expression
 	 */
-	generic_ast_node_t* expr_node = initializer(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -13090,7 +13087,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	}
 
 	//Now we need to see a valid initializer
-	generic_ast_node_t* initializer_node = initializer(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* initializer_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 	
 	/**
 	 * Store the return type here after we do all needed validations. This rule allows 
