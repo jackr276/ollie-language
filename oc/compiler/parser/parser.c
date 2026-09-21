@@ -657,63 +657,55 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * up
  */
 static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
-	//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
-	if(target_type->type_class != TYPE_CLASS_STRUCT){
-		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", target_type->type_name.string);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-		//Null signifies failure
-		return NULL;
+	/**
+	 * What if the user is trying to use an array initializer on a non-array type? If so, this should fail
+	 */
+	if(struct_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", struct_type->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
 	}
 
-
-
-	//We'll need to extract the struct table and that max index that it holds
+	/**
+	 * Extract the struct table and our number of fields expected
+	 */
 	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
-
-	//The number of fields that were defined in the type is here
 	u_int32_t num_fields = struct_table.current_index;
+	u_int32_t seen_fields_count = 0;
 
-	//Initialize a cursor to the initializer list node itself
+	/**
+	 * Run through every child node in the initailizer list
+	 */
 	generic_ast_node_t* cursor = initializer_list_node->first_child;
-
-	//Keep a count of how many fields we've seen
-	u_int32_t seen_count = 0;
-
-	//Run through every node in here
 	while(cursor != NULL){
 		//If we exceed the number of fields given, we error out
-		if(seen_count > num_fields){
-			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
+		if(seen_fields_count > num_fields){
+			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+			return print_and_return_failure(info, parser_line_num);
+		}
+
+		/**
+		 * Recursively call out to the parent validator rule using the variable's type
+		 */
+		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_fields_count);
+		if(validate_initializer_types(variable->type_defined_as, cursor) == NULL){
 			return FALSE;
 		}
 
-		//Grab the variable out
-		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
-
-		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		if(is_ast_node_assignable_to_destination_type(variable->type_defined_as, cursor) == NULL){
-			return FALSE;
-		}
-
-		//Increment this counter
-		seen_count++;
-
-		//Advance to the next sibling
+		/**
+		 * Bump up the cursor and the number of fields we've seen
+		 */
+		seen_fields_count++;
 		cursor = cursor->next_sibling;
 	}
 
 	//One final validation - we need to check if the field counts match
-	if(num_fields != seen_count){
-		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-		return FALSE;
+	if(num_fields != seen_fields_count){
+		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+		return print_and_return_failure(info, parser_line_num);
 	}
 
 	//Set the struct type here accordingly
 	initializer_list_node->inferred_type = struct_type; 
-
-	//If we made it here, then we know that we're good
 	return TRUE;
 }
 
@@ -784,13 +776,10 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
-	//By default, we assume we will fail. The validation step will need to prove us wrong
-	u_int8_t validation_succeeded = FALSE;
-
 	switch(initializer_node->ast_node_type){
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST: {
 			if(validate_types_for_array_initializer_list(target_type, initializer_node) == FALSE){
-				return print_and_return_null("Invalid array initialzier given", parser_line_num);
+				return print_and_return_null("Invalid array initializer given", parser_line_num);
 			}
 
 			//Always give back the target type
