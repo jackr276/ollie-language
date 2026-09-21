@@ -142,7 +142,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
 static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
 static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
-static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
@@ -548,7 +548,7 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 /**
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
-static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
 	//Grab the member type here out as well
 	generic_type_t* member_type = array_type->internal_types.member_type;
 
@@ -564,11 +564,8 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
 	//to the given array type
 	while(cursor != NULL){
-		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
-
-		//If these fail, then we're done here. No need for an error message, they'll have already been printed
-		if(final_type == NULL){
+		//Let the regular assignability rule handle this
+		if(is_ast_node_assignable_to_destination_type(member_type, cursor) == NULL){
 			return FALSE;
 		}
 
@@ -615,7 +612,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
  * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
  * up
  */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
 	//We'll need to extract the struct table and that max index that it holds
 	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
 
@@ -641,10 +638,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
 
 		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_initializer_types(variable->type_defined_as, cursor, membership);
-
-		//Let's check to see if the types are assignable
-		if(final_type == NULL){
+		if(is_ast_node_assignable_to_destination_type(variable->type_defined_as, cursor) == NULL){
 			return FALSE;
 		}
 
@@ -728,7 +722,7 @@ static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic
 /**
  * Top level initializer value for type validation
  */
-static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
 	//Dealias this just to be safe
 	target_type = dealias_type(target_type);
 
@@ -757,7 +751,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, membership);
+			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -779,7 +773,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, membership);
+			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node);
 
 			//If this didn't work we fail out
 			if(validation_succeeded == FALSE){
@@ -821,7 +815,8 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			 * For static and global variables, we cannot initialize to anything
 			 * that is not a constant. Failure to enforce this will lead
 			 * to invalid assembly so we check here
-			 */
+			 *
+			 * TODO BREAK THIS OUT INTO LOCAL AREAS
 			switch(membership){
 				case STATIC_VARIABLE:
 				case GLOBAL_VARIABLE:
@@ -837,6 +832,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 				default:
 					break;
 			}
+			 */
 
 			/**
 			 * If we somehow get here and we have either an array type
@@ -1271,14 +1267,11 @@ static inline u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_n
 		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
 		case AST_NODE_TYPE_UNION_ACCESSOR:
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			break;
+			return TRUE;
 		default:
 			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return value for address operation &", parser_line_num);
 			return FAILURE;
 	}
-
-	//Return true if we made it here
-	return TRUE;
 }
 
 
