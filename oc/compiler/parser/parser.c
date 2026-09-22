@@ -3999,14 +3999,6 @@ loop_end:
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
-	/**
-	 * Sanitize based on the types here. Arrays and references specifically
-	 * cannot be assigned in a traditional sense
-	 */
-	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY){
-		return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
-	}
-
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
@@ -4025,6 +4017,14 @@ loop_end:
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
+	}
+
+	/**
+	 * For array types, we are only able to assign to them if we are using an array initializer 
+	 * expression. Copy assignment does not hold for these
+	 */
+	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY && expr->ast_node_type != AST_NODE_TYPE_ARRAY_INITIALIZER_LIST){
+		return print_and_return_error("Array types can only be assigned to using an array initializer list([] initializer)", left_hand_unary->line_number);
 	}
 
 	//Let the helper do all mutability checking
