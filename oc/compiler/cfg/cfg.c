@@ -1613,8 +1613,8 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL:
-					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
-						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
+					for(int32_t j = 0; j  < cursor->results.parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->results.parameter_results), j);
 
 						//If it's a variable result we add it
 						if(result->result_type == PARAM_RESULT_TYPE_VAR){
@@ -1636,8 +1636,8 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
-					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
-						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
+					for(int32_t j = 0; j  < cursor->results.parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->results.parameter_results), j);
 
 						//If it's a variable result we add it
 						if(result->result_type == PARAM_RESULT_TYPE_VAR){
@@ -7449,7 +7449,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 	//If we have parameters allocate the array now
 	if(signature->function_parameters.current_index != 0){
-		function_call_statement->parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
+		function_call_statement->results.parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
 	}
 
 	/**
@@ -7464,7 +7464,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle it internally to this function
 		 */
 		if(cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
-			parameter_results = emit_parameter_expression(current_block, cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_parameter_expression(current_block, cursor, &(function_call_statement->results.parameter_results));
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -7473,7 +7473,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle the stack management later
 		 */
 		} else {
-			parameter_results = emit_elaborative_param_expressions(current_block, cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_elaborative_param_expressions(current_block, cursor, &(function_call_statement->results.parameter_results));
 		}
 
 		//Bump the final block and move up
@@ -12934,15 +12934,15 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 
 			//Allocate a fresh parameter results array so that we can clone over the parameters
-			new_call->parameter_results = parameter_results_array_alloc(source_instruction->parameter_results.current_index);
+			new_call->results.parameter_results = parameter_results_array_alloc(source_instruction->results.parameter_results.current_index);
 
 			/**
 			 * Now we're going to run through and clone all of the parameter results over one
 			 * by one in the same order
 			 */
-			for(int32_t i = 0; i < source_instruction->parameter_results.current_index; i++){
+			for(int32_t i = 0; i < source_instruction->results.parameter_results.current_index; i++){
 				//Get the source result
-				parameter_result_t* source_result = get_result_at_index(&(source_instruction->parameter_results), i);
+				parameter_result_t* source_result = get_result_at_index(&(source_instruction->results.parameter_results), i);
 
 				/**
 				 * Clone over by type. Note that we do need to clone even for constants because we need distinct
@@ -12952,14 +12952,14 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 					case PARAM_RESULT_TYPE_CONST:{
 						//Clone the constant and add it in
 						three_addr_const_t* cloned_constant = clone_constant(source_result->param_result.constant_result);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
+						add_parameter_result_to_results_array(&(new_call->results.parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_VAR:{
 						//Clone the parameter variable and add it in
 						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
+						add_parameter_result_to_results_array(&(new_call->results.parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
 						break;
 					}
 				}
@@ -13706,7 +13706,7 @@ static void inline_function_call(instruction_t* call_to_inline){
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(block_inlined_in, inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameter_results));
+	clone_entire_function_for_inlining(block_inlined_in, inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->results.parameter_results));
 
 	/**
 	 * We no longer need this statement at all so remove it. It still
