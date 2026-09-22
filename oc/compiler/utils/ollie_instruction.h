@@ -137,6 +137,12 @@ struct instruction_t{
 	//Generic parameter list - could be used for phi functions or function calls
 	dynamic_array_t parameters;
 
+	/**
+	 * TODO I'm thinking that initializers can have an array that either
+	 * stores results *OR* other initialization statement pointers, just a 
+	 * thought though it is unproven
+	 */
+
 	//Used for the function calls on the front-end
 	parameter_results_array_t parameter_results;
 
