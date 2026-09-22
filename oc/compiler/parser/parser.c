@@ -716,53 +716,44 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
  * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
  * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
  *
- * Returns an error node if bad. If good, we return a string initializer node with the string constant
+ * Returns NULL if bad. If good, we return a string initializer node with the string constant
  * node as its child
- *
- * TODO CLEANUP THIS IS A MESS
  */
 static generic_ast_node_t* validate_and_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
-	//Let's first validate that this array actually is a char[]
-	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
-		//Print out the full error message
-		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
+	//Extract some values first
+	u_int32_t num_members = array_type->internal_values.num_members;
+	generic_type_t* member_type = array_type->internal_types.member_type;
 
-		//Fail out here
+	/**
+	 * If we do not have a char type as our underlying, then this is invalid
+	 */
+	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
+		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
-	//we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant
-	
-	//A dynamic string stores a string lenght, it does not account for the null terminator. As such, we'll need to have the null terminator
-	//accounted for by adding 1 to it
-	u_int32_t length = string_constant->string_value.current_length + 1;
-	
-	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
-	//lenght of the array to be whatever we have in here
-	if(array_type->internal_values.num_members == 0){
-		//Set the number of members
-		array_type->internal_values.num_members = length;
+	/**
+	 * Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
+	 * we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant.
+	 * If the length is nonzero, we'll need to validate the length. Otherwise, we'll need to set the length
+	 */
+	u_int32_t string_length = string_constant->string_value.current_length + 1;
+	if(num_members == 0){
+		//Set the number of members and the overall size
+		array_type->internal_values.num_members = string_length;
+		array_type->type_size = string_length;
 
-		//Since these are all chars, the size of the array is just the length
-		array_type->type_size = length;
 	} else {
 		//If these are different, then we fail out
-		if(array_type->internal_values.num_members != length){
-			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array_type->internal_values.num_members, length);
+		if(num_members != string_length){
+			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", num_members, string_length);
 			return print_and_return_error(info, parser_line_num);
 		}
-
-		//Otherwise we're all set
 	}
 
-	//Reassign the class here from a constant to a string initializer
+	//Update the node type and inferred type, and get out
 	string_constant->ast_node_type = AST_NODE_TYPE_STRING_INITIALIZER;
-
-	//Reassign the type to match what was sent in
 	string_constant->inferred_type = array_type;
-
-	//And give this node back
 	return string_constant;
 }
 
@@ -13115,8 +13106,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 * for recursive validation, so that we can handle recursive initialization
 	 */
 	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(type_spec, initializer_node);
-	//TODO WE'RE GOING TO BREAK THE ERROR OUT TO BE IN THIS RULE ABOVE
-	//If the return type is NULL, we fail out here
 	if(return_type == NULL){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
