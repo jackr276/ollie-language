@@ -89,7 +89,7 @@ static heap_queue_t traversal_queue;
  */
 typedef enum {
 	CFG_RESULT_TYPE_VAR,
-	CFG_RESULT_TYPE_CONST,
+	CFG_RESULT_TYPE_CONST, // TODO WILL WANT TO ADD A NEW RESULT TYPE HERE
 } cfg_result_type_t;
 
 
@@ -3883,6 +3883,18 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
 /**
  * Emit initializer three address code. This is designed to be lightweight here, we will do all of the
  * actual heavy lifting in the simplifier to keep our lives simple
+ *
+ * Say we have something like: let x:struct my_struct = {[1, 2, 3, 4, 5], x + 5, y - 2}
+ *
+ * This will be converted into three address code as
+ * 
+ * 	
+ * 	t3 <- x + 5 <--- necessary precomputation
+ * 	t4 <- y - 2
+ *  __BLANK__ <- INITIALIZE FROM STRUCT_INITIALIZER(ARRAY_INITIALIZER(1, 2, 3, 4, 5), t3, t4)
+ *
+ *  This is on our RHS, once we return to the parent rule we will then populate our RHS value
+ *
  */
 static cfg_result_package_t emit_initializer(basic_block_t* block, generic_ast_node_t* initializer_node){
 		//TODO I think we're going to update this my doing something like a memory copy
@@ -3891,6 +3903,31 @@ static cfg_result_package_t emit_initializer(basic_block_t* block, generic_ast_n
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
+
+
+}
+
+
+/**
+ * Emit an array initializer instruction using the given pattern that we want. 
+ *
+ * For example, say that we have: let x:i32[5] = [y - 1, y + 2, y + 3, z - 4, a + 1]
+ * This will be translated in three address code to
+ *
+ * t2 <- y - 1
+ * t3 <- y + 2
+ * t4 <- y + 3
+ * t5 <- z - 4
+ * t6 <- a + 1
+ *
+ * Generates: INITIALIZE FROM ARRAY_INITIALIZER(t2, t3, t4, t5, t6)
+ *
+ * This is what we will give back as a CFG result as it is on our RHS. It will *NOT* be added
+ * to the block. Instead it will be handled by the original caller who will do with it what
+ * they see fit
+ */
+static cfg_result_package_t emit_array_initializer__NEW(basic_block_t* block, generic_ast_node_t* initializer_node){
+
 }
 
 
@@ -3920,7 +3957,13 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 			return emit_function_call(basic_block, primary_parent);
 
 		case AST_NODE_TYPE_STRING_INITIALIZER:
+			printf("TODO NOT DONE YET\n");
+			exit(1);
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			printf("TODO NOT DONE YET\n");
+			exit(1);
+
+
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			return emit_initializer(basic_block, primary_parent);
 
