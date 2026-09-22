@@ -3891,19 +3891,16 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
  * 	
  * 	t3 <- x + 5 <--- necessary precomputation
  * 	t4 <- y - 2
- *  __BLANK__ <- INITIALIZE FROM STRUCT_INITIALIZER(ARRAY_INITIALIZER(1, 2, 3, 4, 5), t3, t4)
+ *  Generates: INITIALIZE FROM STRUCT_INITIALIZER(ARRAY_INITIALIZER(1, 2, 3, 4, 5), t3, t4)
  *
- *  This is on our RHS, once we return to the parent rule we will then populate our RHS value
+ *  What we generate is technically an incomplete instruction
+ *
+ *  TODO I think we may want an initializer like this to be kind of similar to a three_addr_var_t where
+ *  it's its own independent data structure in a way. It can be small we just need to store results
+ *
  *
  */
-static cfg_result_package_t emit_initializer(basic_block_t* block, generic_ast_node_t* initializer_node){
-		//TODO I think we're going to update this my doing something like a memory copy
-		//and having this all be done inside of simplifier instead of trying to fight
-		//with it here
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-
+static cfg_result_package_t emit_struct_initializer__NEW(basic_block_t* block, generic_ast_node_t* initializer_node){
 
 }
 
@@ -3962,7 +3959,6 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			printf("TODO NOT DONE YET\n");
 			exit(1);
-
 
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			return emit_initializer(basic_block, primary_parent);
