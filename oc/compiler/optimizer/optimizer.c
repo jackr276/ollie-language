@@ -593,9 +593,9 @@ static void mark(dynamic_array_t* function_blocks){
 			//If we have a function call, everything in the function call is important
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
-				for(int32_t i = 0; i < stmt->results.parameter_results.current_index; i++){
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					//Get the result out
-					parameter_result_t* result = get_result_at_index(&(stmt->results.parameter_results), i);
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					//If it's a variable then add it
 					if(result->result_type == PARAM_RESULT_TYPE_VAR){
@@ -615,9 +615,9 @@ static void mark(dynamic_array_t* function_blocks){
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
 				//Run through them all and mark them
-				for(int32_t i = 0; i < stmt->results.parameter_results.current_index; i++){
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					//Get the result out
-					parameter_result_t* result = get_result_at_index(&(stmt->results.parameter_results), i);
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					//If it's a variable then add it
 					if(result->result_type == PARAM_RESULT_TYPE_VAR){
@@ -1205,9 +1205,9 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
-				for(int32_t i = 0; i < current->results.parameter_results.current_index; i++){
+				for(int32_t i = 0; i < current->parameter_results.current_index; i++){
 					//Get the result out
-					parameter_result_t* result = get_result_at_index(&(current->results.parameter_results), i);
+					parameter_result_t* result = get_result_at_index(&(current->parameter_results), i);
 
 					//If it's a variable then add it
 					if(result->result_type == PARAM_RESULT_TYPE_VAR){
@@ -1227,9 +1227,9 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
 
 				//Run through them all and mark them
-				for(int32_t i = 0; i < current->results.parameter_results.current_index; i++){
+				for(int32_t i = 0; i < current->parameter_results.current_index; i++){
 					//Get the result out
-					parameter_result_t* result = get_result_at_index(&(current->results.parameter_results), i);
+					parameter_result_t* result = get_result_at_index(&(current->parameter_results), i);
 
 					//If it's a variable then add it
 					if(result->result_type == PARAM_RESULT_TYPE_VAR){
@@ -1483,20 +1483,20 @@ static instruction_t* clone_instruction(instruction_t* cloned, variable_map_t* v
 	}
 
 	//If we have parameter results, emit a copy of them
-	if(cloned->results.parameter_results.current_index != 0){
-		copy->results.parameter_results = parameter_results_array_alloc(cloned->results.parameter_results.current_index);
+	if(cloned->parameter_results.current_index != 0){
+		copy->parameter_results = parameter_results_array_alloc(cloned->parameter_results.current_index);
 
 		for(int32_t i = 0; i < cloned->parameters.current_index; i++){
 			//Get the old result out
-			parameter_result_t* old_result = get_result_at_index(&(cloned->results.parameter_results), i);
+			parameter_result_t* old_result = get_result_at_index(&(cloned->parameter_results), i);
 
 			switch(old_result->result_type){
 				case PARAM_RESULT_TYPE_VAR:
-					add_parameter_result_to_results_array(&(copy->results.parameter_results), old_result->param_result.variable_result, PARAM_RESULT_TYPE_VAR);
+					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.variable_result, PARAM_RESULT_TYPE_VAR);
 					break;
 
 				case PARAM_RESULT_TYPE_CONST:
-					add_parameter_result_to_results_array(&(copy->results.parameter_results), old_result->param_result.constant_result, PARAM_RESULT_TYPE_CONST);
+					add_parameter_result_to_results_array(&(copy->parameter_results), old_result->param_result.constant_result, PARAM_RESULT_TYPE_CONST);
 					break;
 			}
 		}

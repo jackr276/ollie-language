@@ -1651,7 +1651,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * If all of our counting is correct then these should be lining up perfectly with result
 		 * to desired type
 		 */
-		parameter_result_t* result = get_result_at_index(&(call_statement->results.parameter_results), parameter_result_index);
+		parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
 		generic_type_t* parameter_type = dynamic_array_get_at(&(called_function_signature->function_parameters), signature_params_index);
 
 		/**
@@ -1685,7 +1685,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		generic_type_t* elaborated_type = get_elaborated_type(called_function_signature);
 
 		//The number is however many results we have left over. This is our "paramcount"
-		int32_t elaborative_paramcount = call_statement->results.parameter_results.current_index - parameter_result_index;
+		int32_t elaborative_paramcount = call_statement->parameter_results.current_index - parameter_result_index;
 		three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(elaborative_paramcount, i32);
 
 		/**
@@ -1703,9 +1703,9 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * Now run through the remaining parameter results and store them to the stack region
 		 * after we've already added the paramcount
 		 */
-		for(; parameter_result_index < call_statement->results.parameter_results.current_index; parameter_result_index++){
+		for(; parameter_result_index < call_statement->parameter_results.current_index; parameter_result_index++){
 			//Pass it along to the helper to process
-			parameter_result_t* result = get_result_at_index(&(call_statement->results.parameter_results), parameter_result_index);
+			parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
 			store_elaborative_parameter_result(call_statement, elaborated_type, result, &memory_addresses_to_adjust);
 		}
 	}
@@ -1777,7 +1777,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 
 	//These are both no longer of use
 	dynamic_array_dealloc(&memory_addresses_to_adjust);
-	parameter_results_array_dealloc(&(call_statement->results.parameter_results));
+	parameter_results_array_dealloc(&(call_statement->parameter_results));
 
 	//Once we've fully lowered this call statement flag it as fully lowered
 	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;

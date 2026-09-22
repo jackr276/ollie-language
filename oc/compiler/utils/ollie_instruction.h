@@ -21,6 +21,7 @@
 #include "x86_sse_registers.h"
 #include "three_address_variable.h"
 #include "three_address_constant.h"
+#include "three_address_initializer.h"
 
 /**
  * An overall structure for an instruction. Instructions start their life
@@ -83,14 +84,21 @@ struct instruction_t{
 			three_addr_const_t* address_offset;
 			three_addr_var_t* address_operand1;
 			three_addr_var_t* address_operand2;
+
 			//This can never be anything besides a 64 bit integer
 			u_int64_t address_multiplier;
+
 			/**
 			 * Some variables are represented as RIP offsets. We will use a special
 			 * space here so that they are excluded from the register allocator's
 			 * processing
 			 */
 			three_addr_var_t* rip_offset_var;
+
+			/**
+			 * TODO FLESH THIS OUT MORE
+			 */
+			three_addr_initializer_t* initializer_operand;
 		} oir; 
 
 		/**
@@ -134,18 +142,14 @@ struct instruction_t{
 		} x86;
 	} operands;
 
-	//Generic parameter list - could be used for phi functions or function calls
-	dynamic_array_t parameters;
-
 	/**
-	 * We will store parameter results or initializer results in this union 
-	 * to save on space.
+	 * We may have parameters for phi functions/mature function calls or parameter results
+	 * for immature ones
+	 *
+	 * TODO PARAMETER RESULTS CAN CONTAIN INITIALIZERS
 	 */
-	union {
-		//Used for the function calls on the front-end
-		parameter_results_array_t parameter_results;
-		//TODO INITIALIZER RESULTS
-	} results;
+	dynamic_array_t parameters;
+	parameter_results_array_t parameter_results;
 
 	//We have 2 ways to jump. The if jump is our affirmative jump, else is our alternative
 	void* if_block;

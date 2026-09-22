@@ -2674,8 +2674,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			 * keeps track of this for us
 			 */
 			if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
-				for(int32_t i = 0; i < stmt->results.parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->results.parameter_results), i);
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					switch(result->result_type){
 						case PARAM_RESULT_TYPE_VAR:
@@ -2687,7 +2687,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					}
 
 					//Comma printing if appropriate
-					if(i != stmt->results.parameter_results.current_index - 1){
+					if(i != stmt->parameter_results.current_index - 1){
 						fprintf(fl, ", ");
 					}
 				}
@@ -2750,8 +2750,8 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			 * keeps track of this for us
 			 */
 			if(stmt->optional_storage.call_storage.has_been_lowered == FALSE){
-				for(int32_t i = 0; i < stmt->results.parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->results.parameter_results), i);
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					switch(result->result_type){
 						case PARAM_RESULT_TYPE_VAR:
@@ -2763,7 +2763,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 					}
 
 					//Comma printing if appropriate
-					if(i != stmt->results.parameter_results.current_index - 1){
+					if(i != stmt->parameter_results.current_index - 1){
 						fprintf(fl, ", ");
 					}
 				}
