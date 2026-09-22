@@ -138,18 +138,19 @@ struct instruction_t{
 	dynamic_array_t parameters;
 
 	/**
-	 * TODO I'm thinking that initializers can have an array that either
-	 * stores results *OR* other initialization statement pointers, just a 
-	 * thought though it is unproven
+	 * We will store parameter results or initializer results in this union 
+	 * to save on space.
 	 */
+	union {
+		//Used for the function calls on the front-end
+		parameter_results_array_t parameter_results;
+		//TODO INITIALIZER RESULTS
+	} results;
 
-	//Used for the function calls on the front-end
-	parameter_results_array_t parameter_results;
-
-	//We have 2 ways to jump. The if jump is our affirmative jump,
-	//else is our alternative
+	//We have 2 ways to jump. The if jump is our affirmative jump, else is our alternative
 	void* if_block;
 	void* else_block;
+
 	//Optional variable storage to determine what a value relies on
 	three_addr_var_t* relies_on;
 

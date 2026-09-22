@@ -2983,6 +2983,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, ">\n");
 			break;
 
+		//TODO
+		case THREE_ADDR_CODE_STRING_INITIALIZATION_STMT:
+		case THREE_ADDR_CODE_STRUCT_INITIALIZATION_STMT:
+		case THREE_ADDR_CODE_ARRAY_INITIALIZATION_STMT:
+			printf("TODO PRINTING NOT IMPLEMENTED\n");
+			break;
+
 		default:
 			printf("UNKNOWN TYPE\n");
 			break;
