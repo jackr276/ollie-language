@@ -6,4 +6,94 @@
 #ifndef INITIALIZER_RESULT_ARRAY_H
 #define INITIALIZER_RESULT_ARRAY_H
 
+#include "../three_address_constant.h"
+#include "../three_address_variable.h"
+#include <sys/types.h>
+
+typedef struct initializer_result_t initializer_result_t;
+typedef struct initializer_result_array_t intializer_result_array_t;
+
+//For initializing null versions
+#define NULL_INITIALIZER_RESULT_ARRAY_INITIALIZER {NULL, 0, 0}
+
+/**
+ * For initializer result values, we can have:
+ * 	1.) A constant result
+ * 	2.) A variable result
+ * 	3.) Another nested initializer result
+ */
+typedef enum {
+	INITIALIZER_RESULT_TYPE_CONST,
+	INITIALIZER_RESULT_TYPE_VAR,
+	INITIALIZER_RESULT_TYPE_NESTED_INITIALIZER
+} initializer_result_type_t;
+
+
+/**
+ * Maintain a tagged union set that will allow us
+ * to store any of the types that we need
+ */
+struct initializer_result_t {
+	//The actual result type storage
+	initializer_result_type_t result_type;
+
+	/**
+	 * We can store:
+	 * 	1.) pointer to a constant
+	 * 	2.) pointer to a variable
+	 * 	3.) pointer to a nested initializer that we'll need to take care of
+	 */
+	union {
+		three_addr_const_t* constant_result;
+		three_addr_var_t* variable_result;
+		void* nested_initializer;
+	} initializer_result;
+};
+
+
+/**
+ * The actual array itself is just a dynamic
+ * array that contains however many results we actually
+ * need. The user is going to have to provide an
+ * initial size here unlike in a dynamic array
+ */
+struct parameter_results_array_t {
+	parameter_result_t* parameter_results;
+	int32_t current_index;
+	int32_t max_index;
+};
+
+/**
+ * Allocate a parameter results array with the default initial size. This is good
+ * for when we have elaborative params and do not know how many results we will have
+ */
+parameter_results_array_t parameter_results_array_alloc_default_size();
+
+
+/**
+ * Allocate a parameter results array with a given initial size
+ */
+parameter_results_array_t parameter_results_array_alloc(int32_t initial_size);
+
+
+/**
+ * Add a parameter to the results array. We will be relying on the caller to provide us an accurate result
+ * type here. The pointer is generic for this reason, we never need to actually access this memory, just
+ * store the pointer
+ */
+void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type);
+
+
+/**
+ * Retrieve a parameter from the array
+ */
+parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index);
+
+
+/**
+ * Deallocate a parameter results array
+ */
+void parameter_results_array_dealloc(parameter_results_array_t* array);
+
+
 #endif /* INITIALIZER_RESULT_ARRAY_H */
