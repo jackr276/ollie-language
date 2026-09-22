@@ -727,7 +727,7 @@ static generic_ast_node_t* validate_and_set_bounds_for_string_initializer(generi
 	/**
 	 * If we do not have a char type as our underlying, then this is invalid
 	 */
-	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
+	if(member_type->type_class != TYPE_CLASS_BASIC || member_type->basic_type_token != CHAR){
 		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
