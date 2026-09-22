@@ -3881,12 +3881,25 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
 
 
 /**
+ * Emit initializer three address code. This is designed to be lightweight here, we will do all of the
+ * actual heavy lifting in the simplifier to keep our lives simple
+ */
+static cfg_result_package_t emit_initializer(basic_block_t* block, generic_ast_node_t* initializer_node){
+		//TODO I think we're going to update this my doing something like a memory copy
+		//and having this all be done inside of simplifier instead of trying to fight
+		//with it here
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Emit the abstract machine code for a primary expression. Remember that a primary
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
 static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
-	//Holder for the result var/constant
 	three_addr_var_t* result_variable;
 
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
@@ -3899,11 +3912,9 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 			cfg_result_package_t result_package = {basic_block, basic_block, {result_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 			return result_package;
 
-		//Same in this case - just an assignee in basic block
 		case AST_NODE_TYPE_CONSTANT:
 			return emit_constant_from_node(basic_block, primary_parent);
 
-		//We handle direct/indirect calls all in the same rule
 		case AST_NODE_TYPE_FUNCTION_CALL:
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent);
@@ -3911,8 +3922,7 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 		case AST_NODE_TYPE_STRING_INITIALIZER:
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			return emit_initializer(basic_block, primary_parent);
 
 		//By default, we're emitting some kind of expression here
 		default:
