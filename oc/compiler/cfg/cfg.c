@@ -308,6 +308,31 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 }
 
 
+
+/**
+ * This helper function is used to determine if we need to place a global variable
+ * in the ".rel.local" section. This is only done for char* variables *or* anything
+ * that decays into a char*
+ */
+static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+			return does_type_decay_to_char_pointer(type->internal_types.member_type);
+
+		case TYPE_CLASS_POINTER:
+			//This is what we're after
+			if(type->internal_types.points_to == char_type){
+				return TRUE;
+			}
+			
+			return does_type_decay_to_char_pointer(type->internal_types.points_to);
+
+		default:
+			return FALSE;
+	}
+}
+
+
 /**
  * Simple helper to tell whether something is or is not a store operation. This also has a NULL
  * guard. It's only real purpose is for code cleanliness
@@ -11755,7 +11780,6 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 				break;
 					
 			default:
-				printf("%d\n\n\n", cursor->ast_node_type);
 				printf("Fatal internal compiler error: Invalid or unimplemented global initializer node encountered\n");
 				exit(1);
 		}
@@ -11780,36 +11804,15 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 
 
 /**
- * This helper function is used to determine if we need to place a global variable
- * in the ".rel.local" section. This is only done for char* variables *or* anything
- * that decays into a char*
- */
-static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
-	switch(type->type_class){
-		case TYPE_CLASS_ARRAY:
-			return does_type_decay_to_char_pointer(type->internal_types.member_type);
-
-		case TYPE_CLASS_POINTER:
-			//This is what we're after
-			if(type->internal_types.points_to == char_type){
-				return TRUE;
-			}
-			
-			return does_type_decay_to_char_pointer(type->internal_types.points_to);
-
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Visit a global let statement and handle the initializer appropriately.
  * Do note that we have already checked that the entire initialization
  * only contains constants, so we can assume we're only processing constants
  * here
  *
- * TODO THIS WILL REMAIN AS A SPECIAL CASE
+ * This is a very special case because we will be writing these initializer
+ * values literally into the program in .data segment. If in the future
+ * we do any kind of assignment initialization that will be a different
+ * story
  */
 static void visit_global_let_statement(generic_ast_node_t* node){
 	/**
@@ -11826,54 +11829,34 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 	//Grab out the initializer node
 	generic_ast_node_t* initializer = node->first_child;
-
-	//We can see arrays or constants here
 	switch(initializer->ast_node_type){
-		//Array init list - goes to the helper
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//Initialized to an array
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
-
-			//Give it an array of values
 			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
-
-			//Let the helper take care of it
 			emit_global_array_initializer(initializer, &(global_variable->initializer_value.array_initializer_values));
 
 			break;
 		
-		//Should be our most common case - we just have a constant
 		case AST_NODE_TYPE_CONSTANT:
-			//Initialized to a constant
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
-
-			//All we need to do here
 			global_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
 
 			break;
 
-		//Let the helper take over with this one as well
 		case AST_NODE_TYPE_STRING_INITIALIZER:
-			//This is a special kind of constant
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
-
-			//This will handle a variety of cases for us
 			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
 
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			//Initialized to a struct
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRUCT;
-
-			//Give it an array of our struct values and padding
 			global_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
-
-			//Let the helper deal with it
 			emit_global_struct_initializer(initializer, &(global_variable->initializer_value.struct_initializer_values));
+
 			break;
 
-		//This shouldn't be reachable
+		//Unreachable/invalid
 		default:
 			printf("Fatal internal compiler error: Unrecognized/unimplemented global initializer node type encountered\n");
 			exit(1);
@@ -11887,7 +11870,9 @@ static void visit_global_let_statement(generic_ast_node_t* node){
  * only contains constants, so we can assume we're only processing constants
  * here
  *
- * TODO THIS WILL ALSO BE A SPECIAL CASE
+ * This is a special case compared to all other let statements and initializers
+ * because the initializer values will be literally written into the program
+ * in the .data segment
  */
 static void visit_static_let_statement(generic_ast_node_t* node){
 	/**
@@ -11904,54 +11889,34 @@ static void visit_static_let_statement(generic_ast_node_t* node){
 
 	//Grab out the initializer node
 	generic_ast_node_t* initializer = node->first_child;
-
-	//We can see arrays or constants here
 	switch(initializer->ast_node_type){
-		//Array init list - goes to the helper
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//Initialized to an array
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
-
-			//Give it an array of values
 			static_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
-
-			//Let the helper take care of it
 			emit_global_array_initializer(initializer, &(static_variable->initializer_value.array_initializer_values));
 
 			break;
 		
-		//Should be our most common case - we just have a constant
 		case AST_NODE_TYPE_CONSTANT:
-			//Initialized to a constant
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
-
-			//All we need to do here
 			static_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
 
 			break;
 
-		//Let the helper take over with this one as well
 		case AST_NODE_TYPE_STRING_INITIALIZER:
-			//This is a special kind of constant
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
-
-			//This will handle a variety of cases for us
 			static_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
 
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			//Initialized to a struct
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
-
-			//Initialize the struct value list
 			static_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
-
-			//Let the helper take care of it
 			emit_global_struct_initializer(initializer, &(static_variable->initializer_value.struct_initializer_values));
+
 			break;
 
-		//This shouldn't be reachable
+		//Invalid/unreachable
 		default:
 			printf("Fatal internal compiler error: Unrecognized/unimplemented static initializer node type encountered\n");
 			exit(1);
