@@ -1,7 +1,11 @@
 /**
  * Author: Jack Robbins
  * A basic, generic, reusable dynamic array
-*/
+ *
+ * This header file contains API declarations for larger methods like allocators and deallocators
+ * and contains inlined utility functions that are lightweight and frequently used, so inlining them
+ * is advantageous
+ */
 
 #ifndef DYNAMIC_ARRAY_H
 #define DYNAMIC_ARRAY_H
@@ -31,6 +35,7 @@ struct dynamic_array_t{
 };
 
 
+// ======================= Non-Inlined Functions ====================================
 /**
  * Dynamic array initializer macro
  */
@@ -61,6 +66,48 @@ dynamic_array_t dynamic_array_alloc_initial_size(int32_t initial_size);
 dynamic_array_t clone_dynamic_array(dynamic_array_t* array);
 
 /**
+ * Add an item into the dynamic array
+ */
+void dynamic_array_add(dynamic_array_t* array, void* ptr);
+
+/**
+ * Add an item into the dynamic array *IF* the dynamic array
+ * itself has been allocated. This is intended for a very specific
+ * use in the instruction selector
+ */
+void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr);
+
+/**
+ * Set an element at a specified index. No check will be performed
+ * to see if the element is already there. Dynamic resize
+ * will be in effect here
+ */
+void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index);
+
+/**
+ * Are two dynamic arrays completely equal? A "deep equals" 
+ * will ensure that every single element in one array is also inside of the
+ * other, and that no elements in one array are different
+ */
+u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b);
+
+/**
+ * Deallocate an entire dynamic array. 
+ *
+ * NOTE: This will not touch/free any pointers in the array itself,
+ * just the overall structure
+*/
+void dynamic_array_dealloc(dynamic_array_t* array);
+
+/**
+ * Deallocate a dynamic array that was on the heap
+ */
+void dynamic_array_heap_dealloc(dynamic_array_t** array);
+
+// ======================= Non-Inlined Functions ====================================
+// ======================= Inlined Utility Functions ================================
+
+/**
  * Does the dynamic array contain this pointer?
  * 
  * RETURNS: the index if true, -1 if not
@@ -83,6 +130,7 @@ static inline int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
 	return NOT_FOUND;
 }
 
+
 /**
  * Is the dynamic array is empty?
  */
@@ -90,17 +138,6 @@ static inline u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
 	return array->current_index == 0 ? TRUE : FALSE;
 }
 
-/**
- * Add an item into the dynamic array
- */
-void dynamic_array_add(dynamic_array_t* array, void* ptr);
-
-/**
- * Add an item into the dynamic array *IF* the dynamic array
- * itself has been allocated. This is intended for a very specific
- * use in the instruction selector
- */
-void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr);
 
 /**
  * Clear a dynamic array entirely - keeps the size unchanged, but
@@ -120,6 +157,7 @@ static inline void clear_dynamic_array(dynamic_array_t* array){
 	array->current_index = 0;
 }
 
+
 /**
  * Get an element at a specified index. Do not remove the element
  */
@@ -136,13 +174,6 @@ static inline void* dynamic_array_get_at(dynamic_array_t* array, int32_t index){
 	return array->internal_array[index];
 }
 
-
-/**
- * Set an element at a specified index. No check will be performed
- * to see if the element is already there. Dynamic resize
- * will be in effect here
- */
-void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index);
 
 /**
  * Delete an element from the dynamic array at a given index. Returns
@@ -172,6 +203,7 @@ static inline void* dynamic_array_delete_at(dynamic_array_t* array, int32_t inde
 	return deleted;
 }
 
+
 /**
  * Delete the pointer itself from the dynamic array
  *
@@ -195,6 +227,7 @@ static inline void dynamic_array_delete(dynamic_array_t* array, void* ptr){
 	dynamic_array_delete_at(array, index);
 }
 
+
 /**
  * Get the very last element in the dynamic array. Returns NULL if
  * the array is empty
@@ -208,6 +241,7 @@ static inline void* dynamic_array_get_from_back(dynamic_array_t* array){
 	//Grab off of the very end
 	return array->internal_array[array->current_index - 1];
 }
+
 
 /**
  * Remove an element from the back of the dynamic array - O(1) removal
@@ -227,25 +261,5 @@ static inline void* dynamic_array_delete_from_back(dynamic_array_t* array){
 	//Give back the pointer
 	return deleted;
 }
-
-/**
- * Are two dynamic arrays completely equal? A "deep equals" 
- * will ensure that every single element in one array is also inside of the
- * other, and that no elements in one array are different
- */
-u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b);
-
-/**
- * Deallocate an entire dynamic array. 
- *
- * NOTE: This will not touch/free any pointers in the array itself,
- * just the overall structure
-*/
-void dynamic_array_dealloc(dynamic_array_t* array);
-
-/**
- * Deallocate a dynamic array that was on the heap
- */
-void dynamic_array_heap_dealloc(dynamic_array_t** array);
-
+// ======================= Inlined Utility Methods ================================
 #endif /* DYNAMIC_ARRAY_H */
