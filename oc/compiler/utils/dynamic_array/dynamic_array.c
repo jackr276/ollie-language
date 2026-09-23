@@ -231,22 +231,6 @@ void clear_dynamic_array(dynamic_array_t* array){
 
 
 /**
- * Get an element at a specified index. Do not remove the element
- */
-void* dynamic_array_get_at(dynamic_array_t* array, int32_t index){
-	//Return NULL here. It is the caller's responsibility
-	//to check this
-	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
-		exit(1);
-	}
-
-	//Otherwise we should be good to grab. Again we do not delete here
-	return array->internal_array[index];
-}
-
-
-/**
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
  * will be in effect here
