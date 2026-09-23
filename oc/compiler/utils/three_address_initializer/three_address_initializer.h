@@ -62,9 +62,11 @@ struct three_addr_initializer_t {
 	 * instead store initializer_result_t objects which are themselves like
 	 * tagged unions of values
 	 */
-	initializer_result_t* initializer_results;
-	int32_t results_max_index;
-	int32_t results_current_index;
+	struct {
+		initializer_result_t* result_array;
+		int32_t results_max_index;
+		int32_t results_current_index;
+	} results;
 };
 
 
@@ -72,6 +74,17 @@ struct three_addr_initializer_t {
  * Dynamically allocate an initializer of a given type
  */
 three_addr_initializer_t* three_addr_initializer_alloc(generic_type_t* type);
+
+/**
+ * Add an initializer result to the given initializer
+ */
+void add_intializer_result(three_addr_initializer_t* initializer, void* result, initializer_result_type_t result_type);
+
+
+/**
+ * Get the result of an intializer at a given index
+ */
+void* get_intializer_result_at_index(three_addr_initializer_t* initializer, int32_t index);
 
 
 /**
