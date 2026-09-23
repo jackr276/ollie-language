@@ -274,35 +274,6 @@ void clear_token_array(ollie_token_array_t* array){
 	array->current_index = 0;
 }
 
-/**
- * Get an element at a specified index. Do not remove the element
- *
- * Returns a copy of the specified element
- */
-lexitem_t token_array_get_at(ollie_token_array_t* array, int32_t index){
-	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error: Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
-		exit(1);
-	}
-
-	//Give back a copy for this function
-	return array->internal_array[index];
-}
-
-
-/**
- * Get a pointer to an element at a given index. Do not remove the element
- */
-lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, int32_t index){
-	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error: Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
-		exit(1);
-	}
-
-	//Give back a copy for this function
-	return &(array->internal_array[index]);
-}
-
 
 /**
  * Set an element at a specified index. No check will be performed

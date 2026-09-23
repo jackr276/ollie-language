@@ -227,8 +227,6 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
 	}
 
 	//Do they have the same number of elements? If not - they can't possibly be equal
-	//
-	//TODO IS THIS STILL TRUE WITH SET AT LOGIC?
 	if(a->current_index != b->current_index){
 		return FALSE;
 	}
