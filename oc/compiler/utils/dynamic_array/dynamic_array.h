@@ -5,6 +5,8 @@
 
 #ifndef DYNAMIC_ARRAY_H
 #define DYNAMIC_ARRAY_H
+#include "../constants.h"
+#include <string.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -67,12 +69,12 @@ dynamic_array_t clone_dynamic_array(dynamic_array_t* array);
 */
 int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr);
 
-
 /**
  * Is the dynamic array is empty?
 */
-u_int8_t dynamic_array_is_empty(dynamic_array_t* array);
-
+static inline u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
+	return array->current_index == 0 ? TRUE : FALSE;
+}
 
 /**
  * Add an item into the dynamic array
@@ -90,14 +92,27 @@ void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr);
  * Clear a dynamic array entirely - keeps the size unchanged, but
  * sets the entire internal array to 0
  */
-void clear_dynamic_array(dynamic_array_t* array);
+static inline void clear_dynamic_array(dynamic_array_t* array){
+	//Just to be safe
+	if(array == NULL){
+		printf("ERROR: Attempting to clear a NULL dynamic array\n");
+		exit(1);
+	}
+
+	//Wipe the entire thing out
+	memset(array->internal_array, 0, sizeof(void*) * array->current_max_size);
+
+	//Our current index is now 0
+	array->current_index = 0;
+}
 
 /**
  * Get an element at a specified index. Do not remove the element
  */
 static inline void* dynamic_array_get_at(dynamic_array_t* array, int32_t index){
-	//Return NULL here. It is the caller's responsibility
-	//to check this
+	/**
+	 * Return NULL here. It is the caller's responsibility to check this
+	 */
 	if(array->current_max_size <= index){
 		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
 		exit(1);
@@ -133,12 +148,34 @@ void dynamic_array_delete(dynamic_array_t* array, void* ptr);
  * Get the very last element in the dynamic array. Returns NULL if
  * the array is empty
  */
-void* dynamic_array_get_from_back(dynamic_array_t* array);
+static inline void* dynamic_array_get_from_back(dynamic_array_t* array){
+	//Already empty
+	if(array->current_index == 0){
+		return NULL;
+	}
+
+	//Grab off of the very end
+	return array->internal_array[array->current_index - 1];
+}
 
 /**
  * Remove an element from the back of the dynamic array - O(1) removal
  */
-void* dynamic_array_delete_from_back(dynamic_array_t* array);
+static inline void* dynamic_array_delete_from_back(dynamic_array_t* array){
+	//Already empty
+	if(array->current_index == 0){
+		return NULL;
+	}
+
+	//Grab off of the very end
+	void* deleted = array->internal_array[array->current_index - 1];
+
+	//Decrement the index
+	(array->current_index)--;
+
+	//Give back the pointer
+	return deleted;
+}
 
 /**
  * Are two dynamic arrays completely equal? A "deep equals" 
