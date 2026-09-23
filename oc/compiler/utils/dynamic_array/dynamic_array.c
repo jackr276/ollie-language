@@ -13,6 +13,30 @@
 #include <sys/types.h>
 #include "../constants.h"
 
+
+/**
+ * Dynamic resize utility - this should only ever be called by other
+ * functions within this module and is therefore not exposed via
+ * the API
+ */
+static inline void dynamic_resize_if_needed(dynamic_array_t* array, int32_t proposed_index){
+	/**
+	 * Less than the current maximum, this is not needed. We can just
+	 * get out
+	 */
+	if(proposed_index < array->current_max_size){
+		return;
+	}
+
+	/**
+	 * Otherwise it's needed, so we'll need to resize by doubling the
+	 * proposed index
+	 */
+	array->current_max_size = proposed_index * 2;
+	array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+}
+
+
 /**
  * Allocate an entire dynamic array. The resulting control
  * structure will be stack allocated
@@ -64,7 +88,7 @@ dynamic_array_t* dynamic_array_heap_alloc(){
  * the size we need
  */
 dynamic_array_t dynamic_array_alloc_initial_size(int32_t initial_size){
-//First we'll create the overall structure
+	//First we'll create the overall structure
  	dynamic_array_t array;
 
 	//Set the max size using the sane default 
@@ -117,15 +141,12 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
 		exit(1);
 	}
-	
-	//Now we'll see if we need to reallocate this
-	if(array->current_index == array->current_max_size){
-		//We'll double the current max size
-		array->current_max_size *= 2;
 
-		//And we'll reallocate the array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
+	/**
+	 * Pass along the current index(what we'd be adding to)
+	 * to determine if a resize is needed
+	 */
+	dynamic_resize_if_needed(array, array->current_index);
 
 	//Now that we're all set, we can add our element in. Elements are always added in at the very end
 	array->internal_array[array->current_index] = ptr;
@@ -154,15 +175,11 @@ void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr){
 		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
 		exit(1);
 	}
-	
-	//Now we'll see if we need to reallocate this
-	if(array->current_index == array->current_max_size){
-		//We'll double the current max size
-		array->current_max_size *= 2;
 
-		//And we'll reallocate the array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
+	/**
+	 * Resize if needed so that we can place something at the current index
+	 */
+	dynamic_resize_if_needed(array, array->current_index);
 
 	//Now that we're all set, we can add our element in. Elements are always added in at the very end
 	array->internal_array[array->current_index] = ptr;
@@ -191,13 +208,7 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index){
 	 * If the array's max size is smaller than the index
 	 * that we want to insert at, we will dynamically resize
 	 */
-	if(array->current_max_size <= index){
-		//Bump up to twice this to be safe
-		array->current_max_size = index * 2;
-
-		//Reallocate the internal array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
+	dynamic_resize_if_needed(array, index);
 
 	//Now that we've taken care of all that, we'll perform the setting
 	array->internal_array[index] = ptr;

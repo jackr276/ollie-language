@@ -48,14 +48,12 @@ dynamic_array_t* dynamic_array_heap_alloc();
  */
 dynamic_array_t dynamic_array_alloc();
 
-
 /**
  * Initialize a dynamic array with an initial
  * size. This is useful if we already know
  * the size we need
  */
 dynamic_array_t dynamic_array_alloc_initial_size(int32_t initial_size);
-
 
 /**
  * Create an exact clone of the dynamic array that we're given
@@ -87,7 +85,7 @@ static inline int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
 
 /**
  * Is the dynamic array is empty?
-*/
+ */
 static inline u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
 	return array->current_index == 0 ? TRUE : FALSE;
 }
