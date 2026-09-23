@@ -21,6 +21,31 @@
 typedef struct three_addr_initializer_t three_addr_initializer_t;
 typedef struct initializer_result_t initializer_result_t;
 
+/**
+ * Define an enum that will allow us to discern between intializer
+ * types
+ */
+typedef enum {
+	INIITIALIZER_RESULT_TYPE_CONSTANT,
+	INIITIALIZER_RESULT_TYPE_VARIABLE,
+	INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER,
+} initializer_result_type_t;
+
+
+/**
+ * An initializer result is a tagged union that could store a constant,
+ * a variable, or a sub-initializer(just another initializer pointer)
+ */
+struct initializer_result_t {
+	union {
+		three_addr_const_t* constant_value;
+		three_addr_var_t* array_value;
+		three_addr_initializer_t* initializer_value;
+	} value;
+
+	initializer_result_type_t result_type;
+};
+
 
 /**
  * A three address initializer may contain constants, variables *OR*
