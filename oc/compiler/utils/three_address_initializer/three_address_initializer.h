@@ -15,7 +15,6 @@
 //These will contain constants and variables
 #include "../three_address_constant.h"
 #include "../three_address_variable.h"
-#include <sys/types.h>
 
 //Forward declarations
 typedef struct three_addr_initializer_t three_addr_initializer_t;
@@ -80,16 +79,14 @@ three_addr_initializer_t* three_addr_initializer_alloc(generic_type_t* type);
  */
 void add_intializer_result(three_addr_initializer_t* initializer, void* result, initializer_result_type_t result_type);
 
-
 /**
  * Get the result of an intializer at a given index
  */
 void* get_intializer_result_at_index(three_addr_initializer_t* initializer, int32_t index);
 
-
 /**
  * Destroy a given initializer
  */
-void three_addr_initializer_dealloc(generic_type_t* type);
+void three_addr_initializer_dealloc(three_addr_initializer_t* initializer);
 
 #endif /* THREE_ADDRESS_INITIALIZER_H */
