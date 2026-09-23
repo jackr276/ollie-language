@@ -67,7 +67,23 @@ dynamic_array_t clone_dynamic_array(dynamic_array_t* array);
  * 
  * RETURNS: the index if true, -1 if not
 */
-int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr);
+static inline int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
+	//If it's null just return false
+	if(array == NULL || array->internal_array == NULL){
+		return NOT_FOUND;
+	}
+
+	//We'll run through the entire array, comparing pointer by pointer
+	for(int32_t i = 0; i < array->current_index; i++){
+		//If we find an exact memory address match return true
+		if(array->internal_array[i] == ptr){
+			return i;
+		}
+	}
+
+	//If we make it here, we found nothing so return the NOT_FOUND alias(-1)
+	return NOT_FOUND;
+}
 
 /**
  * Is the dynamic array is empty?
@@ -130,19 +146,56 @@ static inline void* dynamic_array_get_at(dynamic_array_t* array, int32_t index){
  */
 void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index);
 
-
 /**
  * Delete an element from the dynamic array at a given index. Returns
  * the element at said index
  */
-void* dynamic_array_delete_at(dynamic_array_t* array, int32_t index);
+static inline void* dynamic_array_delete_at(dynamic_array_t* array, int32_t index) {
+	//Again if we can't do this, we won't disrupt the program. Just return NULL
+	if(array->current_index <= index){
+		return NULL;
+	}
+
+	//We'll grab the element at this index first
+	void* deleted = array->internal_array[index];
+
+	//Now we'll run through everything from that index up until the end, shifting left every time
+	for(int32_t i = index; i < array->current_index - 1; i++){
+		array->internal_array[i] = array->internal_array[i + 1];
+	}
+
+	//Null this out
+	array->internal_array[array->current_index - 1] = NULL;
+
+	//We've seen one less of these now
+	(array->current_index)--;
+
+	//And once we've done that shifting, we're done so
+	return deleted;
+}
 
 /**
  * Delete the pointer itself from the dynamic array
  *
  * Will not complain if it cannot be found - it simply won't be deleted
  */
-void dynamic_array_delete(dynamic_array_t* array, void* ptr);
+static inline void dynamic_array_delete(dynamic_array_t* array, void* ptr){
+	//If this is NULL or empty we'll just return
+	if(ptr == NULL || array == NULL || array->current_index == 0){
+		return;
+	}
+
+	//Otherwise we'll need to grab this index
+	int16_t index = dynamic_array_contains(array, ptr);
+
+	//If we couldn't find it - no harm, we just won't do anything
+	if(index == NOT_FOUND){
+		return;
+	}
+
+	//Now we'll use the index to delete
+	dynamic_array_delete_at(array, index);
+}
 
 /**
  * Get the very last element in the dynamic array. Returns NULL if

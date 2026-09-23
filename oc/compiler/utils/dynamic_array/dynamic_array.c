@@ -109,32 +109,6 @@ dynamic_array_t clone_dynamic_array(dynamic_array_t* array){
 
 
 /**
- * Does the dynamic array contain this pointer?
- *
- * NOTE: This will currently do a linear scan. O(n) time, should be fast
- * enough for our purposes here. If it's really slowing things down, consider
- * sorting the array and binary searching
-*/
-int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
-	//If it's null just return false
-	if(array == NULL || array->internal_array == NULL){
-		return NOT_FOUND;
-	}
-
-	//We'll run through the entire array, comparing pointer by pointer
-	for(int32_t i = 0; i < array->current_index; i++){
-		//If we find an exact memory address match return true
-		if(array->internal_array[i] == ptr){
-			return i;
-		}
-	}
-
-	//If we make it here, we found nothing so
-	return NOT_FOUND;
-}
-
-
-/**
  * Add an element into the dynamic array
  */
 void dynamic_array_add(dynamic_array_t* array, void* ptr){
@@ -231,64 +205,6 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index){
 
 
 /**
- * Delete an element from a specified index. The element itself
- * is returned, allowing this to be used as a search & delete function
- * all in one
- */
-void* dynamic_array_delete_at(dynamic_array_t* array, int32_t index){
-	//Again if we can't do this, we won't disrupt the program. Just return NULL
-	if(array->current_index <= index){
-		return NULL;
-	}
-
-	//We'll grab the element at this index first
-	void* deleted = array->internal_array[index];
-
-	//Now we'll run through everything from that index up until the end, 
-	//shifting left every time
-	for(int32_t i = index; i < array->current_index - 1; i++){
-		//Shift left here
-		array->internal_array[i] = array->internal_array[i + 1];
-	}
-
-	//Null this out
-	array->internal_array[array->current_index - 1] = NULL;
-
-	//We've seen one less of these now
-	(array->current_index)--;
-
-	//And once we've done that shifting, we're done so
-	return deleted;
-}
-
-
-/**
- * Delete the pointer itself from the dynamic array
- *
- * Will not complain if it cannot be found - it simply won't be deleted
- */
-void dynamic_array_delete(dynamic_array_t* array, void* ptr){
-	//If this is NULL or empty we'll just return
-	if(ptr == NULL || array == NULL || array->current_index == 0){
-		return;
-	}
-
-	//Otherwise we'll need to grab this index
-	int16_t index = dynamic_array_contains(array, ptr);
-
-	//If we couldn't find it - no harm, we just won't do anything
-	if(index == NOT_FOUND){
-		return;
-	}
-
-	//Now we'll use the index to delete
-	dynamic_array_delete_at(array, index);
-
-	//And we're done
-}
-
-
-/**
  * Are two dynamic arrays completely equal? A "deep equals" 
  * will ensure that every single element in one array is also inside of the
  * other, and that no elements in one array are different
@@ -299,8 +215,9 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
 		return FALSE;
 	}
 
-	//Do they have the same number of elements? If not - they can't
-	//possibly be equal
+	//Do they have the same number of elements? If not - they can't possibly be equal
+	//
+	//TODO IS THIS STILL TRUE WITH SET AT LOGIC?
 	if(a->current_index != b->current_index){
 		return FALSE;
 	}
