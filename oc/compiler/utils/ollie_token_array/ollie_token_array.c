@@ -13,6 +13,23 @@
 
 
 /**
+ * Perform a dynamic resize based on the proposed index. If needed, we will always
+ * reallocate to be double the size of the proposed index. We will only reallocate when
+ * the proposed index is larger than or equal to the current maximum index
+ */
+static inline void dynamic_resize_if_needed(ollie_token_array_t* array, int32_t proposed_index){
+	//Nothing to do here
+	if(proposed_index < array->current_max_size){
+		return;
+	}
+
+	//Always double the proposed index for the new max size
+	array->current_max_size = proposed_index * 2;
+	array->internal_array = realloc(array->internal_array, sizeof(lexitem_t) * array->current_max_size);
+}
+
+
+/**
  * Perform a deep comparison of two lexitems
  */
 static inline u_int8_t lexitems_equal(lexitem_t* a, lexitem_t* b) {
@@ -187,8 +204,7 @@ int32_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem){
 		//Get a pointer to the current item
 		lexitem_t* lexitem_ptr = &(array->internal_array[i]);
 
-		//If these are equal, give back the index where we found
-		//them
+		//If these are equal, give back the index where we found them
 		if(lexitems_equal(lexitem_ptr, lexitem) == TRUE){
 			return i;
 		}
@@ -213,14 +229,8 @@ void token_array_add(ollie_token_array_t* array, lexitem_t* lexitem){
 		exit(1);
 	}
 
-	//If we've hit the limit we need to reup
-	if(array->current_index == array->current_max_size){
-		//Double the array size
-		array->current_max_size *= 2;
-
-		//Reup the array nowj:w
-		array->internal_array = realloc(array->internal_array, array->current_max_size * sizeof(lexitem_t));
-	}
+	//We're going to insert at the current index, see if we need to resize first
+	dynamic_resize_if_needed(array, array->current_index);
 
 	//Now that we've handled any needed resize we can add in
 	array->internal_array[array->current_index] = *lexitem;
@@ -233,7 +243,7 @@ void token_array_add(ollie_token_array_t* array, lexitem_t* lexitem){
 /**
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
- * will be in effect here
+ * will *NOT* be in effect here
  */
 void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, int32_t index){
 	//Just for safety's sake
@@ -283,6 +293,7 @@ lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_t index){
 	//Give back the copy
 	return deleted;
 }
+
 
 /**
  * Delete the pointer itself from the dynamic array
