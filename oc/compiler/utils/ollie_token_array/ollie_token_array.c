@@ -264,62 +264,6 @@ void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, int32_t 
 
 
 /**
- * Delete an element from the token array at a given index. Returns a copy
- * the element at said index
- */
-lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_t index){
-	//Validations here
-	if(array->current_max_size <= index){
-		printf("ERROR: attempting to delete an element at index %d in an array of size %d\n", index, array->current_max_size);
-		exit(1);
-	}
-
-	//Grab the copy that we will be returning
-	lexitem_t deleted = array->internal_array[index];
-	
-	//Shift everything over by the list to backfill
-	for(int32_t i = index; i < array->current_index - 1; i++){
-		array->internal_array[i] = array->internal_array[i + 1];
-	}
-
-	//Very last thing should be blanked out
-	array->internal_array[array->current_index - 1].constant_values.unsigned_long_value = 0;
-	array->internal_array[array->current_index - 1].line_num = 0;
-	array->internal_array[array->current_index - 1].tok = BLANK;
-
-	//Current index is now one less
-	array->current_index--;
-	
-	//Give back the copy
-	return deleted;
-}
-
-
-/**
- * Delete the pointer itself from the dynamic array
- *
- * Will not complain if it cannot be found - it simply won't be deleted
- */
-void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem){
-	//No point in going further here
-	if(array == NULL || array->internal_array == NULL || lexitem == NULL){
-		return;
-	}
-
-	//Get the index if the token array contains this
-	int32_t index = token_array_contains(array, lexitem);
-
-	//Couldn't find it, leave
-	if(index == NOT_FOUND){
-		return;
-	}
-
-	//Otherwise, use the helper to do the deletion
-	token_array_delete_at(array, index);
-}
-
-
-/**
  * Deallocate an entire token array. 
  */
 void token_array_dealloc(ollie_token_array_t* array){

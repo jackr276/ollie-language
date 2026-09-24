@@ -2,8 +2,12 @@
  * Author: Jack Robbins
  * A specified dynamic array that is to be used specifically for Ollie tokens. This is entirely
  * separate from a normal dynamic array because we are specifically storing tokens, not pointers
- * to tokens. Separately allocating every single token would be a performance nightmare
-*/
+ * to tokens. Separately allocating every single token would be a performance nightmare, so we instead
+ * store them in a flat data structure here and reference them by retrieving pointers to the flat structure
+ *
+ * This header file contains definitions for APIs that are defined in the C file, and also includes inlined 
+ * definitions for frequently used, lightweight APIs like token_array_get_at()
+ */
 
 #ifndef OLLIE_TOKEN_ARRAY_H 
 #define OLLIE_TOKEN_ARRAY_H 
@@ -148,20 +152,57 @@ static inline u_int8_t token_array_is_empty(ollie_token_array_t* array) {
 }
 
 
-
 /**
  * Delete an element from the token array at a given index. Returns
  * the element at said index
  */
-lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_t index);
+static inline lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_t index) {
+	//Validations here
+	if(array->current_max_size <= index){
+		printf("ERROR: attempting to delete an element at index %d in an array of size %d\n", index, array->current_max_size);
+		exit(1);
+	}
+
+	//Grab the copy that we will be returning
+	lexitem_t deleted = array->internal_array[index];
+	
+	//Shift everything over by the list to backfill
+	for(int32_t i = index; i < array->current_index - 1; i++){
+		array->internal_array[i] = array->internal_array[i + 1];
+	}
+
+	//The very last element should be blacked out
+	array->internal_array[array->current_index - 1] = (lexitem_t){{0}, 0, BLANK};
+
+	//Current index is now one less
+	(array->current_index)--;
+	
+	//Give back the copy
+	return deleted;
+}
+
 
 /**
  * Delete the pointer itself from the dynamic array
  *
  * Will not complain if it cannot be found - it simply won't be deleted
  */
-void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem);
+static inline void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem) {
+	//No point in going further here
+	if(array == NULL || array->internal_array == NULL || lexitem == NULL){
+		return;
+	}
 
+	//Get the index if the token array contains this
+	int32_t index = token_array_contains(array, lexitem);
+
+	//Couldn't find it, leave
+	if(index == NOT_FOUND){
+		return;
+	}
+
+	//Otherwise, use the helper to do the deletion
+	token_array_delete_at(array, index);
+}
 // =============================== Inlined Utility Functions ==============================================
-
 #endif /* OLLIE_TOKEN_ARRAY_H */
