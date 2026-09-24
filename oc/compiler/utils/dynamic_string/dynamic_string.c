@@ -161,13 +161,10 @@ void dynamic_string_set(dynamic_string_t* dynamic_string, char* string){
 	u_int32_t paramter_length = strlen(string);
 
 	//This represents the entire new length of the string(no null character)
-	u_int32_t new_length = dynamic_string->current_length + paramter_length;
+	dynamic_string->current_length = paramter_length;
 
 	//Perform a resize if needed(+ 1 to include the null terminator)
-	dynamic_resize_if_needed(dynamic_string, new_length + 1);
-
-	//Set the current length to be this new length here
-	dynamic_string->current_length = new_length;
+	dynamic_resize_if_needed(dynamic_string, dynamic_string->current_length + 1);
 
 	//Copy the string over
 	strncpy(dynamic_string->string, string, paramter_length);
@@ -218,16 +215,13 @@ void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
 	 * The new length is the number of characters in the current
 	 * string plus the additional length
 	 */
-	int32_t new_length = dynamic_string->current_length + additional_length;
+	dynamic_string->current_length = dynamic_string->current_length + additional_length;
 
 	//Resize if needed(+1 for NULL terminator)
-	dynamic_resize_if_needed(dynamic_string, new_length + 1);
+	dynamic_resize_if_needed(dynamic_string, dynamic_string->current_length + 1);
 
 	//Concatenate the string here
 	strncat(dynamic_string->string, string, additional_length);
-
-	//Store the new length
-	dynamic_string->current_length = new_length;
 
 	//Add the NULL terminator onto the end
 	dynamic_string->string[dynamic_string->current_length] = '\0';
