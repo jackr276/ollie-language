@@ -103,6 +103,7 @@ int main(){
 
 	//Set it
 	dynamic_string_set(&string, "I have been set");
+	printf("FIRST SET: %s\n", string.string);
 
 	//Add char by char
 	for(u_int16_t i = 0; i < length; i++){
@@ -124,6 +125,7 @@ int main(){
 
 	//Clone into it
 	dynamic_string_t string2 = clone_dynamic_string(&string);
+	printf("POST CLONE: %s\n", string2.string);
 	
 	//Add char by char
 	for(u_int16_t i = 0; i < length; i++){
