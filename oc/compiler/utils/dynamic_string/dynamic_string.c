@@ -209,6 +209,7 @@ void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch){
  */
 void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
 	//How much additional length do we need
+	int32_t old_current_length = dynamic_string->current_length;
 	int32_t additional_length = strlen(string);
 
 	/**
@@ -220,8 +221,8 @@ void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
 	//Resize if needed(+1 for NULL terminator)
 	dynamic_resize_if_needed(dynamic_string, dynamic_string->current_length + 1);
 
-	//Concatenate the string here
-	strncat(dynamic_string->string, string, additional_length);
+	//Concatenate the string here using a string copy at the old end
+	strncpy(dynamic_string->string + old_current_length, string, additional_length);
 
 	//Add the NULL terminator onto the end
 	dynamic_string->string[dynamic_string->current_length] = '\0';
