@@ -149,38 +149,31 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
  * Set the value of a dynamic string. The function
  * will dynamically resize said string if what is passed
  * through is too big
+ *
+ * SET TO: Hello\0  <-- Current Length = 5
+ *
+ * Should have in dynamic string: 'H', 'e', 'l', 'l', 'o', '\0'
+ * Current length should be 5 in the end
+ * Need to resize space for at least 6 characters
  */
 void dynamic_string_set(dynamic_string_t* dynamic_string, char* string){
-	//Measure the length of this string *with* the null character included
-	u_int16_t paramter_length = strlen(string) + 1;
+	//Get the length of this string *WITHOUT* the NULL character
+	u_int32_t paramter_length = strlen(string);
 
-	//This represents the new length of the string
-	u_int16_t new_length = dynamic_string->current_length + paramter_length;
+	//This represents the entire new length of the string(no null character)
+	u_int32_t new_length = dynamic_string->current_length + paramter_length;
 
-	//If the current length of the string, plus the length of the new string, plus
-	//1 for the null character exceeds our current length, we need to resize
-	if(new_length >= dynamic_string->length){
-		//Is this string's new length less than double the old length? This
-		//will trigger our default behavior of doubling it
-		if(new_length < dynamic_string->length * 2){
-			//Double the length
-			dynamic_string->length = dynamic_string->length * 2;
-
-		//Otherwise, we need to go more than double. This is a rare case, but it can happen. If this does happen,
-		//we'll set the new length to be double the current length
-		} else {
-			dynamic_string->length = new_length * 2;
-		}
-
-		//Realloc the string with this length 
-		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length * sizeof(char));
-	}
+	//Perform a resize if needed(+ 1 to include the null terminator)
+	dynamic_resize_if_needed(dynamic_string, new_length + 1);
 
 	//Set the current length to be this new length here
-	dynamic_string->current_length = new_length - 1;
+	dynamic_string->current_length = new_length;
 
 	//Copy the string over
 	strncpy(dynamic_string->string, string, paramter_length);
+
+	//Be sure to set the NULL terminator at the very end
+	dynamic_string->string[dynamic_string->current_length] = '\0';
 }
 
 
