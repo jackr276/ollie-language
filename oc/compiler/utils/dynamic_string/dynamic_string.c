@@ -198,23 +198,36 @@ void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch){
 
 /**
  * Concatenate a string to the end of our dynamic string
+ *
+ * dynamic_string: 'H', 'e', 'l', 'l', 'o', '\0'
+ * \0 is always at the "current_length", so current_length = 5
+ * string to add: 'W', 'o', 'r', 'l', 'd', '\0'
+ *
+ * Need to have 5 + 5 + 1 = 11 space
+ *
+ * dynamic_string: 'H', 'e', 'l', 'l', 'o', 'W', 'o', 'r', 'l', 'd'
+ * current_length = 10
+ * Store '\0' at index 10
+ * dynamic_string: 'H', 'e', 'l', 'l', 'o', 'W', 'o', 'r', 'l', 'd', '\0'
  */
 void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
-	//Grab the string length here(null terminator included)
-	int32_t additional_length = strlen(string) + 1;
+	//How much additional length do we need
+	int32_t additional_length = strlen(string);
 
 	/**
-	 * The new length(accounting for the NULL terminator as well) may
-	 * require us to reallocate/resize. We'll do that now
+	 * The new length is the number of characters in the current
+	 * string plus the additional length
 	 */
 	int32_t new_length = dynamic_string->current_length + additional_length;
-	dynamic_resize_if_needed(dynamic_string, new_length);
+
+	//Resize if needed(+1 for NULL terminator)
+	dynamic_resize_if_needed(dynamic_string, new_length + 1);
 
 	//Concatenate the string here
 	strncat(dynamic_string->string, string, additional_length);
 
 	//Store the new length
-	dynamic_string->current_length = new_length - 1;
+	dynamic_string->current_length = new_length;
 
 	//Add the NULL terminator onto the end
 	dynamic_string->string[dynamic_string->current_length] = '\0';
