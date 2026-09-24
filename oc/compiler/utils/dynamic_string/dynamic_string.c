@@ -268,19 +268,6 @@ u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b){
 
 
 /**
- * Completely wipe a dynamic string. This allows us to use the same memory that
- * we've allocated once over and over again. This is particularly useful in the lexer
- */
-void clear_dynamic_string(dynamic_string_t* dynamic_string){
-	//Wipe the entire memory region out
-	memset(dynamic_string->string, 0, dynamic_string->length * sizeof(char));
-
-	//And the current length is now just 0
-	dynamic_string->current_length = 0;
-}
-
-
-/**
  * Deallocate a dynamic string that was heap allocated
  */
 void dynamic_string_heap_dealloc(dynamic_string_t* dynamic_string){
