@@ -172,7 +172,7 @@ static inline lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_
 	}
 
 	//The very last element should be blacked out
-	array->internal_array[array->current_index - 1] = (lexitem_t){{0}, 0, BLANK};
+	array->internal_array[array->current_index - 1] = BLANK_LEXITEM;
 
 	//Current index is now one less
 	(array->current_index)--;

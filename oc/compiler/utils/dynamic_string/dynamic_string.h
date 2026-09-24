@@ -16,6 +16,7 @@ typedef struct dynamic_string_t dynamic_string_t;
 
 //============================== Public Utility Macros ===============================
 #define INITIALIZE_DYNAMIC_STRING (dynamic_string_t){NULL, 0, 0}
+#define NULL_DYNAMIC_STRING (dynamic_string_t){NULL, 0, 0}
 //============================== Public Utility Macros ===============================
 
 
