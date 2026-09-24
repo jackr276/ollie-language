@@ -122,20 +122,6 @@ ollie_token_array_t* token_array_heap_alloc(){
 
 
 /**
- * Initialize a token array to be all blank
- */
-ollie_token_array_t initialize_blank_token_array(){
-	ollie_token_array_t array;
-
-	array.internal_array = NULL;
-	array.current_index = 0;
-	array.current_max_size = 0;
-
-	return array;
-}
-
-
-/**
  * Initialize a token array with an initial
  * size. This is useful if we already know
  * the size we need
@@ -215,18 +201,6 @@ int32_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem){
 
 
 /**
- * Is the token arrakj
-*/
-u_int8_t token_array_is_empty(ollie_token_array_t* array){
-	if(array->current_index == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
-}
-
-
-/**
  * Add an item into the array. Note that we pass by copy for convenience, but we are
  * not storing pointers in the array
  *
@@ -253,25 +227,6 @@ void token_array_add(ollie_token_array_t* array, lexitem_t* lexitem){
 
 	//Now bump this up for the next go around
 	(array->current_index)++;
-}
-
-
-/**
- * Clear a token array entirely - keeps the size unchanged, but
- * sets the entire internal array to 0
- */
-void clear_token_array(ollie_token_array_t* array){
-	//Just so we don't end up with any nasty surprises
-	if(array == NULL){
-		printf("ERROR: Attempting to clear a NULL token array");
-		exit(1);
-	}
-
-	//Wipe the entire thing out
-	memset(array->internal_array, 0, sizeof(lexitem_t) * array->current_max_size);
-
-	//Now go in here and reset the current index
-	array->current_index = 0;
 }
 
 

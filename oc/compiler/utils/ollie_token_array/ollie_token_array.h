@@ -11,6 +11,8 @@
 #include <sys/types.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "../constants.h"
+#include <string.h>
 //Link to the token/lexitem structs
 #include "../token.h"
 
@@ -33,16 +35,17 @@ struct ollie_token_array_t{
 
 
 /**
+ * Simple initializer for a blank token array
+ */
+#define BLANK_TOKEN_ARRAY (ollie_token_array_t){NULL, 0, 0}
+
+// =============================== Non-Inlined Functions ==================================================
+/**
  * Heap allocate a token array. This allows us
  * to use something like an array of parameters, for
  * instance
  */
 ollie_token_array_t* token_array_heap_alloc();
-
-/**
- * Initialize a token array to be all blank
- */
-ollie_token_array_t initialize_blank_token_array();
 
 /**
  * Initialize a token array. The resulting
@@ -70,22 +73,30 @@ ollie_token_array_t clone_token_array(ollie_token_array_t* array);
 int32_t token_array_contains(ollie_token_array_t* array, lexitem_t* lexitem);
 
 /**
- * Is the token array empty?
-*/
-u_int8_t token_array_is_empty(ollie_token_array_t* array);
-
-/**
  * Add an item into the array. Note that we pass by copy for convenience, but we are
  * not storing pointers in the array
  */
 void token_array_add(ollie_token_array_t* array, lexitem_t* lexitem);
 
 /**
- * Clear a token array entirely - keeps the size unchanged, but
- * sets the entire internal array to 0
+ * Set an element at a specified index. No check will be performed
+ * to see if the element is already there. Dynamic resize
+ * will be in effect here
  */
-void clear_token_array(ollie_token_array_t* array);
+void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, int32_t index);
 
+/**
+ * Deallocate an entire token array. 
+ */
+void token_array_dealloc(ollie_token_array_t* array);
+
+/**
+ * Deallocate a token array on the heap
+ */
+void token_array_heap_dealloc(ollie_token_array_t* array);
+
+// =============================== Non-Inlined Functions ==================================================
+// =============================== Inlined Utility Functions ==============================================
 /**
  * Get an element at a specified index. Do not remove the element
  *
@@ -101,6 +112,7 @@ static inline lexitem_t token_array_get_at(ollie_token_array_t* array, int32_t i
 	return array->internal_array[index];
 }
 
+
 /**
  * Get a pointer to an element at a given index. Do not remove the element
  */
@@ -114,12 +126,28 @@ static inline lexitem_t* token_array_get_pointer_at(ollie_token_array_t* array, 
 	return &(array->internal_array[index]);
 }
 
+
 /**
- * Set an element at a specified index. No check will be performed
- * to see if the element is already there. Dynamic resize
- * will be in effect here
+ * Clear a token array entirely - keeps the size unchanged, but
+ * sets the entire internal array to 0
  */
-void token_array_set_at(ollie_token_array_t* array, lexitem_t* lexitem, int32_t index);
+static inline void clear_token_array(ollie_token_array_t* array) {
+	//Wipe the entire array out
+	memset(array->internal_array, 0, sizeof(void*) * array->current_max_size);
+
+	//Reset the current index
+	array->current_index = 0;
+}
+
+
+/**
+ * Is the token array empty?
+ */
+static inline u_int8_t token_array_is_empty(ollie_token_array_t* array) {
+	return array->current_index == 0 ? TRUE : FALSE;
+}
+
+
 
 /**
  * Delete an element from the token array at a given index. Returns
@@ -134,14 +162,6 @@ lexitem_t token_array_delete_at(ollie_token_array_t* array, int32_t index);
  */
 void token_array_delete(ollie_token_array_t* array, lexitem_t* lexitem);
 
-/**
- * Deallocate an entire token array. 
- */
-void token_array_dealloc(ollie_token_array_t* array);
-
-/**
- * Deallocate a token array on the heap
- */
-void token_array_heap_dealloc(ollie_token_array_t* array);
+// =============================== Inlined Utility Functions ==============================================
 
 #endif /* OLLIE_TOKEN_ARRAY_H */

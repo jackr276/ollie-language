@@ -1524,7 +1524,7 @@ symtab_macro_record_t* create_macro_record(dynamic_string_t name, u_int32_t line
 	record->tokens = token_array_alloc();
 
 	//We don't know if this will or will not be needed yet - so give it a blank allocation for now
-	record->parameters = initialize_blank_token_array(); 
+	record->parameters = BLANK_TOKEN_ARRAY;
 
 	//Store the line number where this was defined
 	record->line_number = line_number;
