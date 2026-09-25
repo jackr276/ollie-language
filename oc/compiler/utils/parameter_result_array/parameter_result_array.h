@@ -3,6 +3,9 @@
  * This API defines the dynamic parameter result list that is used mainly by the function
  * call emitters in the CFG. This datastructure allows us to store tagged unions that may 
  * contain either three_addr_var_t objects or three_addr_const_t objects
+ *
+ * This header file contains declarations for APIs that are defined in the parameter_result_array.c
+ * file, and contains inlined definitions for commonly used utility functions
  */
 
 #ifndef PARAMETER_RESULT_ARRAY_H
@@ -60,19 +63,24 @@ struct parameter_results_array_t {
 	int32_t max_index;
 };
 
+//================================= Non-Inlined Functions =============================================
 /**
  * Allocate a parameter results array with the default initial size. This is good
  * for when we have elaborative params and do not know how many results we will have
  */
 parameter_results_array_t parameter_results_array_alloc_default_size();
 
-
 /**
  * Allocate a parameter results array with a given initial size
  */
 parameter_results_array_t parameter_results_array_alloc(int32_t initial_size);
 
-
+/**
+ * Deallocate a parameter results array
+ */
+void parameter_results_array_dealloc(parameter_results_array_t* array);
+//================================= Non-Inlined Functions =============================================
+//================================= Inlined Utility Functions =========================================
 /**
  * Add a parameter to the results array. We will be relying on the caller to provide us an accurate result
  * type here. The pointer is generic for this reason, we never need to actually access this memory, just
@@ -85,11 +93,6 @@ void add_parameter_result_to_results_array(parameter_results_array_t* array, voi
  * Retrieve a parameter from the array
  */
 parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index);
-
-
-/**
- * Deallocate a parameter results array
- */
-void parameter_results_array_dealloc(parameter_results_array_t* array);
+//================================= Inlined Utility Functions =========================================
 
 #endif /* PARAMETER_RESULT_ARRAY_H */
