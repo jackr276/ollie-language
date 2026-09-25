@@ -2,6 +2,9 @@
  * Author: Jack Robbins
  * This header file defines all of the APIs and data structures for the 
  * three_addr_var_t use count tracker
+ *
+ * This header file contains API definitions that are implemented in the use_count_tracker.c
+ * file but also contains several simple inlined helpers
  */
 
 #ifndef USE_COUNT_TRACKER_H
@@ -22,12 +25,24 @@ struct use_count_tracker_t {
 	u_int32_t variable_count;
 };
 
-
+//================================ Non-Inlined Functions ======================================
 /**
  * Allocate the underlying data structures in the use count tracker
  */
 use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count);
 
+/**
+ * Dump the use count for every single ID that currently exists
+ * in the tracker. This is purely meant for debugging
+ */
+void dump_use_counts(use_count_tracker_t* tracker);
+
+/**
+ * Deallocate the underlying data structures in the use count tracker
+ */
+void use_count_tracker_dealloc(use_count_tracker_t* tracker);
+//================================ Non-Inlined Functions ======================================
+//================================ Inlined Utility Functions ==================================
 /**
  * Retrieve the use count for a given ID
  */
@@ -48,16 +63,5 @@ void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id);
  * Clear out all of the use counts and start fresh
  */
 void reset_all_use_counts(use_count_tracker_t* tracker);
-
-/**
- * Dump the use count for every single ID that currently exists
- * in the tracker. This is purely meant for debugging
- */
-void dump_use_counts(use_count_tracker_t* tracker);
-
-/**
- * Deallocate the underlying data structures in the use count tracker
- */
-void use_count_tracker_dealloc(use_count_tracker_t* tracker);
-
+//================================ Inlined Utility Functions ==================================
 #endif /* USE_COUNT_TRACKER_H */
