@@ -35,33 +35,21 @@ variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
 	return map;
 }
 
-
-/**
- * Perform the dynamic resize for the variable map if we determine that it's needed
- */
-static inline void dynamically_resize_if_needed(variable_map_t* variable_map){
-	if(variable_map->current_index == variable_map->max_index){
-		//Always double it to be safe
-		variable_map->max_index *= 2;
-
-		//Reallocate to a larger buffer
-		variable_map->mappings = realloc(variable_map->mappings, sizeof(variable_mapping_t) * variable_map->max_index);
-	}
-}
-
-
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, u_int32_t dest_temp_var_id){
-	//Perform the resize if need be
-	dynamically_resize_if_needed(variable_map);
+void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id){
+	/**
+	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
+	 * by variable ID, regardless of what the actual ID is
+	 */
+	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
 
 	//Grab a reference just to make this neater
-	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
 
 	//This is a temp mapping
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_TEMP;
@@ -69,9 +57,6 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
 	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.temporary_id = dest_temp_var_id;
-
-	//Bump this up for the next go around
-	(variable_map->current_index)++;
 }
 
 
@@ -79,14 +64,17 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
  * Create a new mapping for a symtab variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
 void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable){
-	//Perform the resize if needed
-	dynamically_resize_if_needed(variable_map);
+	/**
+	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
+	 * by variable ID, regardless of what the actual ID is
+	 */
+	int32_t adjusted_index = source_variable->associated_three_addr_var_ids.variable_id - variable_map->index_adjustment; 
 
 	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
 
 	//This is a symtab mapping
 	mapping->mapping_type = MAPPING_TYPE_SYMTAB_TO_SYMTAB;
@@ -94,9 +82,6 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	//Store the source and dest
 	mapping->source.symtab_variable = source_variable;
 	mapping->destination.symtab_variable = destination_variable;
-
-	//Bump this up for the next go around
-	(variable_map->current_index)++;
 }
 
 
@@ -104,14 +89,17 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  * Create a new mapping that goes from a temp var to a symtab variable
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, symtab_variable_record_t* destination_variable){
-	//Perform the resize if needed
-	dynamically_resize_if_needed(variable_map);
+void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable){
+	/**
+	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
+	 * by variable ID, regardless of what the actual ID is
+	 */
+	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
 
 	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
 
 	//This is a symtab mapping
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_SYMTAB;
@@ -119,9 +107,6 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_
 	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.symtab_variable = destination_variable;
-
-	//Bump this up for the next go around
-	(variable_map->current_index)++;
 }
 
 
@@ -131,8 +116,6 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_
 void variable_map_dealloc(variable_map_t* map){
 	//Destroy the mappings
 	free(map->mappings);
-
-	//0 these out to be safe
-	map->current_index = 0;
-	map->max_index = 0;
+	map->mapping_count = 0;
+	map->index_adjustment = 0;
 }

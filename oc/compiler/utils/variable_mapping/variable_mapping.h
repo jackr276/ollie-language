@@ -87,15 +87,15 @@ variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function);
  * Create a new mapping for a temporary variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, u_int32_t dest_temp_var_id);
+void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id);
 
 /**
  * Create a new mapping for a symtab variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
 void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable);
 
@@ -103,9 +103,9 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  * Create a new mapping that goes from a temp var to a symtab variable
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
+void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
 
 /**
  * Deallocate a given variable map
@@ -120,7 +120,7 @@ void variable_map_dealloc(variable_map_t* map);
  *
  * TODO WRONG
  */
-static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id){
+static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id){
 	for(int32_t i = 0; i < variable_map->current_index; i++){
 		//Get a pointer to the mapping
 		variable_mapping_t* mapping = &(variable_map->mappings[i]);
