@@ -1821,7 +1821,7 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
-
+		
 		//Run through every signle instruction
 		instruction_t* instruction_cursor = block->leader_statement;
 		while(instruction_cursor != NULL){
