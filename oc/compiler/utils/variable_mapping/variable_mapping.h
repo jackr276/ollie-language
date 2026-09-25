@@ -10,6 +10,10 @@
  * Something important to note about variable maps is that they are ephemeral, they are creating
  * at the point of every single inlining. Because of this, we do not need to worry about preserving
  * any kind of state with them
+ *
+ * RESTRICTIONS: we assume that in any one mapping, one unique variable ID may only be mapped once.
+ * In other words, we may not map the variable with ID 2 twice in distinct mappings. This would make
+ * no sense and would violate our positional encoding
  */
 
 #ifndef VARIABLE_MAPPING_H

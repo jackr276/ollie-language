@@ -10971,6 +10971,15 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
 
+	/**
+	 * IMPORTANT BOOKEEPING: in the event that we do some kind of function inlining,
+	 * we will need to know the minimum variable ID and maximum variable ID that is used
+	 * in this function. Since we're at the start of the function now, the minimum variable
+	 * ID must be the current variable ID as it can only go up from here. We'll record the
+	 * maximum variable ID later on
+	 */
+	current_function->min_variable_id = get_current_variable_id();
+
 	//We need to store the function entry block inside of the record for later use
 	func_record->function_entry_block = function_starting_block;
 
@@ -11038,6 +11047,12 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
 	finalize_all_user_defined_jump_statements(&current_function_user_defined_jump_statements);
+
+	/**
+	 * Now that this function has been entirely emitted, we know that the maximum variable
+	 * ID used in this function will have to whatever the next variable ID is
+	 */
+	current_function->max_variable_id = get_current_variable_id();
 
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
@@ -13818,6 +13833,14 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	 */
 	current_function_blocks = NULL;
 	current_function = NULL;
+
+	/**
+	 * We know that we've performed inlining if we get here, and doing that will have
+	 * made the maximum ID used in this function go up. Because of that, we'll need to
+	 * adjust this for the next go around. Note that the minimum value should never go
+	 * down though, just the maximum one
+	 */
+	function->max_variable_id = get_current_variable_id();
 }
 
 
