@@ -212,6 +212,13 @@ struct symtab_function_record_t{
 	 */
 	u_int32_t token_index_of_definition;
 	/**
+	 * What are the minimum and maximum ID's of the variables that
+	 * were emitted in this function? This will be needed if this function
+	 * ends up being inlined and we need to do a variable mapping
+	 */
+	int32_t min_variable_id;
+	int32_t max_variable_id;
+	/**
 	 * What kind of function is this? As of right now
 	 * there are 2 kinds: regular and overloaded
 	 * Overloaded functions will need to have their

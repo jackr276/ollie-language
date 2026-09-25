@@ -6,6 +6,10 @@
  *
  * This header file contains API definitions that are implemented in the appropriate C
  * file but also contains inline definitions for commonly reused, lightweight helpers
+ *
+ * Something important to note about variable maps is that they are ephemeral, they are creating
+ * at the point of every single inlining. Because of this, we do not need to worry about preserving
+ * any kind of state with them
  */
 
 #ifndef VARIABLE_MAPPING_H

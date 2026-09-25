@@ -5,6 +5,7 @@
 */
 
 #include "symtab.h"
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1316,6 +1317,14 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 	record->function_classification = FUNCTION_CLASSIFICATION_NORMAL;
 
 	/**
+	 * Set the minimum to be INT_MAX, and the maximum to be INT_MIN, in
+	 * preparation for storing the minimum and maximum three address variable
+	 * IDs
+	 */
+	record->min_variable_id = INT_MAX;
+	record->max_variable_id = INT_MIN;
+
+	/**
 	 * Function overloading - every function is its own overload. To simplify
 	 * how we're going to have to look things up inside of the parser, we will
 	 * add this function 
@@ -1372,6 +1381,14 @@ symtab_function_record_t* create_overload_function_record(dynamic_string_t* name
 
 	//Flag this as an overload
 	record->function_classification = FUNCTION_CLASSIFICATION_OVERLOAD;
+
+	/**
+	 * Set the minimum to be INT_MAX, and the maximum to be INT_MIN, in
+	 * preparation for storing the minimum and maximum three address variable
+	 * IDs
+	 */
+	record->min_variable_id = INT_MAX;
+	record->max_variable_id = INT_MIN;
 
 	/**
 	 * IMPOTANT - for error printing, we will store the function's token index of definition here
