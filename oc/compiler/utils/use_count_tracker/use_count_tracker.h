@@ -12,6 +12,7 @@
 
 #include <sys/types.h>
 #include <string.h>
+#include <stdlib.h>
 
 //Predeclare the struct itself
 typedef struct use_count_tracker_t use_count_tracker_t;
@@ -33,6 +34,12 @@ struct use_count_tracker_t {
 use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count);
 
 /**
+ * Perform a dynamic resize on the use count tracker based on the ID that was requested. To
+ * be safe, we will always reallocate with double what was requested
+ */
+void variable_map_dynamic_resize_for_id(use_count_tracker_t* tracker, u_int32_t requested_id);
+
+/**
  * Dump the use count for every single ID that currently exists
  * in the tracker. This is purely meant for debugging
  */
@@ -48,6 +55,12 @@ void use_count_tracker_dealloc(use_count_tracker_t* tracker);
  * Retrieve the use count for a given ID
  */
 static inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id){
+	//Perform the dynamic resize if needed
+	if(id >= tracker->variable_count){
+		variable_map_dynamic_resize_for_id(tracker, id);
+	}
+
+	//Get the ID out
 	return tracker->map[id];
 }
 
@@ -56,6 +69,11 @@ static inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int3
  * Increment the use count for a given ID
  */
 static inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t id){
+	//Perform the dynamic resize if needed
+	if(id >= tracker->variable_count){
+		variable_map_dynamic_resize_for_id(tracker, id);
+	}
+
 	(tracker->map[id])++;
 }
 
@@ -65,6 +83,11 @@ static inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t i
  * at 0, we will never go negative and will stay at 0
  */
 static inline void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id){
+	//Perform the dynamic resize if needed
+	if(id >= tracker->variable_count){
+		variable_map_dynamic_resize_for_id(tracker, id);
+	}
+
 	(tracker->map[id])--;
 }
 

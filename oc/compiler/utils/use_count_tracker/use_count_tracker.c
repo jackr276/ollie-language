@@ -37,7 +37,7 @@ use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count){
  * Perform a dynamic resize on the use count tracker based on the ID that was requested. To
  * be safe, we will always reallocate with double what was requested
  */
-static inline void perform_dynamic_resize(use_count_tracker_t* tracker, u_int32_t requested_id){
+void variable_map_dynamic_resize_for_id(use_count_tracker_t* tracker, u_int32_t requested_id){
 	//Nothing to worry about here
 	if(tracker->variable_count > requested_id){
 		return;
