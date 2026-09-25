@@ -3,6 +3,9 @@
  * This header file defines the APIs for the variable mapping. The variable mapping
  * is used when we clone instructions from one function to another and need 
  * distinct(both memory distinct and ID distinct) values
+ *
+ * This header file contains API definitions that are implemented in the appropriate C
+ * file but also contains inline definitions for commonly reused, lightweight helpers
  */
 
 #ifndef VARIABLE_MAPPING_H
