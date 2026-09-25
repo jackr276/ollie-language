@@ -13530,7 +13530,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
 											   	parameter_results_array_t* parameter_results){
 	//Initialize a brand new variable mapping for our uses
-	variable_map_t variable_map = variable_map_alloc();
+	variable_map_t variable_map = variable_map_alloc(function_to_clone);
 	//Grab this for ease of use
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 	//Store the estimated execution frequency of the block that we've inlined in

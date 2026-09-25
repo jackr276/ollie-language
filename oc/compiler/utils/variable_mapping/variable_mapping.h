@@ -32,6 +32,7 @@ typedef struct variable_map_t variable_map_t;
  * have temp-to-temp or symtab-to-symtab
  */
 typedef enum {
+	MAPPING_TYPE_NOT_IMPLEMENTED = 0, //sentinel value 
 	MAPPING_TYPE_TEMP_TO_TEMP,
 	MAPPING_TYPE_SYMTAB_TO_SYMTAB,
 	MAPPING_TYPE_TEMP_TO_SYMTAB,
@@ -115,34 +116,20 @@ void variable_map_dealloc(variable_map_t* map);
 
 //====================================== Inlined Utility Functions ===========================================================
 /**
- * Crawl the variable map looking specifically for a temporary variable mapping
- * that has the given source variable ID. We return NULL if none is found
- *
- * TODO WRONG
+ * Get the mapping from the mapping list if it exists. If it does not exist, we return NULL
  */
 static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id){
-	for(int32_t i = 0; i < variable_map->current_index; i++){
-		//Get a pointer to the mapping
-		variable_mapping_t* mapping = &(variable_map->mappings[i]);
+	variable_mapping_t* mapping = &(variable_map->mappings[source_temp_var_id - variable_map->index_adjustment]);
 
-		/**
-		 * We only care to look for temp var mappings here - if it's not
-		 * that then skip
-		 */
-		if(mapping->mapping_type != MAPPING_TYPE_TEMP_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_TEMP_TO_TEMP){
-			continue;
-		}
-
-		/**
-		 * We have a hit - return the address of this mapping to avoid copying
-		 */
-		if(mapping->source.temporary_id == source_temp_var_id){
-			return mapping;
-		}
+	/**
+	 * If we get here and we see it's not unimplemented, then we get the mapping,
+	 * otherwise we return NULL
+	 */
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED){
+		return mapping;
+	} else {
+		return NULL;
 	}
-
-	//If we made it here then we found nothing so bail out
-	return NULL;
 }
 
 
@@ -150,35 +137,22 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
  * Crawl the variable map looking specifically for a symtab variable mapping
  * that has the given source symtab variable. We return NULL if none is found
  *
- * TODO WRONG
+ * NOTE: for symtab variables we always use the "variable_id" and we ignore the memory
+ * address variable ID
  */
 static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
+	//
+	variable_mapping_t* mapping = &(variable_map->mappings[source_variable->associated_three_addr_var_ids.variable_id - variable_map->index_adjustment]);
+
 	/**
-	 * Second try: if that didn't work then we'll just do our regular linear scan over
-	 * every single mapping in here
+	 * If we get here and we see it's not unimplemented, then we get the mapping,
+	 * otherwise we return NULL
 	 */
-	for(int32_t i = 0; i < variable_map->current_index; i++){
-		//Get a pointer to the mapping
-		variable_mapping_t* mapping = &(variable_map->mappings[i]);
-
-		/**
-		 * We only care to look for symtab mappings here - if it's not
-		 * that then skip
-		 */
-		if(mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_TEMP){
-			continue;
-		}
-
-		/**
-		 * We have a hit - return the address of this mapping to avoid copying
-		 */
-		if(mapping->source.symtab_variable == source_variable){
-			return mapping;
-		}
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED){
+		return mapping;
+	} else {
+		return NULL;
 	}
-
-	//If we made it here then we found nothing so bail out
-	return NULL;
 }
 //====================================== Inlined Utility Functions ===========================================================
 #endif /* VARIABLE_MAPPING_H */
