@@ -11568,10 +11568,10 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 	if(is_memory_region(variable->type_defined_as) == TRUE
 		|| variable->storage_class == STORAGE_CLASS_STACK){
 		//Create a stack region for this variable
-		node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+		variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
 		//Emit and add the synthetic initialization here
-		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable), node->line_number);
+		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
 		add_statement(current_block, synthetic_initialization);
 	}
 }
@@ -13403,8 +13403,6 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		//We know that we're safe to clone the parameter and get the results
 		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 		parameter_result_t* result = get_result_at_index(parameter_results, results_index);
-
-		printf("PARAMETER VARIABLE ID %d\n", parameter_variable->associated_three_addr_var_ids.variable_id);
 
 		/**
 		 * For parameter aliases, since we are not going to be precoloring the regular parameters these are 

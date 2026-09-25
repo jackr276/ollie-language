@@ -21,6 +21,7 @@
 
 #include <sys/types.h>
 #include "../../symtab/symtab.h"
+#include "../constants.h"
 
 //Individual variable mappings
 typedef struct variable_mapping_t variable_mapping_t;
@@ -141,8 +142,20 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
  * address variable ID
  */
 static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
-	//
-	variable_mapping_t* mapping = &(variable_map->mappings[source_variable->associated_three_addr_var_ids.variable_id - variable_map->index_adjustment]);
+	//TODO DOC
+	int32_t source_var_id;
+	if(source_variable->associated_three_addr_var_ids.variable_id != NEVER_SET){
+		source_var_id = source_variable->associated_three_addr_var_ids.variable_id;
+	} else {
+		source_var_id = source_variable->associated_three_addr_var_ids.memory_address_variable_id;
+	}
+
+	if(source_var_id == NEVER_SET){
+		printf("FATAL THIS WAS NEVER SET HOW IS THAT POSSIBLE\n\n");
+	}
+
+	//Get the mapping using this source var ID with the adjustment
+	variable_mapping_t* mapping = &(variable_map->mappings[source_var_id - variable_map->index_adjustment]);
 
 	/**
 	 * If we get here and we see it's not unimplemented, then we get the mapping,

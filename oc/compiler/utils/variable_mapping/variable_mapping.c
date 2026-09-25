@@ -31,12 +31,6 @@ variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
 	//Allcoate based on our size
 	map.mappings = calloc(sizeof(variable_mapping_t), map.mapping_count);
 
-	printf("MIN VARIABLE IS %d\n", mapped_function->min_variable_id);
-	printf("MAX VARIABLE IS %d\n", mapped_function->max_variable_id);
-
-	printf("VARIABLE MAP HAS ADJUSTMENT OF %d\n", map.index_adjustment);
-	printf("VARIABLE MAP IS OF SIZE %d\n", map.mapping_count);
-
 	//Return a copy
 	return map;
 }
@@ -73,13 +67,23 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t
  * that overwrites a previous mapping, that is on you
  */
 void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable){
+	//TODO DOC
+	int32_t source_var_id;
+	if(source_variable->associated_three_addr_var_ids.variable_id != NEVER_SET){
+		source_var_id = source_variable->associated_three_addr_var_ids.variable_id;
+	} else {
+		source_var_id = source_variable->associated_three_addr_var_ids.memory_address_variable_id;
+	}
+
+	if(source_var_id == NEVER_SET){
+		printf("FATAL THIS WAS NEVER SET HOW IS THAT POSSIBLE\n\n");
+	}
+
 	/**
 	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
 	 * by variable ID, regardless of what the actual ID is
 	 */
-	int32_t adjusted_index = source_variable->associated_three_addr_var_ids.variable_id - variable_map->index_adjustment; 
-
-	printf("ADJUSTED INDEX IS %d\n", adjusted_index);
+	int32_t adjusted_index = source_var_id - variable_map->index_adjustment; 
 
 	//Grab a reference to the region to make this easier
 	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
