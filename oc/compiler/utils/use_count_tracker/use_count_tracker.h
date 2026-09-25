@@ -11,6 +11,7 @@
 #define USE_COUNT_TRACKER_H
 
 #include <sys/types.h>
+#include <string.h>
 
 //Predeclare the struct itself
 typedef struct use_count_tracker_t use_count_tracker_t;
@@ -46,22 +47,33 @@ void use_count_tracker_dealloc(use_count_tracker_t* tracker);
 /**
  * Retrieve the use count for a given ID
  */
-u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id);
+static inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id){
+	return tracker->map[id];
+}
+
 
 /**
  * Increment the use count for a given ID
  */
-void increment_use_count(use_count_tracker_t* tracker, u_int32_t id);
+static inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t id){
+	(tracker->map[id])++;
+}
+
 
 /**
  * Decrement the use count for a given ID. If the use count is already
  * at 0, we will never go negative and will stay at 0
  */
-void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id);
+static inline void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id){
+	(tracker->map[id])--;
+}
+
 
 /**
  * Clear out all of the use counts and start fresh
  */
-void reset_all_use_counts(use_count_tracker_t* tracker);
+static inline void reset_all_use_counts(use_count_tracker_t* tracker){
+	memset(tracker->map, 0, sizeof(u_int16_t) * tracker->variable_count);
+}
 //================================ Inlined Utility Functions ==================================
 #endif /* USE_COUNT_TRACKER_H */
