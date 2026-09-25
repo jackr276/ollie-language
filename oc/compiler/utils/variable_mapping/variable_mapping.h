@@ -65,19 +65,7 @@ struct variable_map_t {
 	int32_t max_index;
 };
 
-
-/**
- * Crawl the variable map looking specifically for a temporary variable mapping
- * that has the given source variable ID. We return NULL if none is found
- */
-variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id);
-
-/**
- * Crawl the variable map looking specifically for a symtab variable mapping
- * that has the given source symtab variable. We return NULL if none is found
- */
-variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable);
-
+//====================================== Non-Inlined Functions ===============================================================
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
  *
@@ -107,10 +95,28 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_
  */
 variable_map_t variable_map_alloc();
 
-
 /**
  * Deallocate a given variable map
  */
 void variable_map_dealloc(variable_map_t* map);
+//====================================== Non-Inlined Functions ===============================================================
 
+//====================================== Inlined Utility Functions ===========================================================
+/**
+ * Crawl the variable map looking specifically for a temporary variable mapping
+ * that has the given source variable ID. We return NULL if none is found
+ */
+static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id){
+
+}
+
+
+/**
+ * Crawl the variable map looking specifically for a symtab variable mapping
+ * that has the given source symtab variable. We return NULL if none is found
+ */
+static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
+
+}
+//====================================== Inlined Utility Functions ===========================================================
 #endif /* VARIABLE_MAPPING_H */
