@@ -94,6 +94,29 @@ void parameter_results_array_dealloc(parameter_results_array_t* array);
  * store the pointer
  */
 static inline void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type){
+	//Only call out to the resizer if we absolutely need to
+	if(array->current_index == array->max_index){
+		parameter_results_dynamic_resize_for_index(array, array->current_index);
+	}
+
+	/**
+	 * Populate our result appropriately based on the given type
+	 */
+	parameter_result_t* new_result = &(array->parameter_results[array->current_index]);
+	switch(result_type){
+		case PARAM_RESULT_TYPE_CONST:{
+			new_result->result_type = result_type;
+			new_result->param_result.constant_result = (three_addr_const_t*)result;
+		}
+
+		case PARAM_RESULT_TYPE_VAR: {
+			new_result->result_type = result_type;
+			new_result->param_result.variable_result = (three_addr_var_t*)result;
+		}
+	}
+
+	//Bump the current index
+	(array->current_index)++;
 }
 
 

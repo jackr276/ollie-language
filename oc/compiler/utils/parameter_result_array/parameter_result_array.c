@@ -4,7 +4,6 @@
  */
 
 #include "parameter_result_array.h"
-#include <stdio.h>
 
 /**
  * Default initial size is 6, this is usually more 
@@ -63,35 +62,6 @@ void parameter_results_dynamic_resize_for_index(parameter_results_array_t* array
 	//Like said above always reallocate to double this size
 	array->max_index = proposed_index * 2;
 	array->parameter_results = realloc(array->parameter_results, array->max_index * sizeof(parameter_result_t));
-}
-
-
-
-/**
- * Add a parameter to the results array. We will be relying on the caller to provide us an accurate result
- * type here. The pointer is generic for this reason, we never need to actually access this memory, just
- * store the pointer
- */
-void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type){
-
-	array->parameter_results[array->current_index].result_type = result_type;
-	
-	/**
-	 * Yes - we do not need this because it's a union and we're just storing memory.
-	 * I prefer the expressiveness of this though as it shows the intent of the code
-	 */
-	switch(result_type){
-		case PARAM_RESULT_TYPE_CONST:
-			array->parameter_results[array->current_index].param_result.constant_result = result;
-			break;
-
-		case PARAM_RESULT_TYPE_VAR:
-			array->parameter_results[array->current_index].param_result.variable_result = result;
-			break;
-	}
-
-	//Current index needs to be upped for the next go around
-	(array->current_index)++;
 }
 
 
