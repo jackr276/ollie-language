@@ -28,8 +28,14 @@ variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
 	 */
 	map.mapping_count = mapped_function->max_variable_id - mapped_function->min_variable_id + 1;
 
-	//Allcoate based on our size, and clear the current index out
-	map.mappings = calloc(sizeof(variable_map_t), map.mapping_count);
+	//Allcoate based on our size
+	map.mappings = calloc(sizeof(variable_mapping_t), map.mapping_count);
+
+	printf("MIN VARIABLE IS %d\n", mapped_function->min_variable_id);
+	printf("MAX VARIABLE IS %d\n", mapped_function->max_variable_id);
+
+	printf("VARIABLE MAP HAS ADJUSTMENT OF %d\n", map.index_adjustment);
+	printf("VARIABLE MAP IS OF SIZE %d\n", map.mapping_count);
 
 	//Return a copy
 	return map;
@@ -72,6 +78,8 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	 * by variable ID, regardless of what the actual ID is
 	 */
 	int32_t adjusted_index = source_variable->associated_three_addr_var_ids.variable_id - variable_map->index_adjustment; 
+
+	printf("ADJUSTED INDEX IS %d\n", adjusted_index);
 
 	//Grab a reference to the region to make this easier
 	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);

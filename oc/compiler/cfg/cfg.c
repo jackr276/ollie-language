@@ -13394,6 +13394,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 	int32_t parameter_index = 0;
 	int32_t results_index = 0;
 	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
+
+
 		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
 		generic_type_t* parameter_type = parameter_variable->type_defined_as;
@@ -13401,6 +13403,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		//We know that we're safe to clone the parameter and get the results
 		symtab_variable_record_t* cloned_parameter = clone_symtab_variable(parameter_variable, variable_map);
 		parameter_result_t* result = get_result_at_index(parameter_results, results_index);
+
+		printf("PARAMETER VARIABLE ID %d\n", parameter_variable->associated_three_addr_var_ids.variable_id);
 
 		/**
 		 * For parameter aliases, since we are not going to be precoloring the regular parameters these are 
