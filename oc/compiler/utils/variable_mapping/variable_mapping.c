@@ -5,18 +5,33 @@
 
 #include "variable_mapping.h"
 
-
 /**
- * Allocate a variable map with the default size
+ * Allocate a variable map designed specifically for a given function. Remember that variable
+ * maps are specific to a given function that we're inlining. They may not be reused and
+ * must be rebuilt upon every single inline request
  */
-variable_map_t variable_map_alloc(){
+variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
+	//Stack allocate the map
 	variable_map_t map;
 
-	//Allocate a buffer with the default size to start
-	map.max_index = VARIABLE_MAPPING_DEFAULT_SIZE;
-	map.mappings = calloc(sizeof(variable_mapping_t), map.max_index);
+	/**
+	 * IMPORTANT - we will maintain a so-called "index-adjustment"
+	 * so that the smallest variable ID inside of this function will
+	 * map to index 0 when we add/retrieve
+	 */
+	map.index_adjustment = mapped_function->min_variable_id;
 
-	map.current_index = 0;
+	/**
+	 * Say our function has the lowest variable at ID 15 and the highest variable
+	 * ID at 57. We will need to store 43 values(we need to store 15 too), so 
+	 * we're storing 57 - 15 + 1
+	 */
+	map.mapping_count = mapped_function->max_variable_id - mapped_function->min_variable_id + 1;
+
+	//Allcoate based on our size, and clear the current index out
+	map.mappings = calloc(sizeof(variable_map_t), map.mapping_count);
+
+	//Return a copy
 	return map;
 }
 

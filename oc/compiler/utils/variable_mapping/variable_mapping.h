@@ -61,9 +61,7 @@ struct variable_mapping_t {
 
 
 /**
- * The overall map holds a dynamically resizing
- * array of mappings that are stored as a contiguous
- * memory chunk(not pointers)
+ * Mappings are stored as a contiguous memory chunk, not pointers
  *
  * The variable mapping is designed to use positional encoding
  * based on the "variable_id" of the three_addr_var_t. However, for
@@ -73,12 +71,18 @@ struct variable_mapping_t {
  */
 struct variable_map_t {
 	variable_mapping_t* mappings;
-	int32_t current_index;
-	int32_t max_index;
+	int32_t mapping_count;
 	int32_t index_adjustment;
 };
 
 //====================================== Non-Inlined Functions ===============================================================
+/**
+ * Allocate a variable map designed specifically for a given function. Remember that variable
+ * maps are specific to a given function that we're inlining. They may not be reused and
+ * must be rebuilt upon every single inline request
+ */
+variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function);
+
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
  *
@@ -104,13 +108,6 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
 
 /**
- * Allocate a variable map designed specifically for a given function. Remember that variable
- * maps are specific to a given function that we're inlining. They may not be reused and
- * must be rebuilt upon every single inline request
- */
-variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function);
-
-/**
  * Deallocate a given variable map
  */
 void variable_map_dealloc(variable_map_t* map);
@@ -120,6 +117,8 @@ void variable_map_dealloc(variable_map_t* map);
 /**
  * Crawl the variable map looking specifically for a temporary variable mapping
  * that has the given source variable ID. We return NULL if none is found
+ *
+ * TODO WRONG
  */
 static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id){
 	for(int32_t i = 0; i < variable_map->current_index; i++){
@@ -150,6 +149,8 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
 /**
  * Crawl the variable map looking specifically for a symtab variable mapping
  * that has the given source symtab variable. We return NULL if none is found
+ *
+ * TODO WRONG
  */
 static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
 	/**
