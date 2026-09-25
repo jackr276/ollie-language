@@ -76,6 +76,13 @@ parameter_results_array_t parameter_results_array_alloc_default_size();
 parameter_results_array_t parameter_results_array_alloc(int32_t initial_size);
 
 /**
+ * Perform a dynamic resize for the parameter result array so that the proposed index will fit. In
+ * the event that we do need to resize, we will always resize to double the proposed index to cut
+ * down on how many of these resizes we must do
+ */
+void parameter_results_dynamic_resize_for_index(parameter_results_array_t* array, int32_t proposed_index);
+
+/**
  * Deallocate a parameter results array
  */
 void parameter_results_array_dealloc(parameter_results_array_t* array);
@@ -86,13 +93,18 @@ void parameter_results_array_dealloc(parameter_results_array_t* array);
  * type here. The pointer is generic for this reason, we never need to actually access this memory, just
  * store the pointer
  */
-void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type);
+static inline void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type){
+}
 
 
 /**
  * Retrieve a parameter from the array
+ *
+ * We assume that the user is smart enough to do their own checks here
  */
-parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index);
+static inline parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index){
+	return &(array->parameter_results[index]);
+}
 //================================= Inlined Utility Functions =========================================
 
 #endif /* PARAMETER_RESULT_ARRAY_H */
