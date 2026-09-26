@@ -150,10 +150,6 @@ static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t
 		source_var_id = source_variable->associated_three_addr_var_ids.memory_address_variable_id;
 	}
 
-	if(source_var_id == NEVER_SET){
-		printf("FATAL THIS WAS NEVER SET HOW IS THAT POSSIBLE\n\n");
-	}
-
 	//Get the mapping using this source var ID with the adjustment
 	variable_mapping_t* mapping = &(variable_map->mappings[source_var_id - variable_map->index_adjustment]);
 

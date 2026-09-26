@@ -75,10 +75,6 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 		source_var_id = source_variable->associated_three_addr_var_ids.memory_address_variable_id;
 	}
 
-	if(source_var_id == NEVER_SET){
-		printf("FATAL THIS WAS NEVER SET HOW IS THAT POSSIBLE\n\n");
-	}
-
 	/**
 	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
 	 * by variable ID, regardless of what the actual ID is
