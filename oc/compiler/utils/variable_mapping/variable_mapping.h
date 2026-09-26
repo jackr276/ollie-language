@@ -142,7 +142,11 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
  * address variable ID
  */
 static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
-	//TODO DOC
+	/**
+	 * For the source variable ID, we will default to use the regular "variable_id" if it's not unset.
+	 * However, if it does not exist, we will fallback to the memory address variable id. Some variables
+	 * exist only as memory addresses which is why we need to do this
+	 */
 	int32_t source_var_id;
 	if(source_variable->associated_three_addr_var_ids.variable_id != NEVER_SET){
 		source_var_id = source_variable->associated_three_addr_var_ids.variable_id;
