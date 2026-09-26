@@ -4,9 +4,6 @@
  * instruction_t. It is expected that this will hold more than one variable/constant and may
  * even hold nested initializers inside of it. There are currently three kinds of initializers,
  * those being: arrays, strings and structs
- *
- * However, due to the dynamic resize and nature of the nested elements, we are not able to
- * just have this as a header and instead will need to have it implemented and part of the build system
  */
 
 #ifndef THREE_ADDRESS_INITIALIZER_H
@@ -68,12 +65,6 @@ struct three_addr_initializer_t {
 	} results;
 };
 
-
-/**
- * Dynamically allocate an initializer of a given type
- */
-three_addr_initializer_t* three_addr_initializer_alloc(generic_type_t* type);
-
 /**
  * Add an initializer result to the given initializer
  */
@@ -82,11 +73,28 @@ void add_intializer_result(three_addr_initializer_t* initializer, void* result, 
 /**
  * Get the result of an intializer at a given index
  */
-void* get_intializer_result_at_index(three_addr_initializer_t* initializer, int32_t index);
+initializer_result_t* get_intializer_result_at_index(three_addr_initializer_t* initializer, int32_t index);
+
 
 /**
  * Destroy a given initializer
  */
-void three_addr_initializer_dealloc(three_addr_initializer_t* initializer);
+static inline void three_addr_initializer_dealloc(three_addr_initializer_t* initializer){
+	/**
+	 * We'll need to destroy any sub-initializers that we have here recursively
+	 */
+	for(int32_t i = 0; i < initializer->results.results_max_index; i++){
+		initializer_result_t* result = &(initializer->results.result_array[i]);
+
+		//Recursively destroy if this happens
+		if(result->result_type == INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER){
+			three_addr_initializer_dealloc(result->value.initializer_value);
+		}
+	}
+
+	//Free the overall structure
+	free(initializer->results.result_array);
+	free(initializer);
+}
 
 #endif /* THREE_ADDRESS_INITIALIZER_H */
