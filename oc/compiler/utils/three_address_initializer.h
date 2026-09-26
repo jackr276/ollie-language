@@ -12,6 +12,7 @@
 //These will contain constants and variables
 #include "three_address_constant.h"
 #include "three_address_variable.h"
+#include <stdlib.h>
 
 //Forward declarations
 typedef struct three_addr_initializer_t three_addr_initializer_t;
@@ -22,9 +23,9 @@ typedef struct initializer_result_t initializer_result_t;
  * types
  */
 typedef enum {
-	INIITIALIZER_RESULT_TYPE_CONSTANT,
-	INIITIALIZER_RESULT_TYPE_VARIABLE,
-	INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER,
+	INITIALIZER_RESULT_TYPE_CONSTANT,
+	INITIALIZER_RESULT_TYPE_VARIABLE,
+	INITIALIZER_RESULT_TYPE_SUB_INITIALIZER,
 } initializer_result_type_t;
 
 
@@ -48,8 +49,12 @@ struct initializer_result_t {
  * nested initializers inside of it
  */
 struct three_addr_initializer_t {
-	//Unique identifier
-	u_int32_t initializer_id;
+	/**
+	 * The initializer ID ties into the three address variable ID system. This
+	 * is very important for variable mapping. It is called the variable ID to 
+	 * reflect this
+	 */
+	int32_t variable_id;
 	//Store the type as well
 	generic_type_t* type;
 	/**
@@ -65,15 +70,49 @@ struct three_addr_initializer_t {
 	} results;
 };
 
+
 /**
- * Add an initializer result to the given initializer
+ * Add an initializer result to the given initializer. This will internally 
  */
-void add_intializer_result(three_addr_initializer_t* initializer, void* result, initializer_result_type_t result_type);
+static inline void add_intializer_result(three_addr_initializer_t* initializer, void* result, initializer_result_type_t result_type){
+	/**
+	 * If we've hit the limit here we'll need to dynamically resize by doubling and then reallocating
+	 * the underlying result array
+	 */
+	if(initializer->results.results_current_index == initializer->results.results_max_index){
+		initializer->results.results_max_index *= 2;
+		initializer->results.result_array = (initializer_result_t*)realloc(initializer->results.result_array, sizeof(initializer_result_t) * initializer->results.results_max_index);
+	}
+
+	//Grab a pointer to where we want to add
+	initializer_result_t* new_result_ptr = &(initializer->results.result_array[initializer->results.results_current_index]);
+
+	switch(result_type){
+		case INIITIALIZER_RESULT_TYPE_CONSTANT: {
+			new_result_ptr->result_type = INIITIALIZER_RESULT_TYPE_CONSTANT;
+
+		}
+
+		case INIITIALIZER_RESULT_TYPE_VARIABLE: {
+			new_result_ptr->result_type = INIITIALIZER_RESULT_TYPE_VARIABLE;
+
+		}
+
+		case INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+			new_result_ptr->result_type = INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER;
+
+		}
+	}
+
+}
+
 
 /**
  * Get the result of an intializer at a given index
  */
-initializer_result_t* get_intializer_result_at_index(three_addr_initializer_t* initializer, int32_t index);
+static inline initializer_result_t* get_intializer_result_at_index(three_addr_initializer_t* initializer, int32_t index){
+	return &(initializer->results.result_array[index]);
+}
 
 
 /**
@@ -87,7 +126,7 @@ static inline void three_addr_initializer_dealloc(three_addr_initializer_t* init
 		initializer_result_t* result = &(initializer->results.result_array[i]);
 
 		//Recursively destroy if this happens
-		if(result->result_type == INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER){
+		if(result->result_type == INITIALIZER_RESULT_TYPE_SUB_INITIALIZER){
 			three_addr_initializer_dealloc(result->value.initializer_value);
 		}
 	}
