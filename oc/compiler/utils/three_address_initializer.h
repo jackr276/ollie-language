@@ -34,6 +34,16 @@ typedef enum {
 
 
 /**
+ * What kind of initializer is it? We only support struct and array. Remember
+ * that string initializers under the hood are just arrays of chars
+ */
+typedef enum {
+	INITIALIZER_TYPE_ARRAY,
+	INITIALIZER_TYPE_STRUCT,
+} initializer_type_t;
+
+
+/**
  * An initializer result is a tagged union that could store a constant,
  * a variable, or a sub-initializer(just another initializer pointer)
  */
@@ -59,8 +69,7 @@ struct three_addr_initializer_t {
 	 * reflect this
 	 */
 	int32_t variable_id;
-	//Store the type as well
-	generic_type_t* type;
+
 	/**
 	 * The "Initializer results" mimics dynamic array functionality
 	 * almost to a T, except that instead of storing pointers, we are
@@ -72,6 +81,11 @@ struct three_addr_initializer_t {
 		int32_t results_max_index;
 		int32_t results_current_index;
 	} results;
+
+	//Less frequently accessed field - the type of the initializer
+	initializer_type_t initializer_type;
+	//Store the type as well
+	generic_type_t* type;
 };
 
 
