@@ -13,8 +13,8 @@
 #define THREE_ADDRESS_INITIALIZER_H
 
 //These will contain constants and variables
-#include "../three_address_constant.h"
-#include "../three_address_variable.h"
+#include "three_address_constant.h"
+#include "three_address_variable.h"
 
 //Forward declarations
 typedef struct three_addr_initializer_t three_addr_initializer_t;
