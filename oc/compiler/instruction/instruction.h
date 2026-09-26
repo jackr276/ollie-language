@@ -171,6 +171,11 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 
 /**
+ * Create and return a three address initializer of a given type
+ */
+three_addr_initializer_t* emit_initializer(generic_type_t* type_initializing, initializer_type_t initializer_type);
+
+/**
  * Create and return a three address var from an existing variable. If 
  * we are assigning to a variable, that will create a new generation of variable.
 */

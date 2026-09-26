@@ -897,6 +897,15 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 
 
 /**
+ * Create and return a three address initializer of a given type
+ */
+three_addr_initializer_t* emit_initializer(generic_type_t* type_initializing, initializer_type_t initializer_type){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
  * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
  * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
  * that they share is the overall variable that they're linked back to, which stores their type information,
