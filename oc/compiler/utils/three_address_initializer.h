@@ -4,6 +4,10 @@
  * instruction_t. It is expected that this will hold more than one variable/constant and may
  * even hold nested initializers inside of it. There are currently three kinds of initializers,
  * those being: arrays, strings and structs
+ *
+ * NOTE: because we require these to be tied into the variable ID system, we cannot do any allocation
+ * here. We need to do all allocation in the instruction.c file to have access to that atomically
+ * increasing variable ID
  */
 
 #ifndef THREE_ADDRESS_INITIALIZER_H
@@ -36,7 +40,7 @@ typedef enum {
 struct initializer_result_t {
 	union {
 		three_addr_const_t* constant_value;
-		three_addr_var_t* array_value;
+		three_addr_var_t* variable_value;
 		three_addr_initializer_t* initializer_value;
 	} value;
 
@@ -88,22 +92,27 @@ static inline void add_intializer_result(three_addr_initializer_t* initializer, 
 	initializer_result_t* new_result_ptr = &(initializer->results.result_array[initializer->results.results_current_index]);
 
 	switch(result_type){
-		case INIITIALIZER_RESULT_TYPE_CONSTANT: {
-			new_result_ptr->result_type = INIITIALIZER_RESULT_TYPE_CONSTANT;
-
+		case INITIALIZER_RESULT_TYPE_CONSTANT: {
+			new_result_ptr->result_type = INITIALIZER_RESULT_TYPE_CONSTANT;
+			new_result_ptr->value.constant_value = (three_addr_const_t*)result;
+			break;
 		}
 
-		case INIITIALIZER_RESULT_TYPE_VARIABLE: {
-			new_result_ptr->result_type = INIITIALIZER_RESULT_TYPE_VARIABLE;
-
+		case INITIALIZER_RESULT_TYPE_VARIABLE: {
+			new_result_ptr->result_type = INITIALIZER_RESULT_TYPE_VARIABLE;
+			new_result_ptr->value.variable_value = (three_addr_var_t*)result;
+			break;
 		}
 
-		case INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-			new_result_ptr->result_type = INIITIALIZER_RESULT_TYPE_SUB_INITIALIZER;
-
+		case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+			new_result_ptr->result_type = INITIALIZER_RESULT_TYPE_SUB_INITIALIZER;
+			new_result_ptr->value.initializer_value = (three_addr_initializer_t*)result;
+			break;
 		}
 	}
 
+	//Bump the current index for the next go around
+	(initializer->results.results_current_index)++;
 }
 
 
