@@ -9,15 +9,10 @@
 #define DYNAMIC_STRING_H
 
 #include <sys/types.h>
-
+#include <string.h>
+#include "../constants.h"
 
 typedef struct dynamic_string_t dynamic_string_t;
-
-
-//============================== Public Utility Macros ===============================
-#define INITIALIZE_DYNAMIC_STRING (dynamic_string_t){NULL, 0, 0}
-//============================== Public Utility Macros ===============================
-
 
 /**
  * A dynamic string itself contains the true length of the string(with \0 included)
@@ -32,7 +27,12 @@ struct dynamic_string_t {
 	u_int32_t length;
 };
 
+//============================== Public Utility Macros ===============================
+#define INITIALIZE_DYNAMIC_STRING (dynamic_string_t){NULL, 0, 0}
+#define NULL_DYNAMIC_STRING (dynamic_string_t){NULL, 0, 0}
+//============================== Public Utility Macros ===============================
 
+//======================================= Non-Inlined Functions ============================
 /**
  * Allocate a dynamic string on the heap. The actual structure itself
  * will be stack allocated
@@ -77,17 +77,6 @@ void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch);
 void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string);
 
 /**
- * Are two dynamic strings identical?
- */
-u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b);
-
-/**
- * Completely wipe a dynamic string. This allows us to use the same memory that
- * we've allocated once over and over again. This is particularly useful in the lexer
- */
-void clear_dynamic_string(dynamic_string_t* dynamic_string);
-
-/**
  * Deallocate a dynamic string that was heap allocated
  */
 void dynamic_string_heap_dealloc(dynamic_string_t* dynamic_string);
@@ -97,4 +86,42 @@ void dynamic_string_heap_dealloc(dynamic_string_t* dynamic_string);
  */
 void dynamic_string_dealloc(dynamic_string_t* dynamic_string);
 
+//======================================= Non-Inlined Functions ============================
+//======================================= Inlined Utility Functions ========================
+/**
+ * Completely wipe a dynamic string. This allows us to use the same memory that
+ * we've allocated once over and over again. This is particularly useful in the lexer
+ */
+static inline void clear_dynamic_string(dynamic_string_t* dynamic_string){
+	//Wipe the entire memory region out
+	memset(dynamic_string->string, 0, dynamic_string->length * sizeof(char));
+
+	//And the current length is now just 0
+	dynamic_string->current_length = 0;
+}
+
+
+/**
+ * Are two dynamic strings identical?
+ */
+static inline u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b){
+	//Mismatched lengths mean that they can't be equal
+	if(a->current_length != b->current_length){
+		return FALSE;
+	}
+
+	//Even if both of them are NULL, we do not consider unallocated
+	//strings to have any kind of equality
+	if(a->string == NULL || b->string == NULL){
+		return FALSE;
+	}
+
+	//Now we do a string compare. TRUE if they're equal, false if not
+	if(strncmp(a->string, b->string, a->current_length) == 0){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+//======================================= Inlined Utility Functions ========================
 #endif /* DYNAMIC_STRING_H */

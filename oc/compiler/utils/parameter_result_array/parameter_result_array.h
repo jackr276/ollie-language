@@ -3,6 +3,9 @@
  * This API defines the dynamic parameter result list that is used mainly by the function
  * call emitters in the CFG. This datastructure allows us to store tagged unions that may 
  * contain either three_addr_var_t objects or three_addr_const_t objects
+ *
+ * This header file contains declarations for APIs that are defined in the parameter_result_array.c
+ * file, and contains inlined definitions for commonly used utility functions
  */
 
 #ifndef PARAMETER_RESULT_ARRAY_H
@@ -60,36 +63,71 @@ struct parameter_results_array_t {
 	int32_t max_index;
 };
 
+//================================= Non-Inlined Functions =============================================
 /**
  * Allocate a parameter results array with the default initial size. This is good
  * for when we have elaborative params and do not know how many results we will have
  */
 parameter_results_array_t parameter_results_array_alloc_default_size();
 
-
 /**
  * Allocate a parameter results array with a given initial size
  */
 parameter_results_array_t parameter_results_array_alloc(int32_t initial_size);
 
-
 /**
- * Add a parameter to the results array. We will be relying on the caller to provide us an accurate result
- * type here. The pointer is generic for this reason, we never need to actually access this memory, just
- * store the pointer
+ * Perform a dynamic resize for the parameter result array so that the proposed index will fit. In
+ * the event that we do need to resize, we will always resize to double the proposed index to cut
+ * down on how many of these resizes we must do
  */
-void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type);
-
-
-/**
- * Retrieve a parameter from the array
- */
-parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index);
-
+void parameter_results_dynamic_resize_for_index(parameter_results_array_t* array, int32_t proposed_index);
 
 /**
  * Deallocate a parameter results array
  */
 void parameter_results_array_dealloc(parameter_results_array_t* array);
+//================================= Non-Inlined Functions =============================================
+//================================= Inlined Utility Functions =========================================
+/**
+ * Add a parameter to the results array. We will be relying on the caller to provide us an accurate result
+ * type here. The pointer is generic for this reason, we never need to actually access this memory, just
+ * store the pointer
+ */
+static inline void add_parameter_result_to_results_array(parameter_results_array_t* array, void* result, parameter_result_type_t result_type){
+	//Only call out to the resizer if we absolutely need to
+	if(array->current_index == array->max_index){
+		parameter_results_dynamic_resize_for_index(array, array->current_index);
+	}
+
+	/**
+	 * Populate our result appropriately based on the given type
+	 */
+	parameter_result_t* new_result = &(array->parameter_results[array->current_index]);
+	switch(result_type){
+		case PARAM_RESULT_TYPE_CONST:{
+			new_result->result_type = result_type;
+			new_result->param_result.constant_result = (three_addr_const_t*)result;
+		}
+
+		case PARAM_RESULT_TYPE_VAR: {
+			new_result->result_type = result_type;
+			new_result->param_result.variable_result = (three_addr_var_t*)result;
+		}
+	}
+
+	//Bump the current index
+	(array->current_index)++;
+}
+
+
+/**
+ * Retrieve a parameter from the array
+ *
+ * We assume that the user is smart enough to do their own checks here
+ */
+static inline parameter_result_t* get_result_at_index(parameter_results_array_t* array, int32_t index){
+	return &(array->parameter_results[index]);
+}
+//================================= Inlined Utility Functions =========================================
 
 #endif /* PARAMETER_RESULT_ARRAY_H */

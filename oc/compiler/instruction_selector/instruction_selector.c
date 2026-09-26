@@ -1822,6 +1822,11 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
+		/**
+		 * We may as well do this now to resize if there are any changes in the number of variables.
+		 */
+		use_count_tracker_dynamic_resize_for_id(&use_count_tracker, get_current_variable_id());
+		
 		//Run through every signle instruction
 		instruction_t* instruction_cursor = block->leader_statement;
 		while(instruction_cursor != NULL){

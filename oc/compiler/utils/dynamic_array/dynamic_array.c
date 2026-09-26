@@ -13,6 +13,30 @@
 #include <sys/types.h>
 #include "../constants.h"
 
+
+/**
+ * Dynamic resize utility - this should only ever be called by other
+ * functions within this module and is therefore not exposed via
+ * the API
+ */
+static inline void dynamic_resize_if_needed(dynamic_array_t* array, int32_t proposed_index){
+	/**
+	 * Less than the current maximum, this is not needed. We can just
+	 * get out
+	 */
+	if(proposed_index < array->current_max_size){
+		return;
+	}
+
+	/**
+	 * Otherwise it's needed, so we'll need to resize by doubling the
+	 * proposed index
+	 */
+	array->current_max_size = proposed_index * 2;
+	array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
+}
+
+
 /**
  * Allocate an entire dynamic array. The resulting control
  * structure will be stack allocated
@@ -64,7 +88,7 @@ dynamic_array_t* dynamic_array_heap_alloc(){
  * the size we need
  */
 dynamic_array_t dynamic_array_alloc_initial_size(int32_t initial_size){
-//First we'll create the overall structure
+	//First we'll create the overall structure
  	dynamic_array_t array;
 
 	//Set the max size using the sane default 
@@ -109,45 +133,6 @@ dynamic_array_t clone_dynamic_array(dynamic_array_t* array){
 
 
 /**
- * Does the dynamic array contain this pointer?
- *
- * NOTE: This will currently do a linear scan. O(n) time, should be fast
- * enough for our purposes here. If it's really slowing things down, consider
- * sorting the array and binary searching
-*/
-int16_t dynamic_array_contains(dynamic_array_t* array, void* ptr){
-	//If it's null just return false
-	if(array == NULL || array->internal_array == NULL){
-		return NOT_FOUND;
-	}
-
-	//We'll run through the entire array, comparing pointer by pointer
-	for(int32_t i = 0; i < array->current_index; i++){
-		//If we find an exact memory address match return true
-		if(array->internal_array[i] == ptr){
-			return i;
-		}
-	}
-
-	//If we make it here, we found nothing so
-	return NOT_FOUND;
-}
-
-
-/**
- * Is the dynamic array is empty?
-*/
-u_int8_t dynamic_array_is_empty(dynamic_array_t* array){
-	//We'll just return what the next index is
-	if(array->current_index == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
-}
-
-
-/**
  * Add an element into the dynamic array
  */
 void dynamic_array_add(dynamic_array_t* array, void* ptr){
@@ -156,15 +141,12 @@ void dynamic_array_add(dynamic_array_t* array, void* ptr){
 		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
 		exit(1);
 	}
-	
-	//Now we'll see if we need to reallocate this
-	if(array->current_index == array->current_max_size){
-		//We'll double the current max size
-		array->current_max_size *= 2;
 
-		//And we'll reallocate the array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
+	/**
+	 * Pass along the current index(what we'd be adding to)
+	 * to determine if a resize is needed
+	 */
+	dynamic_resize_if_needed(array, array->current_index);
 
 	//Now that we're all set, we can add our element in. Elements are always added in at the very end
 	array->internal_array[array->current_index] = ptr;
@@ -193,56 +175,17 @@ void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr){
 		printf("ERROR: Attempting to insert a NULL pointer into a dynamic array\n");
 		exit(1);
 	}
-	
-	//Now we'll see if we need to reallocate this
-	if(array->current_index == array->current_max_size){
-		//We'll double the current max size
-		array->current_max_size *= 2;
 
-		//And we'll reallocate the array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
+	/**
+	 * Resize if needed so that we can place something at the current index
+	 */
+	dynamic_resize_if_needed(array, array->current_index);
 
 	//Now that we're all set, we can add our element in. Elements are always added in at the very end
 	array->internal_array[array->current_index] = ptr;
 
 	//Bump this up by 1
 	array->current_index++;
-}
-
-
-/**
- * Clear a dynamic array entirely - keeps the size unchanged, but
- * sets the entire internal array to 0
- */
-void clear_dynamic_array(dynamic_array_t* array){
-	//Just to be safe
-	if(array == NULL){
-		printf("ERROR: Attempting to clear a NULL dynamic array\n");
-		exit(1);
-	}
-
-	//Wipe the entire thing out
-	memset(array->internal_array, 0, sizeof(void*) * array->current_max_size);
-
-	//Our current index is now 0
-	array->current_index = 0;
-}
-
-
-/**
- * Get an element at a specified index. Do not remove the element
- */
-void* dynamic_array_get_at(dynamic_array_t* array, int32_t index){
-	//Return NULL here. It is the caller's responsibility
-	//to check this
-	if(array->current_max_size <= index){
-		printf("Fatal internal compiler error. Attempt to get index %d in an array of size %d\n", index, array->current_max_size);
-		exit(1);
-	}
-
-	//Otherwise we should be good to grab. Again we do not delete here
-	return array->internal_array[index];
 }
 
 
@@ -265,109 +208,10 @@ void dynamic_array_set_at(dynamic_array_t* array, void* ptr, int32_t index){
 	 * If the array's max size is smaller than the index
 	 * that we want to insert at, we will dynamically resize
 	 */
-	if(array->current_max_size <= index){
-		//Bump up to twice this to be safe
-		array->current_max_size = index * 2;
-
-		//Reallocate the internal array
-		array->internal_array = realloc(array->internal_array, sizeof(void*) * array->current_max_size);
-	}
+	dynamic_resize_if_needed(array, index);
 
 	//Now that we've taken care of all that, we'll perform the setting
 	array->internal_array[index] = ptr;
-}
-
-
-/**
- * Delete an element from a specified index. The element itself
- * is returned, allowing this to be used as a search & delete function
- * all in one
- */
-void* dynamic_array_delete_at(dynamic_array_t* array, int32_t index){
-	//Again if we can't do this, we won't disrupt the program. Just return NULL
-	if(array->current_index <= index){
-		return NULL;
-	}
-
-	//We'll grab the element at this index first
-	void* deleted = array->internal_array[index];
-
-	//Now we'll run through everything from that index up until the end, 
-	//shifting left every time
-	for(int32_t i = index; i < array->current_index - 1; i++){
-		//Shift left here
-		array->internal_array[i] = array->internal_array[i + 1];
-	}
-
-	//Null this out
-	array->internal_array[array->current_index - 1] = NULL;
-
-	//We've seen one less of these now
-	(array->current_index)--;
-
-	//And once we've done that shifting, we're done so
-	return deleted;
-}
-
-
-/**
- * Delete the pointer itself from the dynamic array
- *
- * Will not complain if it cannot be found - it simply won't be deleted
- */
-void dynamic_array_delete(dynamic_array_t* array, void* ptr){
-	//If this is NULL or empty we'll just return
-	if(ptr == NULL || array == NULL || array->current_index == 0){
-		return;
-	}
-
-	//Otherwise we'll need to grab this index
-	int16_t index = dynamic_array_contains(array, ptr);
-
-	//If we couldn't find it - no harm, we just won't do anything
-	if(index == NOT_FOUND){
-		return;
-	}
-
-	//Now we'll use the index to delete
-	dynamic_array_delete_at(array, index);
-
-	//And we're done
-}
-
-
-/**
- * Get the very last element in the dynamic array. Returns NULL if
- * the array is empty
- */
-void* dynamic_array_get_from_back(dynamic_array_t* array){
-	//Already empty
-	if(array->current_index == 0){
-		return NULL;
-	}
-
-	//Grab off of the very end
-	return array->internal_array[array->current_index - 1];
-}
-
-
-/**
- * Remove an element from the back of the dynamic array - O(1) removal
- */
-void* dynamic_array_delete_from_back(dynamic_array_t* array){
-	//Already empty
-	if(array->current_index == 0){
-		return NULL;
-	}
-
-	//Grab off of the very end
-	void* deleted = array->internal_array[array->current_index - 1];
-
-	//Decrement the index
-	(array->current_index)--;
-
-	//Give back the pointer
-	return deleted;
 }
 
 
@@ -382,8 +226,7 @@ u_int8_t dynamic_arrays_equal(dynamic_array_t* a, dynamic_array_t* b){
 		return FALSE;
 	}
 
-	//Do they have the same number of elements? If not - they can't
-	//possibly be equal
+	//Do they have the same number of elements? If not - they can't possibly be equal
 	if(a->current_index != b->current_index){
 		return FALSE;
 	}
