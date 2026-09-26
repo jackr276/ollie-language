@@ -5,122 +5,51 @@
 
 #include "variable_mapping.h"
 
-
 /**
- * Allocate a variable map with the default size
+ * Allocate a variable map designed specifically for a given function. Remember that variable
+ * maps are specific to a given function that we're inlining. They may not be reused and
+ * must be rebuilt upon every single inline request
  */
-variable_map_t variable_map_alloc(){
+variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
+	//Stack allocate the map
 	variable_map_t map;
 
-	//Allocate a buffer with the default size to start
-	map.max_index = VARIABLE_MAPPING_DEFAULT_SIZE;
-	map.mappings = calloc(sizeof(variable_mapping_t), map.max_index);
+	/**
+	 * IMPORTANT - we will maintain a so-called "index-adjustment"
+	 * so that the smallest variable ID inside of this function will
+	 * map to index 0 when we add/retrieve
+	 */
+	map.index_adjustment = mapped_function->min_variable_id;
 
-	map.current_index = 0;
+	/**
+	 * Say our function has the lowest variable at ID 15 and the highest variable
+	 * ID at 57. We will need to store 43 values(we need to store 15 too), so 
+	 * we're storing 57 - 15 + 1
+	 */
+	map.mapping_count = mapped_function->max_variable_id - mapped_function->min_variable_id + 1;
+
+	//Allcoate based on our size
+	map.mappings = calloc(sizeof(variable_mapping_t), map.mapping_count);
+
+	//Return a copy
 	return map;
 }
-
-
-/**
- * Crawl the variable map looking specifically for a temporary variable mapping
- * that has the given source variable ID. We return NULL if none is found
- */
-variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id){
-	for(int32_t i = 0; i < variable_map->current_index; i++){
-		//Get a pointer to the mapping
-		variable_mapping_t* mapping = &(variable_map->mappings[i]);
-
-		/**
-		 * We only care to look for temp var mappings here - if it's not
-		 * that then skip
-		 */
-		if(mapping->mapping_type != MAPPING_TYPE_TEMP_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_TEMP_TO_TEMP){
-			continue;
-		}
-
-		/**
-		 * We have a hit - return the address of this mapping to avoid copying
-		 */
-		if(mapping->source.temporary_id == source_temp_var_id){
-			return mapping;
-		}
-	}
-
-	//If we made it here then we found nothing so bail out
-	return NULL;
-}
-
-
-/**
- * Crawl the variable map looking specifically for a symtab variable mapping
- * that has the given source symtab variable. We return NULL if none is found
- */
-variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
-	/**
-	 * First try: get the mapping using the variable ID here. If we get a mapping and the source
-	 * matches then we are going to skip the linear scan
-	 */
-	variable_mapping_t* mapping = &(variable_map->mappings[source_variable->mapping_id]);
-	if(mapping != NULL && mapping->source.symtab_variable == source_variable){
-		return mapping;
-	}
-
-	/**
-	 * Second try: if that didn't work then we'll just do our regular linear scan over
-	 * every single mapping in here
-	 */
-	for(int32_t i = 0; i < variable_map->current_index; i++){
-		//Get a pointer to the mapping
-		variable_mapping_t* mapping = &(variable_map->mappings[i]);
-
-		/**
-		 * We only care to look for symtab mappings here - if it's not
-		 * that then skip
-		 */
-		if(mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_SYMTAB && mapping->mapping_type != MAPPING_TYPE_SYMTAB_TO_TEMP){
-			continue;
-		}
-
-		/**
-		 * We have a hit - return the address of this mapping to avoid copying
-		 */
-		if(mapping->source.symtab_variable == source_variable){
-			return mapping;
-		}
-	}
-
-	//If we made it here then we found nothing so bail out
-	return NULL;
-}
-
-
-/**
- * Perform the dynamic resize for the variable map if we determine that it's needed
- */
-static inline void dynamically_resize_if_needed(variable_map_t* variable_map){
-	if(variable_map->current_index == variable_map->max_index){
-		//Always double it to be safe
-		variable_map->max_index *= 2;
-
-		//Reallocate to a larger buffer
-		variable_map->mappings = realloc(variable_map->mappings, sizeof(variable_mapping_t) * variable_map->max_index);
-	}
-
-}
-
 
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, u_int32_t dest_temp_var_id){
-	//Perform the resize if need be
-	dynamically_resize_if_needed(variable_map);
+void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id){
+	/**
+	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
+	 * by variable ID, regardless of what the actual ID is
+	 */
+	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
 
 	//Grab a reference just to make this neater
-	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
 
 	//This is a temp mapping
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_TEMP;
@@ -128,12 +57,6 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
 	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.temporary_id = dest_temp_var_id;
-
-	//The mapping ID is the index where it exists
-	mapping->mapping_id = variable_map->current_index;
-
-	//Bump this up for the next go around
-	(variable_map->current_index)++;
 }
 
 
@@ -141,14 +64,29 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, u_int32
  * Create a new mapping for a symtab variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
 void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable){
-	//Perform the resize if needed
-	dynamically_resize_if_needed(variable_map);
+	/**
+	 * For the source variable ID, we will default to use the regular "variable_id" if it's not unset.
+	 * However, if it does not exist, we will fallback to the memory address variable id. Some variables
+	 * exist only as memory addresses which is why we need to do this
+	 */
+	int32_t source_var_id;
+	if(source_variable->associated_three_addr_var_ids.variable_id != NEVER_SET){
+		source_var_id = source_variable->associated_three_addr_var_ids.variable_id;
+	} else {
+		source_var_id = source_variable->associated_three_addr_var_ids.memory_address_variable_id;
+	}
+
+	/**
+	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
+	 * by variable ID, regardless of what the actual ID is
+	 */
+	int32_t adjusted_index = source_var_id - variable_map->index_adjustment; 
 
 	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
 
 	//This is a symtab mapping
 	mapping->mapping_type = MAPPING_TYPE_SYMTAB_TO_SYMTAB;
@@ -156,15 +94,6 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	//Store the source and dest
 	mapping->source.symtab_variable = source_variable;
 	mapping->destination.symtab_variable = destination_variable;
-
-	//The mapping ID is the index where it exists
-	mapping->mapping_id = variable_map->current_index;
-
-	//Store on the symtab variable the mapping that we correspond to
-	source_variable->mapping_id = mapping->mapping_id;
-
-	//Bump this up for the next go around
-	(variable_map->current_index)++;
 }
 
 
@@ -172,14 +101,17 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  * Create a new mapping that goes from a temp var to a symtab variable
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
- * that is on you
+ * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_int32_t source_temp_var_id, symtab_variable_record_t* destination_variable){
-	//Perform the resize if needed
-	dynamically_resize_if_needed(variable_map);
+void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable){
+	/**
+	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
+	 * by variable ID, regardless of what the actual ID is
+	 */
+	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
 
 	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[variable_map->current_index]);
+	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
 
 	//This is a symtab mapping
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_SYMTAB;
@@ -187,12 +119,6 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_
 	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.symtab_variable = destination_variable;
-
-	//The mapping ID is the index where it exists
-	mapping->mapping_id = variable_map->current_index;
-
-	//Bump this up for the next go around
-	(variable_map->current_index)++;
 }
 
 
@@ -202,8 +128,6 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, u_
 void variable_map_dealloc(variable_map_t* map){
 	//Destroy the mappings
 	free(map->mappings);
-
-	//0 these out to be safe
-	map->current_index = 0;
-	map->max_index = 0;
+	map->mapping_count = 0;
+	map->index_adjustment = 0;
 }

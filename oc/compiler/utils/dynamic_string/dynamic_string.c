@@ -11,6 +11,22 @@
 #include "../constants.h"
 
 /**
+ * Perform a resize on our dynamic string if we determine that it's needed. We will resize when
+ * the proposed index is at or above our current index
+ */
+static inline void dynamic_resize_if_needed(dynamic_string_t* dynamic_string, u_int32_t proposed_index){
+	//Nothing to do here, it's less than the length
+	if(proposed_index < dynamic_string->length){
+		return;
+	}
+
+	//Double the new index for our new length and reallocate
+	dynamic_string->length = proposed_index * 2;
+	dynamic_string->string = realloc(dynamic_string->string, sizeof(char) * dynamic_string->length);
+}
+
+
+/**
  * Allocate a dynamic string on the heap
  */
 dynamic_string_t dynamic_string_alloc(){
@@ -95,28 +111,12 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
 	//Grab this one's length
 	u_int32_t insertee_length = strlen(insertee);
 
-	//Here's our new length
-	u_int32_t new_length = dynamic_string->current_length + insertee_length;
-
 	/**
-	 * Since we are adding characters here, we need to ensure
-	 * that we have enough space. We will do this check by
-	 * seeing if the current length plus the insertee length
-	 * is greater than our current max
+	 * Get what our new length would be and allow the dynamic resize rule
+	 * to handle it
 	 */
-	if(new_length >= dynamic_string->length){
-		//Resize strategy here - if we can get away with *2 we will
-		if(dynamic_string->current_length * 2 > new_length){
-			//Double it
-			dynamic_string->length *= 2;
-
-		} else {
-			//Otherwise we'll go double the new length
-			dynamic_string->length = new_length * 2;
-		}
-
-		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length);
-	}
+	u_int32_t new_length = dynamic_string->current_length + insertee_length + 1;
+	dynamic_resize_if_needed(dynamic_string, new_length);
 
 	/**
 	 * First step: run through the string backwards and shift everything
@@ -129,7 +129,7 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
 		}
 	}
 
-	//Now update the current length
+	//Now update the current length 
 	dynamic_string->current_length += insertee_length;
 
 	/**
@@ -139,6 +139,9 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
 	for(u_int32_t i = 0; i < insertee_length; i++){
 		dynamic_string->string[index + i] = insertee[i];
 	}
+
+	//Always set the NULL terminator
+	dynamic_string->string[dynamic_string->current_length] = '\0';
 }
 
 
@@ -146,38 +149,28 @@ void dynamic_string_insert_string_at_index(dynamic_string_t* dynamic_string, cha
  * Set the value of a dynamic string. The function
  * will dynamically resize said string if what is passed
  * through is too big
+ *
+ * SET TO: Hello\0  <-- Current Length = 5
+ *
+ * Should have in dynamic string: 'H', 'e', 'l', 'l', 'o', '\0'
+ * Current length should be 5 in the end
+ * Need to resize space for at least 6 characters
  */
 void dynamic_string_set(dynamic_string_t* dynamic_string, char* string){
-	//Measure the length of this string *with* the null character included
-	u_int16_t paramter_length = strlen(string) + 1;
+	//Get the length of this string *WITHOUT* the NULL character
+	u_int32_t paramter_length = strlen(string);
 
-	//This represents the new length of the string
-	u_int16_t new_length = dynamic_string->current_length + paramter_length;
+	//This represents the entire new length of the string(no null character)
+	dynamic_string->current_length = paramter_length;
 
-	//If the current length of the string, plus the length of the new string, plus
-	//1 for the null character exceeds our current length, we need to resize
-	if(new_length >= dynamic_string->length){
-		//Is this string's new length less than double the old length? This
-		//will trigger our default behavior of doubling it
-		if(new_length < dynamic_string->length * 2){
-			//Double the length
-			dynamic_string->length = dynamic_string->length * 2;
-
-		//Otherwise, we need to go more than double. This is a rare case, but it can happen. If this does happen,
-		//we'll set the new length to be double the current length
-		} else {
-			dynamic_string->length = new_length * 2;
-		}
-
-		//Realloc the string with this length 
-		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length * sizeof(char));
-	}
-
-	//Set the current length to be this new length here
-	dynamic_string->current_length = new_length - 1;
+	//Perform a resize if needed(+ 1 to include the null terminator)
+	dynamic_resize_if_needed(dynamic_string, dynamic_string->current_length + 1);
 
 	//Copy the string over
 	strncpy(dynamic_string->string, string, paramter_length);
+
+	//Be sure to set the NULL terminator at the very end
+	dynamic_string->string[dynamic_string->current_length] = '\0';
 }
 
 
@@ -186,14 +179,8 @@ void dynamic_string_set(dynamic_string_t* dynamic_string, char* string){
  * how our lexer works
  */
 void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch){
-	//Dynamic resize if needed
-	if(dynamic_string->current_length + 1 >= dynamic_string->length){
-		//Double the length
-		dynamic_string->length *= 2;
-
-		//Realloc with the new length
-		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length * sizeof(char));
-	}
+	//Perform a dynamic resize if need be
+	dynamic_resize_if_needed(dynamic_string, dynamic_string->current_length + 1);
 
 	//Set the char to be at the end
 	dynamic_string->string[dynamic_string->current_length] = ch;
@@ -208,75 +195,37 @@ void dynamic_string_add_char_to_back(dynamic_string_t* dynamic_string, char ch){
 
 /**
  * Concatenate a string to the end of our dynamic string
+ *
+ * dynamic_string: 'H', 'e', 'l', 'l', 'o', '\0'
+ * \0 is always at the "current_length", so current_length = 5
+ * string to add: 'W', 'o', 'r', 'l', 'd', '\0'
+ *
+ * Need to have 5 + 5 + 1 = 11 space
+ *
+ * dynamic_string: 'H', 'e', 'l', 'l', 'o', 'W', 'o', 'r', 'l', 'd'
+ * current_length = 10
+ * Store '\0' at index 10
+ * dynamic_string: 'H', 'e', 'l', 'l', 'o', 'W', 'o', 'r', 'l', 'd', '\0'
  */
 void dynamic_string_concatenate(dynamic_string_t* dynamic_string, char* string){
-	//Grab the string length here
-	u_int16_t additional_length = strlen(string) + 1;
+	//How much additional length do we need
+	int32_t old_current_length = dynamic_string->current_length;
+	int32_t additional_length = strlen(string);
 
-	//Now found the overall new length
-	u_int16_t new_length = dynamic_string->current_length + additional_length;
+	/**
+	 * The new length is the number of characters in the current
+	 * string plus the additional length
+	 */
+	dynamic_string->current_length = dynamic_string->current_length + additional_length;
 
-	//If the current length of the string, plus the length of the new string, plus
-	//1 for the null character exceeds our current length, we need to resize
-	if(new_length >= dynamic_string->length){
-		//Is this string's new length less than double the old length? This
-		//will trigger our default behavior of doubling it
-		if(new_length < dynamic_string->length * 2){
-			//Double the length
-			dynamic_string->length = dynamic_string->length * 2;
+	//Resize if needed(+1 for NULL terminator)
+	dynamic_resize_if_needed(dynamic_string, dynamic_string->current_length + 1);
 
-		//Otherwise, we need to go more than double. This is a rare case, but it can happen. If this does happen,
-		//we'll set the new length to be double the current length
-		} else {
-			dynamic_string->length = new_length * 2;
-		}
+	//Concatenate the string here using a string copy at the old end
+	strncpy(dynamic_string->string + old_current_length, string, additional_length);
 
-		//Realloc the string with this length 
-		dynamic_string->string = realloc(dynamic_string->string, dynamic_string->length * sizeof(char));
-	}
-
-	//Concatenate the string here
-	strncat(dynamic_string->string, string, additional_length);
-
-	//Store the new length
-	dynamic_string->current_length = new_length - 1;
-}
-
-
-/**
- * Are two dynamic strings identical?
- */
-u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b){
-	//Mismatched lengths mean that they can't be equal
-	if(a->current_length != b->current_length){
-		return FALSE;
-	}
-
-	//Even if both of them are NULL, we do not consider unallocated
-	//strings to have any kind of equality
-	if(a->string == NULL || b->string == NULL){
-		return FALSE;
-	}
-
-	//Now we do a string compare. TRUE if they're equal, false if not
-	if(strncmp(a->string, b->string, a->current_length) == 0){
-		return TRUE;
-	} else {
-		return FALSE;
-	}
-}
-
-
-/**
- * Completely wipe a dynamic string. This allows us to use the same memory that
- * we've allocated once over and over again. This is particularly useful in the lexer
- */
-void clear_dynamic_string(dynamic_string_t* dynamic_string){
-	//Wipe the entire memory region out
-	memset(dynamic_string->string, 0, dynamic_string->length * sizeof(char));
-
-	//And the current length is now just 0
-	dynamic_string->current_length = 0;
+	//Add the NULL terminator onto the end
+	dynamic_string->string[dynamic_string->current_length] = '\0';
 }
 
 

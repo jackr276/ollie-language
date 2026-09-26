@@ -212,6 +212,13 @@ struct symtab_function_record_t{
 	 */
 	u_int32_t token_index_of_definition;
 	/**
+	 * What are the minimum and maximum ID's of the variables that
+	 * were emitted in this function? This will be needed if this function
+	 * ends up being inlined and we need to do a variable mapping
+	 */
+	int32_t min_variable_id;
+	int32_t max_variable_id;
+	/**
 	 * What kind of function is this? As of right now
 	 * there are 2 kinds: regular and overloaded
 	 * Overloaded functions will need to have their
@@ -313,12 +320,6 @@ struct symtab_variable_record_t{
 	 * inside of the SSA renamer
 	 */
 	dynamic_integer_array_t ssa_overwritten_generation_map;
-	/**
-	 * Store the ID for the mapping where this symtab
-	 * variable is the *SOURCE*. This is used for O(1)
-	 * retrieval in inlining
-	 */
-	int32_t mapping_id;
 	//Store the lexical scope ID as well(default to 0)
 	u_int32_t lexical_scope_id;
 	//What is the storage class of this variable?

@@ -201,4 +201,10 @@ struct lexitem_t {
 	u_int8_t ignore;
 };
 
+
+/**
+ * Helper initializer for blank lexitems
+ */
+#define BLANK_LEXITEM (lexitem_t){NULL_DYNAMIC_STRING, {0}, 0, BLANK, 0}
+
 #endif /* OLLIE_TOKEN_H */

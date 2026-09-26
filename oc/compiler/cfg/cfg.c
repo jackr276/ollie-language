@@ -10971,6 +10971,15 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
 
+	/**
+	 * IMPORTANT BOOKEEPING: in the event that we do some kind of function inlining,
+	 * we will need to know the minimum variable ID and maximum variable ID that is used
+	 * in this function. Since we're at the start of the function now, the minimum variable
+	 * ID must be the current variable ID as it can only go up from here. We'll record the
+	 * maximum variable ID later on
+	 */
+	current_function->min_variable_id = get_current_variable_id();
+
 	//We need to store the function entry block inside of the record for later use
 	func_record->function_entry_block = function_starting_block;
 
@@ -11038,6 +11047,12 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
 	finalize_all_user_defined_jump_statements(&current_function_user_defined_jump_statements);
+
+	/**
+	 * Now that this function has been entirely emitted, we know that the maximum variable
+	 * ID used in this function will have to whatever the next variable ID is
+	 */
+	current_function->max_variable_id = get_current_variable_id();
 
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
@@ -11553,10 +11568,10 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 	if(is_memory_region(variable->type_defined_as) == TRUE
 		|| variable->storage_class == STORAGE_CLASS_STACK){
 		//Create a stack region for this variable
-		node->variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+		variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
 		//Emit and add the synthetic initialization here
-		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(node->variable), node->line_number);
+		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
 		add_statement(current_block, synthetic_initialization);
 	}
 }
@@ -13379,6 +13394,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 	int32_t parameter_index = 0;
 	int32_t results_index = 0;
 	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
+
+
 		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
 		generic_type_t* parameter_type = parameter_variable->type_defined_as;
@@ -13515,7 +13532,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
 											   	parameter_results_array_t* parameter_results){
 	//Initialize a brand new variable mapping for our uses
-	variable_map_t variable_map = variable_map_alloc();
+	variable_map_t variable_map = variable_map_alloc(function_to_clone);
 	//Grab this for ease of use
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 	//Store the estimated execution frequency of the block that we've inlined in
@@ -13818,6 +13835,20 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	 */
 	current_function_blocks = NULL;
 	current_function = NULL;
+
+	/**
+	 * We know that we've performed inlining if we get here, and doing that will have
+	 * made the maximum variable ID used in this function go up due to all of the variable
+	 * cloning(cloning creates new variables with higher IDs). Because of that, we'll need to
+	 * adjust this for the next go around. Note that the minimum value should never go
+	 * down though, only the maximum one should go up. 
+	 *
+	 * This does mean that inlined functions will have particularly large and sparse
+	 * variable maps, with a large gap in the middle. This is considered to be an acceptable
+	 * tradeoff, and it's worth nothing that variable maps only exist during the inlining
+	 * process so this will not stay in memory for long
+	 */
+	function->max_variable_id = get_current_variable_id();
 }
 
 
