@@ -13838,9 +13838,15 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 
 	/**
 	 * We know that we've performed inlining if we get here, and doing that will have
-	 * made the maximum ID used in this function go up. Because of that, we'll need to
+	 * made the maximum variable ID used in this function go up due to all of the variable
+	 * cloning(cloning creates new variables with higher IDs). Because of that, we'll need to
 	 * adjust this for the next go around. Note that the minimum value should never go
-	 * down though, just the maximum one
+	 * down though, only the maximum one should go up. 
+	 *
+	 * This does mean that inlined functions will have particularly large and sparse
+	 * variable maps, with a large gap in the middle. This is considered to be an acceptable
+	 * tradeoff, and it's worth nothing that variable maps only exist during the inlining
+	 * process so this will not stay in memory for long
 	 */
 	function->max_variable_id = get_current_variable_id();
 }
