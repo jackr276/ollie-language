@@ -293,6 +293,23 @@ static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 	}
 }
 
+
+/**
+ * Is a given node an initializer node or not? Initializer nodes get special
+ * treatment by the CFG constructor so we may need to exclude them from certain checks
+ */
+static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node){
+	switch(initializer_node->ast_node_type){
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
 /**
  * Does an enum list contain a given value for a member?
  */
@@ -3768,10 +3785,14 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  *
  * Cases that we cover:
  * 1.) Attempting to assign to an immutable static or global variable
- * 2.) Attempting to assign to an immutable "field variable" - think struct/union field
- * 3.) Attempting to assign to an immutable array area
+ * 2.) Attempting to initialize an immutable array or struct
+ * 3.) Attempting to assign to an immutable "field variable" - think struct/union field
+ * 4.) Attempting to assign to an immutable array/struct area
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
+	//Get the left handle type out
+	generic_type_t* left_hand_type = dealias_type(left_hand_expression_tree->inferred_type);
+
 	/**
 	 * Easy case to handle first: If we have a variable and it's static or global, we will perform our
 	 * regular mutability checking now. We do this here becuase our SSA analysis does not work on these
@@ -3788,6 +3809,18 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 				print_variable_name_to_buffer(info, variable);
 				return print_and_return_error(info, parser_line_num);
 			}
+		}
+	}
+
+	/**
+	 * Another easy case: are we attempting to assign to(initialize) an immutable struct
+	 * or union variable? This is invalid because immutable memory types may only be initialized
+	 * in a let statement
+	 */
+	if(left_hand_type->type_class == TYPE_CLASS_ARRAY || left_hand_type->type_class == TYPE_CLASS_STRUCT){
+		if(left_hand_type->mutability == NOT_MUTABLE){
+			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", left_hand_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
@@ -3853,6 +3886,8 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			}
 		}
 	}
+
+
 
 	//Just give this back as a flag that we're fine
 	return left_hand_expression_tree;
@@ -4008,14 +4043,6 @@ loop_end:
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
-	}
-
-	/**
-	 * For array types, we are only able to assign to them if we are using an array initializer 
-	 * expression. Copy assignment does not hold for these
-	 */
-	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY && expr->ast_node_type != AST_NODE_TYPE_ARRAY_INITIALIZER_LIST){
-		return print_and_return_error("Array types can only be assigned to using an array initializer list([] initializer)", left_hand_unary->line_number);
 	}
 
 	//Let the helper do all mutability checking
@@ -12947,22 +12974,6 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//All declarations return a node, but most of them won't ever show up in the CFG
 	return declaration_node;
-}
-
-
-/**
- * Is a given node an initializer node or not? Initializer nodes get special
- * treatment by the CFG constructor so we may need to exclude them from certain checks
- */
-static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node){
-	switch(initializer_node->ast_node_type){
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-		case AST_NODE_TYPE_STRING_INITIALIZER:
-			return TRUE;
-		default:
-			return FALSE;
-	}
 }
 
 
