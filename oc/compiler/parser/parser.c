@@ -4045,6 +4045,13 @@ loop_end:
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
 	}
 
+	/**
+	 * We can only every assign to array types using an initailizer type in this scenario
+	 */
+	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY && is_initializer_node(expr) == FALSE){
+		return print_and_return_error("Array types cannot be assigned to unless using an initializer", parser_line_num);
+	}
+
 	//Let the helper do all mutability checking
 	generic_ast_node_t* result = perform_mutability_checking(left_hand_unary);
 	if(result->ast_node_type == AST_NODE_TYPE_ERR_NODE){

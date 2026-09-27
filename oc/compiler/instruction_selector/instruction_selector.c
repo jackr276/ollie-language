@@ -5349,6 +5349,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		return changed;
 	}
 
+	//TODO BLOCKER VALUE
+	if(window->instruction1->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
 	/**
 	 * These statements by now have served their purpose - we can delete them as
 	 * they are no longer needed and have no assembly equivalent

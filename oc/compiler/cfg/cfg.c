@@ -12459,7 +12459,7 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
  */
-static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
+static three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
 	/**
 	 * This is a completely valid and frequent case. In this case, just leave
 	 */
@@ -12691,7 +12691,7 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
  * Clone a constant. This will create separate memory so we maintain
  * complete separation
  */
-static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
+static three_addr_const_t* clone_constant(three_addr_const_t* constant){
 	//If it's empty just leave
 	if(constant == NULL){
 		return NULL;
@@ -13044,8 +13044,17 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			return;
 		}
 
+		case THREE_ADDR_CODE_INITIALIZER_STMT: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+
+
+			return;
+		}
+
 		/**
-		 * By default we need to clone every single variable that 
+		 * By default we need to clone every single variable that could be in an instruction
 		 */
 		default: {
 			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
