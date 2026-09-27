@@ -84,12 +84,13 @@ static dependency_graph_node_t* current_dependency_node = NULL;
 static heap_queue_t traversal_queue;
 
 /**
- * The actual result type that defines whether we have a struct
- * or constant or variable result
+ * The result type defines what we have stored inside of our
+ * cfg_result_package tagged union
  */
 typedef enum {
 	CFG_RESULT_TYPE_VAR,
-	CFG_RESULT_TYPE_CONST, // TODO WILL WANT TO ADD A NEW RESULT TYPE HERE
+	CFG_RESULT_TYPE_CONST,
+	CFG_RESULT_TYPE_INITIALIZER,
 } cfg_result_type_t;
 
 
@@ -110,6 +111,7 @@ typedef struct{
 	union {
 		three_addr_var_t* result_var;
 		three_addr_const_t* result_const;
+		three_addr_initializer_t* result_initializer;
 	} result_value;
 
 	cfg_result_type_t type;
@@ -181,6 +183,7 @@ static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basi
 static void visit_declaration_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
+static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, u_int32_t line_number);
 
@@ -3917,14 +3920,42 @@ static cfg_result_package_t emit_struct_initializer__NEW(basic_block_t* block, g
  * t5 <- z - 4
  * t6 <- a + 1
  *
- * Generates: INITIALIZE FROM ARRAY_INITIALIZER(t2, t3, t4, t5, t6)
+ * Generates: [t2, t3, t4, t5, t6]
  *
  * This is what we will give back as a CFG result as it is on our RHS. It will *NOT* be added
  * to the block. Instead it will be handled by the original caller who will do with it what
  * they see fit
  */
 static cfg_result_package_t emit_array_initializer__NEW(basic_block_t* block, generic_ast_node_t* initializer_node){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
+	//Maintain a pointer for our current block
+	basic_block_t* current_block = block;
+
+	//First allocate the new initializer
+	three_addr_initializer_t* array_initializer = emit_initializer(initializer_node->inferred_type, INITIALIZER_TYPE_ARRAY);
+
+	/**
+	 * Grab a cursor to the initializer values and run through all values, adding
+	 * them to the list each time. Remember that recursive initializers are completely
+	 * possible so we'll need to account for that too by calling the emit_primary_expr()
+	 * code on each one
+	 */
+	generic_ast_node_t* initializer_cursor = initializer_node->first_child;
+	while(initializer_cursor != NULL){
+
+	}
+
+
+
+
+	//Now that we've emitted everything we can package up and return the result package
+	results.type = CFG_RESULT_TYPE_INITIALIZER;
+	results.starting_block = block;
+	results.final_block = current_block;
+	results.operator = BLANK;
+	results.result_value.result_initializer = array_initializer;
+	return results;
 }
 
 
