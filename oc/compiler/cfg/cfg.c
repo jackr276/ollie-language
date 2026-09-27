@@ -13380,6 +13380,8 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
  * Setup all of our function parameters for the inlined call. With the current implementation, it is important that anything
  * that is a stack variable in the original non-inlined call is a stack variable here as well. All stack passed variables
  * will have their stack regions setup in the callee's local stack instead of a separate stack region as is usually done
+ *
+ * TODO WILL NEED TESTING AND SETUP FOR THIS
  */
 static inline void setup_function_parameters_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
 															  variable_map_t* variable_map, parameter_results_array_t* parameter_results,
