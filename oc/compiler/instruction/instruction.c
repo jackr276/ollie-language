@@ -3049,7 +3049,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_INITIALIZER_STMT:
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- initialize from ");
 			print_initializer(fl, stmt->operands.oir.initializer_operand, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
@@ -5799,7 +5799,7 @@ instruction_t* emit_initialization_instruction(three_addr_var_t* being_initializ
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	stmt->statement_type = THREE_ADDR_CODE_INITIALIZER_STMT;
-	stmt->operands.oir.address_operand1 = being_initialized;
+	stmt->operands.oir.assignee = being_initialized;
 	stmt->operands.oir.initializer_operand = initializer;
 	stmt->line_number = line_number;
 
