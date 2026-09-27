@@ -3904,11 +3904,27 @@ static cfg_result_package_t emit_string_initializer__NEW(basic_block_t* block, g
 	 */
 	dynamic_string_t* initializer_string = &(initializer_node->string_value);
 	for(int32_t i = 0; i < initializer_string->current_length; i++){
+		char value = dynamic_string_get_char_at(initializer_string, i);
 
+		//Emit and add this to the initializer
+		three_addr_const_t* initializer_const = emit_direct_integer_or_char_constant(value, char_type);
+		add_intializer_result(string_intializer, initializer_const, INITIALIZER_RESULT_TYPE_CONSTANT);
 	}
 
-}
+	/**
+	 * Even though we've added everything, we still need to add the null terminator(\0) character at
+	 * the very end so we'll do that now
+	 */
+	three_addr_const_t* null_terminator_const = emit_direct_integer_or_char_constant('\0', char_type);
+	add_intializer_result(string_intializer, null_terminator_const, INITIALIZER_RESULT_TYPE_CONSTANT);
 
+	//We can now package up and return our results
+	results.starting_block = block;
+	results.final_block = block;
+	results.type = CFG_RESULT_TYPE_INITIALIZER;
+	results.result_value.result_initializer = string_intializer;
+	return results;
+}
 
 
 /**
