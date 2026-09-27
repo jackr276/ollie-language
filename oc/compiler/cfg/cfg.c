@@ -3455,172 +3455,6 @@ static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basi
 
 
 /**
- * Emit a normal intialization
- *
- * We'll hit this when we have something like:
- *
- * let x:i32 = a + b + c;
- *
- * No array/string/struct initializers here
- */
-static cfg_result_package_t emit_simple_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node){
-	//Holder for the let result var
-	three_addr_var_t* let_result_var;
-	//Allocate the return package here
-	cfg_result_package_t let_results = {current_block, current_block, {let_variable}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//Emit the right hand expression here
-	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
-
-	//Reassign what the current block is in case it's changed
-	current_block = expression_results.final_block;
-
-	/**
-	 * Go based on what the final result type is
-	 */
-	switch(expression_results.type){
-		case CFG_RESULT_TYPE_VAR:
-			//Extract the variable now
-			let_result_var = expression_results.result_value.result_var;
-
-			/**
-			 * Is a copy assignment required between the two variables? This will only
-			 * occur if we have a struct to struct or union to union assignment but if we do,
-			 * we'll need some special handling for it
-			 */
-			if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
-				//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
-				instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, let_result_var, let_variable->type->type_size, expression_node->line_number);
-
-				//Get it into the block
-				add_statement(current_block, copy_statement);
-			/**
-			 * If we have a variable that requires a store assignment, we will
-			 * emit that now
-			 */
-			} else if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
-				/**
-				 * Store the "true" stored type. This will only change if our type is a reference, because
-				 * we need to account for the implicit dereference that's happening
-				 */
-				generic_type_t* true_stored_type = let_variable->type;
-
-				//NOTE: We use the type of our let variable here for the address assignment
-				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
-				
-				//Emit the store code
-				instruction_t* store_statement = emit_store_base_address_only(base_address, let_result_var, true_stored_type, expression_node->line_number);
-						
-				//Now add thi statement in here
-				add_statement(current_block, store_statement);
-
-			} else {
-				//Holders
-				instruction_t* binary_operation;
-				instruction_t* assignment_statement;
-
-				/**
-				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
-				 * be able to shrink our footprint here
-				 */
-				if(current_block->exit_statement != NULL
-					&& current_block->exit_statement->operands.oir.assignee != NULL
-					&& current_block->exit_statement->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& current_block->exit_statement->operands.oir.assignee == let_result_var){
-
-					switch(current_block->exit_statement->statement_type){
-						/**
-						 * For binary operations we can hijack the statement itself
-						 */
-						case THREE_ADDR_CODE_BIN_OP_STMT:
-						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-							binary_operation = current_block->exit_statement;
-
-							//Just replace it with our variable
-							binary_operation->operands.oir.assignee = let_variable;
-
-							break;
-
-						/**
-						 * Something else here - don't know what it is but we play it safe
-						 * and assign things over
-						 */
-						default:
-							//The actual statement is the assignment of right to left
-							assignment_statement = emit_assignment_instruction(let_variable, let_result_var, expression_node->line_number);
-
-							//Finally we'll add this into the overall block
-							add_statement(current_block, assignment_statement);
-					}
-
-				/**
-				 * No fancy optimizations here - just emit an assignment over and we'll be
-				 * fine here
-				 */
-				} else {
-					//The actual statement is the assignment of right to left
-					instruction_t* assignment_statement = emit_assignment_instruction(let_variable, let_result_var, expression_node->line_number);
-
-					//Finally we'll add this into the overall block
-					add_statement(current_block, assignment_statement);
-				}
-			}
-
-			break;
-
-		/**
-		 * Constant results can either require a store instruction or they can
-		 * require a simple initialization. We account for both of these cases
-		 * here
-		 */
-		case CFG_RESULT_TYPE_CONST:
-			/**
-			 * If we have a variable that requires a store assignment, we will
-			 * emit that now
-			 */
-			if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
-				/**
-				 * Store the "true" stored type. This will only change if our type is a reference, because
-				 * we need to account for the implicit dereference that's happening
-				 */
-				generic_type_t* true_stored_type = let_variable->type;
-
-				//NOTE: We use the type of our let variable here for the address assignment
-				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
-				
-				//Emit the store code
-				instruction_t* store_statement = emit_store_base_address_only(base_address, NULL, true_stored_type, expression_node->line_number);
-
-				//Set the store statement's op1_const to be this
-				store_statement->operands.oir.constant_operand = expression_results.result_value.result_const;
-
-				//Now add thi statement in here
-				add_statement(current_block, store_statement);
-
-			/**
-			 * Otherwise we're just doing a regular assignment so we'll
-			 * emit that now
-			 */
-			} else {
-				//Get the assignment out
-				instruction_t* assignment = emit_assignment_with_const_instruction(let_variable, expression_results.result_value.result_const, expression_node->line_number);
-
-				//Add it into the block
-				add_statement(current_block, assignment);
-			}
-
-			break;
-	}
-
-	//Now update the final block
-	let_results.final_block = current_block;
-
-	//And give it back
-	return let_results;
-}
-
-
-/**
  * Emit the initializer three address code for a string type. String initializers are really just array
  * initializers, so this code will generate an array initializer. It is worth noting that it's not possible
  * to have sub-initializers from this
@@ -11824,26 +11658,22 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
 			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
 			emit_global_array_initializer(initializer, &(global_variable->initializer_value.array_initializer_values));
-
 			break;
 		
 		case AST_NODE_TYPE_CONSTANT:
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
 			global_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
-
 			break;
 
 		case AST_NODE_TYPE_STRING_INITIALIZER:
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
 			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
-
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRUCT;
 			global_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
 			emit_global_struct_initializer(initializer, &(global_variable->initializer_value.struct_initializer_values));
-
 			break;
 
 		//Unreachable/invalid
@@ -11884,26 +11714,22 @@ static void visit_static_let_statement(generic_ast_node_t* node){
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
 			static_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
 			emit_global_array_initializer(initializer, &(static_variable->initializer_value.array_initializer_values));
-
 			break;
 		
 		case AST_NODE_TYPE_CONSTANT:
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
 			static_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
-
 			break;
 
 		case AST_NODE_TYPE_STRING_INITIALIZER:
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
 			static_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
-
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
 			static_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
 			emit_global_struct_initializer(initializer, &(static_variable->initializer_value.struct_initializer_values));
-
 			break;
 
 		//Invalid/unreachable
@@ -11986,11 +11812,12 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
  * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
-	//Create the return package here
 	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
-	//Extract the variable
+	//Useful things to hold onto
 	symtab_variable_record_t* variable = node->variable;
+	basic_block_t* current_block = starting_block;
+	generic_type_t* type = node->inferred_type;
 
 	/**
 	 * Record that this variable was *defined* in this
@@ -11999,17 +11826,11 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	 */
 	variable->block_declared_in = starting_block;
 
-	//The current block is the start block
-	basic_block_t* current_block = starting_block;
-
-	//Extract the type here
-	generic_type_t* type = node->inferred_type;
-
-	//The assignee of the let statement. This could either be a variable or it could represent
-	//a base address for an array
-	three_addr_var_t* assignee;
-
-	//Based on what type we have, we'll need to do some special intialization
+	/**
+	 * The assignee of the let statement. This could either be a variable or it could represent
+	 * a memory address. Based on the type we will create this assignee appropriately
+	 */
+	three_addr_var_t* assignee = NULL;
 	switch(type->type_class){
 		/**
 		 * Array, structures and unions are all stored on the stack. So, when
@@ -12017,9 +11838,9 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		 */
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_UNION: {
 			//Create a stack region for this variable and store it in the associated region
-			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
+			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), type);
 
 			/**
 			 * Let's now emit the synthetic initialization for assignment
@@ -12030,25 +11851,10 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 
 			//Emit the memory address variable
 			assignee = emit_memory_address_var(node->variable);
-
-			//The left hand var is our assigned var
-			let_results.type = CFG_RESULT_TYPE_VAR;
-			let_results.result_value.result_var = assignee;
-
-			//We know that this will be the lead block
-			let_results.starting_block = current_block;
+			break;
+		}
 			
-			//Invoke the complex initialization method. We know that we have a struct, array or string initializer here
-			cfg_result_package_t package = emit_complex_initialization(current_block, assignee, node->first_child);
-
-			//This is also the final block for now, unless a ternary comes along
-			let_results.final_block = package.final_block;
-
-			//And give the block back
-			return let_results;
-			
-		//Otherwise we just have a garden variety variable - no stack allocation required
-		default:
+		default: {
 			/**
 			 * If we have a stack variable we will handle the stack region here and
 			 * emit the synthetic initialization for assignment analysis purposes
@@ -12062,11 +11868,150 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				add_statement(current_block, synethtic_initialization);
 			}
 
-			//Emit it
+			//We'll have just a regular variable here
 			assignee = emit_var(variable);
+			break;
+		}
+	}
 
-			//Let the helper rule deal with the rest here
-			return emit_simple_initialization(current_block, assignee, node->first_child);
+	cfg_result_package_t let_initializer_results = emit_expression(current_block, node->first_child);
+
+
+	/**
+	 * Go based on what the final result type is
+	 */
+	switch(expression_results.type){
+		case CFG_RESULT_TYPE_VAR:
+			//Extract the variable now
+			let_result_var = expression_results.result_value.result_var;
+
+			/**
+			 * Is a copy assignment required between the two variables? This will only
+			 * occur if we have a struct to struct or union to union assignment but if we do,
+			 * we'll need some special handling for it
+			 */
+			if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
+				//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
+				instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, let_result_var, let_variable->type->type_size, expression_node->line_number);
+
+				//Get it into the block
+				add_statement(current_block, copy_statement);
+			/**
+			 * If we have a variable that requires a store assignment, we will
+			 * emit that now
+			 */
+			} else if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
+				/**
+				 * Store the "true" stored type. This will only change if our type is a reference, because
+				 * we need to account for the implicit dereference that's happening
+				 */
+				generic_type_t* true_stored_type = let_variable->type;
+
+				//NOTE: We use the type of our let variable here for the address assignment
+				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
+				
+				//Emit the store code
+				instruction_t* store_statement = emit_store_base_address_only(base_address, let_result_var, true_stored_type, expression_node->line_number);
+						
+				//Now add thi statement in here
+				add_statement(current_block, store_statement);
+
+			} else {
+				//Holders
+				instruction_t* binary_operation;
+				instruction_t* assignment_statement;
+
+				/**
+				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
+				 * be able to shrink our footprint here
+				 */
+				if(current_block->exit_statement != NULL
+					&& current_block->exit_statement->operands.oir.assignee != NULL
+					&& current_block->exit_statement->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& current_block->exit_statement->operands.oir.assignee == let_result_var){
+
+					switch(current_block->exit_statement->statement_type){
+						/**
+						 * For binary operations we can hijack the statement itself
+						 */
+						case THREE_ADDR_CODE_BIN_OP_STMT:
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+							binary_operation = current_block->exit_statement;
+
+							//Just replace it with our variable
+							binary_operation->operands.oir.assignee = let_variable;
+
+							break;
+
+						/**
+						 * Something else here - don't know what it is but we play it safe
+						 * and assign things over
+						 */
+						default:
+							//The actual statement is the assignment of right to left
+							assignment_statement = emit_assignment_instruction(let_variable, let_result_var, expression_node->line_number);
+
+							//Finally we'll add this into the overall block
+							add_statement(current_block, assignment_statement);
+					}
+
+				/**
+				 * No fancy optimizations here - just emit an assignment over and we'll be
+				 * fine here
+				 */
+				} else {
+					//The actual statement is the assignment of right to left
+					instruction_t* assignment_statement = emit_assignment_instruction(let_variable, let_result_var, expression_node->line_number);
+
+					//Finally we'll add this into the overall block
+					add_statement(current_block, assignment_statement);
+				}
+			}
+
+			break;
+
+		/**
+		 * Constant results can either require a store instruction or they can
+		 * require a simple initialization. We account for both of these cases
+		 * here
+		 */
+		case CFG_RESULT_TYPE_CONST:
+			/**
+			 * If we have a variable that requires a store assignment, we will
+			 * emit that now
+			 */
+			if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
+				/**
+				 * Store the "true" stored type. This will only change if our type is a reference, because
+				 * we need to account for the implicit dereference that's happening
+				 */
+				generic_type_t* true_stored_type = let_variable->type;
+
+				//NOTE: We use the type of our let variable here for the address assignment
+				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
+				
+				//Emit the store code
+				instruction_t* store_statement = emit_store_base_address_only(base_address, NULL, true_stored_type, expression_node->line_number);
+
+				//Set the store statement's op1_const to be this
+				store_statement->operands.oir.constant_operand = expression_results.result_value.result_const;
+
+				//Now add thi statement in here
+				add_statement(current_block, store_statement);
+
+			/**
+			 * Otherwise we're just doing a regular assignment so we'll
+			 * emit that now
+			 */
+			} else {
+				//Get the assignment out
+				instruction_t* assignment = emit_assignment_with_const_instruction(let_variable, expression_results.result_value.result_const, expression_node->line_number);
+
+				//Add it into the block
+				add_statement(current_block, assignment);
+			}
+
+			break;
 	}
 }
 
