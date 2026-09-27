@@ -13044,12 +13044,40 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			return;
 		}
 
+		/**
+		 * Initializers mimic store statements in how they use addressing modes
+		 * and the like
+		 */
 		case THREE_ADDR_CODE_INITIALIZER_STMT: {
 			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
-			printf("TODO NOT IMPLEMENTED\n");
+
+			/**
+			 * Clone over all of the addressing variables as we don't know which are populated and which aren't
+			 */
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			/**
+			 * IMPORTANT - let the helper clone over the entire initializer. This is a more
+			 * involved process os we won't do it locally
+			 */
+			printf("TODO NOT DONE YET\n");
 			exit(1);
 
-
+			add_statement(cloning_into_block, new_instruction);
 			return;
 		}
 

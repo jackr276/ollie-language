@@ -654,6 +654,7 @@ static void mark(dynamic_array_t* function_blocks){
 			case THREE_ADDR_CODE_INITIALIZER_STMT:
 				//The address that we're writing to will always be needed
 				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
 
 				//Now let the recursive helper mark all of our initializer values
 				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);

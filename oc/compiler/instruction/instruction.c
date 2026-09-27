@@ -912,7 +912,7 @@ three_addr_initializer_t* emit_initializer(generic_type_t* type_initializing, in
 	 * never clash with any actual variable, so we use the variable ID system
 	 */
 	initializer->variable_id = get_next_variable_id();
-	
+
 	//Now let's allocate the initializer list itself
 	initializer->results.results_max_index = DEFAULT_INITIALIZER_LIST_SIZE;
 	initializer->results.result_array = calloc(sizeof(initializer_result_t), DEFAULT_INITIALIZER_LIST_SIZE);
@@ -3046,7 +3046,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_INITIALIZER_STMT:
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- initialize from ");
 			print_initializer(fl, stmt->operands.oir.initializer_operand, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
@@ -5799,6 +5799,10 @@ instruction_t* emit_initialization_instruction(three_addr_var_t* being_initializ
 	stmt->operands.oir.address_operand1 = being_initialized;
 	stmt->operands.oir.initializer_operand = initializer;
 	stmt->line_number = line_number;
+
+	//This is a write to memory statement
+	stmt->memory_access_type = WRITE_TO_MEMORY;
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 
 	return stmt;
 }
