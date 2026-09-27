@@ -189,6 +189,16 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 
 
 /**
+ * Generate an "Internal Compiler Error" panic(exit(1)) on an
+ * invalid result type. This is meant to crash the program
+ */
+static inline void ice_panic_on_invalid_result_type(){
+	fprintf(stderr, "Fatal Internal Compiler Error: Invalid CFG result type detected\n");
+	exit(1);
+}
+
+
+/**
  * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
  */
 static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
@@ -241,12 +251,13 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 
 	switch(result_package->type){
 		//Variable - just give it back
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
 			returned_variable = result_package->result_value.result_var;
 			break;
+		}
 
 		//Constant - unpack with an assignment and give the temp var back
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			constant_value = result_package->result_value.result_const;
 
 			//Emit the assignment
@@ -258,6 +269,12 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 			//This is the variable that we end up returning
 			returned_variable = const_assignment->operands.oir.assignee;
 			break;
+		}
+
+		//We shouldn't be seeing initializers in this
+		default: {
+			ice_panic_on_invalid_result_type();
+		}
 	}
 
 	//Give back the returned variable in the end
@@ -280,7 +297,7 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 
 	switch(result_package->type){
 		//Unpack by performing a temporary assignment
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
 			variable_value = result_package->result_value.result_var;
 
 			//Emit the assignment into the block
@@ -290,9 +307,10 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 			//We will return the temp
 			returned_variable = temp_assignment->operands.oir.assignee;
 			break;
+		}
 
 		//Constant - unpack with an assignment and give the temp var back
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			constant_value = result_package->result_value.result_const;
 
 			//Emit the assignment
@@ -304,6 +322,12 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 			//This is the variable that we end up returning
 			returned_variable = const_assignment->operands.oir.assignee;
 			break;
+		}
+
+		//We shouldn't be seeing initializers in this
+		default: {
+			ice_panic_on_invalid_result_type();
+		}
 	}
 
 	//Give back the returned variable in the end
@@ -443,6 +467,10 @@ static inline u_int8_t is_result_package_empty(cfg_result_package_t* result_pack
 
 		case CFG_RESULT_TYPE_CONST:
 			result = result_package->result_value.result_const == NULL ? TRUE : FALSE;
+			break;
+
+		case CFG_RESULT_TYPE_INITIALIZER:
+			result = result_package->result_value.result_initializer == NULL ? TRUE : FALSE;
 			break;
 	}
 
