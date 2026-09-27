@@ -321,6 +321,8 @@ instruction_t* emit_synthetic_memory_initialization(three_addr_var_t* memory_add
 
 /**
  * Emit a three address initializer expression
+ *
+ * NOTE: the destination is in the first address operand
  */
 instruction_t* emit_initialization_instruction(three_addr_var_t* being_initialized, three_addr_initializer_t* initializer, u_int32_t line_number);
 
