@@ -3899,7 +3899,51 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
  * from the necessary initializer value computations themselves
  */
 static cfg_result_package_t emit_struct_initializer__NEW(basic_block_t* block, generic_ast_node_t* initializer_node){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
+	//Maintain a pointer for our current block
+	basic_block_t* current_block = block;
+
+	//First allocate the new initializer
+	three_addr_initializer_t* struct_initializer = emit_initializer(initializer_node->inferred_type, INITIALIZER_TYPE_STRUCT);
+
+	/**
+	 * Grab a cursor to the initializer values and run through all values, adding
+	 * them to the list each time. Remember that recursive initializers are completely
+	 * possible so we'll need to account for that too by calling the emit_primary_expr()
+	 * code on each one
+	 */
+	generic_ast_node_t* initializer_cursor = initializer_node->first_child;
+	while(initializer_cursor != NULL){
+		//Emit using the primary expression rule
+		cfg_result_package_t child_results = emit_primary_expr_code(current_block, initializer_cursor);
+		
+		//Update the current block after the expression
+		current_block = child_results.final_block;
+
+		switch(child_results.type){
+			case CFG_RESULT_TYPE_CONST:
+				add_intializer_result(struct_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_CONSTANT);
+				break;
+			case CFG_RESULT_TYPE_VAR:
+				add_intializer_result(struct_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_VARIABLE);
+				break;
+			case CFG_RESULT_TYPE_INITIALIZER:
+				add_intializer_result(struct_initializer, child_results.result_value.result_initializer, INITIALIZER_RESULT_TYPE_SUB_INITIALIZER);
+				break;
+		}
+
+		//Bump up to the next one
+		initializer_cursor = initializer_cursor->next_sibling;
+	}
+
+	//Now that we've emitted everything we can package up and return the result package
+	results.type = CFG_RESULT_TYPE_INITIALIZER;
+	results.starting_block = block;
+	results.final_block = current_block;
+	results.operator = BLANK;
+	results.result_value.result_initializer = struct_initializer;
+	return results;
 }
 
 
@@ -3998,9 +4042,9 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 		case AST_NODE_TYPE_STRING_INITIALIZER:
 			printf("TODO NOT DONE YET\n");
 			exit(1);
+
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			printf("TODO NOT DONE YET\n");
-			exit(1);
+			return emit_struct_initializer__NEW(basic_block, primary_parent);
 
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
 			return emit_array_initializer__NEW(basic_block, primary_parent);
