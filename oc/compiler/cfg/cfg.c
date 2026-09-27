@@ -12709,6 +12709,39 @@ static three_addr_const_t* clone_constant(three_addr_const_t* constant){
 
 
 /**
+ * Clone the initializer over by cloning over every single variable/constant
+ * in it using the apporopriate helpers
+ */
+static three_addr_initializer_t* clone_initializer(three_addr_initializer_t* initializer, variable_map_t* map){
+	//First emit the clone the normal way
+	three_addr_initializer_t* clone = emit_initializer(initializer->type, initializer->initializer_type);
+
+	//Run through every single result and clone it
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:{
+				add_intializer_result(clone, clone_initializer(result->value.initializer_value, map), INITIALIZER_RESULT_TYPE_SUB_INITIALIZER);
+				break;
+			}
+
+			case INITIALIZER_RESULT_TYPE_CONSTANT:{
+				add_intializer_result(clone, clone_constant(result->value.constant_value), INITIALIZER_RESULT_TYPE_CONSTANT);
+				break;
+		  	}
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				add_intializer_result(clone, clone_variable(result->value.variable_value, map), INITIALIZER_RESULT_TYPE_VARIABLE);
+				break;
+		}
+	}
+
+	return clone;
+}
+
+
+/**
  * Clone the given instruction into a brand new one. This cloning also
  * involves doing all of our variable replacement logic with the variable
  * mapping, amongst other things
@@ -13074,8 +13107,7 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			 * IMPORTANT - let the helper clone over the entire initializer. This is a more
 			 * involved process os we won't do it locally
 			 */
-			printf("TODO NOT DONE YET\n");
-			exit(1);
+			new_instruction->operands.oir.initializer_operand = clone_initializer(source_instruction->operands.oir.initializer_operand, variable_map);
 
 			add_statement(cloning_into_block, new_instruction);
 			return;
