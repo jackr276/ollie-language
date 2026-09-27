@@ -6567,9 +6567,34 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			break;
 		}
 
+
+		/**
+		 * Handle the special case of an initializer after an assignment expression
+		 */
 		case CFG_RESULT_TYPE_INITIALIZER: {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			three_addr_initializer_t* initializer = right_hand_package.result_value.result_initializer;
+
+			/**
+			 * Option 1: if we have a store statement on the LHS, we can simply 
+			 * convert it into an initializer statement and tack the result initializer
+			 * on
+			 */
+			if(current_block->exit_statement != NULL
+				&& is_store_operation(current_block->exit_statement) == TRUE
+				&& current_block->exit_statement->operands.oir.address_operand1 == left_hand_var){
+
+				//Extract this and convert it
+				instruction_t* initializer_statement = current_block->exit_statement;
+				initializer_statement->statement_type = THREE_ADDR_CODE_INITIALIZER_STMT;
+				
+				//Tack the initializer on
+				initializer_statement->operands.oir.initializer_operand = initializer;
+
+			} else {
+
+			}
+			
+			break;
 		}
 	}
 
