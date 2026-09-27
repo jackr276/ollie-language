@@ -3884,6 +3884,21 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
 
 
 /**
+ * Emit the initializer three address code for a string type. String initializers are really just array
+ * initializers, so this code will generate an array initializer. It is worth noting that it's not possible
+ * to have sub-initializers from this
+ *
+ * Say we have: let x:char[] = "Hello World";
+ * 
+ * Generates: ['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', '\0']
+ */
+static cfg_result_package_t emit_string_initializer__NEW(basic_block_t* block, generic_ast_node_t* initializer_node){
+
+}
+
+
+
+/**
  * Emit initializer three address code. This is designed to be lightweight here, we will do all of the
  * actual heavy lifting in the simplifier to keep our lives simple
  *
@@ -4040,8 +4055,7 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 			return emit_function_call(basic_block, primary_parent);
 
 		case AST_NODE_TYPE_STRING_INITIALIZER:
-			printf("TODO NOT DONE YET\n");
-			exit(1);
+			return emit_string_initializer__NEW(basic_block, primary_parent);
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
 			return emit_struct_initializer__NEW(basic_block, primary_parent);
