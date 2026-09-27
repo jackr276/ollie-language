@@ -3891,17 +3891,12 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
  *
  * This will be converted into three address code as
  * 
- * 	
- * 	t3 <- x + 5 <--- necessary precomputation
- * 	t4 <- y - 2
- *  Generates: INITIALIZE FROM STRUCT_INITIALIZER(ARRAY_INITIALIZER(1, 2, 3, 4, 5), t3, t4)
+ * t3 <- x + 5 <--- necessary precomputation
+ * t4 <- y - 2
+ * Generates: {[1, 2, 3, 4, 5], t3, t4}
  *
- *  What we generate is technically an incomplete instruction
- *
- *  TODO I think we may want an initializer like this to be kind of similar to a three_addr_var_t where
- *  it's its own independent data structure in a way. It can be small we just need to store results
- *
- *
+ * This is what we will give back as a CFG results. We will *NOT* be adding stuff to the block besides
+ * from the necessary initializer value computations themselves
  */
 static cfg_result_package_t emit_struct_initializer__NEW(basic_block_t* block, generic_ast_node_t* initializer_node){
 
