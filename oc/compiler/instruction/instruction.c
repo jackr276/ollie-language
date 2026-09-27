@@ -900,8 +900,25 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
  * Create and return a three address initializer of a given type
  */
 three_addr_initializer_t* emit_initializer(generic_type_t* type_initializing, initializer_type_t initializer_type){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	//Dynamically allocate it
+	three_addr_initializer_t* initializer = calloc(1, sizeof(three_addr_initializer_t));
+
+	//Store the given type and initializer type
+	initializer->type = type_initializing;
+	initializer->initializer_type = initializer_type;
+
+	/**
+	 * IMPORTANT - this needs to have its own unique variable ID that will
+	 * never clash with any actual variable, so we use the variable ID system
+	 */
+	initializer->variable_id = get_next_variable_id();
+	
+	//Now let's allocate the initializer list itself
+	initializer->results.results_max_index = DEFAULT_INITIALIZER_LIST_SIZE;
+	initializer->results.result_array = calloc(sizeof(initializer_result_t), DEFAULT_INITIALIZER_LIST_SIZE);
+
+	//Give back the pointer
+	return initializer;
 }
 
 
