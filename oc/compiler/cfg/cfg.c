@@ -3893,6 +3893,19 @@ static inline cfg_result_package_t emit_complex_initialization(basic_block_t* cu
  * Generates: ['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', '\0']
  */
 static cfg_result_package_t emit_string_initializer__NEW(basic_block_t* block, generic_ast_node_t* initializer_node){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//First allocate this as an array initializer
+	three_addr_initializer_t* string_intializer = emit_initializer(initializer_node->inferred_type, INITIALIZER_TYPE_ARRAY);
+
+	/**
+	 * Now let's get the string value out and run through all of the individual characters,
+	 * adding each one as a char constant to the initializer
+	 */
+	dynamic_string_t* initializer_string = &(initializer_node->string_value);
+	for(int32_t i = 0; i < initializer_string->current_length; i++){
+
+	}
 
 }
 
