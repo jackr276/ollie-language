@@ -1996,7 +1996,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 * we will need to unpack the result here and act accordingly
 		 */
 		switch(expression_package.type){
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				//Extract the returned variable
 				return_variable = expression_package.result_value.result_var;
 
@@ -2072,8 +2072,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				}
 
 				break;
+			}
 
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				//For a const type we'll need our own returned variable
 				return_variable = emit_temp_var(ret_node->inferred_type);
 
@@ -2084,6 +2085,12 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				add_statement(current, const_assignment);
 
 				break;
+			}
+
+			case CFG_RESULT_TYPE_INITIALIZER: {
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+			}
 		}
 	}
 
@@ -2345,7 +2352,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 		switch(binary_results.type){
 			//For a constant type, we are going to need to emit an assignment
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
 
 				//Get it in the block
@@ -2353,14 +2360,19 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 				//This now is our decider
 				conditional_decider = constant_assignment->operands.oir.assignee;
-
 				break;
+			}
 
 			//For this we can extract the result var
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				conditional_decider = binary_results.result_value.result_var;
-
 				break;
+			}
+
+			//We should never see an initializer here
+			default: {
+				ice_panic_on_invalid_result_type();
+			}
 		}
 
 		/**
@@ -2633,7 +2645,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 
 		switch(conditional_results.type){
 			//For a constant type, we are going to need to emit an assignment
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type), conditional_results.result_value.result_const, conditional_node->line_number);
 
 				//Get it in the block
@@ -2641,14 +2653,19 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 
 				//This now is our decider
 				conditional_decider = constant_assignment->operands.oir.assignee;
-
 				break;
+			}
 
 			//For this we can extract the result var
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				conditional_decider = conditional_results.result_value.result_var;
-
 				break;
+			}
+
+			//It is never valid to see an initializer here
+			default: {
+				ice_panic_on_invalid_result_type();
+			}
 		}
 
 		/**
@@ -3474,7 +3491,7 @@ static cfg_result_package_t emit_string_initializer(basic_block_t* block, generi
 	 * adding each one as a char constant to the initializer
 	 */
 	dynamic_string_t* initializer_string = &(initializer_node->string_value);
-	for(int32_t i = 0; i < initializer_string->current_length; i++){
+	for(u_int32_t i = 0; i < initializer_string->current_length; i++){
 		char value = dynamic_string_get_char_at(initializer_string, i);
 
 		//Emit and add this to the initializer
@@ -11831,6 +11848,12 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	 * a memory address. Based on the type we will create this assignee appropriately
 	 */
 	three_addr_var_t* assignee = NULL;
+
+	//TODO DO WE REALLY NEED ALL THIS????
+	//
+	//
+	//
+	//
 	switch(type->type_class){
 		/**
 		 * Array, structures and unions are all stored on the stack. So, when
@@ -12000,7 +12023,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				//Set the store statement's op1_const to be this
 				store_statement->operands.oir.constant_operand = let_initializer_results.result_value.result_const;
 
-				//Now add thi statement in here
+				//Now add this statement in here
 				add_statement(current_block, store_statement);
 
 			/**
@@ -12008,10 +12031,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * emit that now
 			 */
 			} else {
-				//Get the assignment out
+				//Emit an add the assignment
 				instruction_t* assignment = emit_assignment_with_const_instruction(assignee, let_initializer_results.result_value.result_const, expression_node->line_number);
-
-				//Add it into the block
 				add_statement(current_block, assignment);
 			}
 
@@ -12022,7 +12043,10 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		 * Initializer types are simple - all we need to do is emit the appropriate three address code statement and we're done
 		 */
 		case CFG_RESULT_TYPE_INITIALIZER: {
+			instruction_t* initilialization_stmt = emit_initialization_instruction(assignee, let_initializer_results.result_value.result_initializer, expression_node->line_number);
+			add_statement(current_block, initilialization_stmt);
 
+			break;
 		}
 	}
 
