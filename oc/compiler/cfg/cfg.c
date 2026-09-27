@@ -3498,7 +3498,7 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
  *
  */
 static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address,
-														  three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+														  address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
@@ -3513,30 +3513,52 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		//space and into memory
 		instruction_t* load_instruction;
 
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type, line_number);
+		switch(current_offset->type){
+			/**
+			 * There's no offset so we just need to emit a load with our base
+			 * address.
+			 */
+			case OFFSET_TYPE_NONE: {
+				//Emit and add the load
+				instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
+				add_statement(current_block, load_instruction);
 
-			//Add it into the block
-			add_statement(current_block, load_instruction);
+				//Again this now is the base address
+				*base_address = load_instruction->operands.oir.assignee;
+				break;
+			}
 
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
+			/**
+			 * The current offset is a constant so we'll have a load with a constant offset
+			 */
+			case OFFSET_TYPE_CONST: {
+				//Emit and add the load with constant offset
+				load_instruction = emit_load_base_address_and_constant_offset(emit_temp_var(u64), *base_address, current_offset->value.constant_offset, (*base_address)->type, line_number);
+				add_statement(current_block, load_instruction);
 
-			//And the offset is now nothing
-			*current_offset = NULL;
+				//The new base address now is the load instruction's assignee
+				*base_address = load_instruction->operands.oir.assignee;
 
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
-			
-			//Get it into the block
-			add_statement(current_block, load_instruction);
+				//Wipe out what we the old current offset
+				*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+				break;
+			}
 
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
+			/**
+			 * The current offset is a variable so we'll have a load with a variable offset
+			 */
+			case OFFSET_TYPE_VAR: {
+				//Emit and add the load with variable offset
+				load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, current_offset->value.variable_offset, (*base_address)->type, line_number);
+				add_statement(current_block, load_instruction);
+
+				//The new base address now is the load instruction's assignee
+				*base_address = load_instruction->operands.oir.assignee;
+
+				//Wipe out what we the old current offset
+				*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+				break;
+			}
 		}
 	}
 
@@ -3700,7 +3722,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
  * This rule returns *the offset* of the address that we're after. It has no idea
  * what the base address even is
  */
-static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, address_offset_t* current_offset,
 															u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
 	/**
 	 * If our current address is from a non-contiguous region, we are going to need to
@@ -3796,8 +3818,8 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
  * This rule returns *the offset* of the value that we want. It has
  * no idea what the base address of the memory region it's in is
  */
-static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
-																	u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address,
+																	address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
 	//Get what the raw struct type is
 	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
 
@@ -3879,7 +3901,7 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address, address_offset_t* current_offset,
 														   u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
 	/**
 	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
@@ -3942,8 +3964,8 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset,
-																	u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, generic_type_t* union_pointer_type, three_addr_var_t** base_address,
+																	address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
 	//Get the current type
 	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
 
@@ -4019,7 +4041,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  *  for by the type system so it's not something that we need to be aware of here. Non-contiguous memory regions require intermediary loads
  *  in order to work properly
  */
-static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region){
+static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region){
 	//A tracker for what the current block actually is(this can change)
 	basic_block_t* current = basic_block;
 
