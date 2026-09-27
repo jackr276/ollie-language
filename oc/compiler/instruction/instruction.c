@@ -2304,6 +2304,45 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 
 
 /**
+ * Print a three address initializer. These should only exist during the OIR stage, once these
+ * have been converted to assembly they should not exist anymore
+ */
+void print_initializer(FILE* fl, three_addr_initializer_t* initializer, variable_printing_mode_t mode){
+	//Determine if this was an array or struct initializer
+	const char* initializer_start_delimiter = initializer->initializer_type == INITIALIZER_TYPE_ARRAY ? "[" : "{";
+	const char* initializer_end_delimiter = initializer->initializer_type == INITIALIZER_TYPE_ARRAY ? "]" : "}";
+
+	//Print out the start delimeter
+	fprintf(fl, "%s", initializer_start_delimiter);
+
+	//Now run through every single result and print
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		//Get the result out
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				print_variable(fl, result->value.variable_value, mode);
+				break;
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				print_three_addr_constant(fl, result->value.constant_value);
+				break;
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				print_initializer(fl, result->value.initializer_value, mode);
+				break;
+		}
+
+		if(i != initializer->results.results_current_index - 1){
+			fprintf(fl, ", ");
+		}
+	}
+
+	//Print out the end delimeter
+	fprintf(fl, "%s", initializer_end_delimiter);
+}
+
+
+/**
  * Turn an operand into a string
  */
 static char* op_to_string(ollie_token_t op){

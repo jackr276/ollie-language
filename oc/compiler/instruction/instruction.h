@@ -660,6 +660,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt);
 void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode);
 
 /**
+ * Print a three address initializer. These should only exist during the OIR stage, once these
+ * have been converted to assembly they should not exist anymore
+ */
+void print_initializer(FILE* fl, three_addr_initializer_t* initializer, variable_printing_mode_t mode);
+
+/**
  * Print a variable and everything about it. If the variable is in
  * "Block header" mode, we won't print out any dereferencing info
  */

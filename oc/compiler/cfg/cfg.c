@@ -3961,7 +3961,7 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 			exit(1);
 
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//return emit_initializer(basic_block, primary_parent);
+			return emit_initializer(basic_block, primary_parent);
 
 		//By default, we're emitting some kind of expression here
 		default:
