@@ -8193,14 +8193,7 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
  * 				mark j
  * 				add j to worklist
  *
- *
- *
- *
- *
- * TODO WE NEED TO SUPPORT INITIALIZERS
- *
- *
- *
+ * TODO WHAT ARE WE GOING TO DO ABOUT INITIALIZERS?????
  */
 static void mark(dynamic_array_t* function_blocks){
 	//First we'll need a worklist
@@ -8289,9 +8282,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_IDLE_STMT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -8536,6 +8527,10 @@ static void simplify(cfg_t* cfg){
 
 		//Extract the function record too
 		symtab_function_record_t* function = function_entry->function_defined_in;
+
+		//TODO I THINK WE WILL DO INITIALIZER LOWERING HERE FIRST
+		//
+		//function_lowering_pass(function, &(function->function_blocks));
 
 		/**
 		 * Before we do any simplifying, we need to remediate all of the function
