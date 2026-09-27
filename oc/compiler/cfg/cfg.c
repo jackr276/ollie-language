@@ -4216,7 +4216,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		 * For a variable result type, we cannot rely on any constant optimizations
 		 * so we have to trust and emit the expression as-is
 		 */
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
 			/**
 			 * If this is not null, we'll be adding on top of it
 			 * with this rule and eventually reassigning what the current offset
@@ -4267,8 +4267,9 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			}
 
 			break;
+		}
 
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			/**
 			 * If this is not null, we'll be adding on top of it
 			 * with this rule and eventually reassigning what the current offset
@@ -4330,6 +4331,12 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			}
 
 			break;
+		}
+
+		//Never valid to see an initializer in here
+		default: {
+			ice_panic_on_invalid_result_type();
+		}
 	}
 
 	/**
@@ -5580,6 +5587,10 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 		case CFG_RESULT_TYPE_CONST:
 			if_assignment = emit_assignment_with_const_instruction(if_result, if_branch.result_value.result_const, ternary_operation->line_number);
 			break;
+
+		//Should never see an initializer here
+		default:
+			ice_panic_on_invalid_result_type();
 	}
 
 	//Add this into the if block regardless of the result
@@ -5609,6 +5620,10 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 		case CFG_RESULT_TYPE_CONST:
 			else_assignment = emit_assignment_with_const_instruction(else_result, else_branch.result_value.result_const, ternary_operation->line_number);
 			break;
+
+		//Never valid to see an initializer here
+		default:
+			ice_panic_on_invalid_result_type();
 	}
 
 	//Add this into the else block
@@ -6310,7 +6325,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 			 * This will become:
 			 * 	result <- operand1 + <type_size_multiplier> * constant_operand
 			 */
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				//Extract it
 				constant_operand = right_operand_results.result_value.result_const;
 
@@ -6325,8 +6340,9 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				//Throw this into the current block
 				add_statement(current_block, computation);
 				break;
+			}
 
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				//Extract it
 				operand2 = right_operand_results.result_value.result_var;
 
@@ -6368,6 +6384,12 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				}
 
 				break;
+			}
+
+			//Never valid to see an initializer result here
+			default: {
+				ice_panic_on_invalid_result_type();
+			}
 		}
 
 	} else {
@@ -6381,7 +6403,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 			 * This will become:
 			 * 	result <- operand1 - <type_size_multiplier> * constant_operand
 			 */
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				//Extract it
 				constant_operand = right_operand_results.result_value.result_const;
 
@@ -6396,13 +6418,14 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				//Throw this into the current block
 				add_statement(current_block, computation);
 				break;
+			}
 
 			/**
 			 * This will become:
 			 * 	subtrahend <- operand2 * <type_size_multiplier>
 			 * 	result <- operand1 - subtrahend
 			 */
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				//Extract it
 				operand2 = right_operand_results.result_value.result_var;
 
@@ -6423,6 +6446,12 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 				add_statement(current_block, pointer_arithmetic);
 				break;
+			}
+
+			//We should never see an initializer type here
+			default: {
+				ice_panic_on_invalid_result_type();
+			}
 		}
 	}
 
@@ -6596,23 +6625,31 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				 * If we have a constant, we can go straight for a bin_op_with_const statement
 				 * and save the extra assignments and simplifications down the road
 				 */
-				case CFG_RESULT_TYPE_CONST:
+				case CFG_RESULT_TYPE_CONST: {
 					op1_const = right_side.result_value.result_const;
 
 					//We default to op1 for a constant
 					final_result_type = op1->type;
 					break;
+				}
 
 				/**
 				 * Otherwise we have a regular variable value so we will
 				 * unpack it accordingly and use it to help use get the result type
 				 */
-				case CFG_RESULT_TYPE_VAR:
+				case CFG_RESULT_TYPE_VAR: {
 					op2 = right_side.result_value.result_var;
 
 					//Now use the helper to get the final result type
 					final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
 					break;
+				}
+
+				//We should never see an initializer here
+				default: {
+					ice_panic_on_invalid_result_type();
+				}
+
 			}
 
 			/**
@@ -6652,6 +6689,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				case CFG_RESULT_TYPE_VAR:
 					op2 = right_side.result_value.result_var;
 					break;
+
+				//We should never see an initializer type here
+				default:
+					ice_panic_on_invalid_result_type();
 			}
 
 			break;
@@ -6757,6 +6798,8 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 /**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
+ *
+ * TODO HERE
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	//For unpacking
