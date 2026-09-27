@@ -3943,11 +3943,27 @@ static cfg_result_package_t emit_array_initializer__NEW(basic_block_t* block, ge
 	 */
 	generic_ast_node_t* initializer_cursor = initializer_node->first_child;
 	while(initializer_cursor != NULL){
+		//Emit using the primary expression rule
+		cfg_result_package_t child_results = emit_primary_expr_code(current_block, initializer_cursor);
+		
+		//Update the current block after the expression
+		current_block = child_results.final_block;
 
+		switch(child_results.type){
+			case CFG_RESULT_TYPE_CONST:
+				add_intializer_result(array_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_CONSTANT);
+				break;
+			case CFG_RESULT_TYPE_VAR:
+				add_intializer_result(array_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_VARIABLE);
+				break;
+			case CFG_RESULT_TYPE_INITIALIZER:
+				add_intializer_result(array_initializer, child_results.result_value.result_initializer, INITIALIZER_RESULT_TYPE_SUB_INITIALIZER);
+				break;
+		}
+
+		//Bump up to the next one
+		initializer_cursor = initializer_cursor->next_sibling;
 	}
-
-
-
 
 	//Now that we've emitted everything we can package up and return the result package
 	results.type = CFG_RESULT_TYPE_INITIALIZER;
@@ -3992,7 +4008,7 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 			exit(1);
 
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			return emit_initializer(basic_block, primary_parent);
+			return emit_array_initializer__NEW(basic_block, primary_parent);
 
 		//By default, we're emitting some kind of expression here
 		default:
