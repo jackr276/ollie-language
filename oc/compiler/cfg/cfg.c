@@ -6507,8 +6507,6 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 /**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
- *
- * TODO HERE
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	//For unpacking
@@ -6557,7 +6555,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		 * For result types, there are many different things that we need to account
 		 * for like copy assignees, store operations, and optimizations for binary expressions
 		 */
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
 			//Extract the result variable
 			result_var = right_hand_package.result_value.result_var;
 
@@ -6670,12 +6668,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			}
 			
 			break;
+		}
 
 		/**
 		 * For constant result types, really the only thing that we have
 		 * to worry about is whether or not we have a store.
 		 */
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			/**
 			 * First case: we have a store statement that just needs a constant put to it
 			 */
@@ -6715,6 +6714,12 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			}
 			
 			break;
+		}
+
+		case CFG_RESULT_TYPE_INITIALIZER: {
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+		}
 	}
 
 	//Now pack the return value here - this is always a variable type
@@ -7157,6 +7162,10 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 				case CFG_RESULT_TYPE_VAR:
 					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
 					break;
+
+				case CFG_RESULT_TYPE_INITIALIZER:
+					printf("TODO NOT IMPLEMENTED\n");
+					exit(1);
 			}
 
 			//This goes in right after the given last instruction
@@ -7266,6 +7275,10 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 		case CFG_RESULT_TYPE_VAR:
 			add_parameter_result_to_results_array(results, results_package.result_value.result_var, PARAM_RESULT_TYPE_VAR);
 			break;
+
+		case CFG_RESULT_TYPE_INITIALIZER:
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 	}
 
 	//Give back the results in the end
@@ -7310,6 +7323,10 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 			case CFG_RESULT_TYPE_VAR:
 				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_VAR);
 				break;
+			
+			case CFG_RESULT_TYPE_INITIALIZER:
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
 		}
 
 		child_cursor = child_cursor->next_sibling;

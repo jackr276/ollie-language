@@ -143,12 +143,8 @@ typedef enum {
 	THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET,
 	//Specialized synthetic initialization for memory regions
 	THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION,
-	//String initialization
-	THREE_ADDR_CODE_STRING_INITIALIZATION_STMT,
-	//Array initialization
-	THREE_ADDR_CODE_ARRAY_INITIALIZATION_STMT,
-	//Struct initialization
-	THREE_ADDR_CODE_STRUCT_INITIALIZATION_STMT,
+	//An initialization statement that will take an initializer
+	THREE_ADDR_CODE_INITIALIZER_STMT,
 } instruction_stmt_type_t;
 
 #endif /* OLLIE_INTERMEDIARY_REPRESENTATION_H */

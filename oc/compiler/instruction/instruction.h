@@ -320,6 +320,11 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
 instruction_t* emit_synthetic_memory_initialization(three_addr_var_t* memory_address_var, u_int32_t line_number);
 
 /**
+ * Emit a three address initializer expression
+ */
+instruction_t* emit_initialization_instruction(three_addr_var_t* being_initialized, three_addr_initializer_t* initializer, u_int32_t line_number);
+
+/**
  * Emit a statement that only uses two vars of the form var1 <- var2
  *
  * This truncating assignment instruction is designed specifically and only
