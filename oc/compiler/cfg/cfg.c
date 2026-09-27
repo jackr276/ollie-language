@@ -6360,9 +6360,6 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
  * with it
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
-	//For unpacking
-	three_addr_var_t* result_var;
-	//Final return package here - this will be updated as we go
 	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
@@ -6408,7 +6405,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		 */
 		case CFG_RESULT_TYPE_VAR: {
 			//Extract the result variable
-			result_var = right_hand_package.result_value.result_var;
+			three_addr_var_t* result_var = right_hand_package.result_value.result_var;
 
 			/**
 			 * Is a copy assignment required between the destination and source types? This
@@ -6590,8 +6587,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				//Tack the initializer on
 				initializer_statement->operands.oir.initializer_operand = initializer;
 
+			/**
+			 * Option 2: we don't have a premade store statement so we'll have to emit
+			 * the intiailization statement from scratch here
+			 */
 			} else {
-
+				instruction_t* initializer_statement = emit_initialization_instruction(left_hand_var, initializer, parent_node->line_number);
+				add_statement(current_block, initializer_statement);
 			}
 			
 			break;
