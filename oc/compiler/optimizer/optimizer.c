@@ -452,11 +452,8 @@ static void mark(dynamic_array_t* function_blocks){
 				 * Return statements are always considered important
 				 */
 				case THREE_ADDR_CODE_RET_STMT:
-					//Mark this as useful
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -465,11 +462,8 @@ static void mark(dynamic_array_t* function_blocks){
 				 * and are thus also always considered important
 				 */
 				case THREE_ADDR_CODE_RAISE_STMT:
-					//Mark as useful
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//This block does contain a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -481,9 +475,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_ASM_INLINE_STMT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -494,9 +486,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -508,9 +498,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -521,9 +509,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_IDLE_STMT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -533,9 +519,17 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * All initializers are basically like store statements. They are always considered
+				 * useful because we are writiing to memory
+				 */
+				case THREE_ADDR_CODE_INITIALIZER_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
 					current->contains_mark = TRUE;
 					break;
 
@@ -625,6 +619,19 @@ static void mark(dynamic_array_t* function_blocks){
 				}
 
 				break;
+
+			/**
+			 * For an initializer statement there are special steps that we 
+			 * need to take to work on the 
+			 */
+			case THREE_ADDR_CODE_INITIALIZER_STMT: {
+				//The address that we're writing to will always be needed
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
+
+				//TODO INITIALZIER MARKING
+
+				break;
+			}
 
 			/**
 			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
