@@ -94,6 +94,19 @@ typedef enum {
 
 
 /**
+ * The offset type is used for postfix expression 
+ * emittal where we could have a variable or constant
+ * current offset
+ */
+typedef enum {
+	//Default blank value
+	OFFSET_TYPE_NONE = 0,
+	OFFSET_TYPE_CONST,
+	OFFSET_TYPE_VAR
+} offset_type_t;
+
+
+/**
  * CFG result packages are used to pass out the reult
  * of translating an expression. They will contain:
  * 	1.) Starting block of the statement
@@ -101,7 +114,7 @@ typedef enum {
  * 	3.) A tagged union with either a variable or constant result
  * 	4.) The operator that was used, if any
  */
-typedef struct{
+typedef struct {
 	//Blocks come first
 	basic_block_t* starting_block;
 	basic_block_t* final_block;
@@ -117,6 +130,21 @@ typedef struct{
 	//The operator may or may not always be filled
 	ollie_token_t operator;
 } cfg_result_package_t;
+
+
+/**
+ * The address offset type is meant to be used during
+ * postfix expression translation and allow us to absolutely
+ * minimize the number of instructions we produce
+ */
+typedef struct {
+	union {
+		three_addr_const_t* constant_offset;
+		three_addr_var_t* variable_offset;
+	} value;
+
+	offset_type_t type;
+} address_offset_t; 
 
 
 /**
@@ -155,6 +183,11 @@ typedef enum{
  * so we can't wipe them out any other way
  */
 #define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, BLANK}
+
+/**
+ * A simple macro initializer for a blank address offset type
+ */
+#define INITIALIZE_BLANK_ADDRESS_OFFSET (address_offset_t){NULL, OFFSET_TYPE_NONE}
 
 //We predeclare up here to avoid needing any rearrangements
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
@@ -4143,11 +4176,13 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	//Hold onto what our current block is, it may change
 	basic_block_t* current_block = basic_block;
 
-	//A variable for our base address(it starts off as null, the recursive rule will modify it)
+	/**
+	 * Maintain a base address and a current offset. The base address is always
+	 * a variable, while the offset may be a variable or a constant depending
+	 * on what we're doing, necessitating the tagged union type
+	 */
 	three_addr_var_t* base_address = NULL;
-
-	//Another variable for our current offset(again it starts as NULL, the rule will populate if need be)
-	three_addr_var_t* current_offset = NULL;
+	address_offset_t current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
 	
 	//Let the recursive rule do all the work
 	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, &came_from_non_continguous_region);
