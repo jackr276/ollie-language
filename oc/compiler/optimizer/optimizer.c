@@ -396,6 +396,33 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 
 
 /**
+ * Mark all values inside of the special three address initializer. Note that
+ * this helper can be called recursively because initializers themselves can
+ * be recursive
+ */
+static void mark_initializer_values(three_addr_initializer_t* initializer, dynamic_array_t* function_blocks, dynamic_array_t* worklist){
+	//Run through every single initializer result
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				mark_and_add_definition(function_blocks, result->value.variable_value, worklist);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				mark_initializer_values(result->value.initializer_value, function_blocks, worklist);
+				break;
+
+			//Constants don't need to be marked at all
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -624,14 +651,13 @@ static void mark(dynamic_array_t* function_blocks){
 			 * For an initializer statement there are special steps that we 
 			 * need to take to work on the 
 			 */
-			case THREE_ADDR_CODE_INITIALIZER_STMT: {
+			case THREE_ADDR_CODE_INITIALIZER_STMT:
 				//The address that we're writing to will always be needed
 				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
 
-				//TODO INITIALZIER MARKING
-
+				//Now let the recursive helper mark all of our initializer values
+				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
-			}
 
 			/**
 			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
@@ -1163,6 +1189,8 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
  * good thing is that we're able to keep this entire algorithm block-local
  *
  * NOTE: we guarantee that the end statement is a branch
+ *
+ * This is deprecated as of 09/27/2026
  */
 static inline void mark_all_branch_related_statements(basic_block_t* block){
 	//Guarantee that the exit statement is a branch statement

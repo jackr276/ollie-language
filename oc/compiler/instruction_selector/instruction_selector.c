@@ -8192,6 +8192,15 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
  * 			if j is unmarked then
  * 				mark j
  * 				add j to worklist
+ *
+ *
+ *
+ *
+ *
+ * TODO WE NEED TO SUPPORT INITIALIZERS
+ *
+ *
+ *
  */
 static void mark(dynamic_array_t* function_blocks){
 	//First we'll need a worklist
