@@ -3869,6 +3869,8 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
  */
 static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address,
 																	address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	//Get what the raw struct type is
 	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
 
@@ -3880,23 +3882,54 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
-	//Extract the var first
+	/**
+	 * Get the struct record so we can extract the needed offset from this specific member
+	 */
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
-
-	//Now we'll grab the associated struct record
 	symtab_variable_record_t* struct_record = get_struct_member(raw_struct_type, struct_variable->var_name.string);
-	
-	//Let's create our offset here
-	three_addr_const_t* offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
+	u_int64_t record_offset = struct_record->struct_offset;
 
-	//Now we'll have one final assignment here
-	instruction_t* final_assignment =  emit_assignment_with_const_instruction(emit_temp_var(u64), offset, line_number);
+	//The current offset type determines where we go from here
+	switch(current_offset->type){
+		/**
+		 * There is currently no offset so we'll just replace it with the struct record's offset
+		 */
+		case OFFSET_TYPE_NONE: {
+			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+			current_offset->value.constant_offset = struct_offset_const;
+			current_offset->type = OFFSET_TYPE_CONST;
+			break;
+		}
 
-	//Add it into the block
-	add_statement(block, final_assignment);
+		/**
+		 * We have a constant offset already so we'll just need to add to it for the
+		 * new offset to work
+		 */
+		case OFFSET_TYPE_CONST: {
+			sum_constant_with_raw_int64_value(current_offset->value.constant_offset, u64, record_offset);
+			break;
+		}
 
-	//The current offset now is this
-	*current_offset = final_assignment->operands.oir.assignee;
+		/**
+		 * We already have a current offset variable, so we'll need to sum it with
+		 * the given offset constant. Lea is preferred for addressing so we'll use
+		 * that here
+		 */
+		case OFFSET_TYPE_VAR: {
+			//We'll need a new offset and a struct constant
+			three_addr_var_t* new_offset = emit_temp_var(u64);
+			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+
+			//Emit and add the calculation to the block
+			instruction_t* offset_calc = emit_lea_offset_only(new_offset, current_offset->value.variable_offset, struct_offset_const, line_number);
+			add_statement(block, offset_calc);
+
+			//Overwrite the old current offset with this new one
+			current_offset->value.variable_offset = new_offset;
+			current_offset->type = OFFSET_TYPE_VAR;
+			break;
+		}
+	}
 
 	/**
 	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
@@ -3911,8 +3944,9 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//And we're done here, we can package and return what we have
-	cfg_result_package_t results = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
+	//Package up and return the results
+	results.starting_block = block;
+	results.final_block = block;
 	return results;
 }
 
