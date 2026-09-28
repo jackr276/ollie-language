@@ -4309,23 +4309,50 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				break;
 		}
 
-	//Otherwise it's just a memory address call, just emit the base address plus the offset
+	/**
+	 * If we don't need to dereference then we're just doing a memory address call. In this
+	 * case we'll calculate the memory address appropriately based on the base address and 
+	 * offset and return that in the result package
+	 */
 	} else {
-		//If the current offset is not NULL, we'll need to do some calculations here
-		if(current_offset != NULL){
-			//Just do base address + offset
-			instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset, root->line_number);
+		three_addr_var_t* final_memory_address = NULL;
 
-			//Add the instruction in
-			add_statement(current_block, address_calculation);
+		switch(current_offset.type){
+			/**
+			 * No offset at all - the final memory address is 
+			 * just our calculated base address
+			 */
+			case OFFSET_TYPE_NONE: {
+				final_memory_address = base_address;
+				break;
+			}
 
-			//This is what we're returning
-			postfix_results.result_value.result_var = address_calculation->operands.oir.assignee;
+			/**
+			 * Current offset is a variable so we'll convert this into a LEA
+			 * with two operands to represent the computation
+			 */
+			case OFFSET_TYPE_VAR: {
+				final_memory_address = emit_temp_var(base_address->type);
+				instruction_t* final_address_calc = emit_lea_operands_only(final_memory_address, base_address, current_offset.value.variable_offset, root->line_number);
+				add_statement(current_block, final_address_calc);
+				break;
+			}
 
-		//Otherwise it is null, so we can just use the base address
-		} else {
-			postfix_results.result_value.result_var = base_address;
+			/**
+			 * Current offset is a constant so we'll convert this to a lea
+			 * with an offset to represent the computation
+			 */
+			case OFFSET_TYPE_CONST: {
+				final_memory_address = emit_temp_var(base_address->type);
+				instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, current_offset.value.constant_offset, root->line_number);
+				add_statement(current_block, final_address_calc);
+				break;
+			}
 		}
+
+		//Regardless of the path the reuslt is in the final memory address
+		results.type = CFG_RESULT_TYPE_VAR;
+		results.result_value.result_var = final_memory_address;
 	}
 
 	//Package up and return the results package
