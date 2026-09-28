@@ -3569,7 +3569,10 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
-	//Let the helper emit the intermediary load if we're non-contiguous
+	/**
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
+	 */
 	if(*came_from_non_contiguous_region == TRUE){
 		emit_non_contiguous_region_base_address_correction(current_block, base_address, current_offset, line_number);
 	}
@@ -3740,37 +3743,8 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	 * If our current address is from a non-contiguous region, we are going to need to
 	 * load in the value at that address to set up properly here
 	 */
-	//TODO UPDATE
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
 	//Grab the variable that we need
@@ -3840,37 +3814,8 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	 * If our current address is from a non-contiguous region, we are going to need to
 	 * load in the value at that address to set up properly here
 	 */
-	//TODO UPDATE
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, raw_struct_type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, raw_struct_type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
 	//Extract the var first
@@ -3918,9 +3863,9 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address, address_offset_t* current_offset,
 														   u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
 	/**
-	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
 	 */
-	//TODO UPDATE
 	if(*came_from_non_contiguous_region == TRUE){
 		//Now we need to emit the load by doing our offset calculation to get out of the pointer
 		//space and into memory
@@ -3985,9 +3930,9 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
 
 	/**
-	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
 	 */
-	//TODO UPDATE
 	if(*came_from_non_contiguous_region == TRUE){
 		//Now we need to emit the load by doing our offset calculation to get out of the pointer
 		//space and into memory
