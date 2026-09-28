@@ -3867,35 +3867,7 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 	 * load in the value at that address to set up properly here
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
 	/**
@@ -3934,35 +3906,7 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	 * load in the value at that address to set up properly here
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, raw_union_type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, raw_union_type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
 	/**
