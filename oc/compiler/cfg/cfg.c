@@ -3608,27 +3608,51 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					three_addr_var_t* new_offset = emit_temp_var(u64);
 
 					/**
-					 * If we are able to do a lea using the type size, we will do that now
+					 * Case 1: we have a lea compatible power of 2:
+					 *
+					 * Old offset: t1
+					 * Variable result: t7
+					 * Member type size: 8(lea compatible)
+					 *
+					 * We can make this:
+					 * t5 <- lea (base_address, t7, 8)
+					 * t7 <- t5 + t1 <-- add the old offset to this
+					 * 
+					 * And then the new offset is t7
 					 */
 					if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-						instruction_t* address_calculation = emit_lea_multiplier_and_operands(new_offset, *base_address, current_offset->value.variable_offset, member_type->type_size, line_number);
+						instruction_t* address_calculation = emit_lea_multiplier_and_operands(emit_temp_var(u64), *base_address, array_offset, member_type->type_size, line_number);
 						add_statement(current_block, address_calculation);
 
+						instruction_t* offset_addition = emit_binary_operation_instruction(new_offset, address_calculation->operands.oir.assignee, PLUS, current_offset->value.variable_offset, line_number);
+						add_statement(current_block, offset_addition);
+
 					/**
-					 * Otherwise, we can't fully do a lea here so we'll need to instead
-					 * use a binary operation to multiply followed by a different kind of lea
+					 * Case 2: we have a lea incompatible power of 2:
 					 *
-					 * For something like this, we'll have two expressions
-					 * 	t4 <- t2 * 24 <--- calculate the new index value(not lea compatible)
-					 * 	t5 <- MEM<x_0> + t4 <--- indexing off of the base address
+					 * Old offset: t1
+					 * Variable result: t7
+					 * Member type size: 24(NOT lea compatible)
+					 *
+					 * We can make this:
+					 * t4 <- t7 * 24 	<-- scale the variable result
+					 * t5 <- base_address + t4 <-- add it onto the base address
+					 * t7 <- t5 + t1 <-- add the old offset to this new value
+					 * 
+					 * And then the new offset is t7
 					 */
 					} else {
 						three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-						three_addr_var_t* final_offset = emit_binary_operation_with_constant(current_block, emit_temp_var(u64), current_offset->value.variable_offset, STAR, type_size_const, line_number);
+						instruction_t* scaled_result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, type_size_const, line_number);
+						add_statement(current_block, scaled_result);
 
-						//And now that we have the incompatible multiplication over with, we can use a lea to add
-						instruction_t* lea_statement = emit_lea_operands_only(new_offset, *base_address, final_offset, line_number);
-						add_statement(current_block, lea_statement);
+						//Now add the scaled result onto the base address
+						instruction_t* base_address_addition = emit_binary_operation_instruction(emit_temp_var(u64), *base_address, PLUS, scaled_result->operands.oir.assignee, line_number);
+						add_statement(current_block, base_address_addition);
+
+						//Finally add the new offset to the scaled base address to get our final offset
+						instruction_t* final_offset_calc = emit_binary_operation_instruction(new_offset, base_address_addition->operands.oir.assignee, PLUS, current_offset->value.variable_offset, line_number);
+						add_statement(current_block, base_address_addition);
 					}
 
 					//Now the current offset is this new offset that we've calculated
@@ -3660,12 +3684,32 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					 * And then the new offset is t5
 					 */
 					if(is_lea_compatible_power_of_2(member_type->type_size)== TRUE){
+						instruction_t* new_offset_lea = emit_lea_index_offset_and_scale(new_offset, *base_address, array_offset, current_offset->value.constant_offset, member_type->type_size, line_number);
+						add_statement(current_block, new_offset_lea);
 
+					/**
+					 * Case 2: we have a lea incompatible power of 2:
+					 * 
+					 * Old offset: 24
+					 * Variable result: t7
+					 * Member type size: 48(NOT lea compatible)
+					 *
+					 * We can make this:
+					 * t3 <- t7 * 48
+					 * t5 <- t3 + 24
+					 * 
+					 * And then the new offset is t5
+					 */
 					} else {
+						three_addr_const_t* scale_constant = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+						instruction_t* index_multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, scale_constant, line_number);
+						add_statement(current_block, index_multiplication);
+
+						instruction_t* bin
 
 					}
 
-
+					break;
 				}
 			}
 
