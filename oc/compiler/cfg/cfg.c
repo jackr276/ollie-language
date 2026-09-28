@@ -1879,14 +1879,6 @@ static inline three_addr_var_t* generate_pointer_arithmetic_for_unary_operation(
 
 
 /**
- * Emit the appropriate address calculation for a given array member, based on what is given in the parameters. This will
- * result in either a lea or a binary operation and then a lea
- */
-static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, u_int64_t type_size, u_int32_t line_number){
-}
-
-
-/**
  * Emit a struct access lea statement if one is needed(i.e. offset is not zero)
  */
 static inline three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset, u_int32_t line_number){
@@ -3574,8 +3566,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					/**
 					 * Create a new "current offset" that will calculate the offset for this value
 					 */
-					current_offset->type = OFFSET_TYPE_VAR;
-					current_offset->value.variable_offset = emit_temp_var(u64);
+					three_addr_var_t* new_offset = emit_temp_var(u64);
 
 					//The array offset is the unscaled value that came from the expression
 					three_addr_var_t* array_offset = expression_package.result_value.result_var;
@@ -3585,13 +3576,17 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					 * otherwise we'll have to use a binary operation with constant
 					 */
 					if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-						instruction_t* lea = emit_lea_index_and_scale_only(current_offset->value.variable_offset, array_offset, member_type->type_size, line_number);
+						instruction_t* lea = emit_lea_index_and_scale_only(new_offset, array_offset, member_type->type_size, line_number);
 						add_statement(current_block, lea);
 
 					} else {
 						three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-						emit_binary_operation_with_constant(current_block, current_offset->value.variable_offset, array_offset, STAR, type_size_const, line_number);
+						emit_binary_operation_with_constant(current_block, new_offset, array_offset, STAR, type_size_const, line_number);
 					}
+
+					//The new offset is now what we've just calculated
+					current_offset->value.variable_offset = new_offset;
+					current_offset->type = OFFSET_TYPE_VAR;
 
 					break;
 				}
@@ -3638,16 +3633,37 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 					//Now the current offset is this new offset that we've calculated
 					current_offset->value.variable_offset = new_offset;
-
+					current_offset->type = OFFSET_TYPE_VAR;
 					break;
 				}
 
 				/**
+				 * We have a constant current offset that we'll need to add onto with the variable
+				 * offset result that we've just gotten
 				 */
 				case OFFSET_TYPE_CONST: {
 					three_addr_var_t* array_offset = expression_package.result_value.result_var;
 
-					if(is_lea_compatible_power_of_2(jk))
+					//Create a new offset that will become the new current offset
+					three_addr_var_t* new_offset = emit_temp_var(u64);
+
+					/**
+					 * Case 1: we have a lea compatible power of 2:
+					 *
+					 * Old offset: 24
+					 * Variable result: t7
+					 * Member type size: 8(lea compatible)
+					 *
+					 * We can make this:
+					 * t5 <- lea 24(base_address, t7, 8)
+					 * 
+					 * And then the new offset is t5
+					 */
+					if(is_lea_compatible_power_of_2(member_type->type_size)== TRUE){
+
+					} else {
+
+					}
 
 
 				}
