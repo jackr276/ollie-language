@@ -219,6 +219,16 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 
 
 /**
+ * Trigger a fatal internal compiler error panic with the given message
+ * 
+ * NOTE: THIS WILL CRASH THE PROGRAM DELIBERATELY
+ */
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
+	exit(1);
+}
+
+/**
  * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
  */
 static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
@@ -4052,66 +4062,58 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 	/**
 	 * NORMAL CASE - we are dealing with a postfix expression emittal so we will continue the
-	 * recursive chain 
+	 * recursive chain. This recursive processing makes a recursive call before the processing
+	 * for this actual node itself, that way all nodes to the left of it have already been 
+	 * processed by the time we get to process this one(more below)
 	 */
 	if(root->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
-		//Once we make it down here, we know that we don't have a primary expression so we need to do postfix processing
-		//The left child *always* decays into another postfix expression
+		/**
+		 * Extract this stuff for bookkeeping - left child, right child, and
+		 * the types that we need. We recursively evaluate leftwards
+		 */
 		generic_ast_node_t* left_child = root->first_child;
-
-		//And this will *always* be our postoperation code
 		generic_ast_node_t* right_child = left_child->next_sibling;
-		
-		//The type of the memory region we're accessing is all we need here. This is always
-		//the left child's type
 		generic_type_t* memory_region_type = left_child->inferred_type;
 
-		//We need to first recursively emit the left child's postfix expression
+		/**
+		 * RECURSIVE CALL: recursively evaluate everything to the left of this node to ensure maintain
+		 * the order of the postfix expression. This ensures that by the time we're actually processing
+		 * this node we'll already have a base address and offset(likely) to work with
+		 */
 		cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, came_from_non_contiguous_region);
+		current_block = left_child_results.final_block;
 
-		//Update whatever the last block may be
-		current = left_child_results.final_block;
+		cfg_result_package_t accessor_results;
 
-		//The postfix results package
-		cfg_result_package_t postfix_results;
-
-		//NOTE: by the time we get down here, base address will have been populated with an actual value(usually "memory address of")
-
-		//Now we need to go through and calculate the offset
 		switch(right_child->ast_node_type){
-			//Handle an array accessor
 			case AST_NODE_TYPE_ARRAY_ACCESSOR:
-				postfix_results = emit_array_offset_calculation(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				accessor_results = emit_array_offset_calculation(current_block, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
 				break;
 
-			//Handle a regular struct accessor(: access)
 			case AST_NODE_TYPE_STRUCT_ACCESSOR:
-				postfix_results = emit_struct_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				accessor_results = emit_struct_accessor_expression(current_block, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
 				break;
 
-			//Handle a struct pointer access
 			case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
-				postfix_results = emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				accessor_results = emit_struct_pointer_accessor_expression(current_block, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
 				break;
 
-			//Handle a regular union access(. access)
 			case AST_NODE_TYPE_UNION_ACCESSOR:
-				postfix_results = emit_union_accessor_expression(current, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				accessor_results = emit_union_accessor_expression(current_block, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
 				break;
 
-			//Handle a union pointer access (-> access)
 			case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-				postfix_results = emit_union_pointer_accessor_expression(current, right_child, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				accessor_results = emit_union_pointer_accessor_expression(current_block, right_child, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
 				break;
 				
-			//We should never actually hit this, it's just so the compiler is happy
+			/**
+			 * Something is very wrong if we hit this so trigger a compiler panic
+			 */
 			default:
-				break;
+				trigger_ice_panic("Unrecognzied postfix expression node type hit");
 		}
 
-		//Give back our final results(assignee is not needed here)
-		cfg_result_package_t final_results = {current, postfix_results.final_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
-		return final_results;
+		return accessor_results;
 
 	/**
 	 * BASE CASE - we have hit a non-postfix expression, meaning that we are at the end of the
