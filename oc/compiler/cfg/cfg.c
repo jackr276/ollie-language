@@ -4203,51 +4203,54 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
  * the deepest(first) part first and the highest(root) part last
  */
 static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* root){
-	//This is our "base case". If it's not a postfix expression, just move out
-	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		return emit_primary_expr_code(basic_block, root);
-	}
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
-	//Did the current result come from a non-contiguous computation
-	u_int8_t came_from_non_continguous_region = FALSE;
-
-	//Hold onto what our current block is, it may change
+	//Track what the current block is
 	basic_block_t* current_block = basic_block;
+
+	/**
+	 * BASE CASE: if we don't have a postfix expression then we just got here along the
+	 * recursive descent, we'll just call out to the primary expression and move along
+	 */
+	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
+		return emit_primary_expr_code(current_block, root);
+	}
 
 	/**
 	 * Maintain a base address and a current offset. The base address is always
 	 * a variable, while the offset may be a variable or a constant depending
 	 * on what we're doing, necessitating the tagged union type
+	 *
+	 * Also, maintain a flag noting whether or not we came from a contiguous(flat)
+	 * memory region. This will be important for the offset emittal
 	 */
 	three_addr_var_t* base_address = NULL;
 	address_offset_t current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+	u_int8_t came_from_non_continguous_region = FALSE;
 	
-	//Let the recursive rule do all the work
+	/**
+	 * Let the recursive helper emit everyhing that we need for the actual code. Once this completes,
+	 * we have a fully populated current offset with a correct base address in the case of any
+	 * intermediary loads
+	 */
 	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, &came_from_non_continguous_region);
-
-	//Grab htese out for later
-	generic_ast_node_t* left_child = root->first_child;
-	generic_ast_node_t* right_child = left_child->next_sibling;
+	current_block = postfix_results.final_block;
 
 	/**
 	 * For this rule, we care about the parent node's type(after cast/coercion) and
 	 * the original memory access type(before cast/coercion). We will use these 2 to 
 	 * determine if a converting operation is needed
 	 */
+	generic_ast_node_t* left_child = root->first_child;
+	generic_ast_node_t* right_child = left_child->next_sibling;
 	generic_type_t* parent_node_type = root->inferred_type;
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
-	//This is whatever the final block is
-	current_block = postfix_results.final_block;
-
-	//IMPORTANT - the result of this is always going to be a variable
-	postfix_results.type = CFG_RESULT_TYPE_VAR;
-
-	//In case we need them - load and store
-	instruction_t* load_instruction;
-	instruction_t* store_instruction;
-
-	//Do we need a dereference(load or store) here?
+	/**
+	 * If a dereference is required, we will need to do it based on what side of the expression
+	 * we're currently residing on. LHS means that we're doing a store, and RHS means that 
+	 * we're doing a load.
+	 */
 	if(root->dereference_needed == TRUE){
 		//Based on what we have here - we emit the appropriate statement
 		switch(root->side){
@@ -4325,8 +4328,10 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 		}
 	}
 
-	//Give back these results
-	return postfix_results;
+	//Package up and return the results package
+	results.starting_block = basic_block;
+	results.final_block = current_block;
+	return results;
 }
 
 
