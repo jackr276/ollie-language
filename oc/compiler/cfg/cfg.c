@@ -3695,20 +3695,23 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					 * Member type size: 48(NOT lea compatible)
 					 *
 					 * We can make this:
-					 * t3 <- t7 * 48
-					 * t5 <- t3 + 24
+					 * t3 <- t7 * 48 <-- get the scaled index
+					 * t5 <- 24(<base_address>, t3) <--- add it to the base address along with the old offset
 					 * 
 					 * And then the new offset is t5
 					 */
 					} else {
 						three_addr_const_t* scale_constant = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-						instruction_t* index_multiplication = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, scale_constant, line_number);
-						add_statement(current_block, index_multiplication);
+						instruction_t* scaled_index = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, scale_constant, line_number);
+						add_statement(current_block, scaled_index);
 
-						instruction_t* bin
-
+						instruction_t* new_offset_calc = emit_lea_operands_and_offset(new_offset, *base_address, scaled_index->operands.oir.assignee, current_offset->value.constant_offset, line_number);
+						add_statement(current_block, new_offset_calc);
 					}
 
+					//Now the current offset is this new offset that we've calculated
+					current_offset->value.variable_offset = new_offset;
+					current_offset->type = OFFSET_TYPE_VAR;
 					break;
 				}
 			}

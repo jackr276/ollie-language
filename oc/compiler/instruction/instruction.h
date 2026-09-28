@@ -278,6 +278,11 @@ instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t
 instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int32_t line_number);
 
 /**
+ * Emit a lea statement that has operands and an offset
+ */
+instruction_t* emit_lea_operands_and_offset(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, three_addr_const_t* offset, u_int32_t line_number);
+
+/**
  * Emit a lea statement that has the index, offset, and scale. This corresponds
  * to an addressing mode of ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE
  */
