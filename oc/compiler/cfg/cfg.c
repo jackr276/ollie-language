@@ -3711,16 +3711,46 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		}
 
 		case CFG_RESULT_TYPE_CONST: {
+			three_addr_const_t* array_offset = expression_package.result_value.result_const;
+
 			switch(current_offset->type){
 				/**
-				 * There is no current offset so we just need to emit a calculation
-				 * using the 
+				 * There is no current offset so all that we'll need to do is mutiply
+				 * the array offset by the constant value, and then that is our new current
+				 * offset
 				 */
 				case OFFSET_TYPE_NONE: {
+					//Multiply these two constants together, the result is in the array_offset constant
+					multiply_constant_by_raw_int64_value(array_offset, u64, member_type->type_size);
+
+					//Store this now as a constant offset
+					current_offset->value.constant_offset = array_offset;
+					current_offset->type = OFFSET_TYPE_CONST;
 					break;
 				}
 
+				/**
+				 * The current offset is a variable
+				 *
+				 * t5: current offset
+				 * multiplier: 8
+				 * array_offset: 24
+				 *
+				 * t7 <- lea 144(t5)
+				 *
+				 * New offset is in t7
+				 */
 				case OFFSET_TYPE_VAR: {
+					//We will have a new offset constant for this
+					three_addr_var_t* new_offset = emit_temp_var(u64);
+					
+					multiply_constant_by_raw_int64_value(array_offset, u64, member_type->type_size);
+					instruction_t* lea_instruction = emit_lea_offset_only(new_offset, current_offset->value.variable_offset, array_offset, line_number);
+					add_statement(current_block, lea_instruction);
+
+					//Store the new offset in the current offset struct
+					current_offset->value.variable_offset = new_offset;
+					current_offset->type = OFFSET_TYPE_VAR;
 					break;
 				}
 
