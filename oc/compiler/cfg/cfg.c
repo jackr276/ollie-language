@@ -14,6 +14,7 @@
 
 #include "cfg.h"
 #include <assert.h>
+#include <iso646.h>
 #include <limits.h>
 #include <locale.h>
 #include <stdint.h>
@@ -4252,35 +4253,71 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	 * we're doing a load.
 	 */
 	if(root->dereference_needed == TRUE){
-		//Based on what we have here - we emit the appropriate statement
 		switch(root->side){
-			//Left side = store statement
-			case SIDE_TYPE_LEFT:
-				//This could not be null in the case of structs & arrays
-				if(current_offset != NULL){
-					//Intentionally leave the storee null, it will be populated down the line
-					store_instruction = emit_store_base_address_and_index(base_address, current_offset, NULL, original_memory_access_type, root->line_number);
+			/**
+			 * LHS means that we need to be emitting a store statement. For all store statements
+			 * we intentionally leave their storees empty, that will be for caller to populate
+			 *
+			 * IMPORTANT - for all store addresses, it is an absolute must that the assignee
+			 * of the final result package be the base address
+			 */
+			case SIDE_TYPE_LEFT: {
+				switch(current_offset.type){
+					/**
+					 * No current offset - we just have a store with a base
+					 * address and that's it
+					 */
+					case OFFSET_TYPE_NONE:{
+						instruction_t* store_instruction = emit_store_base_address_only(base_address,
+																						NULL,
+																						original_memory_access_type,
+																						root->line_number);
+						add_statement(current_block, store_instruction);
+						break;
+					}
 
-					//Add it into the block
-					add_statement(current_block, store_instruction);
+					/**
+					 * Offset is a variable so we'll have an address calculation
+					 * with two operands, no constants
+					 */
+					case OFFSET_TYPE_VAR:{
+						instruction_t* store_instruction = emit_store_base_address_and_index(base_address,
+																								current_offset.value.variable_offset,
+																								NULL,
+																								original_memory_access_type,
+																								root->line_number);
+						add_statement(current_block, store_instruction);
+						break;
+					}
 
-					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.result_value.result_var = base_address;
-
-				//Otherwise, this means that the current offset is null
-				} else {
-					//Emit the store here - remember we leave the op1 NULL so that a later rule can fill it in
-					store_instruction = emit_store_base_address_only(base_address, NULL, original_memory_access_type, root->line_number);
-
-					//Add it into our block
-					add_statement(current_block, store_instruction);
-
-					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.result_value.result_var = base_address;
+					/**
+					 * Offset is a constant so we'll have an address calculation with the base
+					 * address and a constant offset
+					 */
+					case OFFSET_TYPE_CONST:{
+						instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address,
+																										current_offset.value.constant_offset,
+																										NULL,
+																										original_memory_access_type,
+																										root->line_number);
+						add_statement(current_block, store_instruction);
+						break;
+					}
 				}
 
+				postfix_results.type = CFG_RESULT_TYPE_VAR;
+				postfix_results.result_value.result_var = base_address;
 				break;
+			}
 
+
+			case SIDE_TYPE_RIGHT: {
+
+
+				break;
+			}
+
+			
 			//Right side = load statement
 			case SIDE_TYPE_RIGHT:
 				//This will not be null in the case of structs & arrays
