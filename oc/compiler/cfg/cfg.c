@@ -4047,25 +4047,89 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  *  in order to work properly
  */
 static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region){
-	//A tracker for what the current block actually is(this can change)
-	basic_block_t* current = basic_block;
+	//Keep track of the current block
+	basic_block_t* current_block = basic_block;
 
 	/**
-	 * If we make it here, this is actually our base address emittal. We will use the
-	 * results from here to hang onto our base address
+	 * NORMAL CASE - we are dealing with a postfix expression emittal so we will continue the
+	 * recursive chain 
 	 */
-	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		//Run the primary results function - we know that this is not going to be a constant
+	if(root->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
+		//Once we make it down here, we know that we don't have a primary expression so we need to do postfix processing
+		//The left child *always* decays into another postfix expression
+		generic_ast_node_t* left_child = root->first_child;
+
+		//And this will *always* be our postoperation code
+		generic_ast_node_t* right_child = left_child->next_sibling;
+		
+		//The type of the memory region we're accessing is all we need here. This is always
+		//the left child's type
+		generic_type_t* memory_region_type = left_child->inferred_type;
+
+		//We need to first recursively emit the left child's postfix expression
+		cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, came_from_non_contiguous_region);
+
+		//Update whatever the last block may be
+		current = left_child_results.final_block;
+
+		//The postfix results package
+		cfg_result_package_t postfix_results;
+
+		//NOTE: by the time we get down here, base address will have been populated with an actual value(usually "memory address of")
+
+		//Now we need to go through and calculate the offset
+		switch(right_child->ast_node_type){
+			//Handle an array accessor
+			case AST_NODE_TYPE_ARRAY_ACCESSOR:
+				postfix_results = emit_array_offset_calculation(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			//Handle a regular struct accessor(: access)
+			case AST_NODE_TYPE_STRUCT_ACCESSOR:
+				postfix_results = emit_struct_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			//Handle a struct pointer access
+			case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+				postfix_results = emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			//Handle a regular union access(. access)
+			case AST_NODE_TYPE_UNION_ACCESSOR:
+				postfix_results = emit_union_accessor_expression(current, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			//Handle a union pointer access (-> access)
+			case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+				postfix_results = emit_union_pointer_accessor_expression(current, right_child, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+				
+			//We should never actually hit this, it's just so the compiler is happy
+			default:
+				break;
+		}
+
+		//Give back our final results(assignee is not needed here)
+		cfg_result_package_t final_results = {current, postfix_results.final_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+		return final_results;
+
+	/**
+	 * BASE CASE - we have hit a non-postfix expression, meaning that we are at the end of the
+	 * line an no longer need to recurse. This means that we are at the very leftmost end of the
+	 * postfix expression tree which is known as the "base_address" that we're working off of
+	 */
+	} else {
+		//Emit the primary expression that represents our base address
 		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root);
+		current_block = primary_results.final_block;
 
-		//The current block now is this ones final block
-		current = primary_results.final_block;
-
-		//Extract for some analysis
-		three_addr_var_t* assignee = primary_results.result_value.result_var;
-
-		//Get this if there is one
-		symtab_variable_record_t* base_address_variable = assignee->linked_var;
+		/**
+		 * Extract the postfix base address(the primary expression result) and the 
+		 * linked variable to this base address. Note that the linked variable
+		 * is nullable
+		 */
+		three_addr_var_t* postfix_base_address = primary_results.result_value.result_var;
+		symtab_variable_record_t* base_address_variable = postfix_base_address->linked_var;
 
 		/**
 		 * If we have a linked variable that is coming to us from the stack, we'll
@@ -4084,20 +4148,22 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * selector later on but we'll need it in here now for clarity
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
-				//Emit a new current offset
+				/**
+				 * Emit and add the specialized "elaborative param offset". This will be
+				 * used as the starting offset for our future postfix expression here
+				 */
 				three_addr_var_t* new_current_offset = emit_temp_var(u64);
-
-				//Emit a special instruction for IR clarity
 				instruction_t* elaborative_param_offset = emit_elaborative_param_offset(new_current_offset, emit_var(base_address_variable), root->line_number);
+				add_statement(current_block, elaborative_param_offset);
 
-				//Put it into the block
-				add_statement(current, elaborative_param_offset);
+				/**
+				 * Package up the current offset as a variable offset
+				 */
+				current_offset->value.variable_offset = new_current_offset;
+				current_offset->type = OFFSET_TYPE_VAR;
 
-				//This now is the current offset so we're going to denote that
-				*current_offset = new_current_offset;
-
-				//The base address is just the assignee in this case
-				*base_address = assignee;
+				//In this case the base address is just our result from the postfix expression
+				*base_address = postfix_base_address;
 
 			/**
 			 * Otherwise we still have to account for the case where we have reference types that need
@@ -4111,76 +4177,19 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * or union that is passed by copy. In that case no automatic load is needed
 			 */
 			} else {
-				*base_address = assignee;
+				*base_address = postfix_base_address;
 			}
 
-		//Else just update the base address
+		/**
+		 * No specialized load or treatment required here - the base address is just the 
+		 * result of the primary expression
+		 */
 		} else {
-			//The base address is whatever this assignee is
-			*base_address = assignee;
+			*base_address = postfix_base_address;
 		}
 
-		//And give these back
 		return primary_results;
 	}
-
-	//Once we make it down here, we know that we don't have a primary expression so we need to do postfix processing
-	//The left child *always* decays into another postfix expression
-	generic_ast_node_t* left_child = root->first_child;
-
-	//And this will *always* be our postoperation code
-	generic_ast_node_t* right_child = left_child->next_sibling;
-	
-	//The type of the memory region we're accessing is all we need here. This is always
-	//the left child's type
-	generic_type_t* memory_region_type = left_child->inferred_type;
-
-	//We need to first recursively emit the left child's postfix expression
-	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, came_from_non_contiguous_region);
-
-	//Update whatever the last block may be
-	current = left_child_results.final_block;
-
-	//The postfix results package
-	cfg_result_package_t postfix_results;
-
-	//NOTE: by the time we get down here, base address will have been populated with an actual value(usually "memory address of")
-
-	//Now we need to go through and calculate the offset
-	switch(right_child->ast_node_type){
-		//Handle an array accessor
-		case AST_NODE_TYPE_ARRAY_ACCESSOR:
-			postfix_results = emit_array_offset_calculation(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a regular struct accessor(: access)
-		case AST_NODE_TYPE_STRUCT_ACCESSOR:
-			postfix_results = emit_struct_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a struct pointer access
-		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
-			postfix_results = emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a regular union access(. access)
-		case AST_NODE_TYPE_UNION_ACCESSOR:
-			postfix_results = emit_union_accessor_expression(current, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a union pointer access (-> access)
-		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			postfix_results = emit_union_pointer_accessor_expression(current, right_child, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-			
-		//We should never actually hit this, it's just so the compiler is happy
-		default:
-			break;
-	}
-
-	//Give back our final results(assignee is not needed here)
-	cfg_result_package_t final_results = {current, postfix_results.final_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
-	return final_results;
 }
 
 
