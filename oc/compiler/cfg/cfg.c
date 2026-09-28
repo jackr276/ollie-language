@@ -1883,37 +1883,6 @@ static inline three_addr_var_t* generate_pointer_arithmetic_for_unary_operation(
  * result in either a lea or a binary operation and then a lea
  */
 static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, u_int64_t type_size, u_int32_t line_number){
-	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(i64);
-
-	//Is this a lea compatible power of 2? If so we will use the lea shortcut
-	if(is_lea_compatible_power_of_2(type_size) == TRUE){
-		//Let the helper emit the lea
-		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, type_size, line_number);
-
-		//Get this into the block
-		add_statement(basic_block, address_calculation);
-
-	/**
-	 * Otherwise, we can't fully do a lea here so we'll need to instead
-	 * use a binary operation to multiply followed by a different kind of lea
-	 */
-	} else {
-		//We'll need the size to multiply by
-		three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(type_size, u64);
-
-		//Let the helper emit the entire thing. We'll store into a temp var there
-		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, emit_temp_var(u64), offset, STAR, type_size_const, line_number);
-
-		//And now that we have the incompatible multiplication over with, we can use a lea to add
-		instruction_t* lea_statement = emit_lea_operands_only(assignee, base_addr, final_offset, line_number);
-
-		//Insert into the block
-		add_statement(basic_block, lea_statement);
-	}
-
-	//Whatever happened return the assignee
-	return assignee;
 }
 
 
@@ -3627,41 +3596,61 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					break;
 				}
 
+				/**
+				 * We already have an offset that we've been building up over past accessors,
+				 * so we just need to build on top of it
+				 */
 				case OFFSET_TYPE_VAR: {
+					three_addr_var_t* array_offset = expression_package.result_value.result_var;
 
+					/**
+					 * The formula for array subscript is: base_address + type_size * subscript
+					 * 
+					 * However, if we're on our second or third round, the current var may be an address
+					 *
+					 * This can be done using a lea instruction, so we will emit that directly
+					 */
+					three_addr_var_t* new_offset = emit_temp_var(u64);
+
+					/**
+					 * If we are able to do a lea using the type size, we will do that now
+					 */
+					if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+						instruction_t* address_calculation = emit_lea_multiplier_and_operands(new_offset, *base_address, current_offset->value.variable_offset, member_type->type_size, line_number);
+						add_statement(current_block, address_calculation);
+
+					/**
+					 * Otherwise, we can't fully do a lea here so we'll need to instead
+					 * use a binary operation to multiply followed by a different kind of lea
+					 *
+					 * For something like this, we'll have two expressions
+					 * 	t4 <- t2 * 24 <--- calculate the new index value(not lea compatible)
+					 * 	t5 <- MEM<x_0> + t4 <--- indexing off of the base address
+					 */
+					} else {
+						three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+						three_addr_var_t* final_offset = emit_binary_operation_with_constant(current_block, emit_temp_var(u64), current_offset->value.variable_offset, STAR, type_size_const, line_number);
+
+						//And now that we have the incompatible multiplication over with, we can use a lea to add
+						instruction_t* lea_statement = emit_lea_operands_only(new_offset, *base_address, final_offset, line_number);
+						add_statement(current_block, lea_statement);
+					}
+
+					//Now the current offset is this new offset that we've calculated
+					current_offset->value.variable_offset = new_offset;
+
+					break;
 				}
-
-				case OFFSET_TYPE_CONST: {
-
-				}
-			}
-
-			/**
-			 * If this is not null, we'll be adding on top of it
-			 * with this rule and eventually reassigning what the current offset
-			 * actually is
-			 */
-			if(*current_offset != NULL){
-				//This is whatever was emitted by the expression
-				three_addr_var_t* array_offset = expression_package.result_value.result_var;
 
 				/**
-				 * The formula for array subscript is: base_address + type_size * subscript
-				 * 
-				 * However, if we're on our second or third round, the current var may be an address
-				 *
-				 * This can be done using a lea instruction, so we will emit that directly
 				 */
-				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type->type_size, line_number);
+				case OFFSET_TYPE_CONST: {
+					three_addr_var_t* array_offset = expression_package.result_value.result_var;
 
-				//And finally - our current offset is no longer the actual offset
-				*current_offset = address;
+					if(is_lea_compatible_power_of_2(jk))
 
-			/**
-			 * If this is NULL, then we can just make the current offset be
-			 * the result + the array offset * member type
-			 */
-			} else {
+
+				}
 			}
 
 			break;
