@@ -3797,7 +3797,7 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	 */
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
 	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
-	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
+	u_int64_t record_offset = struct_record->struct_offset;
 
 	//The current offset type determines where we go from here
 	switch(current_offset->type){
@@ -3805,7 +3805,8 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 		 * There is currently no offset so we'll just replace it with the struct record's offset
 		 */
 		case OFFSET_TYPE_NONE: {
-			current_offset->value.constant_offset = struct_offset;
+			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+			current_offset->value.constant_offset = struct_offset_const;
 			current_offset->type = OFFSET_TYPE_CONST;
 			break;
 		}
@@ -3815,37 +3816,29 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 		 * new offset to work
 		 */
 		case OFFSET_TYPE_CONST: {
-
+			sum_constant_with_raw_int64_value(current_offset->value.constant_offset, u64, record_offset);
+			break;
 		}
 
+		/**
+		 * We already have a current offset variable, so we'll need to sum it with
+		 * the given offset constant. Lea is preferred for addressing so we'll use
+		 * that here
+		 */
 		case OFFSET_TYPE_VAR: {
+			//We'll need a new offset and a struct constant
+			three_addr_var_t* new_offset = emit_temp_var(u64);
+			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
 
+			//Emit and add the calculation to the block
+			instruction_t* offset_calc = emit_lea_offset_only(new_offset, current_offset->value.variable_offset, struct_offset_const, line_number);
+			add_statement(block, offset_calc);
+
+			//Overwrite the old current offset with this new one
+			current_offset->value.variable_offset = new_offset;
+			current_offset->type = OFFSET_TYPE_VAR;
+			break;
 		}
-	}
-
-
-	/**
-	 * If the current offset is not null, we're just building on top of something
-	 */
-	if(*current_offset != NULL){
-		//Now we'll emit the address using the helper
-		three_addr_var_t* offset_calculation_result = emit_struct_address_calculation(block, struct_type, *current_offset, struct_offset, line_number);
-
-		//The current offset now is the struct address itself
-		*current_offset = offset_calculation_result;
-
-	/**
-	 * Otherwise, we'll need to emit the current offset here
-	 */
-	} else {
-		//Emit it here
-		*current_offset = emit_temp_var(u64);
-
-		//Emit the const assignment here
-		instruction_t* assignment_instruction = emit_assignment_with_const_instruction(*current_offset, struct_offset, line_number);
-
-		//Add it into the block
-		add_statement(block, assignment_instruction);
 	}
 
 	/**
