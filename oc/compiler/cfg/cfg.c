@@ -3527,6 +3527,8 @@ static inline void emit_non_contiguous_region_base_address_correction(basic_bloc
  */
 static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address,
 														  address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
@@ -3790,9 +3792,12 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//Package up and return
-	expression_package.final_block = current_block;
-	return expression_package;
+	/**
+	 * We really only care about the start and end blocks in our returned package
+	 */
+	results.starting_block = block;
+	results.final_block = current_block;
+	return results;
 }
 
 
@@ -3927,6 +3932,8 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  */
 static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address, address_offset_t* current_offset,
 														   u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	/**
 	 * If our current address is from a non-contiguous region, we are going to need to
 	 * load in the value at that address to set up properly here
@@ -3948,11 +3955,12 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//Very simple rule, we just have this for consistency
-	cfg_result_package_t accessor = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//Give it back
-	return accessor;
+	/**
+	 * We really only care about the start and end blocks in our returned package
+	 */
+	results.starting_block = block;
+	results.final_block = block;
+	return results;
 }
 
 
@@ -3963,6 +3971,8 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  */
 static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, generic_type_t* union_pointer_type, three_addr_var_t** base_address,
 																	address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	//Get the current type
 	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
 
@@ -3988,12 +3998,11 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	}
 
 	/**
-	 * By the time we get out here, we have performed a dereference and loaded whatever our offset
-	 * math was before into the new base address variable. The current offset will be NULL again
-	 * because we need to start over if we have any more offsets
+	 * We really only care about the start and end blocks in our returned package
 	 */
-	cfg_result_package_t return_package = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
-	return return_package;
+	results.starting_block = block;
+	results.final_block = block;
+	return results;
 }
 
 
