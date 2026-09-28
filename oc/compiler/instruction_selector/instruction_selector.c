@@ -3997,6 +3997,9 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 					case ADDRESSING_MODE_RIP_RELATIVE:
 						addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET; 
+
+						//Copy this over since we need the rip offset var for this to work
+						addressing_operation->operands.oir.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
 						break;
 
 					case ADDRESSING_MODE_REGISTERS_AND_SCALE:

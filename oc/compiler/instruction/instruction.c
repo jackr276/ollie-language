@@ -6691,15 +6691,11 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
 
-	//Copy the global var and give a non-memory address version of it
-	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
-	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
-
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
 	//Store this in the rip-relative area
-	lea->operands.oir.rip_offset_var = remediated_version;
+	lea->operands.oir.rip_offset_var = global_variable;
 
 	//And give it back
 	lea->line_number = line_number;
@@ -6725,15 +6721,11 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
 
-	//Copy the global var and give a non-memory address version of it
-	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
-	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
-
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
 	//Store this in the dedicated rip offset area
-	lea->operands.oir.rip_offset_var = remediated_version;
+	lea->operands.oir.rip_offset_var = global_variable;
 
 	//Store the constant offset here as well
 	lea->operands.oir.address_offset = constant;
