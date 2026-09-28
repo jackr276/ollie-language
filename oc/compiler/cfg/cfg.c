@@ -1879,33 +1879,6 @@ static inline three_addr_var_t* generate_pointer_arithmetic_for_unary_operation(
 
 
 /**
- * Emit a struct access lea statement if one is needed(i.e. offset is not zero)
- */
-static inline three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset, u_int32_t line_number){
-	/**
-	 * If the constant is not zero then we will need to emit the lea. However, if it is
-	 * zero, we can save ourselves the hassle and just give back what we already had
-	 */
-	if(is_constant_value_zero(offset) == FALSE){
-		//We need a new temp var for the assignee. We know it's an address always
-		three_addr_var_t* assignee = emit_temp_var(struct_type);
-
-		//Use the lea helper to emit this
-		instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset, line_number);
-
-		//Now add the statement into the block
-		add_statement(basic_block, stmt);
-
-		//And give back the assignee
-		return assignee;
-
-	} else {
-		return current_offset;
-	}
-}
-
-
-/**
  * Emit the abstract machine code for a return statement
  */
 static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_node_t* ret_node){
@@ -3809,6 +3782,8 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
  */
 static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, address_offset_t* current_offset,
 															u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	/**
 	 * If our current address is from a non-contiguous region, we are going to need to
 	 * load in the value at that address to set up properly here
@@ -3817,14 +3792,37 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
-	//Grab the variable that we need
+	/**
+	 * Get the struct record so that we can extract the offset that we're working with
+	 */
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
-
-	//Now we'll grab the associated struct record
 	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
-
-	//The constant that represents the offset
 	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
+
+	//The current offset type determines where we go from here
+	switch(current_offset->type){
+		/**
+		 * There is currently no offset so we'll just replace it with the struct record's offset
+		 */
+		case OFFSET_TYPE_NONE: {
+			current_offset->value.constant_offset = struct_offset;
+			current_offset->type = OFFSET_TYPE_CONST;
+			break;
+		}
+
+		/**
+		 * We have a constant offset already so we'll just need to add to it for the
+		 * new offset to work
+		 */
+		case OFFSET_TYPE_CONST: {
+
+		}
+
+		case OFFSET_TYPE_VAR: {
+
+		}
+	}
+
 
 	/**
 	 * If the current offset is not null, we're just building on top of something
@@ -3864,7 +3862,8 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	}
 
 	//Package & return the results
-	cfg_result_package_t results = {block, block, {*current_offset}, CFG_RESULT_TYPE_VAR, BLANK};
+	results.starting_block = block;
+	results.final_block = block;
 	return results;
 }
 
