@@ -16,7 +16,6 @@
 #include <assert.h>
 #include <iso646.h>
 #include <limits.h>
-#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -4310,40 +4309,59 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 				break;
 			}
 
-
+			/**
+			 * RHS means that we have to do a load instruction. Unlike with the stores, these instructions
+			 * will be emitted as fully complete. For these, it's important that we populate the result
+			 * package with the result of the load in the end
+			 */
 			case SIDE_TYPE_RIGHT: {
+				three_addr_var_t* load_result = emit_temp_var(parent_node_type);
 
+				switch(current_offset.type){
+					/**
+					 * No offset so we can do a load with just a base address
+					 */
+					case OFFSET_TYPE_NONE: {
+						instruction_t* load_instruction = emit_load_base_address_only(load_result,
+																						base_address,
+																						original_memory_access_type,
+																						root->line_number);
+						add_statement(current_block, load_instruction);
+						break;
+					}
 
-				break;
-			}
+					/**
+					 * Loading with a variable offset so we'll have a load instruction with two 
+					 * variables in it
+					 */
+					case OFFSET_TYPE_VAR: {
+						instruction_t* load_instruction = emit_load_base_address_and_index(load_result,
+																							base_address,
+																							current_offset.value.variable_offset,
+																							original_memory_access_type,
+																							root->line_number);
+						add_statement(current_block, load_instruction);
+						break;
+					}
 
-			
-			//Right side = load statement
-			case SIDE_TYPE_RIGHT:
-				//This will not be null in the case of structs & arrays
-				if(current_offset != NULL){
-					//Calculate our load here
-					load_instruction = emit_load_base_address_and_index(emit_temp_var(parent_node_type), base_address, current_offset, original_memory_access_type, root->line_number);
-
-					//Add it into the block
-					add_statement(current_block, load_instruction);
-
-					//Now the final assignee here is important - it's what we give it here
-					postfix_results.result_value.result_var = load_instruction->operands.oir.assignee;
-
-				//Otherwise we have a null current offset, so we're just relying on the base address
-				} else {
-					//Emit the load instruction between the base address and the parent node type
-					load_instruction = emit_load_base_address_only(emit_temp_var(parent_node_type), base_address, original_memory_access_type, root->line_number);
-
-					//Add it into the block
-					add_statement(current_block, load_instruction);
-
-					//This is our final assignee
-					postfix_results.result_value.result_var = load_instruction->operands.oir.assignee;
+					/**
+					 * Loading with a constant offset so we'll do a load with offset only
+					 */
+					case OFFSET_TYPE_CONST: {
+						instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result,
+																										base_address,
+																										current_offset.value.constant_offset,
+																										original_memory_access_type,
+																										root->line_number);
+						add_statement(current_block, load_instruction);
+						break;
+					}
 				}
 
+				results.type = CFG_RESULT_TYPE_VAR;
+				results.result_value.result_var = load_result;
 				break;
+			}
 		}
 
 	/**
