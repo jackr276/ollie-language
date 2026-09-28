@@ -1375,20 +1375,19 @@ instruction_t* emit_lea_operands_and_offset(three_addr_var_t* assignee, three_ad
  * Emit a lea statement that has the index, offset, and scale. This corresponds
  * to an addressing mode of ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE
  */
-instruction_t* emit_lea_index_offset_and_scale(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, three_addr_const_t* offset, u_int64_t scale, u_int32_t line_number){
+instruction_t* emit_lea_index_offset_and_scale(three_addr_var_t* assignee, three_addr_var_t* address_operand2, three_addr_const_t* offset, u_int64_t scale, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = address_operand1;
 	stmt->operands.oir.address_operand2 = address_operand2;
 	stmt->operands.oir.address_offset = offset;
 	stmt->operands.oir.address_multiplier = scale;
 
 	//This only has registers
-	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+	stmt->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 	//And now we give it back
 	stmt->line_number = line_number;

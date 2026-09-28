@@ -3615,17 +3615,13 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					 * Member type size: 8(lea compatible)
 					 *
 					 * We can make this:
-					 * t5 <- lea (base_address, t7, 8)
-					 * t7 <- t5 + t1 <-- add the old offset to this
+					 * t5 <- lea (t1, t7, 8)
 					 * 
-					 * And then the new offset is t7
+					 * And then the new offset is t5
 					 */
 					if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-						instruction_t* address_calculation = emit_lea_multiplier_and_operands(emit_temp_var(u64), *base_address, array_offset, member_type->type_size, line_number);
+						instruction_t* address_calculation = emit_lea_multiplier_and_operands(new_offset, current_offset->value.variable_offset, array_offset, member_type->type_size, line_number);
 						add_statement(current_block, address_calculation);
-
-						instruction_t* offset_addition = emit_binary_operation_instruction(new_offset, address_calculation->operands.oir.assignee, PLUS, current_offset->value.variable_offset, line_number);
-						add_statement(current_block, offset_addition);
 
 					/**
 					 * Case 2: we have a lea incompatible power of 2:
@@ -3636,23 +3632,18 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					 *
 					 * We can make this:
 					 * t4 <- t7 * 24 	<-- scale the variable result
-					 * t5 <- base_address + t4 <-- add it onto the base address
-					 * t7 <- t5 + t1 <-- add the old offset to this new value
+					 * t5 <- lea (t1, t4)
 					 * 
-					 * And then the new offset is t7
+					 * And then the new offset is t5
 					 */
 					} else {
 						three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
 						instruction_t* scaled_result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, type_size_const, line_number);
 						add_statement(current_block, scaled_result);
 
-						//Now add the scaled result onto the base address
-						instruction_t* base_address_addition = emit_binary_operation_instruction(emit_temp_var(u64), *base_address, PLUS, scaled_result->operands.oir.assignee, line_number);
-						add_statement(current_block, base_address_addition);
-
 						//Finally add the new offset to the scaled base address to get our final offset
-						instruction_t* final_offset_calc = emit_binary_operation_instruction(new_offset, base_address_addition->operands.oir.assignee, PLUS, current_offset->value.variable_offset, line_number);
-						add_statement(current_block, base_address_addition);
+						instruction_t* final_offset_calc = emit_lea_operands_only(new_offset, current_offset->value.variable_offset, scaled_result->operands.oir.assignee, line_number);
+						add_statement(current_block, final_offset_calc);
 					}
 
 					//Now the current offset is this new offset that we've calculated
@@ -3679,12 +3670,12 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					 * Member type size: 8(lea compatible)
 					 *
 					 * We can make this:
-					 * t5 <- lea 24(base_address, t7, 8)
+					 * t5 <- lea 24(, t7, 8)
 					 * 
 					 * And then the new offset is t5
 					 */
 					if(is_lea_compatible_power_of_2(member_type->type_size)== TRUE){
-						instruction_t* new_offset_lea = emit_lea_index_offset_and_scale(new_offset, *base_address, array_offset, current_offset->value.constant_offset, member_type->type_size, line_number);
+						instruction_t* new_offset_lea = emit_lea_index_offset_and_scale(new_offset, array_offset, current_offset->value.constant_offset, member_type->type_size, line_number);
 						add_statement(current_block, new_offset_lea);
 
 					/**
@@ -3696,7 +3687,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					 *
 					 * We can make this:
 					 * t3 <- t7 * 48 <-- get the scaled index
-					 * t5 <- 24(<base_address>, t3) <--- add it to the base address along with the old offset
+					 * t5 <- 24(t3) <--- add it to the base address along with the old offset
 					 * 
 					 * And then the new offset is t5
 					 */
@@ -3705,7 +3696,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 						instruction_t* scaled_index = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, scale_constant, line_number);
 						add_statement(current_block, scaled_index);
 
-						instruction_t* new_offset_calc = emit_lea_operands_and_offset(new_offset, *base_address, scaled_index->operands.oir.assignee, current_offset->value.constant_offset, line_number);
+						instruction_t* new_offset_calc = emit_lea_offset_only(new_offset, scaled_index->operands.oir.assignee, current_offset->value.constant_offset, line_number);
 						add_statement(current_block, new_offset_calc);
 					}
 
@@ -3720,6 +3711,26 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		}
 
 		case CFG_RESULT_TYPE_CONST: {
+			switch(current_offset->type){
+				/**
+				 * There is no current offset so we just need to emit a calculation
+				 * using the 
+				 */
+				case OFFSET_TYPE_NONE: {
+					break;
+				}
+
+				case OFFSET_TYPE_VAR: {
+					break;
+				}
+
+				case OFFSET_TYPE_CONST: {
+
+				}
+			}
+
+
+
 			/**
 			 * If this is not null, we'll be adding on top of it
 			 * with this rule and eventually reassigning what the current offset
