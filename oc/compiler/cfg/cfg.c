@@ -3587,14 +3587,55 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	/**
 	 * We may have a constant type here *or* a variable type. Either
-	 * way, we will emit what we are able to
+	 * way, we will emit what we are able to based on the result type
+	 * of the index and the current offset
 	 */
 	switch(expression_package.type){
 		/**
-		 * For a variable result type, we cannot rely on any constant optimizations
-		 * so we have to trust and emit the expression as-is
+		 * Variable offset means that we will see an addressing mode expression
+		 * with two registers
 		 */
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
+			/**
+			 * The current offset type will determine what type of addressing mode
+			 * expression is appropriate for us to emit
+			 */
+			switch(current_offset->type){
+				case OFFSET_TYPE_NONE: {
+					/**
+					 * Create a new "current offset" that will calculate the offset for this value
+					 */
+					current_offset->type = OFFSET_TYPE_VAR;
+					current_offset->value.variable_offset = emit_temp_var(u64);
+
+					//The array offset is the unscaled value that came from the expression
+					three_addr_var_t* array_offset = expression_package.result_value.result_var;
+
+					/**
+					 * If the scale is lea compatible we will convert this into a lea right now,
+					 * otherwise we'll have to use a binary operation with constant
+					 */
+					if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+						instruction_t* lea = emit_lea_index_and_scale_only(current_offset->value.variable_offset, array_offset, member_type->type_size, line_number);
+						add_statement(current_block, lea);
+
+					} else {
+						three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+						emit_binary_operation_with_constant(current_block, current_offset->value.variable_offset, array_offset, STAR, type_size_const, line_number);
+					}
+
+					break;
+				}
+
+				case OFFSET_TYPE_VAR: {
+
+				}
+
+				case OFFSET_TYPE_CONST: {
+
+				}
+			}
+
 			/**
 			 * If this is not null, we'll be adding on top of it
 			 * with this rule and eventually reassigning what the current offset
@@ -3621,32 +3662,12 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			 * the result + the array offset * member type
 			 */
 			} else {
-				//Emit the variable directly here
-				*current_offset = emit_temp_var(u64);
-				
-				//This is whatever was emitted by the expression
-				three_addr_var_t* array_offset = expression_package.result_value.result_var;
-
-				//We're using a lea if we can
-				if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-					//Emit the lea
-					instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size, line_number);
-
-					//Add it in
-					add_statement(current_block, lea);
-
-				//Otherwise just a multiplication statement
-				} else {
-					three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-
-					//Emit the binary operation directly with this. The current offset remains unchanged
-					emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const, line_number);
-				}
 			}
 
 			break;
+		}
 
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			/**
 			 * If this is not null, we'll be adding on top of it
 			 * with this rule and eventually reassigning what the current offset
@@ -3708,6 +3729,7 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 			}
 
 			break;
+		}
 	}
 
 	/**
