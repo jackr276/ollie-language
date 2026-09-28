@@ -187,7 +187,7 @@ typedef enum{
 /**
  * A simple macro initializer for a blank address offset type
  */
-#define INITIALIZE_BLANK_ADDRESS_OFFSET (address_offset_t){NULL, OFFSET_TYPE_NONE}
+#define INITIALIZE_BLANK_ADDRESS_OFFSET (address_offset_t){{NULL}, OFFSET_TYPE_NONE}
 
 //We predeclare up here to avoid needing any rearrangements
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
@@ -3572,7 +3572,6 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					//The new offset is now what we've just calculated
 					current_offset->value.variable_offset = new_offset;
 					current_offset->type = OFFSET_TYPE_VAR;
-
 					break;
 				}
 
@@ -4005,12 +4004,9 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, generic_type_t* union_pointer_type, three_addr_var_t** base_address,
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address,
 																	address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
-
-	//Get the current type
-	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
 
 	/**
 	 * If our current address is from a non-contiguous region, we are going to need to
@@ -4103,7 +4099,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 				break;
 
 			case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-				accessor_results = emit_union_pointer_accessor_expression(current_block, right_child, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				accessor_results = emit_union_pointer_accessor_expression(current_block, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
 				break;
 				
 			/**
@@ -4304,8 +4300,8 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					}
 				}
 
-				postfix_results.type = CFG_RESULT_TYPE_VAR;
-				postfix_results.result_value.result_var = base_address;
+				results.type = CFG_RESULT_TYPE_VAR;
+				results.result_value.result_var = base_address;
 				break;
 			}
 
