@@ -3754,71 +3754,23 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					break;
 				}
 
+				/**
+				 * The current offset is also a constant
+				 *
+				 * current offset: 40
+				 * multiplier: 8
+				 * array offset: 16
+				 *
+				 * New offset is just 16 + 8 * 40 = 336
+				 */
 				case OFFSET_TYPE_CONST: {
+					//First multiply the new offset by the type size
+					multiply_constant_by_raw_int64_value(array_offset, u64, member_type->type_size);
 
+					//Now add it to the current offset, result is in the current offset
+					add_constants(current_offset->value.constant_offset, array_offset);
+					break;
 				}
-			}
-
-
-
-			/**
-			 * If this is not null, we'll be adding on top of it
-			 * with this rule and eventually reassigning what the current offset
-			 * actually is
-			 */
-			if(*current_offset != NULL){
-				/**
-				 * The formula for array subscript is: base_address + type_size * subscript
-				 * 
-				 * However, luckily for us, we know that the offset itself is a constant, so
-				 * we can skip a lot of the actual computation work here
-				 */
-				three_addr_const_t* constant_value = expression_package.result_value.result_const;
-
-				//Emit the actual const over here
-				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-				
-				//Multiply them together
-				multiply_constants(type_size_const, constant_value);
-
-				/**
-				 * If it's not 0, we'll just emit the lea. If it is zero, then
-				 * we don't need to reassign the current offset at all so we
-				 * will leave it as such
-				 */
-				if(is_constant_value_zero(type_size_const) == FALSE){
-					//Emit the calculation
-					instruction_t* address_calculation = emit_lea_offset_only(emit_temp_var(u64), *current_offset, type_size_const, line_number);
-
-					//Get it into the block
-					add_statement(current_block, address_calculation);
-
-					//And finally - our current offset is no longer the actual offset
-					*current_offset = address_calculation->operands.oir.assignee;
-				}
-
-			/**
-			 * Otherwise this is NULL, so we're starting from scratch. Again we know that this is 
-			 * a constant, so we are able to just emit that assignment here
-			 */
-			} else {
-				//Emit the variable directly here
-				*current_offset = emit_temp_var(u64);
-
-				//Extract the result constant out
-				three_addr_const_t* constant_value = expression_package.result_value.result_const;
-
-				//Emit the actual const over here
-				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-
-				//Multiply them together
-				multiply_constants(type_size_const, constant_value);
-
-				//This just becomes an assignment expression
-				instruction_t* assignment = emit_assignment_with_const_instruction(*current_offset, type_size_const, line_number);
-
-				//Add it into the block
-				add_statement(current_block, assignment);
 			}
 
 			break;
@@ -3838,10 +3790,8 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//And the final block is this as well
+	//Package up and return
 	expression_package.final_block = current_block;
-
-	//And finally we give this back
 	return expression_package;
 }
 
