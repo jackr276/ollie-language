@@ -4313,13 +4313,26 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					/**
 					 * Offset is a constant so we'll have an address calculation with the base
 					 * address and a constant offset
+					 *
+					 * If the constant value is nonzero then its worth it to emit the offset. If the
+					 * constant value is 0 then there is no point and we'll emit this as a store with
+					 * base address only
 					 */
 					case OFFSET_TYPE_CONST:{
-						instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address,
-																										current_offset.value.constant_offset,
-																										NULL,
-																										original_memory_access_type,
-																										root->line_number);
+						instruction_t* store_instruction = NULL;
+						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
+							store_instruction = emit_store_base_address_and_constant_offset(base_address,
+																							current_offset.value.constant_offset,
+																							NULL,
+																							original_memory_access_type,
+																							root->line_number);
+						} else {
+							store_instruction = emit_store_base_address_only(base_address,
+																					NULL,
+																					original_memory_access_type,
+																					root->line_number);
+						}
+
 						add_statement(current_block, store_instruction);
 						break;
 					}
