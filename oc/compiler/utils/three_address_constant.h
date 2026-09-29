@@ -18,8 +18,8 @@ typedef struct three_addr_const_t three_addr_const_t;
  * A three address constant always holds the value of the constant
  */
 struct three_addr_const_t{
-	//We hold the type info
-	generic_type_t* type;
+	//What kind of constant is it(HEAVILY USED)
+	ollie_token_t const_type;
 
 	//Store the constant value in a union
 	union {
@@ -60,6 +60,9 @@ struct three_addr_const_t{
 
 	} constant_value;
 
+	//We hold the type info
+	generic_type_t* type;
+
 	/**
 	 * We want the ability to use all of our fancy simplification tricks, but we also need to account for the ambiguity in
 	 * how stack passed parameter constants work. This is our middle ground. We can do any constant manipulation on this
@@ -68,9 +71,6 @@ struct three_addr_const_t{
 	 * viable
 	 */
 	int64_t constant_adjustment;
-
-	//What kind of constant is it
-	ollie_token_t const_type;
 };
 
 #endif /* THREE_ADDR_CONSTANT_H */

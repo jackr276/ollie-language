@@ -1154,6 +1154,23 @@ static void increment_use_counts_for_intializer_members(three_addr_initializer_t
 		return;
 	}
 
+	//Run through all members in the initializer and dispatch appropriately
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				increment_use_count(&use_count_tracker, result->value.variable_value->variable_id);
+				break;
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				increment_use_counts_for_intializer_members(result->value.initializer_value);
+				break;
+
+			//Constants do not have this use count concept
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
 }
 
 
