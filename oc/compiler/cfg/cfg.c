@@ -1653,6 +1653,8 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
  * We will of course need to make some special caveats here like for example function
  * entry blocks with functino parameters. Those parameters really were assigned
  * at the very top, but we just didn't see it
+ *
+ * TODO ADD INITIALIZERS OTHERWISE YOU WILL HAVE ISSUES!!!!!!!
  */
 static void compute_use_and_def_sets_for_function(dynamic_array_t* function_blocks){
 	//For every single block in the set of all function blocks
@@ -1674,7 +1676,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * Function calls contain parameters inside of their parameter results array. These may
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
-				case THREE_ADDR_CODE_FUNC_CALL:
+				case THREE_ADDR_CODE_FUNC_CALL: {
 					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
 						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
@@ -1688,12 +1690,13 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
 					break;
+				}
 
 				/**
 				 * Inidrect function calls contain parameters inside of their parameter results array. These may
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
-				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 					//Indirect function calls also have their op1's used
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
@@ -1711,12 +1714,18 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
 					break;
+				}
+
+				case THREE_ADDR_CODE_INITIALIZER_STMT: {
+
+					break;
+				}
 
 				/**
 				 * In the default case, we just add the USE/DEF for each 
 				 * variable that we can see
 				 */
-				default:
+				default: {
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 					add_variable_to_use_set(cursor->operands.oir.operand2, block);
 					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
@@ -1725,6 +1734,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					//The assignee is in the def set
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					break;
+				}
 			}
 
 			//Bump it up

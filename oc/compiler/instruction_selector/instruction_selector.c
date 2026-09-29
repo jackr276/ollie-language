@@ -1817,6 +1817,9 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 /**
  * Populate the initial use counts for our given function blocks by running through
  * every single instruction and updating based on the operands
+ *
+ *
+ * TODO YOU NEED THIS FOR USE COUNTS AS WELL
  */
 static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
@@ -5416,12 +5419,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 */
 	if(window->instruction1 == NULL || window->instruction2 == NULL){
 		return changed;
-	}
-
-	//TODO BLOCKER VALUE
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT || window->instruction2->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
 	}
 
 	/**
@@ -16455,6 +16452,11 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			handle_indirect_jump(window);
 			break;
+		//TODO
+		case THREE_ADDR_CODE_INITIALIZER_STMT:
+			printf("TODO INITIALIZER NOT IMPLEMENTED\n");
+			exit(1);
+		//TODO
 
 		/**
 		 * If we get here then we're encountering something that we've never seen

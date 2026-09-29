@@ -1466,6 +1466,9 @@ static inline void create_all_initialization_state_maps(variable_symtab_t* varia
  * This pass will do everything needed to convert the CFG into SSA(static single assignment) form.
  * As a reminder, static single assignment form is an IR form where every variable is assigned
  * only once
+ *
+ *
+ * TODO YOU NEED INITIALIZERS IN ALL OF THIS
  */
 static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
 	/**
