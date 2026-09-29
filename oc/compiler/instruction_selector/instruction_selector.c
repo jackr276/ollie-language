@@ -3925,8 +3925,72 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 	instruction_t* lea_statement = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-
 	switch(addressing_operation->addressing_mode){
+		/**
+		 * Combine:
+		 * 	t5 <- 4(t4)
+		 * 	store (t5, t6) <- 11
+		 *
+		 * 	Into:
+		 *
+		 * 	store 4(t4, t6) <- 11
+		 *
+		 *  This is only valid for LEA's where we've got an offset only addressing mode
+		 */
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
+			//Only valid combo is an offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
+
+			//Copy over the address offset and first address operand
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
+
+			//Update the addressing mode to reflect the offset
+			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
+			break;
+		}
+
+		/**
+		 * Combine:
+		 * 	t5 <- 4(t4)
+		 * 	store 8(t5, t6) <- 11
+		 *
+		 * 	Into:
+		 *
+		 * 	store 12(t4, t6) <- 11
+		 *
+		 *  This is only valid for LEA's where we've got an offset only addressing mode
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+			//Only valid combo is an offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
+
+			//Copy over the first address operand
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+
+			//Add the two offsets together
+			add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
+			break;
+		}
+
 		/**
 		 * Combine:
 		 * 	t5 <- 4(t4, t6, 2)
@@ -3938,7 +4002,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 * This is a case where we can just copy the child's mode over
 		 * completely along with all of it's data
 		 */
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
 			//Copy all operands over
 			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
 			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
@@ -3956,6 +4020,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Combine:
@@ -3969,7 +4034,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 * completely along with all of it's data, however we'll first need
 		 * to add the offset constant *if* one of them exists
 		 */
-		case ADDRESSING_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY: {
 			//If we have an offset then add it. Make sure that the result is in the *first* instruction's offset
 			if(does_addressing_mode_use_offset_constant(lea_statement->addressing_mode) == TRUE){
 				add_constants(lea_statement->operands.oir.address_offset, addressing_operation->operands.oir.address_offset);
@@ -3997,6 +4062,9 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 					case ADDRESSING_MODE_RIP_RELATIVE:
 						addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET; 
+
+						//Copy this over since we need the rip offset var for this to work
+						addressing_operation->operands.oir.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
 						break;
 
 					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
@@ -4029,6 +4097,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 			*changed = TRUE;
 			break;
+		}
 		
 		/**
 		 * Anything else is an unsupported combination so just leave

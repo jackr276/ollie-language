@@ -14,8 +14,8 @@
 
 #include "cfg.h"
 #include <assert.h>
+#include <iso646.h>
 #include <limits.h>
-#include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,6 +95,19 @@ typedef enum {
 
 
 /**
+ * The offset type is used for postfix expression 
+ * emittal where we could have a variable or constant
+ * current offset
+ */
+typedef enum {
+	//Default blank value
+	OFFSET_TYPE_NONE = 0,
+	OFFSET_TYPE_CONST,
+	OFFSET_TYPE_VAR
+} offset_type_t;
+
+
+/**
  * CFG result packages are used to pass out the reult
  * of translating an expression. They will contain:
  * 	1.) Starting block of the statement
@@ -102,7 +115,7 @@ typedef enum {
  * 	3.) A tagged union with either a variable or constant result
  * 	4.) The operator that was used, if any
  */
-typedef struct{
+typedef struct {
 	//Blocks come first
 	basic_block_t* starting_block;
 	basic_block_t* final_block;
@@ -119,6 +132,21 @@ typedef struct{
 	//The operator may or may not always be filled
 	ollie_token_t operator;
 } cfg_result_package_t;
+
+
+/**
+ * The address offset type is meant to be used during
+ * postfix expression translation and allow us to absolutely
+ * minimize the number of instructions we produce
+ */
+typedef struct {
+	union {
+		three_addr_const_t* constant_offset;
+		three_addr_var_t* variable_offset;
+	} value;
+
+	offset_type_t type;
+} address_offset_t; 
 
 
 /**
@@ -158,6 +186,11 @@ typedef enum{
  */
 #define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, BLANK}
 
+/**
+ * A simple macro initializer for a blank address offset type
+ */
+#define INITIALIZE_BLANK_ADDRESS_OFFSET (address_offset_t){{NULL}, OFFSET_TYPE_NONE}
+
 //We predeclare up here to avoid needing any rearrangements
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node);
 static cfg_result_package_t visit_let_statement(basic_block_t* basic_block, generic_ast_node_t* node);
@@ -187,14 +220,14 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 
 
 /**
- * Generate an "Internal Compiler Error" panic(exit(1)) on an
- * invalid result type. This is meant to crash the program
+ * Trigger a fatal internal compiler error panic with the given message
+ * 
+ * NOTE: THIS WILL CRASH THE PROGRAM DELIBERATELY
  */
-static inline void ice_panic_on_invalid_result_type(){
-	fprintf(stderr, "Fatal Internal Compiler Error: Invalid CFG result type detected\n");
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
 	exit(1);
 }
-
 
 /**
  * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
@@ -1896,72 +1929,6 @@ static inline three_addr_var_t* generate_pointer_arithmetic_for_unary_operation(
 
 	//Give back the assignee
 	return assignee;
-}
-
-
-/**
- * Emit the appropriate address calculation for a given array member, based on what is given in the parameters. This will
- * result in either a lea or a binary operation and then a lea
- */
-static three_addr_var_t* emit_array_address_calculation(basic_block_t* basic_block, three_addr_var_t* base_addr, three_addr_var_t* offset, u_int64_t type_size, u_int32_t line_number){
-	//We need a new temp var for the assignee. We know it's an address always
-	three_addr_var_t* assignee = emit_temp_var(i64);
-
-	//Is this a lea compatible power of 2? If so we will use the lea shortcut
-	if(is_lea_compatible_power_of_2(type_size) == TRUE){
-		//Let the helper emit the lea
-		instruction_t* address_calculation = emit_lea_multiplier_and_operands(assignee, base_addr, offset, type_size, line_number);
-
-		//Get this into the block
-		add_statement(basic_block, address_calculation);
-
-	/**
-	 * Otherwise, we can't fully do a lea here so we'll need to instead
-	 * use a binary operation to multiply followed by a different kind of lea
-	 */
-	} else {
-		//We'll need the size to multiply by
-		three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(type_size, u64);
-
-		//Let the helper emit the entire thing. We'll store into a temp var there
-		three_addr_var_t* final_offset = emit_binary_operation_with_constant(basic_block, emit_temp_var(u64), offset, STAR, type_size_const, line_number);
-
-		//And now that we have the incompatible multiplication over with, we can use a lea to add
-		instruction_t* lea_statement = emit_lea_operands_only(assignee, base_addr, final_offset, line_number);
-
-		//Insert into the block
-		add_statement(basic_block, lea_statement);
-	}
-
-	//Whatever happened return the assignee
-	return assignee;
-}
-
-
-/**
- * Emit a struct access lea statement if one is needed(i.e. offset is not zero)
- */
-static inline three_addr_var_t* emit_struct_address_calculation(basic_block_t* basic_block, generic_type_t* struct_type, three_addr_var_t* current_offset, three_addr_const_t* offset, u_int32_t line_number){
-	/**
-	 * If the constant is not zero then we will need to emit the lea. However, if it is
-	 * zero, we can save ourselves the hassle and just give back what we already had
-	 */
-	if(is_constant_value_zero(offset) == FALSE){
-		//We need a new temp var for the assignee. We know it's an address always
-		three_addr_var_t* assignee = emit_temp_var(struct_type);
-
-		//Use the lea helper to emit this
-		instruction_t* stmt = emit_lea_offset_only(assignee, current_offset, offset, line_number);
-
-		//Now add the statement into the block
-		add_statement(basic_block, stmt);
-
-		//And give back the assignee
-		return assignee;
-
-	} else {
-		return current_offset;
-	}
 }
 
 
@@ -3688,6 +3655,73 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 
 
 /**
+ * If we came from a non-contiguous memory region and we're now trying to use a postfix expression access again,
+ * we need to emit an intermediary load here in order to keep everything in order. This has the
+ * effect of wiping the deck clean with what we had prior and starting fresh with a new base address,
+ * current offset, etc. An example of a non-continguous memory region would be something
+ * like:
+ * pub fn triple_pointer(x:char***) -> i32 {
+ * 		ret x[1][2][3];
+ * }
+ *
+ * movq 8(%rdi), %rax <- base address of the underlying char** array
+ * movq 16(%rax), %rax <- base address of the underlying char*
+ * movsbl 3(%rax), %eax <- indexing 3 off of that base address for the actual value
+ *
+ * This helper simply creates those intermediate dereferences that we make along the way
+ */
+static inline void emit_non_contiguous_region_base_address_correction(basic_block_t* basic_block, three_addr_var_t** base_address, address_offset_t* current_offset, u_int32_t line_number){
+	switch(current_offset->type){
+		/**
+		 * There's no offset so we just need to emit a load with our base
+		 * address.
+		 */
+		case OFFSET_TYPE_NONE: {
+			//Emit and add the load
+			instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
+			add_statement(basic_block, load_instruction);
+
+			//Again this now is the base address
+			*base_address = load_instruction->operands.oir.assignee;
+			break;
+		}
+
+		/**
+		 * The current offset is a constant so we'll have a load with a constant offset
+		 */
+		case OFFSET_TYPE_CONST: {
+			//Emit and add the load with constant offset
+			instruction_t* load_instruction = emit_load_base_address_and_constant_offset(emit_temp_var(u64), *base_address, current_offset->value.constant_offset, (*base_address)->type, line_number);
+			add_statement(basic_block, load_instruction);
+
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->operands.oir.assignee;
+
+			//Wipe out what we the old current offset
+			*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+			break;
+		}
+
+		/**
+		 * The current offset is a variable so we'll have a load with a variable offset
+		 */
+		case OFFSET_TYPE_VAR: {
+			//Emit and add the load with variable offset
+			instruction_t* load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, current_offset->value.variable_offset, (*base_address)->type, line_number);
+			add_statement(basic_block, load_instruction);
+
+			//The new base address now is the load instruction's assignee
+			*base_address = load_instruction->operands.oir.assignee;
+
+			//Wipe out what we the old current offset
+			*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+			break;
+		}
+	}
+}
+
+
+/**
  * Emit the code needed to perform an array access
  *
  * This rule handles the dynamic decision to derference mid-processing using the "came_from_non_contiguous_region" parameter
@@ -3717,46 +3751,18 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
  *
  */
 static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, generic_type_t* memory_region_type, generic_ast_node_t* array_accessor, three_addr_var_t** base_address,
-														  three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+														  address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	//Keep track of whatever the current block is
 	basic_block_t* current_block = block;
 
 	/**
-	 * If we came from a non-contiguous memory region and we're now trying to use the [] access again,
-	 * we need to emit an intermediary load here in order to keep everything in order. This has the
-	 * effect of wiping the deck clean with what we had prior and starting fresh with a new base address,
-	 * current offest, etc
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type, line_number);
-
-			//Add it into the block
-			add_statement(current_block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
-			
-			//Get it into the block
-			add_statement(current_block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(current_block, base_address, current_offset, line_number);
 	}
 
 	//The first thing we'll see is the value in the brackets([value]). We'll let the helper emit this
@@ -3769,60 +3775,161 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 	/**
 	 * We may have a constant type here *or* a variable type. Either
-	 * way, we will emit what we are able to
+	 * way, we will emit what we are able to based on the result type
+	 * of the index and the current offset
 	 */
 	switch(expression_package.type){
 		/**
-		 * For a variable result type, we cannot rely on any constant optimizations
-		 * so we have to trust and emit the expression as-is
+		 * Variable offset means that we will see an addressing mode expression
+		 * with two registers
 		 */
 		case CFG_RESULT_TYPE_VAR: {
 			/**
-			 * If this is not null, we'll be adding on top of it
-			 * with this rule and eventually reassigning what the current offset
-			 * actually is
+			 * The current offset type will determine what type of addressing mode
+			 * expression is appropriate for us to emit
 			 */
-			if(*current_offset != NULL){
-				//This is whatever was emitted by the expression
-				three_addr_var_t* array_offset = expression_package.result_value.result_var;
+			switch(current_offset->type){
+				case OFFSET_TYPE_NONE: {
+					/**
+					 * Create a new "current offset" that will calculate the offset for this value
+					 */
+					three_addr_var_t* new_offset = emit_temp_var(u64);
+
+					//The array offset is the unscaled value that came from the expression
+					three_addr_var_t* array_offset = expression_package.result_value.result_var;
+
+					/**
+					 * If the scale is lea compatible we will convert this into a lea right now,
+					 * otherwise we'll have to use a binary operation with constant
+					 */
+					if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+						instruction_t* lea = emit_lea_index_and_scale_only(new_offset, array_offset, member_type->type_size, line_number);
+						add_statement(current_block, lea);
+
+					} else {
+						three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+						emit_binary_operation_with_constant(current_block, new_offset, array_offset, STAR, type_size_const, line_number);
+					}
+
+					//The new offset is now what we've just calculated
+					current_offset->value.variable_offset = new_offset;
+					current_offset->type = OFFSET_TYPE_VAR;
+					break;
+				}
 
 				/**
-				 * The formula for array subscript is: base_address + type_size * subscript
-				 * 
-				 * However, if we're on our second or third round, the current var may be an address
-				 *
-				 * This can be done using a lea instruction, so we will emit that directly
+				 * We already have an offset that we've been building up over past accessors,
+				 * so we just need to build on top of it
 				 */
-				three_addr_var_t* address = emit_array_address_calculation(current_block, *current_offset, array_offset, member_type->type_size, line_number);
+				case OFFSET_TYPE_VAR: {
+					three_addr_var_t* array_offset = expression_package.result_value.result_var;
 
-				//And finally - our current offset is no longer the actual offset
-				*current_offset = address;
+					/**
+					 * The formula for array subscript is: base_address + type_size * subscript
+					 * 
+					 * However, if we're on our second or third round, the current var may be an address
+					 *
+					 * This can be done using a lea instruction, so we will emit that directly
+					 */
+					three_addr_var_t* new_offset = emit_temp_var(u64);
 
-			/**
-			 * If this is NULL, then we can just make the current offset be
-			 * the result + the array offset * member type
-			 */
-			} else {
-				//Emit the variable directly here
-				*current_offset = emit_temp_var(u64);
-				
-				//This is whatever was emitted by the expression
-				three_addr_var_t* array_offset = expression_package.result_value.result_var;
+					/**
+					 * Case 1: we have a lea compatible power of 2:
+					 *
+					 * Old offset: t1
+					 * Variable result: t7
+					 * Member type size: 8(lea compatible)
+					 *
+					 * We can make this:
+					 * t5 <- lea (t1, t7, 8)
+					 * 
+					 * And then the new offset is t5
+					 */
+					if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
+						instruction_t* address_calculation = emit_lea_multiplier_and_operands(new_offset, current_offset->value.variable_offset, array_offset, member_type->type_size, line_number);
+						add_statement(current_block, address_calculation);
 
-				//We're using a lea if we can
-				if(is_lea_compatible_power_of_2(member_type->type_size) == TRUE){
-					//Emit the lea
-					instruction_t* lea = emit_lea_index_and_scale_only(*current_offset, array_offset, member_type->type_size, line_number);
+					/**
+					 * Case 2: we have a lea incompatible power of 2:
+					 *
+					 * Old offset: t1
+					 * Variable result: t7
+					 * Member type size: 24(NOT lea compatible)
+					 *
+					 * We can make this:
+					 * t4 <- t7 * 24 	<-- scale the variable result
+					 * t5 <- lea (t1, t4)
+					 * 
+					 * And then the new offset is t5
+					 */
+					} else {
+						three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+						instruction_t* scaled_result = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, type_size_const, line_number);
+						add_statement(current_block, scaled_result);
 
-					//Add it in
-					add_statement(current_block, lea);
+						//Finally add the new offset to the scaled base address to get our final offset
+						instruction_t* final_offset_calc = emit_lea_operands_only(new_offset, current_offset->value.variable_offset, scaled_result->operands.oir.assignee, line_number);
+						add_statement(current_block, final_offset_calc);
+					}
 
-				//Otherwise just a multiplication statement
-				} else {
-					three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+					//Now the current offset is this new offset that we've calculated
+					current_offset->value.variable_offset = new_offset;
+					current_offset->type = OFFSET_TYPE_VAR;
+					break;
+				}
 
-					//Emit the binary operation directly with this. The current offset remains unchanged
-					emit_binary_operation_with_constant(current_block, *current_offset, array_offset, STAR, type_size_const, line_number);
+				/**
+				 * We have a constant current offset that we'll need to add onto with the variable
+				 * offset result that we've just gotten
+				 */
+				case OFFSET_TYPE_CONST: {
+					three_addr_var_t* array_offset = expression_package.result_value.result_var;
+
+					//Create a new offset that will become the new current offset
+					three_addr_var_t* new_offset = emit_temp_var(u64);
+
+					/**
+					 * Case 1: we have a lea compatible power of 2:
+					 *
+					 * Old offset: 24
+					 * Variable result: t7
+					 * Member type size: 8(lea compatible)
+					 *
+					 * We can make this:
+					 * t5 <- lea 24(, t7, 8)
+					 * 
+					 * And then the new offset is t5
+					 */
+					if(is_lea_compatible_power_of_2(member_type->type_size)== TRUE){
+						instruction_t* new_offset_lea = emit_lea_index_offset_and_scale(new_offset, array_offset, current_offset->value.constant_offset, member_type->type_size, line_number);
+						add_statement(current_block, new_offset_lea);
+
+					/**
+					 * Case 2: we have a lea incompatible power of 2:
+					 * 
+					 * Old offset: 24
+					 * Variable result: t7
+					 * Member type size: 48(NOT lea compatible)
+					 *
+					 * We can make this:
+					 * t3 <- t7 * 48 <-- get the scaled index
+					 * t5 <- 24(t3) <--- add it to the base address along with the old offset
+					 * 
+					 * And then the new offset is t5
+					 */
+					} else {
+						three_addr_const_t* scale_constant = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+						instruction_t* scaled_index = emit_binary_operation_with_const_instruction(emit_temp_var(u64), array_offset, STAR, scale_constant, line_number);
+						add_statement(current_block, scaled_index);
+
+						instruction_t* new_offset_calc = emit_lea_offset_only(new_offset, scaled_index->operands.oir.assignee, current_offset->value.constant_offset, line_number);
+						add_statement(current_block, new_offset_calc);
+					}
+
+					//Now the current offset is this new offset that we've calculated
+					current_offset->value.variable_offset = new_offset;
+					current_offset->type = OFFSET_TYPE_VAR;
+					break;
 				}
 			}
 
@@ -3830,72 +3937,77 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		}
 
 		case CFG_RESULT_TYPE_CONST: {
-			/**
-			 * If this is not null, we'll be adding on top of it
-			 * with this rule and eventually reassigning what the current offset
-			 * actually is
-			 */
-			if(*current_offset != NULL){
+			three_addr_const_t* array_offset = expression_package.result_value.result_const;
+
+			switch(current_offset->type){
 				/**
-				 * The formula for array subscript is: base_address + type_size * subscript
-				 * 
-				 * However, luckily for us, we know that the offset itself is a constant, so
-				 * we can skip a lot of the actual computation work here
+				 * There is no current offset so all that we'll need to do is mutiply
+				 * the array offset by the constant value, and then that is our new current
+				 * offset
 				 */
-				three_addr_const_t* constant_value = expression_package.result_value.result_const;
+				case OFFSET_TYPE_NONE: {
+					//Multiply these two constants together, the result is in the array_offset constant
+					multiply_constant_by_raw_int64_value(array_offset, u64, member_type->type_size);
 
-				//Emit the actual const over here
-				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
-				
-				//Multiply them together
-				multiply_constants(type_size_const, constant_value);
+					/**
+					 * If we have an offset that is not 0, we'll store this as a constant
+					 * offset. Otherwise we can just leave the whole thing blank
+					 */
+					if(is_constant_value_zero(array_offset) == FALSE){
+						current_offset->value.constant_offset = array_offset;
+						current_offset->type = OFFSET_TYPE_CONST;
+					} else {
+						*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+					}
 
-				/**
-				 * If it's not 0, we'll just emit the lea. If it is zero, then
-				 * we don't need to reassign the current offset at all so we
-				 * will leave it as such
-				 */
-				if(is_constant_value_zero(type_size_const) == FALSE){
-					//Emit the calculation
-					instruction_t* address_calculation = emit_lea_offset_only(emit_temp_var(u64), *current_offset, type_size_const, line_number);
-
-					//Get it into the block
-					add_statement(current_block, address_calculation);
-
-					//And finally - our current offset is no longer the actual offset
-					*current_offset = address_calculation->operands.oir.assignee;
+					break;
 				}
 
-			/**
-			 * Otherwise this is NULL, so we're starting from scratch. Again we know that this is 
-			 * a constant, so we are able to just emit that assignment here
-			 */
-			} else {
-				//Emit the variable directly here
-				*current_offset = emit_temp_var(u64);
+				/**
+				 * The current offset is a variable
+				 *
+				 * t5: current offset
+				 * multiplier: 8
+				 * array_offset: 24
+				 *
+				 * t7 <- lea 144(t5)
+				 *
+				 * New offset is in t7
+				 */
+				case OFFSET_TYPE_VAR: {
+					//We will have a new offset constant for this
+					three_addr_var_t* new_offset = emit_temp_var(u64);
+					
+					multiply_constant_by_raw_int64_value(array_offset, u64, member_type->type_size);
+					instruction_t* lea_instruction = emit_lea_offset_only(new_offset, current_offset->value.variable_offset, array_offset, line_number);
+					add_statement(current_block, lea_instruction);
 
-				//Extract the result constant out
-				three_addr_const_t* constant_value = expression_package.result_value.result_const;
+					//Store the new offset in the current offset struct
+					current_offset->value.variable_offset = new_offset;
+					current_offset->type = OFFSET_TYPE_VAR;
+					break;
+				}
 
-				//Emit the actual const over here
-				three_addr_const_t* type_size_const = emit_direct_integer_or_char_constant(member_type->type_size, u64);
+				/**
+				 * The current offset is also a constant
+				 *
+				 * current offset: 40
+				 * multiplier: 8
+				 * array offset: 16
+				 *
+				 * New offset is just 16 + 8 * 40 = 336
+				 */
+				case OFFSET_TYPE_CONST: {
+					//First multiply the new offset by the type size
+					multiply_constant_by_raw_int64_value(array_offset, u64, member_type->type_size);
 
-				//Multiply them together
-				multiply_constants(type_size_const, constant_value);
-
-				//This just becomes an assignment expression
-				instruction_t* assignment = emit_assignment_with_const_instruction(*current_offset, type_size_const, line_number);
-
-				//Add it into the block
-				add_statement(current_block, assignment);
+					//Now add it to the current offset, result is in the current offset
+					add_constants(current_offset->value.constant_offset, array_offset);
+					break;
+				}
 			}
 
 			break;
-		}
-
-		//Never valid to see an initializer in here
-		default: {
-			ice_panic_on_invalid_result_type();
 		}
 	}
 
@@ -3912,11 +4024,12 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//And the final block is this as well
-	expression_package.final_block = current_block;
-
-	//And finally we give this back
-	return expression_package;
+	/**
+	 * We really only care about the start and end blocks in our returned package
+	 */
+	results.starting_block = block;
+	results.final_block = current_block;
+	return results;
 }
 
 
@@ -3926,75 +4039,74 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
  * This rule returns *the offset* of the address that we're after. It has no idea
  * what the base address even is
  */
-static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block, generic_type_t* struct_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, address_offset_t* current_offset,
 															u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	/**
 	 * If our current address is from a non-contiguous region, we are going to need to
 	 * load in the value at that address to set up properly here
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
-	//Grab the variable that we need
+	/**
+	 * Get the struct record so that we can extract the offset that we're working with
+	 */
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
-
-	//Now we'll grab the associated struct record
 	symtab_variable_record_t* struct_record = get_struct_member(struct_type, struct_variable->var_name.string);
+	u_int64_t record_offset = struct_record->struct_offset;
 
-	//The constant that represents the offset
-	three_addr_const_t* struct_offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
+	//The current offset type determines where we go from here
+	switch(current_offset->type){
+		/**
+		 * There is currently no offset so we'll just replace it with the struct record's offset
+		 */
+		case OFFSET_TYPE_NONE: {
+			/**
+			 * If the record offset is not 0, we'll emit a constant for it and store that as our offset. Otherwise
+			 * it is 0 and there's no point in emitting anything
+			 */
+			if(record_offset != 0){
+				three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+				current_offset->value.constant_offset = struct_offset_const;
+				current_offset->type = OFFSET_TYPE_CONST;
+			} else {
+				*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+			}
 
-	/**
-	 * If the current offset is not null, we're just building on top of something
-	 */
-	if(*current_offset != NULL){
-		//Now we'll emit the address using the helper
-		three_addr_var_t* offset_calculation_result = emit_struct_address_calculation(block, struct_type, *current_offset, struct_offset, line_number);
+			break;
+		}
 
-		//The current offset now is the struct address itself
-		*current_offset = offset_calculation_result;
+		/**
+		 * We have a constant offset already so we'll just need to add to it for the
+		 * new offset to work
+		 */
+		case OFFSET_TYPE_CONST: {
+			sum_constant_with_raw_int64_value(current_offset->value.constant_offset, u64, record_offset);
+			break;
+		}
 
-	/**
-	 * Otherwise, we'll need to emit the current offset here
-	 */
-	} else {
-		//Emit it here
-		*current_offset = emit_temp_var(u64);
+		/**
+		 * We already have a current offset variable, so we'll need to sum it with
+		 * the given offset constant. Lea is preferred for addressing so we'll use
+		 * that here
+		 */
+		case OFFSET_TYPE_VAR: {
+			//We'll need a new offset and a struct constant
+			three_addr_var_t* new_offset = emit_temp_var(u64);
+			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
 
-		//Emit the const assignment here
-		instruction_t* assignment_instruction = emit_assignment_with_const_instruction(*current_offset, struct_offset, line_number);
+			//Emit and add the calculation to the block
+			instruction_t* offset_calc = emit_lea_offset_only(new_offset, current_offset->value.variable_offset, struct_offset_const, line_number);
+			add_statement(block, offset_calc);
 
-		//Add it into the block
-		add_statement(block, assignment_instruction);
+			//Overwrite the old current offset with this new one
+			current_offset->value.variable_offset = new_offset;
+			current_offset->type = OFFSET_TYPE_VAR;
+			break;
+		}
 	}
 
 	/**
@@ -4011,7 +4123,8 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 	}
 
 	//Package & return the results
-	cfg_result_package_t results = {block, block, {*current_offset}, CFG_RESULT_TYPE_VAR, BLANK};
+	results.starting_block = block;
+	results.final_block = block;
 	return results;
 }
 
@@ -4022,8 +4135,10 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
  * This rule returns *the offset* of the value that we want. It has
  * no idea what the base address of the memory region it's in is
  */
-static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
-																	u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_t* block, generic_type_t* struct_pointer_type, generic_ast_node_t* struct_accessor, three_addr_var_t** base_address,
+																	address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	//Get what the raw struct type is
 	generic_type_t* raw_struct_type = struct_pointer_type->internal_types.points_to;
 
@@ -4032,54 +4147,65 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 	 * load in the value at that address to set up properly here
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, raw_struct_type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, raw_struct_type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
-	//Extract the var first
+	/**
+	 * Get the struct record so we can extract the needed offset from this specific member
+	 */
 	symtab_variable_record_t* struct_variable = struct_accessor->variable;
-
-	//Now we'll grab the associated struct record
 	symtab_variable_record_t* struct_record = get_struct_member(raw_struct_type, struct_variable->var_name.string);
-	
-	//Let's create our offset here
-	three_addr_const_t* offset = emit_direct_integer_or_char_constant(struct_record->struct_offset, u64);
+	u_int64_t record_offset = struct_record->struct_offset;
 
-	//Now we'll have one final assignment here
-	instruction_t* final_assignment =  emit_assignment_with_const_instruction(emit_temp_var(u64), offset, line_number);
+	//The current offset type determines where we go from here
+	switch(current_offset->type){
+		/**
+		 * There is currently no offset so we'll just replace it with the struct record's offset
+		 */
+		case OFFSET_TYPE_NONE: {
+			/**
+			 * If the record offset is not 0, we'll emit a constant for it and store that as our offset. Otherwise
+			 * it is 0 and there's no point in emitting anything
+			 */
+			if(record_offset != 0){
+				three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+				current_offset->value.constant_offset = struct_offset_const;
+				current_offset->type = OFFSET_TYPE_CONST;
+			} else {
+				*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+			}
+			break;
+		}
 
-	//Add it into the block
-	add_statement(block, final_assignment);
+		/**
+		 * We have a constant offset already so we'll just need to add to it for the
+		 * new offset to work
+		 */
+		case OFFSET_TYPE_CONST: {
+			sum_constant_with_raw_int64_value(current_offset->value.constant_offset, u64, record_offset);
+			break;
+		}
 
-	//The current offset now is this
-	*current_offset = final_assignment->operands.oir.assignee;
+		/**
+		 * We already have a current offset variable, so we'll need to sum it with
+		 * the given offset constant. Lea is preferred for addressing so we'll use
+		 * that here
+		 */
+		case OFFSET_TYPE_VAR: {
+			//We'll need a new offset and a struct constant
+			three_addr_var_t* new_offset = emit_temp_var(u64);
+			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+
+			//Emit and add the calculation to the block
+			instruction_t* offset_calc = emit_lea_offset_only(new_offset, current_offset->value.variable_offset, struct_offset_const, line_number);
+			add_statement(block, offset_calc);
+
+			//Overwrite the old current offset with this new one
+			current_offset->value.variable_offset = new_offset;
+			current_offset->type = OFFSET_TYPE_VAR;
+			break;
+		}
+	}
 
 	/**
 	 * IMPORTANT: if what we just calculated came specifically from a non-contiguous memory
@@ -4094,8 +4220,9 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//And we're done here, we can package and return what we have
-	cfg_result_package_t results = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
+	//Package up and return the results
+	results.starting_block = block;
+	results.final_block = block;
 	return results;
 }
 
@@ -4105,41 +4232,16 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address, three_addr_var_t** current_offset,
+static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address, address_offset_t* current_offset,
 														   u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
 	/**
-	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, (*base_address)->type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, (*base_address)->type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
 	/**
@@ -4155,11 +4257,12 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
 		*came_from_non_contiguous_region = FALSE;
 	}
 
-	//Very simple rule, we just have this for consistency
-	cfg_result_package_t accessor = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//Give it back
-	return accessor;
+	/**
+	 * We really only care about the start and end blocks in our returned package
+	 */
+	results.starting_block = block;
+	results.final_block = block;
+	return results;
 }
 
 
@@ -4168,44 +4271,16 @@ static cfg_result_package_t emit_union_accessor_expression(basic_block_t* block,
  *
  * This rule returns *the address* of the value that we've asked for
  */
-static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, generic_type_t* union_pointer_type, three_addr_var_t** base_address, three_addr_var_t** current_offset,
-																	u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
-	//Get the current type
-	generic_type_t* raw_union_type = union_pointer_type->internal_types.points_to;
+static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t* block, generic_ast_node_t* union_accessor, three_addr_var_t** base_address,
+																	address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region, u_int32_t line_number){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
-	 * If this came from a non-contiguous region, then we're going to need to deal with it accordingly
+	 * If our current address is from a non-contiguous region, we are going to need to
+	 * load in the value at that address to set up properly here
 	 */
 	if(*came_from_non_contiguous_region == TRUE){
-		//Now we need to emit the load by doing our offset calculation to get out of the pointer
-		//space and into memory
-		instruction_t* load_instruction;
-
-		//The current offset is not null, we need to emit some calculation here
-		if(*current_offset != NULL){
-			//Emit the load
-			load_instruction = emit_load_base_address_and_index(emit_temp_var(u64), *base_address, *current_offset, raw_union_type, line_number);
-
-			//Add it into the block
-			add_statement(block, load_instruction);
-
-			//The new base address now is the load instruction's assignee
-			*base_address = load_instruction->operands.oir.assignee;
-
-			//And the offset is now nothing
-			*current_offset = NULL;
-
-		//If we get here, we have an empty offset so we just need a regular load
-		} else {
-			//Regular load here
-			load_instruction = emit_load_base_address_only(emit_temp_var(u64), *base_address, raw_union_type, line_number);
-			
-			//Get it into the block
-			add_statement(block, load_instruction);
-
-			//Again this now is the base address
-			*base_address = load_instruction->operands.oir.assignee;
-		}
+		emit_non_contiguous_region_base_address_correction(block, base_address, current_offset, line_number);
 	}
 
 	/**
@@ -4222,12 +4297,11 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
 	}
 
 	/**
-	 * By the time we get out here, we have performed a dereference and loaded whatever our offset
-	 * math was before into the new base address variable. The current offset will be NULL again
-	 * because we need to start over if we have any more offsets
+	 * We really only care about the start and end blocks in our returned package
 	 */
-	cfg_result_package_t return_package = {block, block, {*base_address}, CFG_RESULT_TYPE_VAR, BLANK};
-	return return_package;
+	results.starting_block = block;
+	results.final_block = block;
+	return results;
 }
 
 
@@ -4245,26 +4319,82 @@ static cfg_result_package_t emit_union_pointer_accessor_expression(basic_block_t
  *  for by the type system so it's not something that we need to be aware of here. Non-contiguous memory regions require intermediary loads
  *  in order to work properly
  */
-static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, three_addr_var_t** current_offset, u_int8_t* came_from_non_contiguous_region){
-	//A tracker for what the current block actually is(this can change)
-	basic_block_t* current = basic_block;
+static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_block, generic_ast_node_t* root, three_addr_var_t** base_address, address_offset_t* current_offset, u_int8_t* came_from_non_contiguous_region){
+	//Keep track of the current block
+	basic_block_t* current_block = basic_block;
 
 	/**
-	 * If we make it here, this is actually our base address emittal. We will use the
-	 * results from here to hang onto our base address
+	 * NORMAL CASE - we are dealing with a postfix expression emittal so we will continue the
+	 * recursive chain. This recursive processing makes a recursive call before the processing
+	 * for this actual node itself, that way all nodes to the left of it have already been 
+	 * processed by the time we get to process this one(more below)
 	 */
-	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		//Run the primary results function - we know that this is not going to be a constant
+	if(root->ast_node_type == AST_NODE_TYPE_POSTFIX_EXPR){
+		/**
+		 * Extract this stuff for bookkeeping - left child, right child, and
+		 * the types that we need. We recursively evaluate leftwards
+		 */
+		generic_ast_node_t* left_child = root->first_child;
+		generic_ast_node_t* right_child = left_child->next_sibling;
+		generic_type_t* memory_region_type = left_child->inferred_type;
+
+		/**
+		 * RECURSIVE CALL: recursively evaluate everything to the left of this node to ensure maintain
+		 * the order of the postfix expression. This ensures that by the time we're actually processing
+		 * this node we'll already have a base address and offset(likely) to work with
+		 */
+		cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, came_from_non_contiguous_region);
+		current_block = left_child_results.final_block;
+
+		cfg_result_package_t accessor_results;
+
+		switch(right_child->ast_node_type){
+			case AST_NODE_TYPE_ARRAY_ACCESSOR:
+				accessor_results = emit_array_offset_calculation(current_block, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			case AST_NODE_TYPE_STRUCT_ACCESSOR:
+				accessor_results = emit_struct_accessor_expression(current_block, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
+				accessor_results = emit_struct_pointer_accessor_expression(current_block, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			case AST_NODE_TYPE_UNION_ACCESSOR:
+				accessor_results = emit_union_accessor_expression(current_block, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+
+			case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
+				accessor_results = emit_union_pointer_accessor_expression(current_block, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
+				break;
+				
+			/**
+			 * Something is very wrong if we hit this so trigger a compiler panic
+			 */
+			default:
+				trigger_ice_panic("Unrecognzied postfix expression node type hit");
+		}
+
+		return accessor_results;
+
+	/**
+	 * BASE CASE - we have hit a non-postfix expression, meaning that we are at the end of the
+	 * line an no longer need to recurse. This means that we are at the very leftmost end of the
+	 * postfix expression tree which is known as the "base_address" that we're working off of
+	 */
+	} else {
+		//Emit the primary expression that represents our base address
 		cfg_result_package_t primary_results = emit_primary_expr_code(basic_block, root);
+		current_block = primary_results.final_block;
 
-		//The current block now is this ones final block
-		current = primary_results.final_block;
-
-		//Extract for some analysis
-		three_addr_var_t* assignee = primary_results.result_value.result_var;
-
-		//Get this if there is one
-		symtab_variable_record_t* base_address_variable = assignee->linked_var;
+		/**
+		 * Extract the postfix base address(the primary expression result) and the 
+		 * linked variable to this base address. Note that the linked variable
+		 * is nullable
+		 */
+		three_addr_var_t* postfix_base_address = primary_results.result_value.result_var;
+		symtab_variable_record_t* base_address_variable = postfix_base_address->linked_var;
 
 		/**
 		 * If we have a linked variable that is coming to us from the stack, we'll
@@ -4283,20 +4413,22 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * selector later on but we'll need it in here now for clarity
 			 */
 			if(base_address_variable->type_defined_as->type_class == TYPE_CLASS_ELABORATIVE){
-				//Emit a new current offset
+				/**
+				 * Emit and add the specialized "elaborative param offset". This will be
+				 * used as the starting offset for our future postfix expression here
+				 */
 				three_addr_var_t* new_current_offset = emit_temp_var(u64);
-
-				//Emit a special instruction for IR clarity
 				instruction_t* elaborative_param_offset = emit_elaborative_param_offset(new_current_offset, emit_var(base_address_variable), root->line_number);
+				add_statement(current_block, elaborative_param_offset);
 
-				//Put it into the block
-				add_statement(current, elaborative_param_offset);
+				/**
+				 * Package up the current offset as a variable offset
+				 */
+				current_offset->value.variable_offset = new_current_offset;
+				current_offset->type = OFFSET_TYPE_VAR;
 
-				//This now is the current offset so we're going to denote that
-				*current_offset = new_current_offset;
-
-				//The base address is just the assignee in this case
-				*base_address = assignee;
+				//In this case the base address is just our result from the postfix expression
+				*base_address = postfix_base_address;
 
 			/**
 			 * Otherwise we still have to account for the case where we have reference types that need
@@ -4310,76 +4442,19 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * or union that is passed by copy. In that case no automatic load is needed
 			 */
 			} else {
-				*base_address = assignee;
+				*base_address = postfix_base_address;
 			}
 
-		//Else just update the base address
+		/**
+		 * No specialized load or treatment required here - the base address is just the 
+		 * result of the primary expression
+		 */
 		} else {
-			//The base address is whatever this assignee is
-			*base_address = assignee;
+			*base_address = postfix_base_address;
 		}
 
-		//And give these back
 		return primary_results;
 	}
-
-	//Once we make it down here, we know that we don't have a primary expression so we need to do postfix processing
-	//The left child *always* decays into another postfix expression
-	generic_ast_node_t* left_child = root->first_child;
-
-	//And this will *always* be our postoperation code
-	generic_ast_node_t* right_child = left_child->next_sibling;
-	
-	//The type of the memory region we're accessing is all we need here. This is always
-	//the left child's type
-	generic_type_t* memory_region_type = left_child->inferred_type;
-
-	//We need to first recursively emit the left child's postfix expression
-	cfg_result_package_t left_child_results = emit_postfix_expression_rec(basic_block, left_child, base_address, current_offset, came_from_non_contiguous_region);
-
-	//Update whatever the last block may be
-	current = left_child_results.final_block;
-
-	//The postfix results package
-	cfg_result_package_t postfix_results;
-
-	//NOTE: by the time we get down here, base address will have been populated with an actual value(usually "memory address of")
-
-	//Now we need to go through and calculate the offset
-	switch(right_child->ast_node_type){
-		//Handle an array accessor
-		case AST_NODE_TYPE_ARRAY_ACCESSOR:
-			postfix_results = emit_array_offset_calculation(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a regular struct accessor(: access)
-		case AST_NODE_TYPE_STRUCT_ACCESSOR:
-			postfix_results = emit_struct_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a struct pointer access
-		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
-			postfix_results = emit_struct_pointer_accessor_expression(current, memory_region_type, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a regular union access(. access)
-		case AST_NODE_TYPE_UNION_ACCESSOR:
-			postfix_results = emit_union_accessor_expression(current, right_child, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-
-		//Handle a union pointer access (-> access)
-		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			postfix_results = emit_union_pointer_accessor_expression(current, right_child, memory_region_type, base_address, current_offset, came_from_non_contiguous_region, root->line_number);
-			break;
-			
-		//We should never actually hit this, it's just so the compiler is happy
-		default:
-			break;
-	}
-
-	//Give back our final results(assignee is not needed here)
-	cfg_result_package_t final_results = {current, postfix_results.final_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
-	return final_results;
 }
 
 
@@ -4391,128 +4466,253 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
  * the deepest(first) part first and the highest(root) part last
  */
 static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, generic_ast_node_t* root){
-	//This is our "base case". If it's not a postfix expression, just move out
-	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
-		return emit_primary_expr_code(basic_block, root);
-	}
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
-	//Did the current result come from a non-contiguous computation
-	u_int8_t came_from_non_continguous_region = FALSE;
-
-	//Hold onto what our current block is, it may change
+	//Track what the current block is
 	basic_block_t* current_block = basic_block;
 
-	//A variable for our base address(it starts off as null, the recursive rule will modify it)
+	/**
+	 * BASE CASE: if we don't have a postfix expression then we just got here along the
+	 * recursive descent, we'll just call out to the primary expression and move along
+	 */
+	if(root->ast_node_type != AST_NODE_TYPE_POSTFIX_EXPR){
+		return emit_primary_expr_code(current_block, root);
+	}
+
+	/**
+	 * Maintain a base address and a current offset. The base address is always
+	 * a variable, while the offset may be a variable or a constant depending
+	 * on what we're doing, necessitating the tagged union type
+	 *
+	 * Also, maintain a flag noting whether or not we came from a contiguous(flat)
+	 * memory region. This will be important for the offset emittal
+	 */
 	three_addr_var_t* base_address = NULL;
-
-	//Another variable for our current offset(again it starts as NULL, the rule will populate if need be)
-	three_addr_var_t* current_offset = NULL;
+	address_offset_t current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+	u_int8_t came_from_non_continguous_region = FALSE;
 	
-	//Let the recursive rule do all the work
+	/**
+	 * Let the recursive helper emit everyhing that we need for the actual code. Once this completes,
+	 * we have a fully populated current offset with a correct base address in the case of any
+	 * intermediary loads
+	 */
 	cfg_result_package_t postfix_results = emit_postfix_expression_rec(basic_block, root, &base_address, &current_offset, &came_from_non_continguous_region);
-
-	//Grab htese out for later
-	generic_ast_node_t* left_child = root->first_child;
-	generic_ast_node_t* right_child = left_child->next_sibling;
+	current_block = postfix_results.final_block;
 
 	/**
 	 * For this rule, we care about the parent node's type(after cast/coercion) and
 	 * the original memory access type(before cast/coercion). We will use these 2 to 
 	 * determine if a converting operation is needed
 	 */
+	generic_ast_node_t* left_child = root->first_child;
+	generic_ast_node_t* right_child = left_child->next_sibling;
 	generic_type_t* parent_node_type = root->inferred_type;
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
-	//This is whatever the final block is
-	current_block = postfix_results.final_block;
-
-	//IMPORTANT - the result of this is always going to be a variable
-	postfix_results.type = CFG_RESULT_TYPE_VAR;
-
-	//In case we need them - load and store
-	instruction_t* load_instruction;
-	instruction_t* store_instruction;
-
-	//Do we need a dereference(load or store) here?
+	/**
+	 * If a dereference is required, we will need to do it based on what side of the expression
+	 * we're currently residing on. LHS means that we're doing a store, and RHS means that 
+	 * we're doing a load.
+	 */
 	if(root->dereference_needed == TRUE){
-		//Based on what we have here - we emit the appropriate statement
 		switch(root->side){
-			//Left side = store statement
-			case SIDE_TYPE_LEFT:
-				//This could not be null in the case of structs & arrays
-				if(current_offset != NULL){
-					//Intentionally leave the storee null, it will be populated down the line
-					store_instruction = emit_store_base_address_and_index(base_address, current_offset, NULL, original_memory_access_type, root->line_number);
+			/**
+			 * LHS means that we need to be emitting a store statement. For all store statements
+			 * we intentionally leave their storees empty, that will be for caller to populate
+			 *
+			 * IMPORTANT - for all store addresses, it is an absolute must that the assignee
+			 * of the final result package be the base address
+			 */
+			case SIDE_TYPE_LEFT: {
+				switch(current_offset.type){
+					/**
+					 * No current offset - we just have a store with a base
+					 * address and that's it
+					 */
+					case OFFSET_TYPE_NONE:{
+						instruction_t* store_instruction = emit_store_base_address_only(base_address,
+																						NULL,
+																						original_memory_access_type,
+																						root->line_number);
+						add_statement(current_block, store_instruction);
+						break;
+					}
 
-					//Add it into the block
-					add_statement(current_block, store_instruction);
+					/**
+					 * Offset is a variable so we'll have an address calculation
+					 * with two operands, no constants
+					 */
+					case OFFSET_TYPE_VAR:{
+						instruction_t* store_instruction = emit_store_base_address_and_index(base_address,
+																								current_offset.value.variable_offset,
+																								NULL,
+																								original_memory_access_type,
+																								root->line_number);
+						add_statement(current_block, store_instruction);
+						break;
+					}
 
-					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.result_value.result_var = base_address;
+					/**
+					 * Offset is a constant so we'll have an address calculation with the base
+					 * address and a constant offset
+					 *
+					 * If the constant value is nonzero then its worth it to emit the offset. If the
+					 * constant value is 0 then there is no point and we'll emit this as a store with
+					 * base address only
+					 */
+					case OFFSET_TYPE_CONST:{
+						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
+							instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address,
+																											current_offset.value.constant_offset,
+																											NULL,
+																											original_memory_access_type,
+																											root->line_number);
+							add_statement(current_block, store_instruction);
 
-				//Otherwise, this means that the current offset is null
-				} else {
-					//Emit the store here - remember we leave the op1 NULL so that a later rule can fill it in
-					store_instruction = emit_store_base_address_only(base_address, NULL, original_memory_access_type, root->line_number);
+						} else {
+							instruction_t* store_instruction = emit_store_base_address_only(base_address,
+																							NULL,
+																							original_memory_access_type,
+																							root->line_number);
 
-					//Add it into our block
-					add_statement(current_block, store_instruction);
+							add_statement(current_block, store_instruction);
+						}
 
-					//Give back the base address as the assignee(even though it's not really)
-					postfix_results.result_value.result_var = base_address;
+						break;
+					}
 				}
 
+				results.type = CFG_RESULT_TYPE_VAR;
+				results.result_value.result_var = base_address;
 				break;
+			}
 
-			//Right side = load statement
-			case SIDE_TYPE_RIGHT:
-				//This will not be null in the case of structs & arrays
-				if(current_offset != NULL){
-					//Calculate our load here
-					load_instruction = emit_load_base_address_and_index(emit_temp_var(parent_node_type), base_address, current_offset, original_memory_access_type, root->line_number);
+			/**
+			 * RHS means that we have to do a load instruction. Unlike with the stores, these instructions
+			 * will be emitted as fully complete. For these, it's important that we populate the result
+			 * package with the result of the load in the end
+			 */
+			case SIDE_TYPE_RIGHT: {
+				three_addr_var_t* load_result = emit_temp_var(parent_node_type);
 
-					//Add it into the block
-					add_statement(current_block, load_instruction);
+				switch(current_offset.type){
+					/**
+					 * No offset so we can do a load with just a base address
+					 */
+					case OFFSET_TYPE_NONE: {
+						instruction_t* load_instruction = emit_load_base_address_only(load_result,
+																						base_address,
+																						original_memory_access_type,
+																						root->line_number);
+						add_statement(current_block, load_instruction);
+						break;
+					}
 
-					//Now the final assignee here is important - it's what we give it here
-					postfix_results.result_value.result_var = load_instruction->operands.oir.assignee;
+					/**
+					 * Loading with a variable offset so we'll have a load instruction with two 
+					 * variables in it
+					 */
+					case OFFSET_TYPE_VAR: {
+						instruction_t* load_instruction = emit_load_base_address_and_index(load_result,
+																							base_address,
+																							current_offset.value.variable_offset,
+																							original_memory_access_type,
+																							root->line_number);
+						add_statement(current_block, load_instruction);
+						break;
+					}
 
-				//Otherwise we have a null current offset, so we're just relying on the base address
-				} else {
-					//Emit the load instruction between the base address and the parent node type
-					load_instruction = emit_load_base_address_only(emit_temp_var(parent_node_type), base_address, original_memory_access_type, root->line_number);
+					/**
+					 * Loading with a constant offset so we'll do a load with offset only. If the offset
+					 * value happens to be 0 then we'll skip doing that entirely and just do a load
+					 * with the base address only
+					 */
+					case OFFSET_TYPE_CONST: {
+						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
+							instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result,
+																											base_address,
+																											current_offset.value.constant_offset,
+																											original_memory_access_type,
+																											root->line_number);
+							add_statement(current_block, load_instruction);
 
-					//Add it into the block
-					add_statement(current_block, load_instruction);
+						} else {
+							instruction_t* load_instruction = emit_load_base_address_only(load_result,
+																							base_address,
+																							original_memory_access_type,
+																							root->line_number);
+							add_statement(current_block, load_instruction);
+						}
 
-					//This is our final assignee
-					postfix_results.result_value.result_var = load_instruction->operands.oir.assignee;
+						break;
+					}
 				}
 
+				results.type = CFG_RESULT_TYPE_VAR;
+				results.result_value.result_var = load_result;
 				break;
+			}
 		}
 
-	//Otherwise it's just a memory address call, just emit the base address plus the offset
+	/**
+	 * If we don't need to dereference then we're just doing a memory address call. In this
+	 * case we'll calculate the memory address appropriately based on the base address and 
+	 * offset and return that in the result package
+	 */
 	} else {
-		//If the current offset is not NULL, we'll need to do some calculations here
-		if(current_offset != NULL){
-			//Just do base address + offset
-			instruction_t* address_calculation = emit_binary_operation_instruction(emit_temp_var(base_address->type), base_address, PLUS, current_offset, root->line_number);
+		three_addr_var_t* final_memory_address = NULL;
 
-			//Add the instruction in
-			add_statement(current_block, address_calculation);
+		switch(current_offset.type){
+			/**
+			 * No offset at all - the final memory address is 
+			 * just our calculated base address
+			 */
+			case OFFSET_TYPE_NONE: {
+				final_memory_address = base_address;
+				break;
+			}
 
-			//This is what we're returning
-			postfix_results.result_value.result_var = address_calculation->operands.oir.assignee;
+			/**
+			 * Current offset is a variable so we'll convert this into a LEA
+			 * with two operands to represent the computation
+			 */
+			case OFFSET_TYPE_VAR: {
+				final_memory_address = emit_temp_var(base_address->type);
+				instruction_t* final_address_calc = emit_lea_operands_only(final_memory_address, base_address, current_offset.value.variable_offset, root->line_number);
+				add_statement(current_block, final_address_calc);
+				break;
+			}
 
-		//Otherwise it is null, so we can just use the base address
-		} else {
-			postfix_results.result_value.result_var = base_address;
+			/**
+			 * Current offset is a constant so we'll convert this to a lea
+			 * with an offset to represent the computation
+			 *
+			 * If we have a nonzero constant value then a lea is appropriate. If
+			 * however we have a constant value of 0 we can skip the lea and just
+			 * return the base address
+			 */
+			case OFFSET_TYPE_CONST: {
+				if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
+					final_memory_address = emit_temp_var(base_address->type);
+					instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, current_offset.value.constant_offset, root->line_number);
+					add_statement(current_block, final_address_calc);
+				} else {
+					final_memory_address = base_address;
+				}
+
+				break;
+			}
 		}
+
+		//Regardless of the path the reuslt is in the final memory address
+		results.type = CFG_RESULT_TYPE_VAR;
+		results.result_value.result_var = final_memory_address;
 	}
 
-	//Give back these results
-	return postfix_results;
+	//Package up and return the results package
+	results.starting_block = basic_block;
+	results.final_block = current_block;
+	return results;
 }
 
 

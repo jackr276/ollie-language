@@ -20,5 +20,6 @@ pub fn main() -> i32 {
 		array[i] = i * 3 - 2;
 	}
 
+	OUNIT: [exit_status = 13]
 	ret array[5];
 }
