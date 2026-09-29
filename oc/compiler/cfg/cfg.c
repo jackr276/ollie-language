@@ -3707,9 +3707,17 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 					//Multiply these two constants together, the result is in the array_offset constant
 					multiply_constant_by_raw_int64_value(array_offset, u64, member_type->type_size);
 
-					//Store this now as a constant offset
-					current_offset->value.constant_offset = array_offset;
-					current_offset->type = OFFSET_TYPE_CONST;
+					/**
+					 * If we have an offset that is not 0, we'll store this as a constant
+					 * offset. Otherwise we can just leave the whole thing blank
+					 */
+					if(is_constant_value_zero(array_offset) == FALSE){
+						current_offset->value.constant_offset = array_offset;
+						current_offset->type = OFFSET_TYPE_CONST;
+					} else {
+						*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+					}
+
 					break;
 				}
 
