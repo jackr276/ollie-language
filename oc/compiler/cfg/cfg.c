@@ -4430,11 +4430,20 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			/**
 			 * Current offset is a constant so we'll convert this to a lea
 			 * with an offset to represent the computation
+			 *
+			 * If we have a nonzero constant value then a lea is appropriate. If
+			 * however we have a constant value of 0 we can skip the lea and just
+			 * return the base address
 			 */
 			case OFFSET_TYPE_CONST: {
-				final_memory_address = emit_temp_var(base_address->type);
-				instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, current_offset.value.constant_offset, root->line_number);
-				add_statement(current_block, final_address_calc);
+				if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
+					final_memory_address = emit_temp_var(base_address->type);
+					instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, current_offset.value.constant_offset, root->line_number);
+					add_statement(current_block, final_address_calc);
+				} else {
+					final_memory_address = base_address;
+				}
+
 				break;
 			}
 		}
