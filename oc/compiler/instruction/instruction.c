@@ -1349,6 +1349,54 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 
 
 /**
+ * Emit a lea statement that has operands and an offset
+ */
+instruction_t* emit_lea_operands_and_offset(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, three_addr_const_t* offset, u_int32_t line_number){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->operands.oir.assignee = assignee;
+	stmt->operands.oir.address_operand1 = address_operand1;
+	stmt->operands.oir.address_operand2 = address_operand2;
+	stmt->operands.oir.address_offset = offset;
+
+	//We have registers and an offset
+	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+	//And now we give it back
+	stmt->line_number = line_number;
+	return stmt;
+}
+
+
+/**
+ * Emit a lea statement that has the index, offset, and scale. This corresponds
+ * to an addressing mode of ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE
+ */
+instruction_t* emit_lea_index_offset_and_scale(three_addr_var_t* assignee, three_addr_var_t* address_operand2, three_addr_const_t* offset, u_int64_t scale, u_int32_t line_number){
+	//First we allocate it
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Now we'll make our populations
+	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	stmt->operands.oir.assignee = assignee;
+	stmt->operands.oir.address_operand2 = address_operand2;
+	stmt->operands.oir.address_offset = offset;
+	stmt->operands.oir.address_multiplier = scale;
+
+	//This only has registers
+	stmt->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+	//And now we give it back
+	stmt->line_number = line_number;
+	return stmt;
+
+}
+
+
+/**
  * Emit a statement that is in LEA form
  */
 instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, three_addr_var_t* address_operand1, three_addr_var_t* address_operand2, u_int64_t type_size, u_int32_t line_number){
@@ -6643,15 +6691,11 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
 
-	//Copy the global var and give a non-memory address version of it
-	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
-	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
-
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
 	//Store this in the rip-relative area
-	lea->operands.oir.rip_offset_var = remediated_version;
+	lea->operands.oir.rip_offset_var = global_variable;
 
 	//And give it back
 	lea->line_number = line_number;
@@ -6677,15 +6721,11 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
 
-	//Copy the global var and give a non-memory address version of it
-	three_addr_var_t* remediated_version = emit_var_copy(global_variable);
-	remediated_version->variable_type = VARIABLE_TYPE_NON_TEMP;
-
 	//Op1 is the instruction pointer(relative addressing)
 	lea->operands.oir.address_operand1 = instruction_pointer;
 
 	//Store this in the dedicated rip offset area
-	lea->operands.oir.rip_offset_var = remediated_version;
+	lea->operands.oir.rip_offset_var = global_variable;
 
 	//Store the constant offset here as well
 	lea->operands.oir.address_offset = constant;

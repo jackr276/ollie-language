@@ -27,5 +27,6 @@ pub fn main() -> i32 {
 	//Use the addressing mode here
 	@mutate_address(&(array[3]));
 
-	ret 0;
+	OUNIT: [exit_status = 13]
+	ret array[3];
 }
