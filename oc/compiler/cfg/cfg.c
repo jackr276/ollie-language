@@ -1635,7 +1635,24 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
  * may be made up of sub-initializers so this rule itself can be recursive
  */
 static void add_initializer_members_to_use_set(three_addr_initializer_t* initializer, basic_block_t* block){
+	//Run through all of the initializer results
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
 
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				add_variable_to_use_set(result->value.variable_value, block);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				add_initializer_members_to_use_set(result->value.initializer_value, block);
+				break;
+
+			//Constants are irrelevant for use sets so we can skip
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
 }
 
 
@@ -1686,6 +1703,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL: {
+					//TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
 						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
@@ -1710,6 +1728,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
+					//TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
 						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
@@ -1736,7 +1755,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
 					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
 
-					//TODO
+					add_initializer_members_to_use_set(cursor->operands.oir.initializer_operand, block);
 					break;
 				}
 
