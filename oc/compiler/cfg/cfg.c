@@ -3822,9 +3822,18 @@ static cfg_result_package_t emit_struct_accessor_expression(basic_block_t* block
 		 * There is currently no offset so we'll just replace it with the struct record's offset
 		 */
 		case OFFSET_TYPE_NONE: {
-			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
-			current_offset->value.constant_offset = struct_offset_const;
-			current_offset->type = OFFSET_TYPE_CONST;
+			/**
+			 * If the record offset is not 0, we'll emit a constant for it and store that as our offset. Otherwise
+			 * it is 0 and there's no point in emitting anything
+			 */
+			if(record_offset != 0){
+				three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+				current_offset->value.constant_offset = struct_offset_const;
+				current_offset->type = OFFSET_TYPE_CONST;
+			} else {
+				*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+			}
+
 			break;
 		}
 
@@ -3912,9 +3921,17 @@ static cfg_result_package_t emit_struct_pointer_accessor_expression(basic_block_
 		 * There is currently no offset so we'll just replace it with the struct record's offset
 		 */
 		case OFFSET_TYPE_NONE: {
-			three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
-			current_offset->value.constant_offset = struct_offset_const;
-			current_offset->type = OFFSET_TYPE_CONST;
+			/**
+			 * If the record offset is not 0, we'll emit a constant for it and store that as our offset. Otherwise
+			 * it is 0 and there's no point in emitting anything
+			 */
+			if(record_offset != 0){
+				three_addr_const_t* struct_offset_const = emit_direct_integer_or_char_constant(record_offset, u64);
+				current_offset->value.constant_offset = struct_offset_const;
+				current_offset->type = OFFSET_TYPE_CONST;
+			} else {
+				*current_offset = INITIALIZE_BLANK_ADDRESS_OFFSET;
+			}
 			break;
 		}
 
