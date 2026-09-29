@@ -3927,6 +3927,12 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 
 	switch(addressing_operation->addressing_mode){
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
+			printf("HERE WITH:\n");
+			print_instruction_window_three_address_code(window);
+			break;
+		}
+
 		/**
 		 * Combine:
 		 * 	t5 <- 4(t4, t6, 2)
@@ -3938,7 +3944,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 * This is a case where we can just copy the child's mode over
 		 * completely along with all of it's data
 		 */
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
 			//Copy all operands over
 			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
 			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
@@ -3956,6 +3962,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Combine:
@@ -3969,7 +3976,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 * completely along with all of it's data, however we'll first need
 		 * to add the offset constant *if* one of them exists
 		 */
-		case ADDRESSING_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY: {
 			//If we have an offset then add it. Make sure that the result is in the *first* instruction's offset
 			if(does_addressing_mode_use_offset_constant(lea_statement->addressing_mode) == TRUE){
 				add_constants(lea_statement->operands.oir.address_offset, addressing_operation->operands.oir.address_offset);
@@ -4032,6 +4039,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 
 			*changed = TRUE;
 			break;
+		}
 		
 		/**
 		 * Anything else is an unsupported combination so just leave
