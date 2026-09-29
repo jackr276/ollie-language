@@ -4319,21 +4319,23 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					 * base address only
 					 */
 					case OFFSET_TYPE_CONST:{
-						instruction_t* store_instruction = NULL;
 						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
-							store_instruction = emit_store_base_address_and_constant_offset(base_address,
-																							current_offset.value.constant_offset,
+							instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address,
+																											current_offset.value.constant_offset,
+																											NULL,
+																											original_memory_access_type,
+																											root->line_number);
+							add_statement(current_block, store_instruction);
+
+						} else {
+							instruction_t* store_instruction = emit_store_base_address_only(base_address,
 																							NULL,
 																							original_memory_access_type,
 																							root->line_number);
-						} else {
-							store_instruction = emit_store_base_address_only(base_address,
-																					NULL,
-																					original_memory_access_type,
-																					root->line_number);
+
+							add_statement(current_block, store_instruction);
 						}
 
-						add_statement(current_block, store_instruction);
 						break;
 					}
 				}
@@ -4379,15 +4381,27 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 					}
 
 					/**
-					 * Loading with a constant offset so we'll do a load with offset only
+					 * Loading with a constant offset so we'll do a load with offset only. If the offset
+					 * value happens to be 0 then we'll skip doing that entirely and just do a load
+					 * with the base address only
 					 */
 					case OFFSET_TYPE_CONST: {
-						instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result,
-																										base_address,
-																										current_offset.value.constant_offset,
-																										original_memory_access_type,
-																										root->line_number);
-						add_statement(current_block, load_instruction);
+						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
+							instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result,
+																											base_address,
+																											current_offset.value.constant_offset,
+																											original_memory_access_type,
+																											root->line_number);
+							add_statement(current_block, load_instruction);
+
+						} else {
+							instruction_t* load_instruction = emit_load_base_address_only(load_result,
+																							base_address,
+																							original_memory_access_type,
+																							root->line_number);
+							add_statement(current_block, load_instruction);
+						}
+
 						break;
 					}
 				}
