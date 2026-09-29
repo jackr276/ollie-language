@@ -3971,7 +3971,24 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 *  This is only valid for LEA's where we've got an offset only addressing mode
 		 */
 		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+			//Only valid combo is an offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
 
+			//Copy over the first address operand
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+
+			//Add the two offsets together
+			add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
+			break;
 		}
 
 		/**
