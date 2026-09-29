@@ -3943,9 +3943,35 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 				break;
 			}
 
-			printf("HERE WITH:\n");
-			print_instruction_window_three_address_code(window);
+			//Copy over the address offset and first address operand
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
+
+			//Update the addressing mode to reflect the offset
+			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
 			break;
+		}
+
+		/**
+		 * Combine:
+		 * 	t5 <- 4(t4)
+		 * 	store 8(t5, t6) <- 11
+		 *
+		 * 	Into:
+		 *
+		 * 	store 12(t4, t6) <- 11
+		 *
+		 *  This is only valid for LEA's where we've got an offset only addressing mode
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+
 		}
 
 		/**
