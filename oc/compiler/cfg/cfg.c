@@ -304,7 +304,7 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 
 		//We shouldn't be seeing initializers in this
 		default: {
-			ice_panic_on_invalid_result_type();
+			trigger_ice_panic("Invalid result type detected in result package unpacker");
 		}
 	}
 
@@ -357,7 +357,7 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 
 		//We shouldn't be seeing initializers in this
 		default: {
-			ice_panic_on_invalid_result_type();
+			trigger_ice_panic("Invalid result type detected in result package unpacker");
 		}
 	}
 
@@ -2338,7 +2338,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 			//We should never see an initializer here
 			default: {
-				ice_panic_on_invalid_result_type();
+				trigger_ice_panic("Invalid result type detected in branch emitter");
 			}
 		}
 
@@ -2631,7 +2631,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 
 			//It is never valid to see an initializer here
 			default: {
-				ice_panic_on_invalid_result_type();
+				trigger_ice_panic("Invalid result type detected in branch emitter");
 			}
 		}
 
@@ -4009,6 +4009,13 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 			break;
 		}
+
+		/**
+		 * If we ever see an intializer then something here is very wrong
+		 */
+		case CFG_RESULT_TYPE_INITIALIZER: {
+			trigger_ice_panic("Initializer result type found in postfix expression emitter");
+	 	}
 	}
 
 	/**
@@ -5350,7 +5357,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 		//Should never see an initializer here
 		default:
-			ice_panic_on_invalid_result_type();
+			trigger_ice_panic("Invalid result type detected in ternary expression emitter");
 	}
 
 	//Add this into the if block regardless of the result
@@ -5383,7 +5390,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 		//Never valid to see an initializer here
 		default:
-			ice_panic_on_invalid_result_type();
+			trigger_ice_panic("Invalid result type detected in ternary expression emitter");
 	}
 
 	//Add this into the else block
@@ -6148,7 +6155,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 			//Never valid to see an initializer result here
 			default: {
-				ice_panic_on_invalid_result_type();
+				trigger_ice_panic("Invalid result type detected in pointer arithmetic emittier");
 			}
 		}
 
@@ -6210,7 +6217,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 			//We should never see an initializer type here
 			default: {
-				ice_panic_on_invalid_result_type();
+				trigger_ice_panic("Invalid result type detected in pointer arithmetic emittier");
 			}
 		}
 	}
@@ -6407,7 +6414,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 				//We should never see an initializer here
 				default: {
-					ice_panic_on_invalid_result_type();
+					trigger_ice_panic("Invalid result type detected in binary expression emitter");
 				}
 
 			}
@@ -6452,7 +6459,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 				//We should never see an initializer type here
 				default:
-					ice_panic_on_invalid_result_type();
+					trigger_ice_panic("Invalid result type detected in binary expression emitter");
 			}
 
 			break;
