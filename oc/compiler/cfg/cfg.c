@@ -1631,6 +1631,15 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 
 
 /**
+ * Recursively add all of the members of an initializer to a use set. Remember that initializers
+ * may be made up of sub-initializers so this rule itself can be recursive
+ */
+static void add_initializer_members_to_use_set(three_addr_initializer_t* initializer, basic_block_t* block){
+
+}
+
+
+/**
  * Compute the USE and DEF sets for every single block inside of a function
  *
  * USE[b] -> the set of all variables that are used *before assignment* in block b
@@ -1716,8 +1725,18 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					break;
 				}
 
+				/**
+				 * Initialize statements have the distinction of using the special "three_addr_initializer_t"
+				 * type, which itself may be made up of a bunch of variables and sub-initializers. For this
+				 * reason, we need to make sure that the initializer and its members are begin counted
+				 * properly
+				 */
 				case THREE_ADDR_CODE_INITIALIZER_STMT: {
+					//Initializers are addressing mode compatible
+					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
+					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
 
+					//TODO
 					break;
 				}
 
