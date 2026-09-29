@@ -8245,6 +8245,33 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 
 
 /**
+ * Mark all values inside of the special three address initializer. Note that
+ * this helper can be called recursively because initializers themselves can
+ * be recursive
+ */
+static void mark_initializer_values(three_addr_initializer_t* initializer, dynamic_array_t* function_blocks, dynamic_array_t* worklist){
+	//Run through every single initializer result
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				mark_and_add_definition(function_blocks, result->value.variable_value, worklist);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				mark_initializer_values(result->value.initializer_value, function_blocks, worklist);
+				break;
+
+			//Constants don't need to be marked at all
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -8267,8 +8294,6 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
  * 			if j is unmarked then
  * 				mark j
  * 				add j to worklist
- *
- * TODO WHAT ARE WE GOING TO DO ABOUT INITIALIZERS?????
  */
 static void mark(dynamic_array_t* function_blocks){
 	//First we'll need a worklist
@@ -8382,6 +8407,16 @@ static void mark(dynamic_array_t* function_blocks){
 					break;
 
 				/**
+				 * Initializers are always considered to be useful seeing
+				 * as they are in a way equivalent to stores
+				 */
+				case THREE_ADDR_CODE_INITIALIZER_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
 				 * Special cases: these stack allocation and deallocation statements
 				 * do not have any variables in them(%rsp is inferred because it is the stack)
 				 * They must always be marked, and they may never be deleted. However, since there
@@ -8459,6 +8494,19 @@ static void mark(dynamic_array_t* function_blocks){
 					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
+				break;
+
+			/**
+			 * For an initializer statement there are special steps that we 
+			 * need to take to work on the 
+			 */
+			case THREE_ADDR_CODE_INITIALIZER_STMT:
+				//The address that we're writing to will always be needed
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+
+				//Now let the recursive helper mark all of our initializer values
+				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
 
 			/**
@@ -8602,10 +8650,6 @@ static void simplify(cfg_t* cfg){
 
 		//Extract the function record too
 		symtab_function_record_t* function = function_entry->function_defined_in;
-
-		//TODO I THINK WE WILL DO INITIALIZER LOWERING HERE FIRST
-		//
-		//function_lowering_pass(function, &(function->function_blocks));
 
 		/**
 		 * Before we do any simplifying, we need to remediate all of the function
