@@ -611,6 +611,8 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			//If we have a function call, everything in the function call is important
+			//
+			// TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
@@ -629,6 +631,8 @@ static void mark(dynamic_array_t* function_blocks){
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
+			 *
+			 * TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important

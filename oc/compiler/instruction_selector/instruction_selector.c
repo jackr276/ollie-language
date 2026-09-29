@@ -1145,6 +1145,19 @@ static inline void decrement_use_count_for_variable(three_addr_var_t* variable){
 
 
 /**
+ * Increment the use counts for all initializer members. Remember that initializers can have
+ * sub-initializers as members, so this rule will work recursively
+ */
+static void increment_use_counts_for_intializer_members(three_addr_initializer_t* initializer){
+	//Skip if it's NULL(very common)
+	if(initializer == NULL){
+		return;
+	}
+
+}
+
+
+/**
  * Wrapper around the get use count by ID function. Grabs the use count for any
  * given variable so long as it isn't NULL. If it is NULL we return -1
  */
@@ -1817,9 +1830,6 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 /**
  * Populate the initial use counts for our given function blocks by running through
  * every single instruction and updating based on the operands
- *
- *
- * TODO YOU NEED THIS FOR USE COUNTS AS WELL
  */
 static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
@@ -1844,6 +1854,9 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
 			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
 			increment_use_count_for_variable(instruction_cursor->relies_on);
+
+			//If we have an initializer we'll increment it's use count as well
+			increment_use_counts_for_intializer_members(instruction_cursor->operands.oir.initializer_operand);
 
 			//If we have function parameters be sure to include those as well
 			for(int32_t j = 0; j < instruction_cursor->parameters.current_index; j++){

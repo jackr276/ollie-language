@@ -2177,6 +2177,8 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * after initialize error cases
 	 *
 	 * NOTE: this is a potential fail point for the CFG
+	 *
+	 * TODO NEED INITIALIZER CHECKS
 	 */
 	if(perform_definite_assignment_and_mutability_analysis(cfg) == FAILURE){
 		result = CFG_RESULT_FAILURE;

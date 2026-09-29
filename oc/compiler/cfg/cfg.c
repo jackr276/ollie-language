@@ -1679,8 +1679,6 @@ static void add_initializer_members_to_use_set(three_addr_initializer_t* initial
  * We will of course need to make some special caveats here like for example function
  * entry blocks with functino parameters. Those parameters really were assigned
  * at the very top, but we just didn't see it
- *
- * TODO ADD INITIALIZERS OTHERWISE YOU WILL HAVE ISSUES!!!!!!!
  */
 static void compute_use_and_def_sets_for_function(dynamic_array_t* function_blocks){
 	//For every single block in the set of all function blocks
