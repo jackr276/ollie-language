@@ -3925,9 +3925,24 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 	instruction_t* lea_statement = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-
 	switch(addressing_operation->addressing_mode){
+		/**
+		 * Combine:
+		 * 	t5 <- 4(t4)
+		 * 	store (t5, t6) <- 11
+		 *
+		 * 	Into:
+		 *
+		 * 	store 4(t4, t6) <- 11
+		 *
+		 *  This is only valid for LEA's where we've got an offset only addressing mode
+		 */
 		case ADDRESSING_MODE_REGISTERS_ONLY: {
+			//Only valid combo is an offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
+
 			printf("HERE WITH:\n");
 			print_instruction_window_three_address_code(window);
 			break;
