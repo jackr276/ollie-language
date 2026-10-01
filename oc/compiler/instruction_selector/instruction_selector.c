@@ -16406,6 +16406,16 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 }
 
 
+//TODO
+static void handle_struct_initailization(){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+static void handle_array_initialization(){
+
+}
 
 
 
@@ -16418,6 +16428,21 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 static void handle_initialization_statement(instruction_window_t* window){
 	//Assume instruction1 is the initialization
 	instruction_t* initialization_statement = window->instruction1;
+
+	/**
+	 * We will need to know the base address, so we'll pass around this instruction's
+	 * current base address inside of this specialized struct. We will want to make
+	 * copies of the variables in here when we actually use them, but this will
+	 * give us a jumping off point
+	 */
+	addressing_mode_operands_t base_address = {
+												initialization_statement->operands.oir.address_operand1,
+												initialization_statement->operands.oir.address_operand2,
+												initialization_statement->operands.oir.rip_offset_var,
+												initialization_statement->operands.oir.address_offset,
+												initialization_statement->operands.oir.address_multiplier,
+												initialization_statement->addressing_mode
+											  };
 
 
 	printf("TODO NOT IMPLEMENTED\n");
