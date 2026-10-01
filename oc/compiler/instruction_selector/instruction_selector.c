@@ -8729,16 +8729,7 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
  *
  * NOTE: this function will return the final created statement to the caller
  */
-static instruction_t* convert_initializer_statement_into_OIR_store_statements(instruction_t* initializer){
-	//Assume instruction1 is the initialization
-	instruction_t* initialization_statement = window->instruction1;
-
-	/**
-	 * We'll want to hang onto this for when we rebuild the window after inserting all
-	 * of our store statements. TODO
-	 */
-	instruction_t* before_intializer_stmt = initialization_statement->previous_statement;
-
+static instruction_t* convert_initializer_statement_into_OIR_store_statements(instruction_t* initializer_statement){
 	/**
 	 * We will need to know the base address, so we'll pass around this instruction's
 	 * current base address inside of this specialized struct. We will want to make
@@ -8746,33 +8737,34 @@ static instruction_t* convert_initializer_statement_into_OIR_store_statements(in
 	 * give us a jumping off point
 	 */
 	addressing_mode_operands_t base_address = {
-												initialization_statement->operands.oir.address_operand1,
-												initialization_statement->operands.oir.address_operand2,
-												initialization_statement->operands.oir.rip_offset_var,
-												initialization_statement->operands.oir.address_offset,
-												initialization_statement->operands.oir.address_multiplier,
-												initialization_statement->addressing_mode
+												initializer_statement->operands.oir.address_operand1,
+												initializer_statement->operands.oir.address_operand2,
+												initializer_statement->operands.oir.rip_offset_var,
+												initializer_statement->operands.oir.address_offset,
+												initializer_statement->operands.oir.address_multiplier,
+												initializer_statement->addressing_mode
 											  };
 
 	//Extract the initializer and call out to the appropriate rule
-	three_addr_initializer_t* initializer = initialization_statement->operands.oir.initializer_operand;
+	three_addr_initializer_t* initializer = initializer_statement->operands.oir.initializer_operand;
 	switch(initializer->initializer_type){
 		case INITIALIZER_TYPE_ARRAY:
-			handle_array_initialization(&base_address, initializer, initialization_statement);
+			convert_array_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
 			break;
 
 		case INITIALIZER_TYPE_STRUCT:
-			handle_struct_initialization(&base_address, initializer, initialization_statement);
+			convert_struct_intializer_into_OIR_stores(&base_address, initializer, initializer_statement);
 			break;
 	}
 
 	/**
-	 * Once we've reached the end, the original statement is useless. We can delete
-	 * it and rebuild the window around whatever is right before it
+	 * Once we've reached the end, the original statement is useless. As the return
+	 * value of the function we will give back the very last store statement that we
+	 * create, which will be the statement immediately before the old initializer
 	 */
-	instruction_t* last_initialization_statement = initialization_statement->previous_statement;
-	delete_statement(initialization_statement);
-	reconstruct_window(window, last_initialization_statement);
+	instruction_t* last_store_statement = initializer_statement->previous_statement;
+	delete_statement(initializer_statement);
+	return last_store_statement;
 }
 
 
