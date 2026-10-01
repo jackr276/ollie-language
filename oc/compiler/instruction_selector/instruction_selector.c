@@ -16387,6 +16387,23 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 }
 
 
+
+/**
+ * In order to handle an initialization statement, we will rely on the
+ * helper to emit the actual initialization portion of this. Note that
+ * this will generate a large amount of instructions, so the window
+ * will need to be rebuilt afterwards
+ */
+static void handle_initialization_statement(instruction_window_t* window){
+	//Assume instruction1 is the initialization
+	instruction_t* initialization_statement = window->instruction1;
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+
 /**
  * Select instructions that follow a singular pattern. This one single pass will run after
  * the pattern selector ran and perform one-to-one mappings on whatever is left.
@@ -16482,11 +16499,9 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			handle_indirect_jump(window);
 			break;
-		//TODO
 		case THREE_ADDR_CODE_INITIALIZER_STMT:
-			printf("TODO INITIALIZER NOT IMPLEMENTED\n");
-			exit(1);
-		//TODO
+			handle_initialization_statement(window);
+			break;
 
 		/**
 		 * If we get here then we're encountering something that we've never seen
