@@ -49,6 +49,8 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
+//Specialized struct for passing addressing mode operands around
+typedef struct addressing_mode_operands_t addressing_mode_operands_t;
 
 /**
  * Will we be printing these out as instructions or as three address code
@@ -103,6 +105,23 @@ struct instruction_window_t{
 	instruction_t* instruction1;
 	instruction_t* instruction2;
 	instruction_t* instruction3;
+};
+
+
+/**
+ * This struct carries all of the operands that exist inside
+ * of an addressing mode expression. This exists so that
+ * we can pass these operands around in a compact package 
+ * without having to pass them individually
+ */
+struct addressing_mode_operands_t {
+	three_addr_var_t* address_operand1;
+	three_addr_var_t* address_operand2;
+	three_addr_var_t* rip_offset_var;
+	three_addr_const_t* address_offset;
+	u_int64_t address_multiplier;
+	//Tells us what mode we were in
+	memory_addressing_mode_t addressing_mode;
 };
 
 
@@ -16388,6 +16407,8 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 
 
 
+
+
 /**
  * In order to handle an initialization statement, we will rely on the
  * helper to emit the actual initialization portion of this. Note that
@@ -16397,6 +16418,7 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 static void handle_initialization_statement(instruction_window_t* window){
 	//Assume instruction1 is the initialization
 	instruction_t* initialization_statement = window->instruction1;
+
 
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
