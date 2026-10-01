@@ -1190,6 +1190,37 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 
 
 /**
+ * Rename all of the members inside of an intializer. Remember that initializers
+ * can be recursive so this rule may have to recrusively call itself
+ *
+ * NOTE: initializer members are always on the RHS only
+ */
+static void rename_intitializer_members(three_addr_initializer_t* initializer){
+	//Run through every single result in the initializer
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			//Constants are irrelevant
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				if(is_variable_ssa_eligible(result->value.variable_value) == TRUE){
+					rhs_new_name(result->value.variable_value);
+				}
+
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				rename_intitializer_members(result->value.initializer_value);
+				break;
+		}
+	}
+}
+
+
+/**
  * Rename all variables to be in SSA form. This is the final step in our conversion
  *
  * Algorithm:
@@ -1315,7 +1346,8 @@ static void rename_block(basic_block_t* entry){
 					rhs_new_name(cursor->operands.oir.address_operand2);
 				}
 
-				//TODO
+				//Call out to the helper for this renaming
+				rename_intitializer_members(cursor->operands.oir.initializer_operand);
 
 				break;
 			}
