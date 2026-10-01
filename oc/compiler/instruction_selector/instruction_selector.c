@@ -16407,14 +16407,33 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 
 
 //TODO
-static void handle_struct_initailization(){
+static void handle_struct_initailization(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
 
 
-static void handle_array_initialization(){
+/**
+ * Handle an array initialization by crawling the given initializer and updating the base address offset every single time
+ * we go through here. We may need to recursively call out to helper rules which is fine, so long as we provide
+ * them with updated base address info
+ */
+static void handle_array_initialization(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+	/**
+	 * The array type and member type should always be stored inside of this
+	 * given initializer so we can extract that now
+	 */
+	generic_type_t* array_type = array_initailizer->type;
+	generic_type_t* member_type = array_type->internal_types.member_type;
 
+
+	for(int32_t i = 0; i < array_initailizer->results.results_current_index; i++){
+
+	}
+
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 }
 
 
@@ -16444,9 +16463,25 @@ static void handle_initialization_statement(instruction_window_t* window){
 												initialization_statement->addressing_mode
 											  };
 
+	//Extract the initializer and call out to the appropriate rule
+	three_addr_initializer_t* initializer = initialization_statement->operands.oir.initializer_operand;
+	switch(initializer->initializer_type){
+		case INITIALIZER_TYPE_ARRAY:
+			handle_array_initialization(&base_address, initializer, initialization_statement);
+			break;
 
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+		case INITIALIZER_TYPE_STRUCT:
+			handle_struct_initailization(&base_address, initializer, initialization_statement);
+			break;
+	}
+
+	/**
+	 * Once we've reached the end, the original statement is useless. We can delete
+	 * it and rebuild the window around whatever is right before it
+	 */
+	instruction_t* last_initialization_statement = initialization_statement->previous_statement;
+	delete_statement(initialization_statement);
+	reconstruct_window(window, last_initialization_statement);
 }
 
 
