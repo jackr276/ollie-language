@@ -16406,6 +16406,19 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 }
 
 
+/**
+ * Emit a store instruction using the addressing mode scheme *with* an additional offset added on. This needs to
+ * be emitted directly into x86 assembly which is why a special handler is required. Note that the additional
+ * offset may change the addressing mode. All constants in each addressing mode will need to be copied to
+ * avoid inadvertent corruption
+ */
+static instruction_t* emit_store_with_additional_offset(addressing_mode_operands_t* base_address, int32_t additional_offset, initializer_result_t* result, generic_type_t* memory_write_type){
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	return store_instruction;
+}
+
+
 //TODO
 static void handle_struct_initialization(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
 	printf("TODO NOT IMPLEMENTED\n");
@@ -16437,21 +16450,16 @@ static void handle_array_initialization(addressing_mode_operands_t* base_address
 
 		switch(result->result_type){
 			case INITIALIZER_RESULT_TYPE_CONSTANT: {
-				three_addr_const_t* constant_result = result->value.constant_value;
-
-				//TODO
-				break;
-		    }
-
 			case INITIALIZER_RESULT_TYPE_VARIABLE: {
-				three_addr_var_t* variable_result = result->value.variable_value;
+				instruction_t* result_storage = emit_store_with_additional_offset(base_address, current_array_offset, result, member_type); 
 
-				//TODO
-				break;
+
 		    }
 
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
 				three_addr_initializer_t* initializer_result = result->value.initializer_value;
+
+				printf("TODO NOT IMPLEMENTED\n");
 
 				//TODO
 				break;
