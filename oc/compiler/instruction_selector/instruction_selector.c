@@ -16407,7 +16407,7 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 
 
 //TODO
-static void handle_struct_initailization(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+static void handle_struct_initialization(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
@@ -16425,10 +16425,47 @@ static void handle_array_initialization(addressing_mode_operands_t* base_address
 	 */
 	generic_type_t* array_type = array_initailizer->type;
 	generic_type_t* member_type = array_type->internal_types.member_type;
+	int32_t member_type_size = member_type->type_size;
 
+	//Maintain the current offset from our perspective inside of this initializer
+	int32_t current_array_offset = 0;
 
+	//Run through every single result
 	for(int32_t i = 0; i < array_initailizer->results.results_current_index; i++){
+		//Extract the result that we're after
+		initializer_result_t* result = get_intializer_result_at_index(array_initailizer, i);
 
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_CONSTANT: {
+				three_addr_const_t* constant_result = result->value.constant_value;
+
+				//TODO
+				break;
+		    }
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				three_addr_var_t* variable_result = result->value.variable_value;
+
+				//TODO
+				break;
+		    }
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+				three_addr_initializer_t* initializer_result = result->value.initializer_value;
+
+				//TODO
+				break;
+		    }
+		}
+
+		//TODO NEED SPECIAL HELPER FOR EMITTING STORE WITH AN OFFSET
+
+		/**
+		 * The current offset is always updated by adding one more member
+		 * type size to it for each element that we process. This is done
+		 * after the fact because we're preparing for the next element
+		 */
+		current_array_offset += member_type_size;
 	}
 
 
@@ -16471,7 +16508,7 @@ static void handle_initialization_statement(instruction_window_t* window){
 			break;
 
 		case INITIALIZER_TYPE_STRUCT:
-			handle_struct_initailization(&base_address, initializer, initialization_statement);
+			handle_struct_initialization(&base_address, initializer, initialization_statement);
 			break;
 	}
 
