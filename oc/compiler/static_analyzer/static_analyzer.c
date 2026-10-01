@@ -1260,7 +1260,7 @@ static void rename_block(basic_block_t* entry){
 	 */
 	while(cursor != NULL){
 		switch(cursor->statement_type){
-			case THREE_ADDR_CODE_PHI_STMT:
+			case THREE_ADDR_CODE_PHI_STMT: {
 				/**
 				 * Phi functions are a special case because they overwrite
 				 * multiple definitions, not just one. We'll use a special
@@ -1268,13 +1268,14 @@ static void rename_block(basic_block_t* entry){
 				 */
 				phi_function_lhs_new_name(cursor->operands.oir.assignee);
 				break;
+			}
 				
 			/**
 			 * Function calls are a special case because they have a parameter
 			 * array that we'll need to conisder
 			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand1);
 				}
@@ -1283,6 +1284,7 @@ static void rename_block(basic_block_t* entry){
 				parameter_results_array_t* func_params = &(cursor->parameter_results);
 
 				for(int32_t k = 0; k < func_params->current_index; k++){
+					//TODO INITIALIZER TYPES HERE
 					parameter_result_t* current_param = get_result_at_index(func_params, k);
 
 					//If we have a variable result we'll run through now and put it in
@@ -1297,11 +1299,31 @@ static void rename_block(basic_block_t* entry){
 				}
 
 				break;
+			}
+
+			/**
+			 * Initializer statements contain initializers, which themselves have nested
+			 * variables and sub initializers. In light of this, we'll need special
+			 * handling for these instructinos
+			 */
+			case THREE_ADDR_CODE_INITIALIZER_STMT: {
+				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.address_operand1);
+				}
+
+				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
+					rhs_new_name(cursor->operands.oir.address_operand2);
+				}
+
+				//TODO
+
+				break;
+			}
 
 			/**
 			 * All other cases we just rename as we see appropriate
 			 */
-			default:
+			default: {
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand1);
 				}
@@ -1327,6 +1349,7 @@ static void rename_block(basic_block_t* entry){
 				}
 
 				break;
+			}
 		}
 
 		//Advance up to the next statement
@@ -1466,9 +1489,6 @@ static inline void create_all_initialization_state_maps(variable_symtab_t* varia
  * This pass will do everything needed to convert the CFG into SSA(static single assignment) form.
  * As a reminder, static single assignment form is an IR form where every variable is assigned
  * only once
- *
- *
- * TODO YOU NEED INITIALIZERS IN ALL OF THIS
  */
 static void convert_cfg_to_ssa_form(cfg_t* cfg, variable_symtab_t* variables){
 	/**
