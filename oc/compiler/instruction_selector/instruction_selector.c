@@ -16090,6 +16090,16 @@ static void handle_load_instruction(instruction_window_t* window){
 
 
 /**
+ * Since sto
+ *
+ */
+static inline void handle_store_instruction_converting_source_move(){
+
+}
+
+
+
+/**
  * Handle a store instruction and account for all memory movement possibilities
  * that take place when we do this store instruction
  */
@@ -16411,9 +16421,37 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
  * be emitted directly into x86 assembly which is why a special handler is required. Note that the additional
  * offset may change the addressing mode. All constants in each addressing mode will need to be copied to
  * avoid inadvertent corruption
+ *
+ * NOTE: this emits a fully fledged x86 statement. NO OIR WILL BE POPULATED
+ *
+ * TODO CONVERTING MOVES AS WELL
  */
 static instruction_t* emit_store_with_additional_offset(addressing_mode_operands_t* base_address, int32_t additional_offset, initializer_result_t* result, generic_type_t* memory_write_type){
+	//Dynamically create the instruction
 	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	//We'll be using this often for our results
+	variable_size_t write_size = get_type_size(memory_write_type);
+
+	/**
+	 * Is a converting move required between the 
+	 */
+	if(is_converting_move_required(memory_write_type, result->value.variable_value->type) == TRUE){
+
+	}
+
+
+
+
+
+	select_move_instruction(jk, variable_size_t source_size, u_int8_t destination_signed, alignment_type_t alignment, memory_access_type_t memory_access_type)
+
+
+
+	switch(base_address->addressing_mode){
+
+	}
+
 
 	return store_instruction;
 }
