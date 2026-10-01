@@ -16090,16 +16090,6 @@ static void handle_load_instruction(instruction_window_t* window){
 
 
 /**
- * Since sto
- *
- */
-static inline void handle_store_instruction_converting_source_move(){
-
-}
-
-
-
-/**
  * Handle a store instruction and account for all memory movement possibilities
  * that take place when we do this store instruction
  */
@@ -16416,60 +16406,16 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 }
 
 
-/**
- * Emit a store instruction using the addressing mode scheme *with* an additional offset added on. This needs to
- * be emitted directly into x86 assembly which is why a special handler is required. Note that the additional
- * offset may change the addressing mode. All constants in each addressing mode will need to be copied to
- * avoid inadvertent corruption
- *
- * NOTE: this emits a fully fledged x86 statement. NO OIR WILL BE POPULATED
- *
- * TODO CONVERTING MOVES AS WELL
- */
-static instruction_t* emit_store_with_additional_offset(addressing_mode_operands_t* base_address, int32_t additional_offset, initializer_result_t* result, generic_type_t* memory_write_type){
-	//Dynamically create the instruction
-	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
-
-	//We'll be using this often for our results
-	variable_size_t write_size = get_type_size(memory_write_type);
-
-	/**
-	 * Is a converting move required between the 
-	 */
-	if(is_converting_move_required(memory_write_type, result->value.variable_value->type) == TRUE){
-
-	}
-
-
-
-
-
-	select_move_instruction(jk, variable_size_t source_size, u_int8_t destination_signed, alignment_type_t alignment, memory_access_type_t memory_access_type)
-
-
-
-	switch(base_address->addressing_mode){
-
-	}
-
-
-	return store_instruction;
-}
-
-
 //TODO
-static void handle_struct_initialization(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
 
 
 /**
- * Handle an array initialization by crawling the given initializer and updating the base address offset every single time
- * we go through here. We may need to recursively call out to helper rules which is fine, so long as we provide
- * them with updated base address info
  */
-static void handle_array_initialization(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
 	/**
 	 * The array type and member type should always be stored inside of this
 	 * given initializer so we can extract that now
@@ -16486,26 +16432,6 @@ static void handle_array_initialization(addressing_mode_operands_t* base_address
 		//Extract the result that we're after
 		initializer_result_t* result = get_intializer_result_at_index(array_initailizer, i);
 
-		switch(result->result_type){
-			case INITIALIZER_RESULT_TYPE_CONSTANT: {
-			case INITIALIZER_RESULT_TYPE_VARIABLE: {
-				instruction_t* result_storage = emit_store_with_additional_offset(base_address, current_array_offset, result, member_type); 
-
-
-		    }
-
-			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				three_addr_initializer_t* initializer_result = result->value.initializer_value;
-
-				printf("TODO NOT IMPLEMENTED\n");
-
-				//TODO
-				break;
-		    }
-		}
-
-		//TODO NEED SPECIAL HELPER FOR EMITTING STORE WITH AN OFFSET
-
 		/**
 		 * The current offset is always updated by adding one more member
 		 * type size to it for each element that we process. This is done
@@ -16520,16 +16446,22 @@ static void handle_array_initialization(addressing_mode_operands_t* base_address
 }
 
 
-
 /**
- * In order to handle an initialization statement, we will rely on the
- * helper to emit the actual initialization portion of this. Note that
- * this will generate a large amount of instructions, so the window
- * will need to be rebuilt afterwards
+ * Convert an initializer statement into OIR store statements. This represents the final
+ * lowering step for intializers before we end up converting it all into x86 assembly. This
+ * step will generate a lot of instructions as each individual member needs at least one store,
+ * with recursive initializers needing more. We will rebuild the window from the very first
+ * statement once we are done with this, and the original instruction will be deleted
  */
-static void handle_initialization_statement(instruction_window_t* window){
+static void convert_initializer_statement_into_OIR_store_statements(instruction_window_t* window){
 	//Assume instruction1 is the initialization
 	instruction_t* initialization_statement = window->instruction1;
+
+	/**
+	 * We'll want to hang onto this for when we rebuild the window after inserting all
+	 * of our store statements. TODO
+	 */
+	instruction_t* before_intializer_stmt = initialization_statement->previous_statement;
 
 	/**
 	 * We will need to know the base address, so we'll pass around this instruction's
@@ -16663,9 +16595,6 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			break;
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			handle_indirect_jump(window);
-			break;
-		case THREE_ADDR_CODE_INITIALIZER_STMT:
-			handle_initialization_statement(window);
 			break;
 
 		/**
