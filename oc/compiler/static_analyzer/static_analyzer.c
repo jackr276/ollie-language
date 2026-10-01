@@ -1854,6 +1854,37 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 
 
 /**
+ * Does the given initializer comply with definite assignment rules. Remember that initializers
+ * can have recursive definitions so this rule itself can be called recursively
+ */
+static u_int8_t check_initializer_for_definite_assignment(instruction_t* instruction, three_addr_initializer_t* initializer){
+	//By default assume success(1)
+	u_int8_t overall_result = SUCCESS;
+
+	//Run through every result
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			//Constants don't matter to use here
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				overall_result &= check_variable_for_definite_assignment(instruction, result->value.variable_value);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				overall_result &= check_initializer_for_definite_assignment(instruction, result->value.initializer_value);
+				break;
+		}
+	}
+
+	return overall_result;
+}
+
+
+/**
  * Does the given instruction comply with the definite assignment rules? We will check 
  * every single eligible variable for compliance. If one variable fails, the whole thing
  * fails out
@@ -1861,6 +1892,8 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
  * NOTE: we assume that the caller will never pass a phi function. Phi functions should never
  * be included in definite assignment analysis because they are not real from the programmer's
  * perspective
+ *
+ * TODO HERE
  */
 static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction){
 	//By default assume SUCCESS(1)
@@ -2229,8 +2262,6 @@ cfg_construction_result_type_t perform_all_static_analysis(cfg_t* cfg, front_end
 	 * after initialize error cases
 	 *
 	 * NOTE: this is a potential fail point for the CFG
-	 *
-	 * TODO NEED INITIALIZER CHECKS
 	 */
 	if(perform_definite_assignment_and_mutability_analysis(cfg) == FAILURE){
 		result = CFG_RESULT_FAILURE;
