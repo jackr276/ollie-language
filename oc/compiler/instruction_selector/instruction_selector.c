@@ -8680,6 +8680,42 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 }
 
 
+/**
+ * Generate an OIR store instruction using the addressing mode operands given *and* accounting
+ * for the given additional offset. 
+ *
+ * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
+ * result that is an actual initializer here. This is just for variables and constants
+ */
+static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_operands_t* base_address, int32_t additional_offset,
+																initializer_result_t* result_to_store, generic_type_t* memory_write_type){
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	/**
+	 * Populate this with all of the info needed to have a fully functional store statement
+	 */
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+
+	/**
+	 * Based on the addressing mode *and8 the value of the additional offset
+	 * we may have an addressing mode that varies slightly from the one
+	 * that was provided
+	 *
+	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
+	 */
+	switch(base_address->addressing_mode){
+
+
+	}
+
+
+
+	return store_instruction;
+}
+
+
 //TODO
 static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction){
 	printf("TODO NOT IMPLEMENTED\n");
