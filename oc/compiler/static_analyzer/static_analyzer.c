@@ -1858,6 +1858,11 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
  * can have recursive definitions so this rule itself can be called recursively
  */
 static u_int8_t check_initializer_for_definite_assignment(instruction_t* instruction, three_addr_initializer_t* initializer){
+	//If it's NULL then we're good just get out
+	if(initializer == NULL){
+		return SUCCESS;
+	}
+
 	//By default assume success(1)
 	u_int8_t overall_result = SUCCESS;
 
@@ -1892,8 +1897,6 @@ static u_int8_t check_initializer_for_definite_assignment(instruction_t* instruc
  * NOTE: we assume that the caller will never pass a phi function. Phi functions should never
  * be included in definite assignment analysis because they are not real from the programmer's
  * perspective
- *
- * TODO HERE
  */
 static inline u_int8_t does_instruction_comply_with_definite_assignment(instruction_t* instruction){
 	//By default assume SUCCESS(1)
@@ -1911,12 +1914,16 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
 
+	//If we have an initializer then we'll check that(null check is in the helper)
+	overall_result &= check_initializer_for_definite_assignment(instruction, instruction->operands.oir.initializer_operand);
+
 	//Check all parameters as well for function calls
 	for(int32_t i = 0; i < instruction->parameter_results.current_index; i++){
 		//Get the parameter result
 		parameter_result_t* result = get_result_at_index(&(instruction->parameter_results), i);
 
 		//If it's a variable we'll check it
+		//TODO WILL NEED SUPPORT HERE
 		if(result->result_type == PARAM_RESULT_TYPE_VAR){
 			overall_result &= check_variable_for_definite_assignment(instruction, result->param_result.variable_result);
 		}
