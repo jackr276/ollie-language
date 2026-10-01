@@ -8681,35 +8681,65 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 
 
 //TODO
-static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction){
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
 
 
 /**
+ * Go through all of the members of the given array initializer and create the equivalent OIR store statement for each one
+ * along the way. In the event that a recursive initializer is hit, we will package up a fresh addressing_mode_operands_t
+ * struct and invoke that
  */
-static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction){
 	/**
 	 * The array type and member type should always be stored inside of this
 	 * given initializer so we can extract that now
 	 */
-	generic_type_t* array_type = array_initailizer->type;
+	generic_type_t* array_type = array_initializer->type;
 	generic_type_t* member_type = array_type->internal_types.member_type;
 	int32_t member_type_size = member_type->type_size;
 
 	//Maintain the current offset from our perspective inside of this initializer
 	int32_t current_array_offset = 0;
 
-	//Run through every single result
-	for(int32_t i = 0; i < array_initailizer->results.results_current_index; i++){
-		//Extract the result that we're after
-		initializer_result_t* result = get_intializer_result_at_index(array_initailizer, i);
+	/**
+	 * Crawl the initializer's members and dispatch to the appropriate rule
+	 * based on each member type. Even though arrays are homogenous in Ollie types,
+	 * the initializer could have a mismatch of variables and constants
+	 */
+	for(int32_t i = 0; i < array_initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(array_initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+			case INITIALIZER_RESULT_TYPE_CONSTANT: {
+
+				break;
+			}
+
+			//TODO
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+				//TODO IF WE HAVE AN OFFSET IT WILL NEED
+				//TO BE ADDED TO THE ADDRESS_OFFSET FIELD IN THE
+				//NEW INITIALIZER HERE AND THE ADDRESSING MODE
+				//WILL NEED TO BE UPDATED
+
+
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+				break;
+			}
+		}
+		
 
 		/**
 		 * The current offset is always updated by adding one more member
 		 * type size to it for each element that we process. This is done
-		 * after the fact because we're preparing for the next element
+		 * after the fact because we're preparing for the next element. Unlike
+		 * with structs, array members are homogenous so this is always the
+		 * same
 		 */
 		current_array_offset += member_type_size;
 	}
