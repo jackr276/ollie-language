@@ -8680,6 +8680,129 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 }
 
 
+//TODO
+static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
+ */
+static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
+	/**
+	 * The array type and member type should always be stored inside of this
+	 * given initializer so we can extract that now
+	 */
+	generic_type_t* array_type = array_initailizer->type;
+	generic_type_t* member_type = array_type->internal_types.member_type;
+	int32_t member_type_size = member_type->type_size;
+
+	//Maintain the current offset from our perspective inside of this initializer
+	int32_t current_array_offset = 0;
+
+	//Run through every single result
+	for(int32_t i = 0; i < array_initailizer->results.results_current_index; i++){
+		//Extract the result that we're after
+		initializer_result_t* result = get_intializer_result_at_index(array_initailizer, i);
+
+		/**
+		 * The current offset is always updated by adding one more member
+		 * type size to it for each element that we process. This is done
+		 * after the fact because we're preparing for the next element
+		 */
+		current_array_offset += member_type_size;
+	}
+
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+}
+
+
+/**
+ * Convert an initializer statement into OIR store statements. This represents the final
+ * lowering step for intializers before we end up converting it all into x86 assembly. This
+ * step will generate a lot of instructions as each individual member needs at least one store,
+ * with recursive initializers needing more. We will rebuild the window from the very first
+ * statement once we are done with this, and the original instruction will be deleted
+ *
+ * NOTE: this function will return the final created statement to the caller
+ */
+static instruction_t* convert_initializer_statement_into_OIR_store_statements(instruction_t* initializer){
+	//Assume instruction1 is the initialization
+	instruction_t* initialization_statement = window->instruction1;
+
+	/**
+	 * We'll want to hang onto this for when we rebuild the window after inserting all
+	 * of our store statements. TODO
+	 */
+	instruction_t* before_intializer_stmt = initialization_statement->previous_statement;
+
+	/**
+	 * We will need to know the base address, so we'll pass around this instruction's
+	 * current base address inside of this specialized struct. We will want to make
+	 * copies of the variables in here when we actually use them, but this will
+	 * give us a jumping off point
+	 */
+	addressing_mode_operands_t base_address = {
+												initialization_statement->operands.oir.address_operand1,
+												initialization_statement->operands.oir.address_operand2,
+												initialization_statement->operands.oir.rip_offset_var,
+												initialization_statement->operands.oir.address_offset,
+												initialization_statement->operands.oir.address_multiplier,
+												initialization_statement->addressing_mode
+											  };
+
+	//Extract the initializer and call out to the appropriate rule
+	three_addr_initializer_t* initializer = initialization_statement->operands.oir.initializer_operand;
+	switch(initializer->initializer_type){
+		case INITIALIZER_TYPE_ARRAY:
+			handle_array_initialization(&base_address, initializer, initialization_statement);
+			break;
+
+		case INITIALIZER_TYPE_STRUCT:
+			handle_struct_initialization(&base_address, initializer, initialization_statement);
+			break;
+	}
+
+	/**
+	 * Once we've reached the end, the original statement is useless. We can delete
+	 * it and rebuild the window around whatever is right before it
+	 */
+	instruction_t* last_initialization_statement = initialization_statement->previous_statement;
+	delete_statement(initialization_statement);
+	reconstruct_window(window, last_initialization_statement);
+}
+
+
+/**
+ * Crawl over the entire function, lowering any initializers that we see into equivalent store statement
+ * chains in OIR. This represents the final lowering step for initializers and will leave the entire function
+ * ready for instruction selection
+ */
+static inline void lower_all_initializer_statements(symtab_function_record_t* function, dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block_to_process = dynamic_array_get_at(function_blocks, i);
+
+		//Run through every statement and perform the lowering
+		instruction_t* instruction_cursor = block_to_process->leader_statement;
+		while(instruction_cursor != NULL){
+			/**
+			 * If we see an initializer call out to the helper. Remember that the
+			 * helper returns a pointer to the last statement created, so we'll need 
+			 * to reassign the cursor to that
+			 */
+			if(instruction_cursor->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT) {
+				instruction_cursor = convert_initializer_statement_into_OIR_store_statements(instruction_cursor);
+			}
+
+			instruction_cursor = instruction_cursor->next_statement;
+		}
+	}
+}
+
+
 /**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
@@ -8766,6 +8889,14 @@ static void simplify(cfg_t* cfg){
 				order_blocks(cfg);
 			}
 		}
+
+		/**
+		 * The very last thing that we'll need to do is run through the function and
+		 * convert all initializer statements from the high level OIR that they come to us
+		 * in into lower-level OIR store statements. This is the final step in priming
+		 * all instructions for instruction selection
+		 */
+		lower_all_initializer_statements(function, &(function->function_blocks));
 	}
 }
 
@@ -16404,101 +16535,6 @@ static inline void handle_stack_deallocation_statement(instruction_t* instructio
 	//And change the type to subtraction
 	instruction->instruction_type = ADDQ;
 }
-
-
-//TODO
-static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-}
-
-
-/**
- */
-static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initailizer, instruction_t* original_instruction){
-	/**
-	 * The array type and member type should always be stored inside of this
-	 * given initializer so we can extract that now
-	 */
-	generic_type_t* array_type = array_initailizer->type;
-	generic_type_t* member_type = array_type->internal_types.member_type;
-	int32_t member_type_size = member_type->type_size;
-
-	//Maintain the current offset from our perspective inside of this initializer
-	int32_t current_array_offset = 0;
-
-	//Run through every single result
-	for(int32_t i = 0; i < array_initailizer->results.results_current_index; i++){
-		//Extract the result that we're after
-		initializer_result_t* result = get_intializer_result_at_index(array_initailizer, i);
-
-		/**
-		 * The current offset is always updated by adding one more member
-		 * type size to it for each element that we process. This is done
-		 * after the fact because we're preparing for the next element
-		 */
-		current_array_offset += member_type_size;
-	}
-
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-}
-
-
-/**
- * Convert an initializer statement into OIR store statements. This represents the final
- * lowering step for intializers before we end up converting it all into x86 assembly. This
- * step will generate a lot of instructions as each individual member needs at least one store,
- * with recursive initializers needing more. We will rebuild the window from the very first
- * statement once we are done with this, and the original instruction will be deleted
- */
-static void convert_initializer_statement_into_OIR_store_statements(instruction_window_t* window){
-	//Assume instruction1 is the initialization
-	instruction_t* initialization_statement = window->instruction1;
-
-	/**
-	 * We'll want to hang onto this for when we rebuild the window after inserting all
-	 * of our store statements. TODO
-	 */
-	instruction_t* before_intializer_stmt = initialization_statement->previous_statement;
-
-	/**
-	 * We will need to know the base address, so we'll pass around this instruction's
-	 * current base address inside of this specialized struct. We will want to make
-	 * copies of the variables in here when we actually use them, but this will
-	 * give us a jumping off point
-	 */
-	addressing_mode_operands_t base_address = {
-												initialization_statement->operands.oir.address_operand1,
-												initialization_statement->operands.oir.address_operand2,
-												initialization_statement->operands.oir.rip_offset_var,
-												initialization_statement->operands.oir.address_offset,
-												initialization_statement->operands.oir.address_multiplier,
-												initialization_statement->addressing_mode
-											  };
-
-	//Extract the initializer and call out to the appropriate rule
-	three_addr_initializer_t* initializer = initialization_statement->operands.oir.initializer_operand;
-	switch(initializer->initializer_type){
-		case INITIALIZER_TYPE_ARRAY:
-			handle_array_initialization(&base_address, initializer, initialization_statement);
-			break;
-
-		case INITIALIZER_TYPE_STRUCT:
-			handle_struct_initialization(&base_address, initializer, initialization_statement);
-			break;
-	}
-
-	/**
-	 * Once we've reached the end, the original statement is useless. We can delete
-	 * it and rebuild the window around whatever is right before it
-	 */
-	instruction_t* last_initialization_statement = initialization_statement->previous_statement;
-	delete_statement(initialization_statement);
-	reconstruct_window(window, last_initialization_statement);
-}
-
 
 
 /**
