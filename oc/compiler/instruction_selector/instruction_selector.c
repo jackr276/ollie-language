@@ -8706,6 +8706,14 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
 	 */
 	switch(base_address->addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+
+			break;
+		}
+
+		case ADDRESSING_MODE_OFFSET_ONLY: {
+
+		}
 
 
 	}

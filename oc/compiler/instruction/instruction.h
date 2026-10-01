@@ -217,6 +217,11 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var);
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);
 
 /**
+ * Emit a constant that is copied from another constant
+ */
+three_addr_const_t* emit_constant_copy(three_addr_const_t* constant);
+
+/**
  * Create and return a constant three address var
  */
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node);

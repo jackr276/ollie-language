@@ -1200,6 +1200,20 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 
 
 /**
+ * Emit a constant that is copied from another constant
+ */
+three_addr_const_t* emit_constant_copy(three_addr_const_t* constant){
+	//Clone the constant
+	three_addr_const_t* emitted_const = calloc(1, sizeof(three_addr_const_t));
+
+	//Direct copy over
+	memcpy(emitted_const, constant, sizeof(three_addr_const_t));
+
+	return emitted_const;
+}
+
+
+/**
  * Emit a push instruction. We only have one kind of pushing - quadwords - we don't
  * deal with getting granular when pushing
  */
