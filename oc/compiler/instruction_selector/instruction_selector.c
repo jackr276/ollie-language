@@ -8776,7 +8776,6 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 				break;
 			}
 		}
-		
 
 		/**
 		 * The current offset is always updated by adding one more member

@@ -1123,7 +1123,7 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
  * 		by whether or not the variable is LIVE_IN at the start of the join
  * 		node. See the full algorithm in the dedicated function
  *
- * 	2.) Non-mutable non-user defined: these variables do have constraints on
+ * 	2.) Non-mutable user defined: these variables do have constraints on
  * 		mutability so we need to keep track of every place where the value
  * 		could be overwritten. To do this, we do not prune SSA using live in
  *		and insert phi functions at every join node that is dominated by
@@ -1451,6 +1451,12 @@ static void rename_block(basic_block_t* entry){
 	 * Once we're done, we'll need to unwind our stack here. Anything that involves an assignee, we'll
 	 * need to pop it's stack so we don't have excessive variable numbers. We'll now iterate over again
 	 * and perform pops whereever we see a variable being assigned
+	 *
+	 * Note that this is done after we recursively rename all blocks that this given block dominates,
+	 * so all of those will have the most up-to-date names with the assignments in here. Once we unwind,
+	 * all blocks that are not dominated by this block(don't have to flow through this block) will not be tainted
+	 * by the numbers on the stack that come in this block, because of course this block is not guaranteed
+	 * to execute before those it does not dominate directly so those numbers in theory don't exist
 	 */
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
