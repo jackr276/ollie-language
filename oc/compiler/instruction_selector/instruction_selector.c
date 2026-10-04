@@ -9163,9 +9163,13 @@ static instruction_t* convert_initializer_statement_into_OIR_store_statements(in
 /**
  * Crawl over the entire function, lowering any initializers that we see into equivalent store statement
  * chains in OIR. This represents the final lowering step for initializers and will leave the entire function
- * ready for instruction selection
+ * ready for instruction selection. This function returns TRUE if we found at least one initializer which
+ * will tell the caller that it needs to trigger additional simplification
  */
-static inline void lower_all_initializer_statements(dynamic_array_t* function_blocks){
+static inline u_int8_t lower_all_initializer_statements(dynamic_array_t* function_blocks){
+	//By default assume we found no initializers
+	u_int8_t found_initializer = FALSE;
+
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block_to_process = dynamic_array_get_at(function_blocks, i);
 
@@ -9176,16 +9180,19 @@ static inline void lower_all_initializer_statements(dynamic_array_t* function_bl
 			 * If we see an initializer call out to the helper. Remember that the
 			 * helper returns a pointer to the last statement created, so we'll need 
 			 * to reassign the cursor to that
-			 *
-			 * TODO WANT A FLAG IF WE EVER DID THIS SO WE CAN SELECTIVELY SIMPLIFY
 			 */
 			if(instruction_cursor->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT) {
+				//Flag that we did find an initializer
+				found_initializer = TRUE;
+
 				instruction_cursor = convert_initializer_statement_into_OIR_store_statements(instruction_cursor);
 			}
 
 			instruction_cursor = instruction_cursor->next_statement;
 		}
 	}
+
+	return found_initializer;
 }
 
 
@@ -9280,18 +9287,20 @@ static void simplify(cfg_t* cfg){
 		 * The very last thing that we'll need to do is run through the function and
 		 * convert all initializer statements from the high level OIR that they come to us
 		 * in into lower-level OIR store statements. This is the final step in priming
-		 * all instructions for instruction selection
+		 * all instructions for instruction selection. This helper will return TRUE
+		 * if we have at least one initializer that was simplified, which will tell us
+		 * that we need to trigger the simplifier
 		 */
-		lower_all_initializer_statements(&(function->function_blocks));
-
-		/**
-		 * After we do all of this, one run final simplifier pass to ensure everything
-		 * is in the simplest form that we can get it in
-		 */
-		do {
-			reset_all_use_counts(&use_count_tracker);
-			populate_use_counts_for_function(&(function->function_blocks));
-		} while(simplifier_pass(function_entry) == TRUE);
+		if(lower_all_initializer_statements(&(function->function_blocks)) == TRUE){
+			/**
+			 * After we do all of this, one run final simplifier pass to ensure everything
+			 * is in the simplest form that we can get it in
+			 */
+			do {
+				reset_all_use_counts(&use_count_tracker);
+				populate_use_counts_for_function(&(function->function_blocks));
+			} while(simplifier_pass(function_entry) == TRUE);
+		}
 	}
 }
 
