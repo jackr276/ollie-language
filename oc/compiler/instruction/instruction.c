@@ -5862,6 +5862,39 @@ instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_a
 
 
 /**
+ * Emit a memory copy statement from one memory region to another. This exists
+ * purely as an OIR statement and is converted to moves later on down the road
+ *
+ * This variation is meant for the most common use case where the destination is
+ * just a base address
+ */
+instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	//Flag as a memory copy statement
+	stmt->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
+
+	//Flag that this is a write to memory and store how much we need to copy
+	stmt->memory_access_type = WRITE_TO_MEMORY;
+	stmt->optional_storage.byte_amount_to_copy = byte_amount_to_copy;
+
+	/**
+	 * In this case we know that we just have a destination address so
+	 * throw it in address op1
+	 */
+	stmt->operands.oir.address_operand1 = destination_address;
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
+	//Store the source as our op1
+	stmt->operands.oir.operand1 = source_memory_region;
+
+	stmt->line_number = line_number;
+	return stmt;
+
+}
+
+
+/**
  * Emit a load statement directly. This should only be used during spilling
  */
 instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_t* stack_pointer, type_symtab_t* symtab, u_int64_t offset, u_int32_t line_number){
