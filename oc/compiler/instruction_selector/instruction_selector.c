@@ -1260,7 +1260,7 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 	 * to the function parameters, the stack region that we're building should sync up with
 	 * what the function we're calling has on hand locally
 	 */
-	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, parameter_type->type_size, call_statement->line_number);
+	instruction_t* copy_instruction = emit_memory_copy_instruction_base_address_only(pass_by_copy_memory_address, copying_from_var, parameter_type->type_size, call_statement->line_number);
 	insert_instruction_before_given(copy_instruction, call_statement);
 }
 
@@ -1546,7 +1546,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 		}
 
 		//Create the memory copy and throw it in before the call statement
-		instruction_t* memory_copy = emit_memory_copy_instruction(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
+		instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
 		insert_instruction_before_given(memory_copy, call_statement);
 	}
 }
