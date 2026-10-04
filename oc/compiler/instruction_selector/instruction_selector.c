@@ -8896,8 +8896,6 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 		store_instruction->operands.oir.constant_operand = result_to_store->value.constant_value;
 	} else {
 		store_instruction->operands.oir.operand1 = result_to_store->value.variable_value;
-
-		//TODO NEED TO ACCOUNT FOR MEMORY ADDRESS VARIABLES
 	}
 
 	return store_instruction;
@@ -9205,6 +9203,15 @@ static void simplify(cfg_t* cfg){
 		 * all instructions for instruction selection
 		 */
 		lower_all_initializer_statements(function, &(function->function_blocks));
+
+		/**
+		 * After we do all of this, one run final simplifier pass to ensure everything
+		 * is in the simplest form that we can get it in
+		 */
+		do {
+			reset_all_use_counts(&use_count_tracker);
+			populate_use_counts_for_function(&(function->function_blocks));
+		} while(simplifier_pass(function_entry) == TRUE);
 	}
 }
 
