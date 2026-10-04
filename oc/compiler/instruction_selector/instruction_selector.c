@@ -8979,17 +8979,27 @@ static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t
 	 * the given result actually is
 	 */
 	for(int32_t i = 0; i < struct_initializer->results.results_current_index; i++){
-		//Extract the initializer itself
+		/**
+		 * We'll need the initializer and the struct member itself here
+		 */
 		initializer_result_t* result = get_intializer_result_at_index(struct_initializer, i);
+		symtab_variable_record_t* struct_record = get_struct_member_at_index(struct_type, i);
+
+		current_offset = struct_record->struct_offset;
 
 		//TODO CURRENT OFFSET UPDATE
 
 		switch(result->result_type){
+			/**
+			 */
 			case INITIALIZER_RESULT_TYPE_VARIABLE:
 			case INITIALIZER_RESULT_TYPE_CONSTANT:{
 
+				break;
 		 	}
 
+			/**
+			 */
 			//TODO
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
 				printf("TODO NOT IMPLEMENTED\n");
