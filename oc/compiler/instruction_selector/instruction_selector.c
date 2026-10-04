@@ -8690,7 +8690,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	addressing_operands_t destination_memory_address = {
 														memory_copy_statement->operands.oir.address_operand1,
 														memory_copy_statement->operands.oir.address_operand2,
-														memory_copy_statement->operands.oir.constant_operand,
+														memory_copy_statement->operands.oir.address_offset,
 														memory_copy_statement->operands.oir.address_multiplier,
 														memory_copy_statement->operands.oir.rip_offset_var,
 														memory_copy_statement->addressing_mode
