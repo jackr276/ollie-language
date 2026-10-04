@@ -8902,8 +8902,68 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 }
 
 
+/**
+ * Create a new addressing mode operands struct based on the original operands given, with an
+ * additional offset added in. This is meant to be used for the recursive initializer rules
+ * where we'll need to pass in the current base address with an additional offset accounted
+ * for
+ */
+static inline addressing_mode_operands_t package_new_addressing_operands_with_additional_offset(addressing_mode_operands_t* original_operands, int32_t offset){
+	//Get a direct copy of these operands
+	addressing_mode_operands_t new_operands = *original_operands;
+
+	//We need to clone this always to avoid different calls stepping over eachother
+	new_operands.address_offset = emit_constant_copy_if_not_null(new_operands.address_offset);
+
+	switch(new_operands.addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+			break;
+
+		case ADDRESSING_MODE_RIP_RELATIVE:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+			break;
+
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+			break;
+
+		/**
+		 * These all already have offsets, so we won't need to change the type at all,
+		 * we just need to sum the additional offset with it
+		 */
+		case ADDRESSING_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			sum_constant_with_raw_int64_value(new_operands.address_offset, i64, offset);
+			break;
+
+		default:
+			trigger_ice_panic("Invalid addressing mode detected");
+			break;
+	}
+
+	return new_operands;
+}
+
+
 //TODO
-static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction){
+static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction){
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
@@ -8954,54 +9014,8 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 			 * create a new offset that accounts for the current offset
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				//Get a direct copy of these operands
-				addressing_mode_operands_t new_operands = *base_address;
-
-				//We need to clone this always to avoid different calls stepping over eachother
-				new_operands.address_offset = emit_constant_copy_if_not_null(new_operands.address_offset);
-
-				switch(new_operands.addressing_mode){
-					case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
-						new_operands.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-						break;
-
-					case ADDRESSING_MODE_REGISTERS_ONLY:
-						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
-						new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-						break;
-
-					case ADDRESSING_MODE_RIP_RELATIVE:
-						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
-						new_operands.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-						break;
-
-					case ADDRESSING_MODE_INDEX_AND_SCALE:
-						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
-						new_operands.addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-						break;
-
-					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
-						new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-						break;
-
-					/**
-					 * These all already have offsets, so we won't need to change the type at all,
-					 * we just need to sum the additional offset with it
-					 */
-					case ADDRESSING_MODE_OFFSET_ONLY:
-					case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-					case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-					case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-					case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-						sum_constant_with_raw_int64_value(new_operands.address_offset, i64, current_array_offset);
-						break;
-
-					default:
-						trigger_ice_panic("Invalid addressing mode detected");
-						break;
-				}
+				//Let the helper do all of our packaging
+				addressing_mode_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_array_offset);
 
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
@@ -9087,7 +9101,7 @@ static instruction_t* convert_initializer_statement_into_OIR_store_statements(in
  * chains in OIR. This represents the final lowering step for initializers and will leave the entire function
  * ready for instruction selection
  */
-static inline void lower_all_initializer_statements(symtab_function_record_t* function, dynamic_array_t* function_blocks){
+static inline void lower_all_initializer_statements(dynamic_array_t* function_blocks){
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block_to_process = dynamic_array_get_at(function_blocks, i);
 
@@ -9202,7 +9216,7 @@ static void simplify(cfg_t* cfg){
 		 * in into lower-level OIR store statements. This is the final step in priming
 		 * all instructions for instruction selection
 		 */
-		lower_all_initializer_statements(function, &(function->function_blocks));
+		lower_all_initializer_statements(&(function->function_blocks));
 
 		/**
 		 * After we do all of this, one run final simplifier pass to ensure everything
