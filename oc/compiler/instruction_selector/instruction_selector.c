@@ -8701,24 +8701,34 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 	/**
 	 * Based on the addressing mode *and8 the value of the additional offset
 	 * we may have an addressing mode that varies slightly from the one
-	 * that was provided
+	 * that was provided. It's only going to really vary though if said additional
+	 * offset is not 0. If it is 0, then we can just copy everything over 
+	 * literally
 	 *
 	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
 	 */
-	switch(base_address->addressing_mode){
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+	if(additional_offset != 0){
+		switch(base_address->addressing_mode){
+			case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
 
-			break;
+				break;
+			}
+
+			case ADDRESSING_MODE_OFFSET_ONLY: {
+
+			}
+
+
 		}
 
-		case ADDRESSING_MODE_OFFSET_ONLY: {
 
-		}
-
+	/**
+	 * Additional offset is 0 so we don't need to do anything besides copy over all of the addressing
+	 * mode operands from the given base address pointer
+	 */
+	} else {
 
 	}
-
-
 
 	return store_instruction;
 }
@@ -8757,9 +8767,16 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 		initializer_result_t* result = get_intializer_result_at_index(array_initializer, i);
 
 		switch(result->result_type){
+			/**
+			 * For variables and constants we will emit the store with the additional
+			 * offset using the helper. The helper itself will deal with cloning the constants
+			 * if needed for us
+			 */
 			case INITIALIZER_RESULT_TYPE_VARIABLE:
 			case INITIALIZER_RESULT_TYPE_CONSTANT: {
-
+				//Emit and get this inserted right *BEFORE* the original
+				instruction_t* result_storage = generate_OIR_store_with_additional_offset(base_address, current_array_offset, result, member_type);
+				insert_instruction_after_given(result_storage, original_instruction);
 				break;
 			}
 
