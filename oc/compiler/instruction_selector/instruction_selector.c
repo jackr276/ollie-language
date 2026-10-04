@@ -8896,6 +8896,8 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 		store_instruction->operands.oir.constant_operand = result_to_store->value.constant_value;
 	} else {
 		store_instruction->operands.oir.operand1 = result_to_store->value.variable_value;
+
+		//TODO NEED TO ACCOUNT FOR MEMORY ADDRESS VARIABLES
 	}
 
 	return store_instruction;
