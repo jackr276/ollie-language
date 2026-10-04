@@ -2542,7 +2542,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
 
@@ -2585,7 +2585,7 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
@@ -2628,7 +2628,7 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
@@ -2671,7 +2671,7 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
  * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
  * our work area
  */
-static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
@@ -2743,17 +2743,18 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 	block->function_defined_in->requires_initial_alignment = TRUE;
 
 	/**
-	 * For memory copy statements, we copy *from* address operand 2 *to* address operand 1
+	 * For memory copy statements, we copy *from* the first operand into
+	 * the addressing mode expression that is stored in the instruction
 	 */
-	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.address_operand2;
-	three_addr_var_t* destination_memory_address_var = memory_copy_statement->operands.oir.address_operand1;
-	
-	/**
-	 * We're going to be wiping the slate clean with how we do the copying so we
-	 * can go ahead and decrement these use counts now
-	 */
-	decrement_use_count_for_variable(source_memory_address_var);
-	decrement_use_count_for_variable(destination_memory_address_var);
+	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.operand1;
+	addressing_operands_t destination_memory_address = {
+														memory_copy_statement->operands.oir.address_operand1,
+														memory_copy_statement->operands.oir.address_operand2,
+														memory_copy_statement->operands.oir.constant_operand,
+														memory_copy_statement->operands.oir.address_multiplier,
+														memory_copy_statement->operands.oir.rip_offset_var,
+														memory_copy_statement->addressing_mode
+														};
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;
@@ -5247,6 +5248,8 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 		/**
 		 * If we have a memory copy statement now is the time where we'll convert that into loads and
 		 * stores
+		 *
+		 * TODO MAY WANT TO MOVE THIS DOWN AND OUT
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 			convert_memory_copy_statement_into_loads_and_stores(window, instruction);
@@ -5421,6 +5424,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	/**
 	 * These statements by now have served their purpose - we can delete them as
 	 * they are no longer needed and have no assembly equivalent
+	 *
+	 * TODO WHY NOT DO THIS WITH ALL STATEMENTS???
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
 		delete_statement(window->instruction1);
@@ -5435,6 +5440,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * where we are not doing any kind of storing or loading, but instead
 	 * pointer arithmetic or grabbing memory addresses. We know for a fact
 	 * that the "op1" is always going to be the memory address
+	 *
+	 * TODO WE MAY WANT TO REWORK THIS INTO ITS OWN PASS
 	 */
 	perform_memory_address_remediations(window, window->instruction1, &changed);
 	perform_memory_address_remediations(window, window->instruction2, &changed);
