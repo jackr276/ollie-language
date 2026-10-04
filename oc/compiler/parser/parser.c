@@ -827,11 +827,10 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			}
 
 			/**
-			 * If we somehow get here and we have either an array type
-			 * this is incorrect. This type can only be initialized using
-			 * the initializer strategy
+			 * If we get here with an array type then this is incorrect. Array types can only
+			 * be initialized using the [] syntax
 			 */
-			if(target_type->type_class == TYPE_CLASS_ARRAY || target_type->type_class == TYPE_CLASS_STRUCT){
+			if(target_type->type_class == TYPE_CLASS_ARRAY){
 				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
 				return print_and_return_null(info, parser_line_num);
 			}

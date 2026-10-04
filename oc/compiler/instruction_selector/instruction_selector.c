@@ -139,6 +139,20 @@ static inline void trigger_ice_panic(char* message){
 
 
 /**
+ * Is the given type always assigned by copy?
+ */
+static inline u_int8_t is_type_assigned_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Simple utility for us to print out an instruction window in its three address code
  * (before instruction selection) format
  */
@@ -8721,11 +8735,19 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
 
 	/**
-	 * Populate this with all of the info needed to have a fully functional store statement
+	 * If we have a type that is not assigned by copy we will need
+	 * a store statement. Otherwise if we have a type that is assigned by copy
+	 * we will need a memory copy statement
 	 */
-	store_instruction->memory_access_type = WRITE_TO_MEMORY;
-	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	if(is_type_assigned_by_copy(memory_write_type) == FALSE){
+		store_instruction->memory_access_type = WRITE_TO_MEMORY;
+		store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+		store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	} else {
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
+
 
 	/**
 	 * Based on the addressing mode *and8 the value of the additional offset
