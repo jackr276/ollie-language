@@ -27,6 +27,21 @@
  * as three address code statements, and eventually become assembly instructions
  */
 typedef struct instruction_t instruction_t;
+typedef struct addressing_operands_t addressing_operands_t;
+
+/**
+ * This utility struct is used for passing around addressing
+ * operands when we don't want to pass everything at once
+ */
+struct addressing_operands_t {
+	three_addr_const_t* address_offset;
+	three_addr_var_t* address_operand1;
+	three_addr_var_t* address_operand2;
+	u_int64_t address_multiplier;
+	three_addr_var_t* rip_offset_var;
+	memory_addressing_mode_t addressing_mode;
+};
+
 
 /**
  * Are we forcing something to be signed or unsigned

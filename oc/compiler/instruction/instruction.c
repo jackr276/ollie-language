@@ -2588,12 +2588,15 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		/**
 		 * Specialized memory copy statement. This exists for deep
 		 * copies from struct to struct or union to union
+		 *
+		 * Memory copies store the destination address as an OIR addressing
+		 * mode instruction while they store the source as a singular operand in op1
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 			fprintf(fl, "memory copy %ld bytes ", stmt->optional_storage.byte_amount_to_copy);
-			print_variable(fl, stmt->operands.oir.address_operand1, PRINTING_VAR_INLINE);
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
-			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
