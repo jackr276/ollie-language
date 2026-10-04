@@ -5433,18 +5433,6 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 			*changed = TRUE;
 			break;
 
-		/**
-		 * If we have a memory copy statement now is the time where we'll convert that into loads and
-		 * stores
-		 *
-		 * TODO MAY WANT TO MOVE THIS DOWN AND OUT
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, instruction);
-
-			*changed = TRUE;
-			break;
-
 		//By default do nothing
 		default:
 			break;
@@ -5592,6 +5580,23 @@ static inline void combine_binary_operation_with_source_operand_load(instruction
 
 
 /**
+ * If we find a THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION statement, it is by this point entirely
+ * useless to us. Due to this, we can just delete them as we find them
+ */
+static inline void remove_memory_region_init_statement_if_found(instruction_window_t* window, u_int8_t* changed){
+	//Not at all applicable for just leave
+	if(window->instruction1 == NULL || window->instruction1->statement_type != THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
+		return;
+	}
+
+	//Delete and rework as needed
+	delete_statement(window->instruction1);
+	reconstruct_window(window, window->instruction1->next_statement);
+	*changed = TRUE;
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -5612,15 +5617,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	/**
 	 * These statements by now have served their purpose - we can delete them as
 	 * they are no longer needed and have no assembly equivalent
-	 *
-	 * TODO WHY NOT DO THIS WITH ALL STATEMENTS???
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
-		delete_statement(window->instruction1);
-		reconstruct_window(window, window->instruction2);
-		changed = TRUE;
-	}
-	
+	remove_memory_region_init_statement_if_found(window, &changed);
+
 	/**
 	 * Memory address rememediation - if we have non store/load
 	 * instructions and we want to remediate their memory addresses,
@@ -5628,8 +5627,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * where we are not doing any kind of storing or loading, but instead
 	 * pointer arithmetic or grabbing memory addresses. We know for a fact
 	 * that the "op1" is always going to be the memory address
-	 *
-	 * TODO WE MAY WANT TO REWORK THIS INTO ITS OWN PASS
 	 */
 	perform_memory_address_remediations(window, window->instruction1, &changed);
 	perform_memory_address_remediations(window, window->instruction2, &changed);
@@ -7289,7 +7286,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
 	/**
 	 * ================== Combining loads with source arguments for binary operations =========================
 	 * In x86, many binary operations support having a source operand that is from memory. Doing this condenses
@@ -7307,6 +7303,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		combine_binary_operation_with_source_operand_load(window);
 		changed = TRUE;
 	}
+
+	/**
+	 * ================================ Memory copy statement remediation ====================================
+	 */
 
 	//Return whether or not we changed the block return changed;
 	return changed;
