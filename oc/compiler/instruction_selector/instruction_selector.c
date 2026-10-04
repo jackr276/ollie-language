@@ -8747,7 +8747,7 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 			 */
 			case ADDRESSING_MODE_OFFSET_ONLY: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 				//Add this additional offset in
@@ -8755,7 +8755,29 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 				break;
 			}
 
+			/**
+			 * Going to end up with something like store 4(x_0, y_0) <- 5
+			 */
 			case ADDRESSING_MODE_REGISTERS_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				break;
+			}
+
+			/**
+			 * We're going to end up with something like store 4 + 8(x_0, y_0) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
 			}
 
 		}
@@ -8775,7 +8797,7 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 		store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
 	}
 
-	//TODO DO THE STORAGE
+	//TODO DO THE STORAGE OF RESULTS
 
 	return store_instruction;
 }
