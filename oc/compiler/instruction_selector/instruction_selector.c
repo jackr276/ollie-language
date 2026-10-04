@@ -44,9 +44,6 @@ static cfg_t* cfg_reference;
 //Maintain a reference to the use count tracker
 static use_count_tracker_t use_count_tracker;
 
-static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
-static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
-
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 //Specialized struct for passing addressing mode operands around
@@ -123,6 +120,11 @@ struct addressing_mode_operands_t {
 	//Tells us what mode we were in
 	memory_addressing_mode_t addressing_mode;
 };
+
+static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
+static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
+static void convert_struct_initiailizer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
 
 
 /**
@@ -9001,16 +9003,32 @@ static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t
 		 	}
 
 			/**
+			 * For a sub-initializer we will need to recursively invoke the initializer
+			 * rule. Before doing that, we will need to create a new operands struct and
+			 * create a new offset that accounts for the current offset
 			 */
-			//TODO
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
+				//Let the helper do all of our packaging
+				addressing_mode_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_offset);
 
-		  	}
-			//TODO
+				/**
+				 * Now that we've packaged up the new operands, we can recursively call
+				 * the appropriate emitter based on the initializer result
+				 */
+				three_addr_initializer_t* initializer = result->value.initializer_value;
+				switch(initializer->initializer_type){
+					case INITIALIZER_TYPE_ARRAY:
+						convert_array_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
+
+					case INITIALIZER_TYPE_STRUCT:
+						convert_struct_intializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
+				}
+
+				break;
+			}
 		}
-
 	}
 }
 
