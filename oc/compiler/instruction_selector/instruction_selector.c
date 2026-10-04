@@ -165,6 +165,27 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * Clone a constant. This will create separate memory so we maintain
+ * complete separation
+ */
+static inline three_addr_const_t* copy_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
+}
+
+
+/**
  * Quick helper to see if an instruction is a binary operation with a constant - this
  * also handles NULL checking
  */
@@ -2542,7 +2563,6 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 	store_instruction->type_storage.memory_read_write_type = memory_write_type;
 
-
 	/**
 	 * Based on the addressing mode *and8 the value of the additional offset
 	 * we may have an addressing mode that varies slightly from the one
@@ -2576,7 +2596,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 */
 			case ADDRESSING_MODE_OFFSET_ONLY: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 				//Add this additional offset in
@@ -2601,7 +2621,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 				//Add this additional offset in
@@ -2626,7 +2646,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
 				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 				//Add this additional offset in
@@ -2653,7 +2673,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
 				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 				//Add this additional offset in
@@ -2678,7 +2698,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 				//Add this additional offset in
@@ -2687,8 +2707,8 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			}
 
 			default: {
-				trigger_ice_panic("Invalid addressing mode detected");
-				break;
+				fprintf(stderr, "Invalid addressing mode detected");
+				exit(1);
 		 	}
 		}
 
@@ -2704,7 +2724,9 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 		store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
 
 		//Because of the potential for address offset manipulation we need this to be distinct
-		store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
+		if(base_address->address_offset != NULL){
+			store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+		}
 	}
 
 	//Populate the storee and exit
@@ -2734,7 +2756,6 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 16 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, (*last_instruction)->line_number);
@@ -2743,14 +2764,10 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, double_quad_word, (*last_instruction)->line_number);
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, double_quad_word);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -2777,7 +2794,6 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 8 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, (*last_instruction)->line_number);
@@ -2786,14 +2802,10 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i64, (*last_instruction)->line_number);
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i64);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -2820,7 +2832,6 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 4 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, (*last_instruction)->line_number);
@@ -2829,14 +2840,10 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i32, (*last_instruction)->line_number);
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i32);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -2863,7 +2870,6 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 
 	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
 
 	//First load the 2 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, (*last_instruction)->line_number);
@@ -2872,14 +2878,10 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 	insert_instruction_after_given(load_instruction, *last_instruction);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i16, (*last_instruction)->line_number);
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i16);
 
 	//The store goes right after the load
 	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
 
 	//Finally update the reference
 	*last_instruction = store_instruction;
@@ -2964,7 +2966,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
@@ -2976,7 +2978,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
@@ -2988,7 +2990,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
@@ -3000,7 +3002,7 @@ static void convert_memory_copy_statement_into_loads_and_stores(instruction_wind
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
