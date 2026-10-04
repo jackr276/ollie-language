@@ -8681,6 +8681,22 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 
 
 /**
+ * Emit a variable copy if and only if this is not a NULL pointer
+ */
+static inline three_addr_var_t* emit_variable_copy_if_not_null(three_addr_var_t* variable){
+	return variable != NULL ? emit_var_copy(variable) : NULL;
+}
+
+
+/**
+ * Emit a constant copy if and only if this is not a NULL pointer
+ */
+static inline three_addr_const_t* emit_constant_copy_if_not_null(three_addr_const_t* constant){
+	return constant != NULL ? emit_constant_copy(constant) : NULL;
+}
+
+
+/**
  * Generate an OIR store instruction using the addressing mode operands given *and* accounting
  * for the given additional offset. 
  *
@@ -8727,7 +8743,14 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 	 * mode operands from the given base address pointer
 	 */
 	} else {
+		store_instruction->addressing_mode = base_address->addressing_mode;
+		store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+		store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+		store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+		store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
 
+		//Because of the potential for address offset manipulation we need this to be distinct
+		store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
 	}
 
 	return store_instruction;
