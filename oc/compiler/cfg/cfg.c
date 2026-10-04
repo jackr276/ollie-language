@@ -1972,7 +1972,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 					 * It is not a guarantee that the return variable will always be a stack variable, so we cannot rely on that
 					 * stack region size for the byte amount to copy in here
 					 */
-					instruction_t* copy_to_ret_region = emit_memory_copy_instruction(return_by_copy_address_var, return_variable, ret_node->inferred_type->type_size, ret_node->line_number);
+					instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(return_by_copy_address_var, return_variable, ret_node->inferred_type->type_size, ret_node->line_number);
 
 					//Add this into the block
 					add_statement(current, copy_to_ret_region);
@@ -6341,7 +6341,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
 				//Emit the copy from the left hand var to the final op1
-				instruction_t* copy_statement = emit_memory_copy_instruction(left_hand_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(left_hand_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
 
 				//Get it into the block
 				add_statement(current_block, copy_statement);		
@@ -12084,7 +12084,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 */
 			if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
 				//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
-				instruction_t* copy_statement = emit_memory_copy_instruction(let_variable, let_result_var, let_variable->type->type_size, expression_node->line_number);
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(let_variable, let_result_var, let_variable->type->type_size, expression_node->line_number);
 
 				//Get it into the block
 				add_statement(current_block, copy_statement);
@@ -13231,9 +13231,15 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
 
-			//We only need these two variables
+			//Clone all variables over
 			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
 			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
+			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+
+			//First operand is the source so we'll need that
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 
 			//We need to know how much copying must be done
 			new_instruction->optional_storage.byte_amount_to_copy = source_instruction->optional_storage.byte_amount_to_copy;
@@ -13576,10 +13582,10 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 
 		} else {
 			//This is as easy as memory copying and adding it in
-			instruction_t* memory_copy = emit_memory_copy_instruction(emit_memory_address_var(temp_var), 
-																		result->param_result.variable_result,
-																		elaborated_type->type_size,
-																		line_number);
+			instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(emit_memory_address_var(temp_var),
+																						result->param_result.variable_result,
+																						elaborated_type->type_size,
+																						line_number);
 			add_statement(function_entry, memory_copy);
 		}
 	}
@@ -13718,10 +13724,10 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 * Once we've initialized we can do the memory copy. Note that this is always
 			 * going to be a variable so we don't need to worry about constants
 			 */
-			instruction_t* memory_copy = emit_memory_copy_instruction(emit_memory_address_var(cloned_parameter), 
-															 			result->param_result.variable_result, 
-															 			parameter_type->type_size,
-															 			line_number);
+			instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(emit_memory_address_var(cloned_parameter),
+															 							result->param_result.variable_result, 
+															 							parameter_type->type_size,
+															 							line_number);
 			add_statement(function_entry, memory_copy);
 		}
 	}

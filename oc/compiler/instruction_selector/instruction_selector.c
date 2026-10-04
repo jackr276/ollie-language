@@ -50,6 +50,9 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
+//The copy pair struct for our copy pair emittal
+typedef struct instruction_copy_pair_t instruction_copy_pair_t;
+
 /**
  * Will we be printing these out as instructions or as three address code
  * statements?
@@ -103,6 +106,16 @@ struct instruction_window_t{
 	instruction_t* instruction1;
 	instruction_t* instruction2;
 	instruction_t* instruction3;
+};
+
+
+/**
+ * An instruction copy pair struct contains a load and a store
+ * instruction. The result of the load is the source for the store
+ */
+struct instruction_copy_pair_t {
+	instruction_t* load_instruction;
+	instruction_t* store_instruction;
 };
 
 
@@ -161,6 +174,27 @@ static void print_instruction_window(instruction_window_t* window){
 	}
 
 	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Clone a constant. This will create separate memory so we maintain
+ * complete separation
+ */
+static inline three_addr_const_t* copy_constant(three_addr_const_t* constant){
+	//If it's empty just leave
+	if(constant == NULL){
+		return NULL;
+	}
+
+	//Complete duplication
+	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
+
+	//And a full copy over
+	memcpy(copy, constant, sizeof(three_addr_const_t));
+
+	//Give it back
+	return copy;
 }
 
 
@@ -1260,7 +1294,7 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 	 * to the function parameters, the stack region that we're building should sync up with
 	 * what the function we're calling has on hand locally
 	 */
-	instruction_t* copy_instruction = emit_memory_copy_instruction(pass_by_copy_memory_address, copying_from_var, parameter_type->type_size, call_statement->line_number);
+	instruction_t* copy_instruction = emit_memory_copy_instruction_base_address_only(pass_by_copy_memory_address, copying_from_var, parameter_type->type_size, call_statement->line_number);
 	insert_instruction_before_given(copy_instruction, call_statement);
 }
 
@@ -1546,7 +1580,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 		}
 
 		//Create the memory copy and throw it in before the call statement
-		instruction_t* memory_copy = emit_memory_copy_instruction(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
+		instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
 		insert_instruction_before_given(memory_copy, call_statement);
 	}
 }
@@ -2528,315 +2562,189 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 
 /**
- * Emit a 16 byte load/store copy instruction pair. This instruction will be using the specialized
- * movdqu instruction when it eventually gets selected later on down the road and will use the specialied
- * F128 basic type to represent the 16 byte copy
+ * Generate an OIR store instruction using the addressing mode operands given *and* accounting
+ * for the given additional offset. 
  *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
- *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
+ * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
+ * result that is an actual initializer here. This is just for variables and constants
  */
-static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
-	//Double quad word storage variable here
-	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
-
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
-
-	//First load the 16 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, double_quad_word, (*last_instruction)->line_number);
-
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
-}
-
-
-/**
- * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
- * it gets instruction selected down the road
- *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
- *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
- */
-static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
-	//Quad word storage variable here
-	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
-
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
-
-	//First load the 8 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i64, (*last_instruction)->line_number);
-
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
-}
-
-
-/**
- * Emit a 4 byte load/store copy instruction pair. This instruction will use a regular movl and an i32 when
- * it gets instruction selected down the road
- *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
- *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
- */
-static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
-	//Double word storage variable here
-	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
-
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
-
-	//First load the 4 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i32, (*last_instruction)->line_number);
-
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
-}
-
-
-/**
- * Emit a 2 byte load/store copy instruction pair. This instruction will use a regular movw and an i16 when
- * it gets instruction selected down the road
- *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
- *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
- */
-static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, three_addr_var_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
-	//Word storage variable here
-	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
-
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-	three_addr_const_t* dest_offset_constant = emit_direct_integer_or_char_constant(current_offset, i64);
-
-	//First load the 2 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(dest_memory_address, dest_offset_constant, temporary_storage_variable, i16, (*last_instruction)->line_number);
-
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Update the use counts
-	increment_use_count_for_variable(source_memory_address);
-	increment_use_count_for_variable(dest_memory_address);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
-}
-
-
-/**
- * A memory copy instruction that is only one statement inside of OIR will 
- * routinely balloon to 10/20 statements inside of actual assembly. The
- * most that we can copy in a two instruction pair is 16 bytes. We may
- * need to scale that down if we have a fractional part of the struct/union
- * remaining to copy
- *
- * General idea:
- * 	Say we have a struct that occupies 40 bytes of memory. We will need
- * 	to chunk this into 16 + 16 + 8 bytes of copying. Each copy takes
- * 	2 instructions so we will end up producing at least 6 instructions to make
- * 	this happen
- *
- * 	memory copy MEM<x> <- MEM<y>
- * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
- *
- * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
- * 	 movaps %xmm2, 48(%rsp)  <--- Store 16 byte chunk #1
- * 	 movdqu 16(%rsp), %xmm2  <--- Load 16 byte chunk #2
- * 	 movaps %xmm2, 64(%rsp)  <--- Store 16 byte chunk #2
- * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
- * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
- * 	
- *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
- *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
- *	 movq/movl/movw etc.
- *
- *	 In order to simplify things, we will first be converting these all into load/store operations and will
- *	 allow the existing processes to convert from there inside of the instruction selector itself. This ensures
- *	 that we maintain all of the existing logic around memory address variables
- */
-static void convert_memory_copy_statement_into_loads_and_stores(instruction_window_t* window_to_rebuild, instruction_t* memory_copy_statement){
-	/**
-	 * Since this function performs a copy assignment, we'll need to make sure that everything here 
-	 * is going to be aligned so that we can use x86 aligned moves. The initial alignment
-	 * flag will tell us that we need to account for the 8 bytes that a call offsets
-	 * on the stack frame. We wait to set this flag until we get here in the instruction
-	 * simplifier for simplicity, because we know that every memory copy must flow through here
-	 */
-	basic_block_t* block = memory_copy_statement->block_contained_in;
-	block->function_defined_in->requires_initial_alignment = TRUE;
+static instruction_t* generate_store_instruction_from_addressing_operands(addressing_operands_t* base_address, int32_t additional_offset,
+																			three_addr_var_t* storee, generic_type_t* memory_write_type){
+	//Allocate and populate with what we need generically
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
 
 	/**
-	 * For memory copy statements, we copy *from* address operand 2 *to* address operand 1
+	 * Based on the addressing mode *and8 the value of the additional offset
+	 * we may have an addressing mode that varies slightly from the one
+	 * that was provided. It's only going to really vary though if said additional
+	 * offset is not 0. If it is 0, then we can just copy everything over 
+	 * literally
+	 *
+	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
 	 */
-	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.address_operand2;
-	three_addr_var_t* destination_memory_address_var = memory_copy_statement->operands.oir.address_operand1;
-	
-	/**
-	 * We're going to be wiping the slate clean with how we do the copying so we
-	 * can go ahead and decrement these use counts now
-	 */
-	decrement_use_count_for_variable(source_memory_address_var);
-	decrement_use_count_for_variable(destination_memory_address_var);
-
-	//Maintain the current offset. This is going to be the same for the source and destination
-	u_int64_t current_offset = 0;
-
-	/**
-	 * Due to unique situations that we may enounter(like pass by copy parameters), we may need
-	 * to adjust the memory address that the source has if we're copying after a new stack allocation
-	 * statement. We maintain a base adjustment amoutn just for this purpose
-	 */
-	u_int64_t source_adjustment = source_memory_address_var->memory_address_base_adjustment;
-
-	//We always use the dedicated field to determine how many bytes we should be copying
-	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
-
-	//We need to keep track of the last instruction. This will be constantly updated by every function we call
-	instruction_t* last_instruction = memory_copy_statement;
-
-	do {
+	if(additional_offset != 0){
 		/**
-		 * More than 16 bytes remain - we will tackle this using a 16
-		 * byte copy
+		 * Remember that ending up in here means that the constant is specifically
+		 * nonzero so we're going to need to change addressing modes that don't have
+		 * constants to ones that do
 		 */
-		if(remaining_copy_amount >= 16) {
-			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+		switch(base_address->addressing_mode){
+			/**
+			 * We'll end up with something like store 4(x_0) <- 5
+			 */
+			case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				break;
+			}
 
-			//We copied 16 so we knock down how much we have left
-			remaining_copy_amount -= 16;
+			/**
+			 * With this if we have an additional offset of 4 and already
+			 * have something like store 4(x_0) <- 5 we'll just add to it
+			 * to get store 8(x_0) <- 5
+			 */
+			case ADDRESSING_MODE_OFFSET_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
-			//The current offset has now increased by 16
-			current_offset += 16;
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
 
-		/**
-		 * More than 8 but less than 16, we will use a regular movq for this
-		 */
-		} else if(remaining_copy_amount >= 8) {
-			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+			/**
+			 * Going to end up with something like store 4(x_0, y_0) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				break;
+			}
 
-			//We copied 8 so we knock down how much we have left
-			remaining_copy_amount -= 8;
+			/**
+			 * We're going to end up with something like store 4 + 8(x_0, y_0) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
-			//The current offset has now increased by 8
-			current_offset += 8;
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
 
-		/**
-		 * More than 4 but less than 8, we will use a movl for this
-		 */
-		} else if(remaining_copy_amount >= 4) {
-			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+			/**
+			 * We'll get something like store 4(, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_INDEX_AND_SCALE: {
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+				break;
+			}
 
-			//We copied 4 so we knock down how much we have left
-			remaining_copy_amount -= 4;
+			/**
+			 * We'll get something like store 4 + 8(, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
-			//The current offset has now increased by 4
-			current_offset += 4;
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+		 	}
 
-		/**
-		 * More than 2 but less than 4 - copy 2 at a time
-		 */
-		} else if(remaining_copy_amount >= 2) {
-			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, destination_memory_address_var, current_offset, source_adjustment);
+			/**
+			 * We'll get something like store 4(x_0, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				break;
+			}
 
-			//We copied 2 so we knock down how much we have left
-			remaining_copy_amount -= 2;
+			/**
+			 * We'll get something like store 4+8(x_0, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
-			//The current offset has now increased by 2
-			current_offset += 2;
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
 
-		/**
-		 * Anything less is completely invalid and we should error - this likely means we have 
-		 * an issue somewhere else in the system that needs to be addressed
-		 */
-		} else {
-			fprintf(stderr, "Fatal Internal Compiler Error: Remaining copy amount for a memory copy was less than 2 bytes\n");
-			exit(1);
+			/**
+			 * We'll get something like store 4+x_0(%rip) <- 5
+			 */
+			case ADDRESSING_MODE_RIP_RELATIVE: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				break;
+			}
+
+			/**
+			 * We'll get something like store 4+8+x_0(%rip) <- 5
+			 */
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
+
+			default: {
+				fprintf(stderr, "Invalid addressing mode detected");
+				exit(1);
+		 	}
 		}
 
-	} while(remaining_copy_amount > 0);
+	/**
+	 * Additional offset is 0 so we don't need to do anything besides copy over all of the addressing
+	 * mode operands from the given base address pointer
+	 */
+	} else {
+		store_instruction->addressing_mode = base_address->addressing_mode;
+		store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+		store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+		store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+		store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
 
-	//Now we can delete the old memory copy instruction
-	delete_statement(memory_copy_statement);
+		//Because of the potential for address offset manipulation we need this to be distinct
+		if(base_address->address_offset != NULL){
+			store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+		}
+	}
 
-	//And we will reorganize the window around the last instruction we've inserted
-	reconstruct_window(window_to_rebuild, last_instruction);
+	//Populate the storee and exit
+	store_instruction->operands.oir.operand1 = storee;
+	return store_instruction;
 }
 
 
@@ -5244,16 +5152,6 @@ static inline void perform_memory_address_remediations(instruction_window_t* win
 			*changed = TRUE;
 			break;
 
-		/**
-		 * If we have a memory copy statement now is the time where we'll convert that into loads and
-		 * stores
-		 */
-		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-			convert_memory_copy_statement_into_loads_and_stores(window, instruction);
-
-			*changed = TRUE;
-			break;
-
 		//By default do nothing
 		default:
 			break;
@@ -5401,6 +5299,23 @@ static inline void combine_binary_operation_with_source_operand_load(instruction
 
 
 /**
+ * If we find a THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION statement, it is by this point entirely
+ * useless to us. Due to this, we can just delete them as we find them
+ */
+static inline void remove_memory_region_init_statement_if_found(instruction_window_t* window, u_int8_t* changed){
+	//Not at all applicable for just leave
+	if(window->instruction1 == NULL || window->instruction1->statement_type != THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
+		return;
+	}
+
+	//Delete and rework as needed
+	delete_statement(window->instruction1);
+	reconstruct_window(window, window->instruction1->next_statement);
+	*changed = TRUE;
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -5422,12 +5337,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * These statements by now have served their purpose - we can delete them as
 	 * they are no longer needed and have no assembly equivalent
 	 */
-	if(window->instruction1->statement_type == THREE_ADDR_CODE_MEMORY_REGION_INITIALIZATION){
-		delete_statement(window->instruction1);
-		reconstruct_window(window, window->instruction2);
-		changed = TRUE;
-	}
-	
+	remove_memory_region_init_statement_if_found(window, &changed);
+
 	/**
 	 * Memory address rememediation - if we have non store/load
 	 * instructions and we want to remediate their memory addresses,
@@ -7094,7 +7005,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
 	/**
 	 * ================== Combining loads with source arguments for binary operations =========================
 	 * In x86, many binary operations support having a source operand that is from memory. Doing this condenses
@@ -7112,6 +7022,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		combine_binary_operation_with_source_operand_load(window);
 		changed = TRUE;
 	}
+
+	/**
+	 * ================================ Memory copy statement remediation ====================================
+	 * Now that this window has had the opportunity to be simplified, we can go through and convert any memory
+	 * copy statements into equivalent load and store statements. We do this now as opposed to later to give a chance
+	 * for the addressing mode operation inside of the memory copy to be fully simplified before we 
+	 * 
+	 */
 
 	//Return whether or not we changed the block return changed;
 	return changed;
@@ -8581,6 +8499,307 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 
 
 /**
+ * Emit a 16 byte load/store copy instruction pair. This instruction will be using the specialized
+ * movdqu instruction when it eventually gets selected later on down the road and will use the specialied
+ * F128 basic type to represent the 16 byte copy
+ *
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
+ *
+ * This helper will return a copy pair struct that contains the load and store instructions
+ */
+static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+	//Double quad word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+
+	//First load the 16 bytes out of memory
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, 0);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, double_quad_word);
+
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
+}
+
+
+/**
+ * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
+ * it gets instruction selected down the road
+ *
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
+ *
+ * This helper will return a copy pair struct that contains the load and store instructions
+ */
+static inline instruction_copy_pair_t emit_8_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+	//Quad word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+
+	//First load the 8 bytes out of memory
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, 0);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i64);
+
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
+}
+
+
+/**
+ * Emit a 4 byte load/store copy instruction pair. This instruction will use a regular movl and an i32 when
+ * it gets instruction selected down the road
+ *
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
+ *
+ * This helper will return a copy pair struct that contains the load and store instructions
+ */
+static inline instruction_copy_pair_t emit_4_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+	//Double word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+
+	//First load the 4 bytes out of memory
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, 0);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i32);
+
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
+}
+
+
+/**
+ * Emit a 2 byte load/store copy instruction pair. This instruction will use a regular movw and an i16 when
+ * it gets instruction selected down the road
+ *
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
+ *
+ * This helper will return a copy pair struct that contains the load and store instructions
+ */
+static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+	//Word storage variable here
+	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
+
+	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
+	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+
+	//First load the 2 bytes out of memory
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, 0);
+
+	//Now emit the corresponding store to take that retrieved memory and put it into the destination
+	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i16);
+
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
+}
+
+
+/**
+ * A memory copy instruction that is only one statement inside of OIR will 
+ * routinely balloon to 10/20 statements inside of actual assembly. The
+ * most that we can copy in a two instruction pair is 16 bytes. We may
+ * need to scale that down if we have a fractional part of the struct/union
+ * remaining to copy
+ *
+ * General idea:
+ * 	Say we have a struct that occupies 40 bytes of memory. We will need
+ * 	to chunk this into 16 + 16 + 8 bytes of copying. Each copy takes
+ * 	2 instructions so we will end up producing at least 6 instructions to make
+ * 	this happen
+ *
+ * 	memory copy MEM<x> <- MEM<y>
+ * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
+ *
+ * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
+ * 	 movaps %xmm2, 48(%rsp)  <--- Store 16 byte chunk #1
+ * 	 movdqu 16(%rsp), %xmm2  <--- Load 16 byte chunk #2
+ * 	 movaps %xmm2, 64(%rsp)  <--- Store 16 byte chunk #2
+ * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
+ * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
+ * 	
+ *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
+ *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
+ *	 movq/movl/movw etc.
+ *
+ *	 In order to simplify things, we will first be converting these all into load/store operations and will
+ *	 allow the existing processes to convert from there inside of the instruction selector itself. This ensures
+ *	 that we maintain all of the existing logic around memory address variables
+ *
+ * NOTE: this will return a pointer to the last instruction that was emitted by this function
+ */
+static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instruction_t* memory_copy_statement){
+	/**
+	 * Since this function performs a copy assignment, we'll need to make sure that everything here 
+	 * is going to be aligned so that we can use x86 aligned moves. The initial alignment
+	 * flag will tell us that we need to account for the 8 bytes that a call offsets
+	 * on the stack frame. We wait to set this flag until we get here in the instruction
+	 * simplifier for simplicity, because we know that every memory copy must flow through here
+	 */
+	basic_block_t* block = memory_copy_statement->block_contained_in;
+	block->function_defined_in->requires_initial_alignment = TRUE;
+
+	/**
+	 * For memory copy statements, we copy *from* the first operand into
+	 * the addressing mode expression that is stored in the instruction
+	 */
+	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.operand1;
+	addressing_operands_t destination_memory_address = {
+														memory_copy_statement->operands.oir.address_operand1,
+														memory_copy_statement->operands.oir.address_operand2,
+														memory_copy_statement->operands.oir.address_offset,
+														memory_copy_statement->operands.oir.address_multiplier,
+														memory_copy_statement->operands.oir.rip_offset_var,
+														memory_copy_statement->addressing_mode
+														};
+
+	//Maintain the current offset. This is going to be the same for the source and destination
+	u_int64_t current_offset = 0;
+
+	/**
+	 * Due to unique situations that we may enounter(like pass by copy parameters), we may need
+	 * to adjust the memory address that the source has if we're copying after a new stack allocation
+	 * statement. We maintain a base adjustment amoutn just for this purpose
+	 */
+	u_int64_t source_adjustment = source_memory_address_var->memory_address_base_adjustment;
+
+	//We always use the dedicated field to determine how many bytes we should be copying
+	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
+
+	//We need to keep track of the last instruction. This will be constantly updated by every function we call
+	instruction_t* last_instruction = memory_copy_statement;
+
+	do {
+		instruction_copy_pair_t copy_pair;
+
+		/**
+		 * More than 16 bytes remain - we will tackle this using a 16
+		 * byte copy
+		 */
+		if(remaining_copy_amount >= 16) {
+			copy_pair = emit_16_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+
+			//We copied 16 so we knock down how much we have left
+			remaining_copy_amount -= 16;
+
+			//The current offset has now increased by 16
+			current_offset += 16;
+
+		/**
+		 * More than 8 but less than 16, we will use a regular movq for this
+		 */
+		} else if(remaining_copy_amount >= 8) {
+			copy_pair = emit_8_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+
+			//We copied 8 so we knock down how much we have left
+			remaining_copy_amount -= 8;
+
+			//The current offset has now increased by 8
+			current_offset += 8;
+
+		/**
+		 * More than 4 but less than 8, we will use a movl for this
+		 */
+		} else if(remaining_copy_amount >= 4) {
+			copy_pair = emit_4_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+
+			//We copied 4 so we knock down how much we have left
+			remaining_copy_amount -= 4;
+
+			//The current offset has now increased by 4
+			current_offset += 4;
+
+		/**
+		 * More than 2 but less than 4 - copy 2 at a time
+		 */
+		} else if(remaining_copy_amount >= 2) {
+			copy_pair = emit_2_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+
+			//We copied 2 so we knock down how much we have left
+			remaining_copy_amount -= 2;
+
+			//The current offset has now increased by 2
+			current_offset += 2;
+
+		/**
+		 * Anything less is completely invalid and we should error - this likely means we have 
+		 * an issue somewhere else in the system that needs to be addressed
+		 */
+		} else {
+			fprintf(stderr, "Fatal Internal Compiler Error: Remaining copy amount for a memory copy was less than 2 bytes\n");
+			exit(1);
+		}
+
+		/**
+		 * Now that we have our copy pair, we can insert it all after the current
+		 * last instruction that we have to work off of. Following the insertion
+		 * we'll be sure to update the last instruction pointer to reflect the changes
+		 */
+		insert_instruction_after_given(copy_pair.load_instruction, last_instruction);
+		insert_instruction_after_given(copy_pair.store_instruction, copy_pair.load_instruction);
+		last_instruction = copy_pair.store_instruction;
+
+	} while(remaining_copy_amount > 0);
+
+	//Now we can delete the old memory copy instruction
+	delete_statement(memory_copy_statement);
+
+	//Give back the last instruction
+	return last_instruction;
+}
+
+
+/**
+ * Run through all function blocks and convert any memory copy statements that we find into load
+ * and store statements. This function returns TRUE if we found at least one memory copy statement to
+ * convert, because that will require us to trigger the simplifier
+ */
+static inline u_int8_t convert_memory_copy_statements_into_loads_and_stores(dynamic_array_t* function_blocks){
+	//By default assume we converted nothing
+	u_int8_t converted_memory_copy = FALSE;
+
+	//Run through all of the blocks
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
+
+		/**
+		 * Run through the block and call out to the helper whenever we find
+		 * a statement to convert
+		 */
+		instruction_t* cursor = current_block->leader_statement;
+		while(cursor != NULL){
+			if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
+				cursor = convert_memory_copy_statement_into_loads_and_stores(cursor);
+
+				//Flag that we did this
+				converted_memory_copy = TRUE;
+			}
+
+			cursor = cursor->next_statement;
+		}
+	}
+
+	return converted_memory_copy;
+}
+
+
+/**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
  */
@@ -8665,6 +8884,24 @@ static void simplify(cfg_t* cfg){
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
 				order_blocks(cfg);
 			}
+		}
+
+		/**
+		 * Now that we have everything simplified, we can convert any/all memory copy
+		 * statements into equivalent load and store statements. This generates a large
+		 * volume of instructions which is why we want to do it later on. If at any
+		 * point we find that we've converted at least one instruciton, we will
+		 * retrigger the simplifier
+		 */
+		if(convert_memory_copy_statements_into_loads_and_stores(&(function->function_blocks)) == TRUE){
+			/**
+			 * Run the simplifier after we've done the conversion to make sure we are in
+			 * as simple a form as we can get
+			 */
+			do {
+				reset_all_use_counts(&use_count_tracker);
+				populate_use_counts_for_function(&(function->function_blocks));
+			} while(simplifier_pass(function_entry) == TRUE);
 		}
 	}
 }
