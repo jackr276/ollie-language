@@ -126,6 +126,17 @@ struct addressing_mode_operands_t {
 
 
 /**
+ * Trigger a fatal internal compiler error panic with the given message
+ * 
+ * NOTE: THIS WILL CRASH THE PROGRAM DELIBERATELY
+ */
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
+	exit(1);
+}
+
+
+/**
  * Simple utility for us to print out an instruction window in its three address code
  * (before instruction selection) format
  */
@@ -8832,9 +8843,35 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 				break;
 			}
 
+			/**
+			 * We'll get something like store 4+x_0(%rip) <- 5
+			 */
+			case ADDRESSING_MODE_RIP_RELATIVE: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				break;
+			}
 
+			/**
+			 * We'll get something like store 4+8+x_0(%rip) <- 5
+			 */
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
 
+			default: {
+				trigger_ice_panic("Invalid addressing mode detected");
+				break;
+		 	}
 		}
 
 	/**
@@ -8852,7 +8889,14 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 		store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
 	}
 
-	//TODO DO THE STORAGE OF RESULTS
+	/**
+	 * Now that we're done emitting everything we can store the result in here
+	 */
+	if(result_to_store->result_type == INITIALIZER_RESULT_TYPE_CONSTANT){
+		store_instruction->operands.oir.constant_operand = result_to_store->value.constant_value;
+	} else {
+		store_instruction->operands.oir.operand1 = result_to_store->value.variable_value;
+	}
 
 	return store_instruction;
 }
