@@ -5832,7 +5832,7 @@ instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
  */
-instruction_t* emit_memory_copy_instruction(addressing_operands_t destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number){
+instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Flag as a memory copy statement
@@ -5846,12 +5846,12 @@ instruction_t* emit_memory_copy_instruction(addressing_operands_t destination_ad
 	 * The destination is always represented as an addressing mode expression itself,
 	 * while the source is in the form of a single variable in op1
 	 */
-	stmt->operands.oir.address_operand1 = destination_address.address_operand1;
-	stmt->operands.oir.address_operand2 = destination_address.address_operand2;
-	stmt->operands.oir.address_offset = destination_address.address_offset;
-	stmt->operands.oir.address_multiplier = destination_address.address_multiplier;
-	stmt->operands.oir.rip_offset_var = destination_address.rip_offset_var;
-	stmt->addressing_mode = destination_address.addressing_mode;
+	stmt->operands.oir.address_operand1 = destination_address->address_operand1;
+	stmt->operands.oir.address_operand2 = destination_address->address_operand2;
+	stmt->operands.oir.address_offset = destination_address->address_offset;
+	stmt->operands.oir.address_multiplier = destination_address->address_multiplier;
+	stmt->operands.oir.rip_offset_var = destination_address->rip_offset_var;
+	stmt->addressing_mode = destination_address->addressing_mode;
 
 	//Store the source as our op1
 	stmt->operands.oir.operand1 = source_memory_region;
