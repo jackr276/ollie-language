@@ -8507,9 +8507,9 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
  * addressing operands for us to use directly. This allows us to emit an instruction that is basically
  * fully simplified off the bat
  *
- * This helper will return a struct that contains the load and store instructions
+ * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_t* emit_16_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
 
@@ -8517,19 +8517,13 @@ static inline instruction_t* emit_16_byte_copy_pair(three_addr_var_t* source_mem
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 
 	//First load the 16 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, 0);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, double_quad_word);
 
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
 }
 
 
@@ -8541,9 +8535,9 @@ static inline instruction_t* emit_16_byte_copy_pair(three_addr_var_t* source_mem
  * addressing operands for us to use directly. This allows us to emit an instruction that is basically
  * fully simplified off the bat
  *
- * This helper will return a poiner to the created instruction
+ * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline void emit_8_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_8_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
@@ -8551,19 +8545,13 @@ static inline void emit_8_byte_copy_pair(three_addr_var_t* source_memory_address
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 
 	//First load the 8 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, 0);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i64);
 
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
 }
 
 
@@ -8575,9 +8563,9 @@ static inline void emit_8_byte_copy_pair(three_addr_var_t* source_memory_address
  * addressing operands for us to use directly. This allows us to emit an instruction that is basically
  * fully simplified off the bat
  *
- * This helper will return a poiner to the created instruction
+ * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline void emit_4_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_4_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
@@ -8585,19 +8573,13 @@ static inline void emit_4_byte_copy_pair(three_addr_var_t* source_memory_address
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 
 	//First load the 4 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, 0);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i32);
 
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
 }
 
 
@@ -8609,9 +8591,9 @@ static inline void emit_4_byte_copy_pair(three_addr_var_t* source_memory_address
  * addressing operands for us to use directly. This allows us to emit an instruction that is basically
  * fully simplified off the bat
  *
- * This helper will return a poiner to the created instruction
+ * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
@@ -8619,19 +8601,13 @@ static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three
 	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
 
 	//First load the 2 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, (*last_instruction)->line_number);
-
-	//The load goes right after whatever came first
-	insert_instruction_after_given(load_instruction, *last_instruction);
+	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, 0);
 
 	//Now emit the corresponding store to take that retrieved memory and put it into the destination
 	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i16);
 
-	//The store goes right after the load
-	insert_instruction_after_given(store_instruction, load_instruction);
-
-	//Finally update the reference
-	*last_instruction = store_instruction;
+	//Package up and return the copy pair
+	return (instruction_copy_pair_t){load_instruction, store_instruction};
 }
 
 
@@ -8710,12 +8686,14 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	instruction_t* last_instruction = memory_copy_statement;
 
 	do {
+		instruction_copy_pair_t copy_pair;
+
 		/**
 		 * More than 16 bytes remain - we will tackle this using a 16
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			emit_16_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_16_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
@@ -8727,7 +8705,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			emit_8_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_8_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
@@ -8739,7 +8717,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			emit_4_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_4_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
@@ -8751,7 +8729,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			emit_2_byte_copy_pair(&last_instruction, source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_2_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
@@ -8767,6 +8745,15 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 			fprintf(stderr, "Fatal Internal Compiler Error: Remaining copy amount for a memory copy was less than 2 bytes\n");
 			exit(1);
 		}
+
+		/**
+		 * Now that we have our copy pair, we can insert it all after the current
+		 * last instruction that we have to work off of. Following the insertion
+		 * we'll be sure to update the last instruction pointer to reflect the changes
+		 */
+		insert_instruction_after_given(copy_pair.load_instruction, last_instruction);
+		insert_instruction_after_given(copy_pair.store_instruction, copy_pair.load_instruction);
+		last_instruction = copy_pair.store_instruction;
 
 	} while(remaining_copy_amount > 0);
 
