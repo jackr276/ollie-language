@@ -123,7 +123,7 @@ struct addressing_mode_operands_t {
 
 static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
 static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
-static void convert_struct_initiailizer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
+static void convert_struct_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
 
 
@@ -8969,7 +8969,7 @@ static inline addressing_mode_operands_t package_new_addressing_operands_with_ad
  * for each member along the way. In the event that a recursive initializer is hit, we will package up a fresh
  * addressing_mode_operands_t struct and invoke that
  */
-static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction){
+static void convert_struct_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction){
 	//Extract the struct type
 	generic_type_t* struct_type = struct_initializer->type;
 
@@ -9022,7 +9022,7 @@ static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t
 						break;
 
 					case INITIALIZER_TYPE_STRUCT:
-						convert_struct_intializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						convert_struct_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
 						break;
 				}
 
@@ -9092,7 +9092,7 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 						break;
 
 					case INITIALIZER_TYPE_STRUCT:
-						convert_struct_intializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						convert_struct_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
 						break;
 				}
 
@@ -9145,7 +9145,7 @@ static instruction_t* convert_initializer_statement_into_OIR_store_statements(in
 			break;
 
 		case INITIALIZER_TYPE_STRUCT:
-			convert_struct_intializer_into_OIR_stores(&base_address, initializer, initializer_statement);
+			convert_struct_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
 			break;
 	}
 
