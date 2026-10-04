@@ -8781,13 +8781,34 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 }
 
 
-
+/**
+ * Run through all function blocks and convert any memory copy statements that we find into load
+ * and store statements. This function returns TRUE if we found at least one memory copy statement to
+ * convert, because that will require us to trigger the simplifier
+ */
 static inline u_int8_t convert_memory_copy_statements_into_loads_and_stores(dynamic_array_t* function_blocks){
 	//By default assume we converted nothing
 	u_int8_t converted_memory_copy = FALSE;
 
+	//Run through all of the blocks
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
 
+		/**
+		 * Run through the block and call out to the helper whenever we find
+		 * a statement to convert
+		 */
+		instruction_t* cursor = current_block->leader_statement;
+		while(cursor != NULL){
+			if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
+				cursor = convert_memory_copy_statement_into_loads_and_stores(cursor);
+
+				//Flag that we did this
+				converted_memory_copy = TRUE;
+			}
+
+			cursor = cursor->next_statement;
+		}
 	}
 
 	return converted_memory_copy;
@@ -8879,6 +8900,24 @@ static void simplify(cfg_t* cfg){
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
 				order_blocks(cfg);
 			}
+		}
+
+		/**
+		 * Now that we have everything simplified, we can convert any/all memory copy
+		 * statements into equivalent load and store statements. This generates a large
+		 * volume of instructions which is why we want to do it later on. If at any
+		 * point we find that we've converted at least one instruciton, we will
+		 * retrigger the simplifier
+		 */
+		if(convert_memory_copy_statements_into_loads_and_stores(&(function->function_blocks)) == TRUE){
+			/**
+			 * Run the simplifier after we've done the conversion to make sure we are in
+			 * as simple a form as we can get
+			 */
+			do {
+				reset_all_use_counts(&use_count_tracker);
+				populate_use_counts_for_function(&(function->function_blocks));
+			} while(simplifier_pass(function_entry) == TRUE);
 		}
 	}
 }
