@@ -8744,8 +8744,10 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 		store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 		store_instruction->type_storage.memory_read_write_type = memory_write_type;
 	} else {
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		store_instruction->memory_access_type = WRITE_TO_MEMORY;
+		store_instruction->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
+		store_instruction->type_storage.memory_read_write_type = memory_write_type;
+		store_instruction->optional_storage.byte_amount_to_copy = memory_write_type->type_size;
 	}
 
 
