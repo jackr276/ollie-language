@@ -8724,19 +8724,41 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
 	 */
 	if(additional_offset != 0){
+		/**
+		 * Remember that ending up in here means that the constant is specifically
+		 * nonzero so we're going to need to change addressing modes that don't have
+		 * constants to ones that do
+		 */
 		switch(base_address->addressing_mode){
+			/**
+			 * We'll end up with something like store 4(x_0) <- 5
+			 */
 			case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
-
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 				break;
 			}
 
+			/**
+			 * With this if we have an additional offset of 4 and already
+			 * have something like store 4(x_0) <- 5 we'll just add to it
+			 * to get store 8(x_0) <- 5
+			 */
 			case ADDRESSING_MODE_OFFSET_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
 			}
 
+			case ADDRESSING_MODE_REGISTERS_ONLY: {
+			}
 
 		}
-
 
 	/**
 	 * Additional offset is 0 so we don't need to do anything besides copy over all of the addressing
@@ -8752,6 +8774,8 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 		//Because of the potential for address offset manipulation we need this to be distinct
 		store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
 	}
+
+	//TODO DO THE STORAGE
 
 	return store_instruction;
 }
