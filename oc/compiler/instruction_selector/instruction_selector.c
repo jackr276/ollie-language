@@ -8962,8 +8962,46 @@ static inline addressing_mode_operands_t package_new_addressing_operands_with_ad
 }
 
 
-//TODO
+/**
+ * Go through all of the members of the given struct initializer and create the equivalent OIR store statement
+ * for each member along the way. In the event that a recursive initializer is hit, we will package up a fresh
+ * addressing_mode_operands_t struct and invoke that
+ */
 static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction){
+	//Extract the struct type
+	generic_type_t* struct_type = struct_initializer->type;
+
+	//Maintain a current offset for us to go through
+	int32_t current_offset = 0;
+
+	/**
+	 * Run through all of the results and dispatch accordingly based on what
+	 * the given result actually is
+	 */
+	for(int32_t i = 0; i < struct_initializer->results.results_current_index; i++){
+		//Extract the initializer itself
+		initializer_result_t* result = get_intializer_result_at_index(struct_initializer, i);
+
+		//TODO CURRENT OFFSET UPDATE
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+			case INITIALIZER_RESULT_TYPE_CONSTANT:{
+
+		 	}
+
+			//TODO
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+				printf("TODO NOT IMPLEMENTED\n");
+				exit(1);
+
+		  	}
+			//TODO
+		}
+
+	}
+
+
 	printf("TODO NOT IMPLEMENTED\n");
 	exit(1);
 }
