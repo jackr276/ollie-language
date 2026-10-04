@@ -8948,12 +8948,61 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 				break;
 			}
 
-			//TODO
+			/**
+			 * For a sub-initializer we will need to recursively invoke the initializer
+			 * rule. Before doing that, we will need to create a new operands struct and
+			 * create a new offset that accounts for the current offset
+			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				//TODO IF WE HAVE AN OFFSET IT WILL NEED
-				//TO BE ADDED TO THE ADDRESS_OFFSET FIELD IN THE
-				//NEW INITIALIZER HERE AND THE ADDRESSING MODE
-				//WILL NEED TO BE UPDATED
+				//Get a direct copy of these operands
+				addressing_mode_operands_t new_operands = *base_address;
+
+				//We need to clone this always to avoid different calls stepping over eachother
+				new_operands.address_offset = emit_constant_copy_if_not_null(new_operands.address_offset);
+
+				switch(new_operands.addressing_mode){
+					case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
+						new_operands.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_ONLY:
+						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
+						new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+						break;
+
+					case ADDRESSING_MODE_RIP_RELATIVE:
+						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
+						new_operands.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+						break;
+
+					case ADDRESSING_MODE_INDEX_AND_SCALE:
+						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
+						new_operands.addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+						break;
+
+					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+						new_operands.address_offset = emit_direct_integer_or_char_constant(current_array_offset, i64);
+						new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+						break;
+
+					/**
+					 * These all already have offsets, so we won't need to change the type at all,
+					 * we just need to sum the additional offset with it
+					 */
+					case ADDRESSING_MODE_OFFSET_ONLY:
+					case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+					case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+					case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+					case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+						sum_constant_with_raw_int64_value(new_operands.address_offset, i64, current_array_offset);
+						break;
+
+					default:
+						trigger_ice_panic("Invalid addressing mode detected");
+						break;
+				}
+
 
 
 				printf("TODO NOT IMPLEMENTED\n");
