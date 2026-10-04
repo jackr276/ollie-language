@@ -2100,9 +2100,34 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				break;
 			}
 
+			/**
+			 * If we have an initializer return type, then by default we're dealing with a return by copy variable. In this
+			 * case, we'll need to emit an initialization into the return by copy variable itself
+			 */
 			case CFG_RESULT_TYPE_INITIALIZER: {
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
+				/**
+				 * The return by copy variable that we created during setup will always be cached in the current
+				 * function record. It was aliased but that's of no concern to us. All that we need to do now
+				 * emit a variable based on that created return by copy variable
+				 */
+				three_addr_var_t* return_by_copy_address_var = emit_var(current_function->return_by_copy_variable);
+
+				//Emit and add the initializer in
+				instruction_t* initializer = emit_initialization_instruction(return_by_copy_address_var, expression_package.result_value.result_initializer, ret_node->line_number);
+				add_statement(current, initializer);
+
+				/**
+				 * Now that we've actually done the initialization, we'll need to move the return by copy var(in %rdi) into
+				 * %rax as it is what will be returned. We'll achieve this via a simple copy
+				 */
+				three_addr_var_t* copy_to_rax_var = emit_temp_var(void_ptr);
+				instruction_t* copy_to_rax = emit_assignment_instruction(copy_to_rax_var, return_by_copy_address_var, ret_node->line_number);
+				add_statement(current, copy_to_rax);
+
+				//Now the actual return variable is the new temp we have to represent the copy to %rax
+				return_variable = copy_to_rax_var;
+
+				break;
 			}
 		}
 	}
@@ -6817,7 +6842,6 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			break;
 		}
 
-
 		/**
 		 * Handle the special case of an initializer after an assignment expression
 		 */
@@ -6853,13 +6877,12 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		}
 	}
 
-	//Now pack the return value here - this is always a variable type
+	/**
+	 * Package up and return all of our results
+	 */
 	result_package.type = CFG_RESULT_TYPE_VAR;
 	result_package.result_value.result_var = left_hand_var;
-	//This is whatever the current block is
 	result_package.final_block = current_block;
-
-	//And give the results back
 	return result_package;
 }
 
