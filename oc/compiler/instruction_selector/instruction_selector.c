@@ -8780,6 +8780,34 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
 				break;
 			}
 
+			/**
+			 * We'll get something like store 4(, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_INDEX_AND_SCALE: {
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+				break;
+			}
+
+			/**
+			 * We'll get something like store 4 + 8(, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+		 	}
+
+
+
+
 		}
 
 	/**
