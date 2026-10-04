@@ -9003,10 +9003,21 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 						break;
 				}
 
+				/**
+				 * Now that we've packaged up the new operands, we can recursively call
+				 * the appropriate emitter based on the initializer result
+				 */
+				three_addr_initializer_t* initializer = result->value.initializer_value;
+				switch(initializer->initializer_type){
+					case INITIALIZER_TYPE_ARRAY:
+						convert_array_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
 
+					case INITIALIZER_TYPE_STRUCT:
+						convert_struct_intializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
+				}
 
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
 				break;
 			}
 		}
