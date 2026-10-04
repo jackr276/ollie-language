@@ -50,6 +50,9 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
+//The copy pair struct for our copy pair emittal
+typedef struct instruction_copy_pair_t instruction_copy_pair_t;
+
 /**
  * Will we be printing these out as instructions or as three address code
  * statements?
@@ -103,6 +106,16 @@ struct instruction_window_t{
 	instruction_t* instruction1;
 	instruction_t* instruction2;
 	instruction_t* instruction3;
+};
+
+
+/**
+ * An instruction copy pair struct contains a load and a store
+ * instruction. The result of the load is the source for the store
+ */
+struct instruction_copy_pair_t {
+	instruction_t* load_instruction;
+	instruction_t* store_instruction;
 };
 
 
@@ -8490,17 +8503,13 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
  * movdqu instruction when it eventually gets selected later on down the road and will use the specialied
  * F128 basic type to represent the 16 byte copy
  *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
  *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
+ * This helper will return a struct that contains the load and store instructions
  */
-static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_t* emit_16_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
 
@@ -8528,17 +8537,13 @@ static inline void emit_16_byte_copy_pair(instruction_t** last_instruction, thre
  * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
  * it gets instruction selected down the road
  *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
  *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
+ * This helper will return a poiner to the created instruction
  */
-static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline void emit_8_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
@@ -8566,17 +8571,13 @@ static inline void emit_8_byte_copy_pair(instruction_t** last_instruction, three
  * Emit a 4 byte load/store copy instruction pair. This instruction will use a regular movl and an i32 when
  * it gets instruction selected down the road
  *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
  *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
+ * This helper will return a poiner to the created instruction
  */
-static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline void emit_4_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
@@ -8604,15 +8605,11 @@ static inline void emit_4_byte_copy_pair(instruction_t** last_instruction, three
  * Emit a 2 byte load/store copy instruction pair. This instruction will use a regular movw and an i16 when
  * it gets instruction selected down the road
  *
- * We assume that the source and destination variables given to us are memory addresses. Whether or not they
- * are memory address variables or not is actually not relevant, which is why the strategy of converting to OIR first
- * is desirable for us
+ * The source variable is given to us as a regular variable, while the destination is provided as a set of
+ * addressing operands for us to use directly. This allows us to emit an instruction that is basically
+ * fully simplified off the bat
  *
- * This helper will update the current_offset variable. The current offset is going to be the same for the source and the
- * destination because they have the exact same memory shape/size(compiler enforces this)
- *
- * This function will update the last instruction reference so that we always maintain a pointer to the last instruction in
- * our work area
+ * This helper will return a poiner to the created instruction
  */
 static inline void emit_2_byte_copy_pair(instruction_t** last_instruction, three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Word storage variable here
