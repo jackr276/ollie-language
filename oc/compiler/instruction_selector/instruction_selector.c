@@ -8944,7 +8944,7 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 			case INITIALIZER_RESULT_TYPE_CONSTANT: {
 				//Emit and get this inserted right *BEFORE* the original
 				instruction_t* result_storage = generate_OIR_store_with_additional_offset(base_address, current_array_offset, result, member_type);
-				insert_instruction_after_given(result_storage, original_instruction);
+				insert_instruction_before_given(result_storage, original_instruction);
 				break;
 			}
 
@@ -8971,10 +8971,6 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 		 */
 		current_array_offset += member_type_size;
 	}
-
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
 }
 
 
