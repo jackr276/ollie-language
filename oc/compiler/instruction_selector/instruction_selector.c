@@ -8985,16 +8985,18 @@ static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t
 		initializer_result_t* result = get_intializer_result_at_index(struct_initializer, i);
 		symtab_variable_record_t* struct_record = get_struct_member_at_index(struct_type, i);
 
+		//The current offset will always just be this struct offset
 		current_offset = struct_record->struct_offset;
-
-		//TODO CURRENT OFFSET UPDATE
 
 		switch(result->result_type){
 			/**
+			 * If we have variables or constant results then all we'll need to do is emit the equivalent
+			 * OIR store statement 
 			 */
 			case INITIALIZER_RESULT_TYPE_VARIABLE:
 			case INITIALIZER_RESULT_TYPE_CONSTANT:{
-
+				instruction_t* store_statement = generate_OIR_store_with_additional_offset(base_address, current_offset, result, struct_record->type_defined_as);
+				insert_instruction_before_given(store_statement, original_instruction);
 				break;
 		 	}
 
@@ -9010,10 +9012,6 @@ static void convert_struct_intializer_into_OIR_stores(addressing_mode_operands_t
 		}
 
 	}
-
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
 }
 
 
@@ -9160,6 +9158,8 @@ static inline void lower_all_initializer_statements(dynamic_array_t* function_bl
 			 * If we see an initializer call out to the helper. Remember that the
 			 * helper returns a pointer to the last statement created, so we'll need 
 			 * to reassign the cursor to that
+			 *
+			 * TODO WANT A FLAG IF WE EVER DID THIS SO WE CAN SELECTIVELY SIMPLIFY
 			 */
 			if(instruction_cursor->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT) {
 				instruction_cursor = convert_initializer_statement_into_OIR_store_statements(instruction_cursor);
