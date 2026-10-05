@@ -378,37 +378,6 @@ static inline u_int8_t is_raw_constant_valid_for_lea_multiplier(int64_t constant
 
 
 /**
- * Is the given f32 negative? We need to use bit manipulation to deterine
- * this because regular float equality will not detect cases like -0.0 == 0.0
- */
-static inline u_int8_t is_f32_negative(float value){
-	//Get the float as an int without going through a conversion
-	u_int32_t float_as_int = *(u_int32_t*)(&value);
-
-	//We can extract the sign bit by getting MSB
-	u_int32_t sign_bit = (float_as_int >> 31);
-
-	return sign_bit == 1 ? TRUE : FALSE;
-}
-
-
-/**
- * Is the given f64 negative? We need to use bit manipulation to deterine
- * this because regular float equality will not detect cases like -0.0 == 0.0
- */
-static inline u_int8_t is_f64_negative(double value){
-	//Get the double as a long without going through a conversion
-	u_int64_t double_as_long = *(u_int64_t*)(&value);
-
-	//We can extract the sign bit by getting MSB
-	u_int64_t sign_bit = (double_as_long >> 63);
-
-	return sign_bit == 1 ? TRUE : FALSE;
-}
-
-
-
-/**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
  * due to internal hardware constraints. This operation will find
  * if a given value is compatible
@@ -11195,8 +11164,6 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 		 * If we made it here, that specifically means that we are dealing with a char* constant. This is
 		 * an important distinction, because it will require that we emit a .LC local constant value and
 		 * then a pointer to it
-		 *
-		 * TOOD LOOK INTO THIS
 		 */
 		case STR_CONST:
 			//Let's first emit the string local constant

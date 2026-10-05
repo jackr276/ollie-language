@@ -31,6 +31,7 @@ static generic_type_t* i32;
 static generic_type_t* u16;
 static generic_type_t* i16;
 static generic_type_t* u8;
+static generic_type_t* char_pointer;
 
 //The dynamic string that we reuse for searching
 static dynamic_string_t value_name_searcher_string;
@@ -174,6 +175,36 @@ static void print_instruction_window(instruction_window_t* window){
 	}
 
 	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Is the given f32 negative? We need to use bit manipulation to deterine
+ * this because regular float equality will not detect cases like -0.0 == 0.0
+ */
+static inline u_int8_t is_f32_negative(float value){
+	//Get the float as an int without going through a conversion
+	u_int32_t float_as_int = *(u_int32_t*)(&value);
+
+	//We can extract the sign bit by getting MSB
+	u_int32_t sign_bit = (float_as_int >> 31);
+
+	return sign_bit == 1 ? TRUE : FALSE;
+}
+
+
+/**
+ * Is the given f64 negative? We need to use bit manipulation to deterine
+ * this because regular float equality will not detect cases like -0.0 == 0.0
+ */
+static inline u_int8_t is_f64_negative(double value){
+	//Get the double as a long without going through a conversion
+	u_int64_t double_as_long = *(u_int64_t*)(&value);
+
+	//We can extract the sign bit by getting MSB
+	u_int64_t sign_bit = (double_as_long >> 63);
+
+	return sign_bit == 1 ? TRUE : FALSE;
 }
 
 
@@ -5383,18 +5414,13 @@ static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local
 /**
  * Emit a three_addr_const_t value that is a local constant(.LCx) reference
  */
-static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
-
-	//Once this has been made, we can add it to the function
+static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, dynamic_string_t* string_value){
+	//Create it and add it into the CFG
+	local_constant_t* local_constant = string_local_constant_alloc(char_pointer, string_value);
 	add_local_constant_to_cfg(cfg, local_constant);
 
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
+	//Allocate and return the variable that holds this
+	return emit_local_constant_temp_var(local_constant);
 }
 
 
@@ -5402,18 +5428,13 @@ static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, generic_a
  * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
  * will also help us add the f32 constant to the function as a local function reference
  */
-static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
-
-	//Once this has been made, we can add it to the function
+static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, float float_value){
+	//Create it and add it to the CFG
+	local_constant_t* local_constant = f32_local_constant_alloc(f32, float_value);
 	add_local_constant_to_cfg(cfg, local_constant);
 
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
+	//Allocate and return the variable that holds this
+	return emit_local_constant_temp_var(local_constant);
 }
 
 
@@ -5421,18 +5442,13 @@ static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, generic_ast_
  * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
  * will also help us add the f64 constant to the function as a local function reference
  */
-static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = f64_local_constant_alloc(const_node->inferred_type, const_node->constant_value.double_value);
-
-	//Once this has been made, we can add it to the function
+static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, double double_value){
+	//Create it and add it to the CFG
+	local_constant_t* local_constant = f64_local_constant_alloc(f64, double_value);
 	add_local_constant_to_cfg(cfg, local_constant);
 
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
+	//Allocate and return the variable that holds this
+	return emit_local_constant_temp_var(local_constant);
 }
 
 
@@ -5460,7 +5476,39 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 		return;
 	}
 
+	//Pointer to the result variable that we'll want eventually
+	three_addr_var_t* result_variable = NULL;
+
 	switch(old_constant->const_type){
+		case FLOAT_CONST: {
+			/**
+			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
+			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
+			 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
+			 * because that would have the sign bit set
+			 */
+			if(old_constant->constant_value.float_constant == 0.0f && is_f32_negative(old_constant->constant_value.float_constant) == FALSE){
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
+				three_addr_var_t* cleared_var = emit_temp_var(f32);
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, 0);
+				insert_instruction_before_given(instruction, clear_instruction);
+
+				//This is the variable that we want to use
+				result_variable = cleared_var;
+
+			/**
+			 * Otherwise it's not 0 so we'll need to emit a local constant and a rip offset
+			 * load to get the value out
+			 */
+			} else {
+
+			}
+
+
+
 		case STR_CONST: {
 			//First let's see if we can find it already
 			local_constant_t* string_local_constant = get_string_local_constant(&(cfg_reference->local_string_constants), old_constant->constant_value.string_constant);
@@ -5470,6 +5518,7 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 			 */
 			three_addr_var_t* string_lc_variable = NULL;
 			if(string_local_constant == NULL){
+				string_lc_variable = emit_string_local_constant(cfg_reference, );
 
 			} else {
 
@@ -5513,24 +5562,6 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 
 	//For float constants, we need to emit the local constant equivalent via the helper
 	case FLOAT_CONST:
-		/**
-		 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
-		 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
-		 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
-		 * because that would have the sign bit set
-		 */
-		if(constant_node->constant_value.float_value == 0.0f && is_f32_negative(constant_node->constant_value.float_value) == FALSE){
-			//Emit a temp var for this value
-			three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
-
-			/**
-			 * We will now use a specialized IR instruction to clear this variable out. In reality
-			 * this clearing will be a PXOR statement
-			 */
-			instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
-
-			//Add it into the block
-			add_statement(basic_block, clear_instruction);
 
 			/**
 			 * We are done - let's now package up and return the variable that we need to
@@ -17039,6 +17070,7 @@ static void select_instructions(cfg_t* cfg){
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these general use types first
 	double_quad_word = lookup_type_name_only(cfg->type_symtab, "&double_quad_word", NOT_MUTABLE)->type;
+	char_pointer = lookup_type_name_only(cfg->type_symtab, "char*", NOT_MUTABLE)->type;
 	f64 = lookup_type_name_only(cfg->type_symtab, "f64", NOT_MUTABLE)->type;
 	f32 = lookup_type_name_only(cfg->type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
