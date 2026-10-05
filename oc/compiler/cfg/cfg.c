@@ -11195,6 +11195,8 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 		 * If we made it here, that specifically means that we are dealing with a char* constant. This is
 		 * an important distinction, because it will require that we emit a .LC local constant value and
 		 * then a pointer to it
+		 *
+		 * TOOD LOOK INTO THIS
 		 */
 		case STR_CONST:
 			//Let's first emit the string local constant
