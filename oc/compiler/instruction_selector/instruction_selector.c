@@ -5458,7 +5458,7 @@ static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, double doubl
  * function will perform the conversion and replace the "constant_operand" field with the appropriate
  * variable and update the instruction type as needed
  */
-static void convert_OIR_constant_to_local_constant_if_required(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
+static void convert_OIR_constant_to_local_constant_if_required(instruction_t* instruction, u_int8_t* changed){
 	/**
 	 * If the instruction is NULL or it doesn't have a constant operand then there's
 	 * no point in bothering here
@@ -5718,9 +5718,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * binary. As part of the simplification process, we will go through and lower
 	 * any constant that fits that category now
 	 */
-	convert_OIR_constant_to_local_constant_if_required(window, window->instruction1, &changed);
-	convert_OIR_constant_to_local_constant_if_required(window, window->instruction2, &changed);
-	convert_OIR_constant_to_local_constant_if_required(window, window->instruction3, &changed);
+	convert_OIR_constant_to_local_constant_if_required(window->instruction1, &changed);
+	convert_OIR_constant_to_local_constant_if_required(window->instruction2, &changed);
+	convert_OIR_constant_to_local_constant_if_required(window->instruction3, &changed);
 
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
