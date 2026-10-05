@@ -205,27 +205,6 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
- * Clone a constant. This will create separate memory so we maintain
- * complete separation
- */
-static inline three_addr_const_t* copy_constant(three_addr_const_t* constant){
-	//If it's empty just leave
-	if(constant == NULL){
-		return NULL;
-	}
-
-	//Complete duplication
-	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
-
-	//And a full copy over
-	memcpy(copy, constant, sizeof(three_addr_const_t));
-
-	//Give it back
-	return copy;
-}
-
-
-/**
  * Quick helper to see if an instruction is a binary operation with a constant - this
  * also handles NULL checking
  */
@@ -2669,7 +2648,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 */
 			case ADDRESSING_MODE_OFFSET_ONLY: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 				//Add this additional offset in
@@ -2694,7 +2673,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 				//Add this additional offset in
@@ -2719,7 +2698,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
 				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 				//Add this additional offset in
@@ -2746,7 +2725,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
 				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 				//Add this additional offset in
@@ -2771,7 +2750,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 				//Add this additional offset in
@@ -2798,7 +2777,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 
 		//Because of the potential for address offset manipulation we need this to be distinct
 		if(base_address->address_offset != NULL){
-			store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+			store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 		}
 	}
 
@@ -9417,7 +9396,6 @@ static inline u_int8_t convert_memory_copy_statements_into_loads_and_stores(dyna
 	}
 
 	return converted_memory_copy;
->>>>>>> main
 }
 
 
@@ -9524,8 +9502,10 @@ static void simplify(cfg_t* cfg){
 			 *
 			 *
 			 * TODO
+			 */
 		}
 
+		/*
 		 * Now that we have everything simplified, we can convert any/all memory copy
 		 * statements into equivalent load and store statements. This generates a large
 		 * volume of instructions which is why we want to do it later on. If at any
