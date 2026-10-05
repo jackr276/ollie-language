@@ -2907,7 +2907,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			return constant_result_package;
 
 		//Special case here - we need to emit a variable for the function pointer itself
-		case FUNC_CONST:
+		case FUNC_CONST: {
 			//Emit the variable first
 			function_pointer_variable = emit_function_pointer_temp_var(constant_node->func_record);
 
@@ -2923,13 +2923,9 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			constant_result_package.type = CFG_RESULT_TYPE_VAR;
 			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
 			return constant_result_package;
+		}
 
-		/**
-		 * For every other constant type that we have, we will have a result type that
-		 * actually is a constant itself. To keep things as segmented as possible
-		 * each area will allocate the constant itself
-		 */
-		case CHAR_CONST:
+		case CHAR_CONST: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = CHAR_CONST;
@@ -2939,8 +2935,9 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			constant_result_package.type = CFG_RESULT_TYPE_CONST;
 			constant_result_package.result_value.result_const = emitted_constant;
 			return constant_result_package;
+		}
 
-		case BYTE_CONST:
+		case BYTE_CONST: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST;
@@ -2950,8 +2947,9 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			constant_result_package.type = CFG_RESULT_TYPE_CONST;
 			constant_result_package.result_value.result_const = emitted_constant;
 			return constant_result_package;
+		}
 
-		case BYTE_CONST_FORCE_U:
+		case BYTE_CONST_FORCE_U: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST_FORCE_U;
@@ -2961,8 +2959,9 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			constant_result_package.type = CFG_RESULT_TYPE_CONST;
 			constant_result_package.result_value.result_const = emitted_constant;
 			return constant_result_package;
+		}
 
-		case SHORT_CONST:
+		case SHORT_CONST: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST;
@@ -2972,8 +2971,9 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			constant_result_package.type = CFG_RESULT_TYPE_CONST;
 			constant_result_package.result_value.result_const = emitted_constant;
 			return constant_result_package;
+		}
 
-		case SHORT_CONST_FORCE_U:
+		case SHORT_CONST_FORCE_U: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST_FORCE_U;
@@ -2983,56 +2983,53 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			constant_result_package.type = CFG_RESULT_TYPE_CONST;
 			constant_result_package.result_value.result_const = emitted_constant;
 			return constant_result_package;
+		}
 
-		case INT_CONST:
+		case INT_CONST: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST;
-
 			emitted_constant->constant_value.signed_integer_constant = constant_node->constant_value.signed_int_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case INT_CONST_FORCE_U:
+		case INT_CONST_FORCE_U: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_integer_constant = constant_node->constant_value.unsigned_int_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case LONG_CONST:
+		case LONG_CONST: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = LONG_CONST;
-
 			emitted_constant->constant_value.signed_long_constant = constant_node->constant_value.signed_long_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case LONG_CONST_FORCE_U:
+		case LONG_CONST_FORCE_U: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = LONG_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_long_constant = constant_node->constant_value.unsigned_long_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
+			break;
+		}
 			
 		//Some weird error if we get here - hard exit
 		default:
 			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected in CFG.\n");
 			exit(1);
 	}
+
+
+	/**
+	 * Package up and return once we get here
+	 */
+	constant_result_package.type = CFG_RESULT_TYPE_CONST;
+	constant_result_package.result_value.result_const = emitted_constant;
+	return constant_result_package;
 }
 
 
