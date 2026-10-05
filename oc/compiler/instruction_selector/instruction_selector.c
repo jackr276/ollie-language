@@ -46,8 +46,6 @@ static use_count_tracker_t use_count_tracker;
 
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
-//Specialized struct for passing addressing mode operands around
-typedef struct addressing_mode_operands_t addressing_mode_operands_t;
 
 //The copy pair struct for our copy pair emittal
 typedef struct instruction_copy_pair_t instruction_copy_pair_t;
@@ -108,25 +106,10 @@ struct instruction_window_t{
 };
 
 
-/**
- * This struct carries all of the operands that exist inside
- * of an addressing mode expression. This exists so that
- * we can pass these operands around in a compact package 
- * without having to pass them individually
- */
-struct addressing_mode_operands_t {
-	three_addr_var_t* address_operand1;
-	three_addr_var_t* address_operand2;
-	three_addr_var_t* rip_offset_var;
-	three_addr_const_t* address_offset;
-	u_int64_t address_multiplier;
-	//Tells us what mode we were in
-	memory_addressing_mode_t addressing_mode;
-};
-
+//Predeclared functions for reference
 static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
-static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
-static void convert_struct_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
+static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
+static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
 
 
@@ -8646,7 +8629,7 @@ static inline three_addr_const_t* emit_constant_copy_if_not_null(three_addr_cons
  * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
  * result that is an actual initializer here. This is just for variables and constants
  */
-static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_operands_t* base_address, int32_t additional_offset,
+static instruction_t* generate_OIR_store_with_additional_offset(addressing_operands_t* base_address, int32_t additional_offset,
 																initializer_result_t* result_to_store, generic_type_t* memory_write_type){
 	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
 
@@ -8850,9 +8833,9 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_mode_
  * where we'll need to pass in the current base address with an additional offset accounted
  * for
  */
-static inline addressing_mode_operands_t package_new_addressing_operands_with_additional_offset(addressing_mode_operands_t* original_operands, int32_t offset){
+static inline addressing_operands_t package_new_addressing_operands_with_additional_offset(addressing_operands_t* original_operands, int32_t offset){
 	//Get a direct copy of these operands
-	addressing_mode_operands_t new_operands = *original_operands;
+	addressing_operands_t new_operands = *original_operands;
 
 	//We need to clone this always to avoid different calls stepping over eachother
 	new_operands.address_offset = emit_constant_copy_if_not_null(new_operands.address_offset);
@@ -8907,9 +8890,9 @@ static inline addressing_mode_operands_t package_new_addressing_operands_with_ad
 /**
  * Go through all of the members of the given struct initializer and create the equivalent OIR store statement
  * for each member along the way. In the event that a recursive initializer is hit, we will package up a fresh
- * addressing_mode_operands_t struct and invoke that
+ * addressing_operands_t struct and invoke that
  */
-static void convert_struct_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction){
+static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction){
 	//Extract the struct type
 	generic_type_t* struct_type = struct_initializer->type;
 
@@ -8949,7 +8932,7 @@ static void convert_struct_initializer_into_OIR_stores(addressing_mode_operands_
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
 				//Let the helper do all of our packaging
-				addressing_mode_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_offset);
+				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_offset);
 
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
@@ -8975,10 +8958,10 @@ static void convert_struct_initializer_into_OIR_stores(addressing_mode_operands_
 
 /**
  * Go through all of the members of the given array initializer and create the equivalent OIR store statement for each one
- * along the way. In the event that a recursive initializer is hit, we will package up a fresh addressing_mode_operands_t
+ * along the way. In the event that a recursive initializer is hit, we will package up a fresh addressing_operands_t 
  * struct and invoke that
  */
-static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction){
+static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction){
 	/**
 	 * The array type and member type should always be stored inside of this
 	 * given initializer so we can extract that now
@@ -9019,7 +9002,7 @@ static void convert_array_initializer_into_OIR_stores(addressing_mode_operands_t
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
 				//Let the helper do all of our packaging
-				addressing_mode_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_array_offset);
+				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_array_offset);
 
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
@@ -9068,14 +9051,14 @@ static instruction_t* convert_initializer_statement_into_OIR_store_statements(in
 	 * copies of the variables in here when we actually use them, but this will
 	 * give us a jumping off point
 	 */
-	addressing_mode_operands_t base_address = {
-												initializer_statement->operands.oir.address_operand1,
-												initializer_statement->operands.oir.address_operand2,
-												initializer_statement->operands.oir.rip_offset_var,
-												initializer_statement->operands.oir.address_offset,
-												initializer_statement->operands.oir.address_multiplier,
-												initializer_statement->addressing_mode
-											  };
+	addressing_operands_t base_address = {
+											initializer_statement->operands.oir.address_operand1,
+											initializer_statement->operands.oir.address_operand2,
+											initializer_statement->operands.oir.address_offset,
+											initializer_statement->operands.oir.address_multiplier,
+											initializer_statement->operands.oir.rip_offset_var,
+											initializer_statement->addressing_mode
+										  };
 
 	//Extract the initializer and call out to the appropriate rule
 	three_addr_initializer_t* initializer = initializer_statement->operands.oir.initializer_operand;
@@ -9538,6 +9521,11 @@ static void simplify(cfg_t* cfg){
 			/**
 			 * After we do all of this, one run final simplifier pass to ensure everything
 			 * is in the simplest form that we can get it in
+			 *
+			 *
+			 * TODO
+		}
+
 		 * Now that we have everything simplified, we can convert any/all memory copy
 		 * statements into equivalent load and store statements. This generates a large
 		 * volume of instructions which is why we want to do it later on. If at any

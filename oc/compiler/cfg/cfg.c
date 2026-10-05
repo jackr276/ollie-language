@@ -12221,7 +12221,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * we'll need some special handling for it
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
-				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(let_variable, let_result_var, let_variable->type->type_size, expression_node->line_number);
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
 
 				//Get it into the block
 				add_statement(current_block, copy_statement);
