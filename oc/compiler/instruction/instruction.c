@@ -2067,7 +2067,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
  * constant and print it
  */
 static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
-	fprintf(fl, "\t.string \"%s\"\n", string_constant->constant_value.string_constant);
+	fprintf(fl, "\t.string \"%s\"\n", string_constant->constant_value.string_constant.string);
 }
 
 
@@ -2317,7 +2317,7 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			break;
 
 		case STR_CONST:
-			fprintf(fl, "\"%s\"", constant->constant_value.string_constant);
+			fprintf(fl, "\"%s\"", constant->constant_value.string_constant.string);
 			break;
 
 		case FUNC_CONST:

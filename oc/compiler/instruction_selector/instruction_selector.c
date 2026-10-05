@@ -5586,44 +5586,51 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 			break;
 		}
 
-
 		case STR_CONST: {
 			//First let's see if we can find it already
-			local_constant_t* string_local_constant = get_string_local_constant(&(cfg_reference->local_string_constants), old_constant->constant_value.string_constant);
+			local_constant_t* string_local_constant = get_string_local_constant(&(cfg_reference->local_string_constants), old_constant->constant_value.string_constant.string);
 
 			/**
-			 * Now based on whether or not this local constant exists
+			 * Now based on whether or not this local constant exists, we'll either create and add it here or emit a 
+			 * brand new one. Either way we'll end up with a proper local constant variable
 			 */
 			three_addr_var_t* string_lc_variable = NULL;
 			if(string_local_constant == NULL){
-				string_lc_variable = emit_string_local_constant(cfg_reference, );
-
+				string_lc_variable = emit_string_local_constant(cfg_reference, &(old_constant->constant_value.string_constant));
 			} else {
-
+				string_lc_variable = emit_local_constant_temp_var(string_local_constant);
 			}
+
+			/**
+			 * The result variable will come from a variable offset load. We'll load in directly
+			 * before the instruction that is of interest
+			 */
+			result_variable = emit_temp_var(char_pointer);
+			instruction_t* rip_offset_load = emit_load_rip_relative(result_variable, string_lc_variable, instruction_pointer_variable, char_pointer, 0);
+			insert_instruction_before_given(rip_offset_load, instruction);
 
 			break;
 		}
+
+		case FUNC_CONST: {
+			/**
+			 * For a function constant all we need to do is emit a rip relative lea(not load) using the function
+			 * name which comes to us in the constant record
+			 */
+			three_addr_var_t* func_pointer = emit_function_pointer_temp_var(old_constant->constant_value.function_constant);
+			result_variable = emit_temp_var(old_constant->type);
+			instruction_t* rip_relative_load = emit_lea_rip_relative_constant(result_variable, func_pointer, instruction_pointer_variable, 0);
+			insert_instruction_before_given(rip_relative_load, instruction);
+
+			break;
+	 	}
+
+		default: {
+			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected\n");
+			exit(1);
+	 	}
 	}
 
-	//Special case here - we need to emit a variable for the function pointer itself
-	case FUNC_CONST: {
-		//Emit the variable first
-		function_pointer_variable = emit_function_pointer_temp_var(constant_node->func_record);
-
-		//Now emit the rip-relative assignment used to load the address
-		const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), function_pointer_variable, instruction_pointer_var, constant_node->line_number);
-
-		//Get this into the block
-		add_statement(basic_block, const_assignment);
-
-		/**
-		 * Package up and return the resulting constant that we got
-		 */
-		constant_result_package.type = CFG_RESULT_TYPE_VAR;
-		constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
-		return constant_result_package;
-	}
 
 	//TODO INSTRUCTION MODIFICATION
 }

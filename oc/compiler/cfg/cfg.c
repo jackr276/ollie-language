@@ -2739,7 +2739,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 		case STR_CONST: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = STR_CONST;
-			emitted_constant->constant_value.string_constant = constant_node->string_value.string;
+			emitted_constant->constant_value.string_constant = constant_node->string_value;
 			break;
 		}
 
@@ -11100,7 +11100,7 @@ static inline three_addr_const_t* emit_global_variable_string_constant(generic_a
 	constant->type = string_initializer->inferred_type;
 
 	//Extract what we need out of it
-	constant->constant_value.string_constant = string_initializer->string_value.string;
+	constant->constant_value.string_constant = string_initializer->string_value;
 
 	return constant;
 }
