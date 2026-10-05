@@ -2752,8 +2752,6 @@ static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_lab
 static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, generic_ast_node_t* constant_node){
 	//Initialize the constant result package
 	cfg_result_package_t constant_result_package = INITIALIZE_BLANK_CFG_RESULT;
-	constant_result_package.starting_block = basic_block;
-	constant_result_package.final_block = basic_block;
 
 	//Placeholders for constant/var values
 	three_addr_const_t* emitted_constant;
@@ -2770,6 +2768,7 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 	 * handled in the catch-all default bucket
 	 */
 	switch(constant_node->constant_type){
+
 		case STR_CONST:
 			//Let's first see if we already have it
 			local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
@@ -2929,60 +2928,40 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = CHAR_CONST;
-
 			emitted_constant->constant_value.char_constant = constant_node->constant_value.char_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
+			break;
 		}
 
 		case BYTE_CONST: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST;
-
 			emitted_constant->constant_value.signed_byte_constant = constant_node->constant_value.signed_byte_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
+			break;
 		}
 
 		case BYTE_CONST_FORCE_U: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_byte_constant = constant_node->constant_value.unsigned_byte_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
+			break;
 		}
 
 		case SHORT_CONST: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST;
-
 			emitted_constant->constant_value.signed_short_constant = constant_node->constant_value.signed_short_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
+			break;
 		}
 
 		case SHORT_CONST_FORCE_U: {
 			emitted_constant = calloc(1, sizeof(three_addr_const_t));
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_short_constant = constant_node->constant_value.unsigned_short_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
+			break;
 		}
 
 		case INT_CONST: {
@@ -3027,6 +3006,8 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 	/**
 	 * Package up and return once we get here
 	 */
+	constant_result_package.starting_block = basic_block;
+	constant_result_package.final_block = basic_block;
 	constant_result_package.type = CFG_RESULT_TYPE_CONST;
 	constant_result_package.result_value.result_const = emitted_constant;
 	return constant_result_package;
