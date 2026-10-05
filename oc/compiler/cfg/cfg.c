@@ -2754,10 +2754,26 @@ static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, 
 	cfg_result_package_t constant_result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
-	 * In the CFG, we do not care to have constants 
+	 * In the CFG, we have all constants as the special three_addr_const_t struct. It is not
+	 * until the simplify step in the instruction selector that we will convert constants like
+	 * function constants, string constants, etc into local constants(.LCx) values
 	 */
 	three_addr_const_t* emitted_constant = calloc(1, sizeof(three_addr_const_t));
 	switch(constant_node->constant_type){
+		case FUNC_CONST: {
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = FUNC_CONST;
+			emitted_constant->constant_value.function_constant = constant_node->func_record;
+			break;
+		}
+
+		case STR_CONST: {
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = STR_CONST;
+			emitted_constant->constant_value.string_constant = constant_node->string_value.string;
+			break;
+		}
+
 		case FLOAT_CONST: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = FLOAT_CONST;
