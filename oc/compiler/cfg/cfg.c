@@ -378,37 +378,6 @@ static inline u_int8_t is_raw_constant_valid_for_lea_multiplier(int64_t constant
 
 
 /**
- * Is the given f32 negative? We need to use bit manipulation to deterine
- * this because regular float equality will not detect cases like -0.0 == 0.0
- */
-static inline u_int8_t is_f32_negative(float value){
-	//Get the float as an int without going through a conversion
-	u_int32_t float_as_int = *(u_int32_t*)(&value);
-
-	//We can extract the sign bit by getting MSB
-	u_int32_t sign_bit = (float_as_int >> 31);
-
-	return sign_bit == 1 ? TRUE : FALSE;
-}
-
-
-/**
- * Is the given f64 negative? We need to use bit manipulation to deterine
- * this because regular float equality will not detect cases like -0.0 == 0.0
- */
-static inline u_int8_t is_f64_negative(double value){
-	//Get the double as a long without going through a conversion
-	u_int64_t double_as_long = *(u_int64_t*)(&value);
-
-	//We can extract the sign bit by getting MSB
-	u_int64_t sign_bit = (double_as_long >> 63);
-
-	return sign_bit == 1 ? TRUE : FALSE;
-}
-
-
-
-/**
  * Lea statements may only have: 1, 2, 4, or 8 as their scales
  * due to internal hardware constraints. This operation will find
  * if a given value is compatible
@@ -837,62 +806,6 @@ static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local
 
 			break;
 	}
-}
-
-
-/**
- * Emit a three_addr_const_t value that is a local constant(.LCx) reference
- */
-static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
-
-	//Once this has been made, we can add it to the function
-	add_local_constant_to_cfg(cfg, local_constant);
-
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
-}
-
-
-/**
- * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
- * will also help us add the f32 constant to the function as a local function reference
- */
-static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
-
-	//Once this has been made, we can add it to the function
-	add_local_constant_to_cfg(cfg, local_constant);
-
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
-}
-
-
-/**
- * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
- * will also help us add the f64 constant to the function as a local function reference
- */
-static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = f64_local_constant_alloc(const_node->inferred_type, const_node->constant_value.double_value);
-
-	//Once this has been made, we can add it to the function
-	add_local_constant_to_cfg(cfg, local_constant);
-
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
 }
 
 
@@ -2747,292 +2660,125 @@ static inline void emit_user_defined_jump(basic_block_t* basic_block, symtab_lab
 
 
 /**
- * Emit the abstract machine code for a constant to variable assignment. 
+ * Convert a constant node into an OIR constant
  */
 static cfg_result_package_t emit_constant_from_node(basic_block_t* basic_block, generic_ast_node_t* constant_node){
 	//Initialize the constant result package
 	cfg_result_package_t constant_result_package = INITIALIZE_BLANK_CFG_RESULT;
-	constant_result_package.starting_block = basic_block;
-	constant_result_package.final_block = basic_block;
-
-	//Placeholders for constant/var values
-	three_addr_const_t* emitted_constant;
-	three_addr_var_t* local_constant_val;
-	three_addr_var_t* function_pointer_variable;
-	local_constant_t* local_constant;
-	//Holder for the constant assignment
-	instruction_t* const_assignment;
 
 	/**
-	 * Constants that are: strings, f32, f64, and function pointers require
-	 * special attention here since they use rip-relative addressing/local constants
-	 * to work. All other constants do not require this special treatment and are
-	 * handled in the catch-all default bucket
+	 * In the CFG, we have all constants as the special three_addr_const_t struct. It is not
+	 * until the simplify step in the instruction selector that we will convert constants like
+	 * function constants, string constants, etc into local constants(.LCx) values
 	 */
+	three_addr_const_t* emitted_constant = calloc(1, sizeof(three_addr_const_t));
 	switch(constant_node->constant_type){
-		case STR_CONST:
-			//Let's first see if we already have it
-			local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
+		case FUNC_CONST: {
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = FUNC_CONST;
+			emitted_constant->constant_value.function_constant = constant_node->func_record;
+			break;
+		}
 
-			/**
-			 * If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
-			 * to get our temp var
-			 */
-			if(local_constant == NULL){
-				local_constant_val = emit_string_local_constant(cfg, constant_node);
-			} else {
-				local_constant_val = emit_local_constant_temp_var(local_constant);
-			}
+		case STR_CONST: {
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = STR_CONST;
+			emitted_constant->constant_value.string_constant = constant_node->string_value;
+			break;
+		}
 
-			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var, constant_node->line_number);
+		case FLOAT_CONST: {
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = FLOAT_CONST;
+			emitted_constant->constant_value.float_constant = constant_node->constant_value.float_value;
+			break;
+		}
 
-			//Add this into the block
-			add_statement(basic_block, const_assignment);
+		case DOUBLE_CONST: {
+			emitted_constant->type = constant_node->inferred_type;
+			emitted_constant->const_type = DOUBLE_CONST;
+			emitted_constant->constant_value.double_constant = constant_node->constant_value.double_value;
+			break;
+		}
 
-			/**
-			 * This is always a variable constant - we will package it up and return now
-			 */
-			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
-			return constant_result_package;
-
-		//For float constants, we need to emit the local constant equivalent via the helper
-		case FLOAT_CONST:
-			/**
-			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
-			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
-			 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
-			 * because that would have the sign bit set
-			 */
-			if(constant_node->constant_value.float_value == 0.0f && is_f32_negative(constant_node->constant_value.float_value) == FALSE){
-				//Emit a temp var for this value
-				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
-
-				/**
-				 * We will now use a specialized IR instruction to clear this variable out. In reality
-				 * this clearing will be a PXOR statement
-				 */
-				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
-
-				//Add it into the block
-				add_statement(basic_block, clear_instruction);
-
-				/**
-				 * We are done - let's now package up and return the variable that we need to
-				 */
-				constant_result_package.type = CFG_RESULT_TYPE_VAR;
-				constant_result_package.result_value.result_var = cleared_var;
-				return constant_result_package;
-			}
-
-			//Let's first see if we can find it
-			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_node->constant_value.float_value);
-
-			//Either create a new local constant or update it accordingly
-			if(local_constant == NULL){
-				local_constant_val = emit_f32_local_constant(cfg, constant_node);
-			} else {
-				local_constant_val = emit_local_constant_temp_var(local_constant);
-			}
-
-			/**
-			 * Emit a rip-relative load to get this local constant out
-			 */
-			const_assignment = emit_load_rip_relative(emit_temp_var(f32), local_constant_val, instruction_pointer_var, f32, constant_node->line_number);
-
-			//Now add the actual assignment into the block
-			add_statement(basic_block, const_assignment);
-
-			/**
-			 * Package up and get out of here with our final result
-			 */
-			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
-			return constant_result_package;
-
-		//For double constants, we need to emit the local constant equivalent via the helper
-		case DOUBLE_CONST:
-			/**
-			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
-			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
-			 * first check if the constant value is 0 to see if that's a viable option. Note that if we have -0.0, it does
-			 * not count because -0.0 would still have the sign bit set, so doing a PXOR_CLEAR would not represent that
-			 * properly
-			 */
-			if(constant_node->constant_value.double_value == 0.0 && is_f64_negative(constant_node->constant_value.double_value) == FALSE){
-				//Emit a temp var for this value
-				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
-
-				/**
-				 * We will now use a specialized IR instruction to clear this variable out. In reality
-				 * this clearing will be a PXOR statement
-				 */
-				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
-
-				//Add it into the block
-				add_statement(basic_block, clear_instruction);
-
-				/**
-				 * Package up and return the final result type
-				 */
-				constant_result_package.type = CFG_RESULT_TYPE_VAR;
-				constant_result_package.result_value.result_var = cleared_var;
-				return constant_result_package;
-			}
-
-			//Let's first see if we can find it
-			local_constant = get_f64_local_constant(&(cfg->local_f64_constants), constant_node->constant_value.double_value);
-
-			//Either create a new local constant or update it accordingly
-			if(local_constant == NULL){
-				local_constant_val = emit_f64_local_constant(cfg, constant_node);
-			} else {
-				local_constant_val = emit_local_constant_temp_var(local_constant);
-			}
-
-			/**
-			 * Emit a rip-relative load to get this local constant out
-			 */
-			const_assignment = emit_load_rip_relative(emit_temp_var(f64), local_constant_val, instruction_pointer_var, f64, constant_node->line_number);
-
-			//Get this into the block
-			add_statement(basic_block, const_assignment);
-
-			/**
-			 * Now we can package up and return the entire result struct
-			 */
-			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
-			return constant_result_package;
-
-		//Special case here - we need to emit a variable for the function pointer itself
-		case FUNC_CONST:
-			//Emit the variable first
-			function_pointer_variable = emit_function_pointer_temp_var(constant_node->func_record);
-
-			//Now emit the rip-relative assignment used to load the address
-			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), function_pointer_variable, instruction_pointer_var, constant_node->line_number);
-
-			//Get this into the block
-			add_statement(basic_block, const_assignment);
-
-			/**
-			 * Package up and return the resulting constant that we got
-			 */
-			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
-			return constant_result_package;
-
-		/**
-		 * For every other constant type that we have, we will have a result type that
-		 * actually is a constant itself. To keep things as segmented as possible
-		 * each area will allocate the constant itself
-		 */
-		case CHAR_CONST:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case CHAR_CONST: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = CHAR_CONST;
-
 			emitted_constant->constant_value.char_constant = constant_node->constant_value.char_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case BYTE_CONST:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case BYTE_CONST: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST;
-
 			emitted_constant->constant_value.signed_byte_constant = constant_node->constant_value.signed_byte_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case BYTE_CONST_FORCE_U:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case BYTE_CONST_FORCE_U: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = BYTE_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_byte_constant = constant_node->constant_value.unsigned_byte_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case SHORT_CONST:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case SHORT_CONST: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST;
-
 			emitted_constant->constant_value.signed_short_constant = constant_node->constant_value.signed_short_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case SHORT_CONST_FORCE_U:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case SHORT_CONST_FORCE_U: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = SHORT_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_short_constant = constant_node->constant_value.unsigned_short_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case INT_CONST:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case INT_CONST: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST;
-
 			emitted_constant->constant_value.signed_integer_constant = constant_node->constant_value.signed_int_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case INT_CONST_FORCE_U:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case INT_CONST_FORCE_U: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = INT_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_integer_constant = constant_node->constant_value.unsigned_int_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case LONG_CONST:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case LONG_CONST: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = LONG_CONST;
-
 			emitted_constant->constant_value.signed_long_constant = constant_node->constant_value.signed_long_value;
+			break;
+		}
 
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
-
-		case LONG_CONST_FORCE_U:
-			emitted_constant = calloc(1, sizeof(three_addr_const_t));
+		case LONG_CONST_FORCE_U: {
 			emitted_constant->type = constant_node->inferred_type;
 			emitted_constant->const_type = LONG_CONST_FORCE_U;
-
 			emitted_constant->constant_value.unsigned_long_constant = constant_node->constant_value.unsigned_long_value;
-
-			constant_result_package.type = CFG_RESULT_TYPE_CONST;
-			constant_result_package.result_value.result_const = emitted_constant;
-			return constant_result_package;
+			break;
+		}
 			
 		//Some weird error if we get here - hard exit
 		default:
 			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected in CFG.\n");
 			exit(1);
 	}
+
+
+	/**
+	 * Package up and return once we get here
+	 */
+	constant_result_package.starting_block = basic_block;
+	constant_result_package.final_block = basic_block;
+	constant_result_package.type = CFG_RESULT_TYPE_CONST;
+	constant_result_package.result_value.result_const = emitted_constant;
+	return constant_result_package;
 }
 
 
@@ -11298,7 +11044,7 @@ static inline three_addr_const_t* emit_global_variable_string_constant(generic_a
 	constant->type = string_initializer->inferred_type;
 
 	//Extract what we need out of it
-	constant->constant_value.string_constant = string_initializer->string_value.string;
+	constant->constant_value.string_constant = string_initializer->string_value;
 
 	return constant;
 }
@@ -11312,9 +11058,6 @@ static inline three_addr_const_t* emit_global_variable_string_constant(generic_a
 static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* const_node){
 	//First we'll dynamically allocate the constant
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
-
-	//A holder for later if need be
-	three_addr_var_t* string_local_constant;
 
 	//Now we'll assign the appropriate values
 	constant->const_type = const_node->constant_type; 
@@ -11358,22 +11101,32 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
 			break;
+
 		/**
 		 * If we made it here, that specifically means that we are dealing with a char* constant. This is
 		 * an important distinction, because it will require that we emit a .LC local constant value and
 		 * then a pointer to it
 		 */
-		case STR_CONST:
-			//Let's first emit the string local constant
-			string_local_constant = emit_string_local_constant(cfg, const_node);
+		case STR_CONST: {
+			//First see if this exists already
+			local_constant_t* existing_string_lc = get_string_local_constant(&(cfg->local_string_constants), const_node->string_value.string);
 
-			//Now we'll assign the appropriate values
+			/**
+			 * If we don't already have it then we'll need to emit and add this to the CFG
+			 */
+			if(existing_string_lc == NULL){
+				existing_string_lc = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
+				add_local_constant_to_cfg(cfg, existing_string_lc);
+			}
+
+			//Now that we're here we can create the three_addr_var_t that represents this local constant address
+			three_addr_var_t* local_constant_address = emit_local_constant_temp_var(existing_string_lc);
+
+			//Flag this as a REL_ADDRESS_CONSTANT and store the address
+			constant->constant_value.local_constant_address = local_constant_address;
 			constant->const_type = REL_ADDRESS_CONST;
-
-			//Extract what we need out of it
-			constant->constant_value.local_constant_address = string_local_constant;
-
 			break;
+		}
 			
 		//Some very weird error here
 		default:

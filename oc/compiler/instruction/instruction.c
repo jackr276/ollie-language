@@ -2067,7 +2067,7 @@ void print_variable(FILE* fl, three_addr_var_t* variable, variable_printing_mode
  * constant and print it
  */
 static inline void print_global_variable_string_constant(FILE* fl, three_addr_const_t* string_constant){
-	fprintf(fl, "\t.string \"%s\"\n", string_constant->constant_value.string_constant);
+	fprintf(fl, "\t.string \"%s\"\n", string_constant->constant_value.string_constant.string);
 }
 
 
@@ -2270,27 +2270,43 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 		case BYTE_CONST:
 			fprintf(fl, "%d", constant->constant_value.signed_byte_constant);
 			break;
+
 		case BYTE_CONST_FORCE_U:
 			fprintf(fl, "%d", constant->constant_value.unsigned_byte_constant);
 			break;
+
 		case SHORT_CONST:
 			fprintf(fl, "%d", constant->constant_value.signed_short_constant);
 			break;
+
 		case SHORT_CONST_FORCE_U:
 			fprintf(fl, "%d", constant->constant_value.unsigned_short_constant);
 			break;
+
 		case INT_CONST:
 			fprintf(fl, "%d", constant->constant_value.signed_integer_constant);
 			break;
+
 		case INT_CONST_FORCE_U:
 			fprintf(fl, "%d", constant->constant_value.unsigned_integer_constant);
 			break;
+
 		case LONG_CONST:
 			fprintf(fl, "%ld", constant->constant_value.signed_long_constant);
 			break;
+
 		case LONG_CONST_FORCE_U:
 			fprintf(fl, "%ld", constant->constant_value.unsigned_long_constant);
 			break;
+
+		case FLOAT_CONST:
+			fprintf(fl, "%f", constant->constant_value.float_constant);
+			break;
+
+		case DOUBLE_CONST:
+			fprintf(fl, "%f", constant->constant_value.double_constant);
+			break;
+
 		case CHAR_CONST:
 			//Special case here to for display reasons
 			if(constant->constant_value.char_constant == 0){
@@ -2298,6 +2314,14 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 			} else {
 				fprintf(fl, "'%c'", constant->constant_value.char_constant);
 			}
+			break;
+
+		case STR_CONST:
+			fprintf(fl, "\"%s\"", constant->constant_value.string_constant.string);
+			break;
+
+		case FUNC_CONST:
+			fprintf(fl, "%s", constant->constant_value.function_constant->func_name.string);
 			break;
 
 		/**

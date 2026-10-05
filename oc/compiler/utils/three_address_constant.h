@@ -44,7 +44,11 @@ struct three_addr_const_t{
 		 * use a string constant. This is exclusively for the global context
 		 * in that case however, and will not be used anywhere else
 		 */
-		char* string_constant;
+		dynamic_string_t string_constant;
+		/**
+		 * We may also have a function constant that we hold onto
+		 */
+		symtab_function_record_t* function_constant;
 		/**
 		 * There are other special cases where we can hold a relative pointer to
 		 * a local constant. This is done exlcusively for declaring char* values

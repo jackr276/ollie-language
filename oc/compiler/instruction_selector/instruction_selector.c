@@ -31,6 +31,7 @@ static generic_type_t* i32;
 static generic_type_t* u16;
 static generic_type_t* i16;
 static generic_type_t* u8;
+static generic_type_t* char_pointer;
 
 //The dynamic string that we reuse for searching
 static dynamic_string_t value_name_searcher_string;
@@ -174,6 +175,36 @@ static void print_instruction_window(instruction_window_t* window){
 	}
 
 	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Is the given f32 negative? We need to use bit manipulation to deterine
+ * this because regular float equality will not detect cases like -0.0 == 0.0
+ */
+static inline u_int8_t is_f32_negative(float value){
+	//Get the float as an int without going through a conversion
+	u_int32_t float_as_int = *(u_int32_t*)(&value);
+
+	//We can extract the sign bit by getting MSB
+	u_int32_t sign_bit = (float_as_int >> 31);
+
+	return sign_bit == 1 ? TRUE : FALSE;
+}
+
+
+/**
+ * Is the given f64 negative? We need to use bit manipulation to deterine
+ * this because regular float equality will not detect cases like -0.0 == 0.0
+ */
+static inline u_int8_t is_f64_negative(double value){
+	//Get the double as a long without going through a conversion
+	u_int64_t double_as_long = *(u_int64_t*)(&value);
+
+	//We can extract the sign bit by getting MSB
+	u_int64_t sign_bit = (double_as_long >> 63);
+
+	return sign_bit == 1 ? TRUE : FALSE;
 }
 
 
@@ -5088,7 +5119,7 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
  * Perform memory address remediations for a given instruction in our instruction window. This function
  * will update the changed value in the event that a change does occur
  */
-static inline void perform_memory_address_remediations(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
+static void perform_memory_address_remediations(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
 	/**
 	 * If it's NULL then leave
 	 */
@@ -5316,6 +5347,334 @@ static inline void remove_memory_region_init_statement_if_found(instruction_wind
 
 
 /**
+ * Is the given constant a so-called "rip-relative" constant? This is only the case for
+ * floating point, strings and function constants
+ */
+static inline u_int8_t does_constant_require_rip_relative_load(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case FUNC_CONST:
+		case STR_CONST:
+		case DOUBLE_CONST:
+		case FLOAT_CONST:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+} 
+
+
+/**
+ * Simple helper that will add a local constant onto the cfg in the appropriate region
+ *
+ * This helper will also initialize the appropriate array if it is found to be null. This is
+ * done so that we aren't allocating them all unnecessarily at the beginning
+ */
+static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local_constant){
+	//Go based on what type it is
+	switch(local_constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_F32:
+			if(cfg->local_f32_constants.internal_array == NULL){
+				cfg->local_f32_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f32_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_F64:
+			if(cfg->local_f64_constants.internal_array == NULL){
+				cfg->local_f64_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f64_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_STRING:
+			if(cfg->local_string_constants.internal_array == NULL){
+				cfg->local_string_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_string_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_XMM128:
+			if(cfg->local_xmm128_constants.internal_array == NULL){
+				cfg->local_xmm128_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_xmm128_constants), local_constant);
+
+			break;
+	}
+}
+
+
+/**
+ * Emit a three_addr_const_t value that is a local constant(.LCx) reference
+ */
+static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, dynamic_string_t* string_value){
+	//Create it and add it into the CFG
+	local_constant_t* local_constant = string_local_constant_alloc(char_pointer, string_value);
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Allocate and return the variable that holds this
+	return emit_local_constant_temp_var(local_constant);
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f32 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, float float_value){
+	//Create it and add it to the CFG
+	local_constant_t* local_constant = f32_local_constant_alloc(f32, float_value);
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Allocate and return the variable that holds this
+	return emit_local_constant_temp_var(local_constant);
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f64 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, double double_value){
+	//Create it and add it to the CFG
+	local_constant_t* local_constant = f64_local_constant_alloc(f64, double_value);
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Allocate and return the variable that holds this
+	return emit_local_constant_temp_var(local_constant);
+}
+
+
+/**
+ * By the time that we get to this point in the simplification flow, we are now ready to convert
+ * all constants that need to be handled as local constants into local constants. This helper
+ * function will perform the conversion and replace the "constant_operand" field with the appropriate
+ * variable and update the instruction type as needed
+ */
+static void convert_OIR_constant_to_local_constant_if_required(instruction_t* instruction, u_int8_t* changed){
+	/**
+	 * If the instruction is NULL or it doesn't have a constant operand then there's
+	 * no point in bothering here
+	 */
+	if(instruction == NULL || instruction->operands.oir.constant_operand == NULL){
+		return;
+	}
+
+	/**
+	 * Get a reference to the old constant. If it doesn't require a rip relative
+	 * load then we can just leave out early
+	 */
+	three_addr_const_t* old_constant = instruction->operands.oir.constant_operand;
+	if(does_constant_require_rip_relative_load(old_constant) == FALSE){
+		return;
+	}
+
+	//Pointer to the result variable that we'll want eventually
+	three_addr_var_t* result_variable = NULL;
+
+	switch(old_constant->const_type){
+		case FLOAT_CONST: {
+			//Have this on hand for convenience
+			float float_value = old_constant->constant_value.float_constant;
+
+			/**
+			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
+			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
+			 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
+			 * because that would have the sign bit set
+			 */
+			if(float_value == 0.0f && is_f32_negative(float_value) == FALSE){
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
+				three_addr_var_t* cleared_var = emit_temp_var(f32);
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, 0);
+				insert_instruction_before_given(clear_instruction, instruction);
+
+				//This is the variable that we want to use
+				result_variable = cleared_var;
+
+			/**
+			 * Otherwise it's not 0 so we'll need to emit a local constant and a rip offset
+			 * load to get the value out
+			 */
+			} else {
+				//Let's first see if it already exists
+				local_constant_t* float_lc = get_f32_local_constant(&(cfg_reference->local_f32_constants), float_value);
+
+				/**
+				 * Either we have it already, in which case we just emit a var from it, or
+				 * we emit it fresh as a new local constant and get a variable from that
+				 */
+				three_addr_var_t* float_lc_variable = NULL;
+				if(float_lc == NULL){
+					float_lc_variable = emit_f32_local_constant(cfg_reference, float_value);
+				} else {
+					float_lc_variable = emit_local_constant_temp_var(float_lc);
+				}
+
+				/**
+				 * The result variable here will come from the rip offset load. We'll add the load in directly
+				 * before the instruction that we're currently working with
+				 */
+				result_variable = emit_temp_var(f32);
+				instruction_t* rip_offset_load = emit_load_rip_relative(result_variable, float_lc_variable, instruction_pointer_variable, f32, 0);
+				insert_instruction_before_given(rip_offset_load, instruction);
+			}
+
+			break;
+		}
+
+		case DOUBLE_CONST: {
+			//Have this on hand for convenience
+			double double_value = old_constant->constant_value.double_constant;
+
+			/**
+			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
+			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
+			 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
+			 * because that would have the sign bit set
+			 */
+			if(double_value == 0.0 && is_f64_negative(double_value) == FALSE){
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
+				three_addr_var_t* cleared_var = emit_temp_var(f64);
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, 0);
+				insert_instruction_before_given(clear_instruction, instruction);
+
+				//This is the variable that we want to use
+				result_variable = cleared_var;
+
+			/**
+			 * Otherwise it's not 0 so we'll need to emit a local constant and a rip offset
+			 * load to get the value out
+			 */
+			} else {
+				//Let's first see if it already exists
+				local_constant_t* double_lc = get_f64_local_constant(&(cfg_reference->local_f64_constants), double_value);
+
+				/**
+				 * Either we have it already, in which case we just emit a var from it, or
+				 * we emit it fresh as a new local constant and get a variable from that
+				 */
+				three_addr_var_t* double_lc_variable = NULL;
+				if(double_lc == NULL){
+					double_lc_variable = emit_f64_local_constant(cfg_reference, double_value);
+				} else {
+					double_lc_variable = emit_local_constant_temp_var(double_lc);
+				}
+
+				/**
+				 * The result variable here will come from the rip offset load. We'll add the load in directly
+				 * before the instruction that we're currently working with
+				 */
+				result_variable = emit_temp_var(f64);
+				instruction_t* rip_offset_load = emit_load_rip_relative(result_variable, double_lc_variable, instruction_pointer_variable, f64, 0);
+				insert_instruction_before_given(rip_offset_load, instruction);
+			}
+
+			break;
+		}
+
+		case STR_CONST: {
+			//First let's see if we can find it already
+			local_constant_t* string_local_constant = get_string_local_constant(&(cfg_reference->local_string_constants), old_constant->constant_value.string_constant.string);
+
+			/**
+			 * Now based on whether or not this local constant exists, we'll either create and add it here or emit a 
+			 * brand new one. Either way we'll end up with a proper local constant variable
+			 */
+			three_addr_var_t* string_lc_variable = NULL;
+			if(string_local_constant == NULL){
+				string_lc_variable = emit_string_local_constant(cfg_reference, &(old_constant->constant_value.string_constant));
+			} else {
+				string_lc_variable = emit_local_constant_temp_var(string_local_constant);
+			}
+
+			/**
+			 * The result variable is a pointer that will come from a lea rip relative calculation
+			 */
+			result_variable = emit_temp_var(char_pointer);
+			instruction_t* rip_offset_load = emit_lea_rip_relative_constant(result_variable, string_lc_variable, instruction_pointer_variable, 0);
+			insert_instruction_before_given(rip_offset_load, instruction);
+
+			break;
+		}
+
+		case FUNC_CONST: {
+			/**
+			 * For a function constant all we need to do is emit a rip relative lea(not load) using the function
+			 * name which comes to us in the constant record
+			 */
+			three_addr_var_t* func_pointer = emit_function_pointer_temp_var(old_constant->constant_value.function_constant);
+			result_variable = emit_temp_var(old_constant->type);
+			instruction_t* rip_relative_load = emit_lea_rip_relative_constant(result_variable, func_pointer, instruction_pointer_variable, 0);
+			insert_instruction_before_given(rip_relative_load, instruction);
+
+			break;
+	 	}
+
+		default: {
+			fprintf(stderr, "Fatal internal compiler error: unrecognized constant type detected\n");
+			exit(1);
+	 	}
+	}
+
+	/**
+	 * Now that we have the variable resulting from the load(f32, f64) or lea address(string, func const),
+	 * we can go through and update the original instruction accordingly. Remember that this can only ever
+	 * come from the "constant operand", so only instructions that have that can be impacted. Some instructions
+	 * (like bin_op_with_const) will need to have their codes changed
+	 */
+	instruction->operands.oir.constant_operand = NULL;
+
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_STMT;
+			instruction->operands.oir.operand2 = result_variable;
+			break;
+
+		case THREE_ADDR_CODE_ASSN_CONST_STMT:
+			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+			instruction->operands.oir.operand1 = result_variable;
+			break;
+
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			instruction->operands.oir.operand1 = result_variable;
+			break;
+
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			instruction->operands.oir.operand1 = result_variable;
+			break;
+		
+		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			instruction->operands.oir.operand2 = result_variable;
+			break;
+
+		default:
+			break;
+	}
+
+	/**
+	 * Flag this as a change. Specifically do *NOT* reconstruct the window after doing this
+	 * because we want to go in sequential order, and rebuilding the window would mess
+	 * that up
+	 */
+	*changed = TRUE;
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -5350,6 +5709,18 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	perform_memory_address_remediations(window, window->instruction1, &changed);
 	perform_memory_address_remediations(window, window->instruction2, &changed);
 	perform_memory_address_remediations(window, window->instruction3, &changed);
+
+	/**
+	 * Constant to local constant conversion - some constants(these would always
+	 * be in constant_operand) are not actually represented raw in assembly. A perfect
+	 * example of this is float and double consts, which are really represented
+	 * using local constant(.LCx) values in the .readonly section of the generated
+	 * binary. As part of the simplification process, we will go through and lower
+	 * any constant that fits that category now
+	 */
+	convert_OIR_constant_to_local_constant_if_required(window->instruction1, &changed);
+	convert_OIR_constant_to_local_constant_if_required(window->instruction2, &changed);
+	convert_OIR_constant_to_local_constant_if_required(window->instruction3, &changed);
 
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
@@ -7061,9 +7432,7 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
 			changed = simplify_window(&window);
 
 			//Set this flag if it was changed
-			if(changed == TRUE){
-				window_changed = TRUE;
-			}
+			window_changed |= changed;
 
 			//And slide it
 			slide_window(&window);
@@ -15562,54 +15931,6 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 
 
 /**
- * Simple helper that will add a local constant onto the cfg in the appropriate region
- *
- * This helper will also initialize the appropriate array if it is found to be null. This is
- * done so that we aren't allocating them all unnecessarily at the beginning
- */
-static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local_constant){
-	//Go based on what type it is
-	switch(local_constant->local_constant_type){
-		case LOCAL_CONSTANT_TYPE_F32:
-			if(cfg->local_f32_constants.internal_array == NULL){
-				cfg->local_f32_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_f32_constants), local_constant);
-
-			break;
-
-		case LOCAL_CONSTANT_TYPE_F64:
-			if(cfg->local_f64_constants.internal_array == NULL){
-				cfg->local_f64_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_f64_constants), local_constant);
-
-			break;
-
-		case LOCAL_CONSTANT_TYPE_STRING:
-			if(cfg->local_string_constants.internal_array == NULL){
-				cfg->local_string_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_string_constants), local_constant);
-
-			break;
-
-		case LOCAL_CONSTANT_TYPE_XMM128:
-			if(cfg->local_xmm128_constants.internal_array == NULL){
-				cfg->local_xmm128_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_xmm128_constants), local_constant);
-
-			break;
-	}
-}
-
-
-/**
  * Handle a negation instruction. It should be noted that there
  * are 2 different kinds of negation selection processes, one for
  * floating point instructions and one for GP instructions
@@ -16703,6 +17024,7 @@ static void select_instructions(cfg_t* cfg){
 void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	//Grab these general use types first
 	double_quad_word = lookup_type_name_only(cfg->type_symtab, "&double_quad_word", NOT_MUTABLE)->type;
+	char_pointer = lookup_type_name_only(cfg->type_symtab, "char*", NOT_MUTABLE)->type;
 	f64 = lookup_type_name_only(cfg->type_symtab, "f64", NOT_MUTABLE)->type;
 	f32 = lookup_type_name_only(cfg->type_symtab, "f32", NOT_MUTABLE)->type;
 	u64 = lookup_type_name_only(cfg->type_symtab, "u64", NOT_MUTABLE)->type;
