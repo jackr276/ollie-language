@@ -5316,10 +5316,47 @@ static inline void remove_memory_region_init_statement_if_found(instruction_wind
 
 
 /**
+ * Is the given constant a so-called "rip-relative" constant? This is only the case for
+ * floating point, strings and function constants
+ */
+static inline u_int8_t does_constant_require_rip_relative_load(three_addr_const_t* constant){
+	switch(constant->const_type){
+		case FUNC_CONST:
+		case STR_CONST:
+		case DOUBLE_CONST:
+		case FLOAT_CONST:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+} 
+
+
+
+/**
  *
  * TODO HERE
  */
 static inline void convert_OIR_constant_to_local_constant_if_required(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
+	/**
+	 * If the instruction is NULL or it doesn't have a constant operand then there's
+	 * no point in bothering here
+	 */
+	if(instruction == NULL || instruction->operands.oir.constant_operand == NULL){
+		return;
+	}
+
+	/**
+	 * Get a reference to the old constant. If it doesn't require a rip relative
+	 * load then we can just leave out early
+	 */
+	three_addr_const_t* old_constant = instruction->operands.oir.constant_operand;
+	if(does_constant_require_rip_relative_load(old_constant) == FALSE){
+		return;
+	}
+
+
+
 
 
 
@@ -7238,9 +7275,7 @@ static u_int8_t simplifier_pass(basic_block_t* entry){
 			changed = simplify_window(&window);
 
 			//Set this flag if it was changed
-			if(changed == TRUE){
-				window_changed = TRUE;
-			}
+			window_changed |= changed;
 
 			//And slide it
 			slide_window(&window);
