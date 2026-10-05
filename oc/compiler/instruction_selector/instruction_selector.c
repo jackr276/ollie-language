@@ -9487,8 +9487,7 @@ static void simplify(cfg_t* cfg){
 		}
 
 		/**
-		 * TODO HERE
-		 * The very last thing that we'll need to do is run through the function and
+		 * The second to last thing that we'll need to do is run through the function and
 		 * convert all initializer statements from the high level OIR that they come to us
 		 * in into lower-level OIR store statements. This is the final step in priming
 		 * all instructions for instruction selection. This helper will return TRUE
@@ -9499,10 +9498,11 @@ static void simplify(cfg_t* cfg){
 			/**
 			 * After we do all of this, one run final simplifier pass to ensure everything
 			 * is in the simplest form that we can get it in
-			 *
-			 *
-			 * TODO
 			 */
+			do {
+				reset_all_use_counts(&use_count_tracker);
+				populate_use_counts_for_function(&(function->function_blocks));
+			} while(simplifier_pass(function_entry) == TRUE);
 		}
 
 		/*
