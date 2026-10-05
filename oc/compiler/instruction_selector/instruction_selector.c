@@ -5481,13 +5481,16 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 
 	switch(old_constant->const_type){
 		case FLOAT_CONST: {
+			//Have this on hand for convenience
+			float float_value = old_constant->constant_value.float_constant;
+
 			/**
 			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
 			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
 			 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
 			 * because that would have the sign bit set
 			 */
-			if(old_constant->constant_value.float_constant == 0.0f && is_f32_negative(old_constant->constant_value.float_constant) == FALSE){
+			if(float_value == 0.0f && is_f32_negative(float_value) == FALSE){
 				/**
 				 * We will now use a specialized IR instruction to clear this variable out. In reality
 				 * this clearing will be a PXOR statement
@@ -5504,10 +5507,31 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 			 * load to get the value out
 			 */
 			} else {
+				//Let's first see if it already exists
+				local_constant_t* float_lc = get_f32_local_constant(&(cfg_reference->local_f32_constants), float_value);
 
+				/**
+				 * Either we have it already, in which case we just emit a var from it, or
+				 * we emit it fresh as a new local constant and get a variable from that
+				 */
+				three_addr_var_t* float_lc_variable = NULL;
+				if(float_lc == NULL){
+					float_lc_variable = emit_f32_local_constant(cfg_reference, float_value);
+				} else {
+					float_lc_variable = emit_local_constant_temp_var(float_lc);
+				}
+
+				/**
+				 * The result variable here will come from the rip offset load. We'll add the load in directly
+				 * before the instruction that we're currently working with
+				 */
+				result_variable = emit_temp_var(f32);
+				instruction_t* rip_offset_load = emit_load_rip_relative(result_variable, float_lc_variable, instruction_pointer_variable, f32, 0);
+				insert_instruction_before_given(rip_offset_load, instruction);
 			}
 
-
+			break;
+		}
 
 		case STR_CONST: {
 			//First let's see if we can find it already
@@ -5528,73 +5552,6 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 		}
 	}
 
-
-
-
-
-
-	case STR_CONST:
-		//Let's first see if we already have it
-		local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
-
-		/**
-		 * If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
-		 * to get our temp var
-		 */
-		if(local_constant == NULL){
-			local_constant_val = emit_string_local_constant(cfg, constant_node);
-		} else {
-			local_constant_val = emit_local_constant_temp_var(local_constant);
-		}
-
-		//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
-		const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var, constant_node->line_number);
-
-		//Add this into the block
-		add_statement(basic_block, const_assignment);
-
-		/**
-		 * This is always a variable constant - we will package it up and return now
-		 */
-		constant_result_package.type = CFG_RESULT_TYPE_VAR;
-		constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
-		return constant_result_package;
-
-	//For float constants, we need to emit the local constant equivalent via the helper
-	case FLOAT_CONST:
-
-			/**
-			 * We are done - let's now package up and return the variable that we need to
-			 */
-			constant_result_package.type = CFG_RESULT_TYPE_VAR;
-			constant_result_package.result_value.result_var = cleared_var;
-			return constant_result_package;
-		}
-
-		//Let's first see if we can find it
-		local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_node->constant_value.float_value);
-
-		//Either create a new local constant or update it accordingly
-		if(local_constant == NULL){
-			local_constant_val = emit_f32_local_constant(cfg, constant_node);
-		} else {
-			local_constant_val = emit_local_constant_temp_var(local_constant);
-		}
-
-		/**
-		 * Emit a rip-relative load to get this local constant out
-		 */
-		const_assignment = emit_load_rip_relative(emit_temp_var(f32), local_constant_val, instruction_pointer_var, f32, constant_node->line_number);
-
-		//Now add the actual assignment into the block
-		add_statement(basic_block, const_assignment);
-
-		/**
-		 * Package up and get out of here with our final result
-		 */
-		constant_result_package.type = CFG_RESULT_TYPE_VAR;
-		constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
-		return constant_result_package;
 
 	//For double constants, we need to emit the local constant equivalent via the helper
 	case DOUBLE_CONST:
