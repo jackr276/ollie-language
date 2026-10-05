@@ -5497,7 +5497,7 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 				 */
 				three_addr_var_t* cleared_var = emit_temp_var(f32);
 				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, 0);
-				insert_instruction_before_given(instruction, clear_instruction);
+				insert_instruction_before_given(clear_instruction, instruction);
 
 				//This is the variable that we want to use
 				result_variable = cleared_var;
@@ -5550,7 +5550,7 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 				 */
 				three_addr_var_t* cleared_var = emit_temp_var(f64);
 				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, 0);
-				insert_instruction_before_given(instruction, clear_instruction);
+				insert_instruction_before_given(clear_instruction, instruction);
 
 				//This is the variable that we want to use
 				result_variable = cleared_var;
@@ -5602,11 +5602,10 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 			}
 
 			/**
-			 * The result variable will come from a variable offset load. We'll load in directly
-			 * before the instruction that is of interest
+			 * The result variable is a pointer that will come from a lea rip relative calculation
 			 */
 			result_variable = emit_temp_var(char_pointer);
-			instruction_t* rip_offset_load = emit_load_rip_relative(result_variable, string_lc_variable, instruction_pointer_variable, char_pointer, 0);
+			instruction_t* rip_offset_load = emit_lea_rip_relative_constant(result_variable, string_lc_variable, instruction_pointer_variable, 0);
 			insert_instruction_before_given(rip_offset_load, instruction);
 
 			break;
@@ -5632,7 +5631,7 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 	}
 
 	/**
-	 * Now that we have the variable resulting from the load(string, f32, f64) or lea address(func const),
+	 * Now that we have the variable resulting from the load(f32, f64) or lea address(string, func const),
 	 * we can go through and update the original instruction accordingly. Remember that this can only ever
 	 * come from the "constant operand", so only instructions that have that can be impacted. Some instructions
 	 * (like bin_op_with_const) will need to have their codes changed
@@ -5641,11 +5640,16 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 	instruction->operands.oir.operand1 = result_variable;
 
 	/**
-	 * Special case - this will actually change our statement type without a constant
-	 * inside of it
+	 * Special cases - changing these instructions from constants
+	 * to non-constants will also change their statement codes
 	 */
-	if(instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
-		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_STMT;
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_STMT;
+		case THREE_ADDR_CODE_ASSN_CONST_STMT:
+			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+		default:
+			break;
 	}
 
 	/**
