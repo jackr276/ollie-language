@@ -5119,7 +5119,7 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
  * Perform memory address remediations for a given instruction in our instruction window. This function
  * will update the changed value in the event that a change does occur
  */
-static inline void perform_memory_address_remediations(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
+static void perform_memory_address_remediations(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
 	/**
 	 * If it's NULL then leave
 	 */
@@ -5458,7 +5458,7 @@ static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, double doubl
  * function will perform the conversion and replace the "constant_operand" field with the appropriate
  * variable and update the instruction type as needed
  */
-static inline void convert_OIR_constant_to_local_constant_if_required(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
+static void convert_OIR_constant_to_local_constant_if_required(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
 	/**
 	 * If the instruction is NULL or it doesn't have a constant operand then there's
 	 * no point in bothering here
