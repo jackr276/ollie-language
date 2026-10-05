@@ -5637,17 +5637,30 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 	 * (like bin_op_with_const) will need to have their codes changed
 	 */
 	instruction->operands.oir.constant_operand = NULL;
-	instruction->operands.oir.operand1 = result_variable;
 
-	/**
-	 * Special cases - changing these instructions from constants
-	 * to non-constants will also change their statement codes
-	 */
 	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 			instruction->statement_type = THREE_ADDR_CODE_BIN_OP_STMT;
+			instruction->operands.oir.operand2 = result_variable;
+			break;
+
 		case THREE_ADDR_CODE_ASSN_CONST_STMT:
 			instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+			instruction->operands.oir.operand1 = result_variable;
+			break;
+
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+			instruction->operands.oir.operand1 = result_variable;
+			break;
+
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+			instruction->operands.oir.operand1 = result_variable;
+			break;
+		
+		case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			instruction->operands.oir.operand2 = result_variable;
+			break;
+
 		default:
 			break;
 	}
