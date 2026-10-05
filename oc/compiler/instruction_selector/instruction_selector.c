@@ -5332,10 +5332,115 @@ static inline u_int8_t does_constant_require_rip_relative_load(three_addr_const_
 } 
 
 
+/**
+ * Simple helper that will add a local constant onto the cfg in the appropriate region
+ *
+ * This helper will also initialize the appropriate array if it is found to be null. This is
+ * done so that we aren't allocating them all unnecessarily at the beginning
+ */
+static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local_constant){
+	//Go based on what type it is
+	switch(local_constant->local_constant_type){
+		case LOCAL_CONSTANT_TYPE_F32:
+			if(cfg->local_f32_constants.internal_array == NULL){
+				cfg->local_f32_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f32_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_F64:
+			if(cfg->local_f64_constants.internal_array == NULL){
+				cfg->local_f64_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_f64_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_STRING:
+			if(cfg->local_string_constants.internal_array == NULL){
+				cfg->local_string_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_string_constants), local_constant);
+
+			break;
+
+		case LOCAL_CONSTANT_TYPE_XMM128:
+			if(cfg->local_xmm128_constants.internal_array == NULL){
+				cfg->local_xmm128_constants = dynamic_array_alloc();
+			}
+
+			dynamic_array_add(&(cfg->local_xmm128_constants), local_constant);
+
+			break;
+	}
+}
+
 
 /**
- *
- * TODO HERE
+ * Emit a three_addr_const_t value that is a local constant(.LCx) reference
+ */
+static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f32 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
+ * will also help us add the f64 constant to the function as a local function reference
+ */
+static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
+	//Let's create the local constant first.
+	local_constant_t* local_constant = f64_local_constant_alloc(const_node->inferred_type, const_node->constant_value.double_value);
+
+	//Once this has been made, we can add it to the function
+	add_local_constant_to_cfg(cfg, local_constant);
+
+	//Now allocate the variable that will hold this
+	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
+
+	//And give this back
+	return local_constant_variable;
+}
+
+
+/**
+ * By the time that we get to this point in the simplification flow, we are now ready to convert
+ * all constants that need to be handled as local constants into local constants. This helper
+ * function will perform the conversion and replace the "constant_operand" field with the appropriate
+ * variable and update the instruction type as needed
  */
 static inline void convert_OIR_constant_to_local_constant_if_required(instruction_window_t* window, instruction_t* instruction, u_int8_t* changed){
 	/**
@@ -5353,6 +5458,25 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 	three_addr_const_t* old_constant = instruction->operands.oir.constant_operand;
 	if(does_constant_require_rip_relative_load(old_constant) == FALSE){
 		return;
+	}
+
+	switch(old_constant->const_type){
+		case STR_CONST: {
+			//First let's see if we can find it already
+			local_constant_t* string_local_constant = get_string_local_constant(&(cfg_reference->local_string_constants), old_constant->constant_value.string_constant);
+
+			/**
+			 * Now based on whether or not this local constant exists
+			 */
+			three_addr_var_t* string_lc_variable = NULL;
+			if(string_local_constant == NULL){
+
+			} else {
+
+			}
+
+			break;
+		}
 	}
 
 
