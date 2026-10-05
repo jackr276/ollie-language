@@ -5631,8 +5631,28 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 	 	}
 	}
 
+	/**
+	 * Now that we have the variable resulting from the load(string, f32, f64) or lea address(func const),
+	 * we can go through and update the original instruction accordingly. Remember that this can only ever
+	 * come from the "constant operand", so only instructions that have that can be impacted. Some instructions
+	 * (like bin_op_with_const) will need to have their codes changed
+	 */
+	instruction->operands.oir.constant_operand = NULL;
+	instruction->operands.oir.operand1 = result_variable;
 
-	//TODO INSTRUCTION MODIFICATION
+	/**
+	 * Special case - this will actually change our statement type without a constant
+	 * inside of it
+	 */
+	if(instruction->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT){
+		instruction->statement_type = THREE_ADDR_CODE_BIN_OP_STMT;
+	}
+
+	/**
+	 * Flag this as changed and rebuild our window around the current instruction
+	 */
+	*changed = TRUE;
+	reconstruct_window(window, instruction);
 }
 
 
@@ -15889,54 +15909,6 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 
 	//Give the instruction back
 	return instruction;
-}
-
-
-/**
- * Simple helper that will add a local constant onto the cfg in the appropriate region
- *
- * This helper will also initialize the appropriate array if it is found to be null. This is
- * done so that we aren't allocating them all unnecessarily at the beginning
- */
-static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local_constant){
-	//Go based on what type it is
-	switch(local_constant->local_constant_type){
-		case LOCAL_CONSTANT_TYPE_F32:
-			if(cfg->local_f32_constants.internal_array == NULL){
-				cfg->local_f32_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_f32_constants), local_constant);
-
-			break;
-
-		case LOCAL_CONSTANT_TYPE_F64:
-			if(cfg->local_f64_constants.internal_array == NULL){
-				cfg->local_f64_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_f64_constants), local_constant);
-
-			break;
-
-		case LOCAL_CONSTANT_TYPE_STRING:
-			if(cfg->local_string_constants.internal_array == NULL){
-				cfg->local_string_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_string_constants), local_constant);
-
-			break;
-
-		case LOCAL_CONSTANT_TYPE_XMM128:
-			if(cfg->local_xmm128_constants.internal_array == NULL){
-				cfg->local_xmm128_constants = dynamic_array_alloc();
-			}
-
-			dynamic_array_add(&(cfg->local_xmm128_constants), local_constant);
-
-			break;
-	}
 }
 
 
