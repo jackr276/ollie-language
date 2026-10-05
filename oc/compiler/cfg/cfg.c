@@ -810,62 +810,6 @@ static inline void add_local_constant_to_cfg(cfg_t* cfg, local_constant_t* local
 
 
 /**
- * Emit a three_addr_const_t value that is a local constant(.LCx) reference
- */
-static inline three_addr_var_t* emit_string_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
-
-	//Once this has been made, we can add it to the function
-	add_local_constant_to_cfg(cfg, local_constant);
-
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
-}
-
-
-/**
- * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
- * will also help us add the f32 constant to the function as a local function reference
- */
-static inline three_addr_var_t* emit_f32_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = f32_local_constant_alloc(const_node->inferred_type, const_node->constant_value.float_value);
-
-	//Once this has been made, we can add it to the function
-	add_local_constant_to_cfg(cfg, local_constant);
-
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
-}
-
-
-/**
- * Emit a three_addr_var_t value that is a local constant(.LCx) reference. This helper function
- * will also help us add the f64 constant to the function as a local function reference
- */
-static inline three_addr_var_t* emit_f64_local_constant(cfg_t* cfg, generic_ast_node_t* const_node){
-	//Let's create the local constant first.
-	local_constant_t* local_constant = f64_local_constant_alloc(const_node->inferred_type, const_node->constant_value.double_value);
-
-	//Once this has been made, we can add it to the function
-	add_local_constant_to_cfg(cfg, local_constant);
-
-	//Now allocate the variable that will hold this
-	three_addr_var_t* local_constant_variable = emit_local_constant_temp_var(local_constant);
-
-	//And give this back
-	return local_constant_variable;
-}
-
-
-/**
  * A helper function that will directly emit either an f32 or f64
  * constant value and place said value into the appropriate location
  * for a function. This will return a variable that corresponds
@@ -11115,9 +11059,6 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 	//First we'll dynamically allocate the constant
 	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
 
-	//A holder for later if need be
-	three_addr_var_t* string_local_constant;
-
 	//Now we'll assign the appropriate values
 	constant->const_type = const_node->constant_type; 
 	constant->type = const_node->inferred_type;
@@ -11160,22 +11101,32 @@ static three_addr_const_t* emit_global_variable_constant(generic_ast_node_t* con
 		case FLOAT_CONST:
 			constant->constant_value.float_constant = const_node->constant_value.float_value;
 			break;
+
 		/**
 		 * If we made it here, that specifically means that we are dealing with a char* constant. This is
 		 * an important distinction, because it will require that we emit a .LC local constant value and
 		 * then a pointer to it
 		 */
-		case STR_CONST:
-			//Let's first emit the string local constant
-			string_local_constant = emit_string_local_constant(cfg, const_node);
+		case STR_CONST: {
+			//First see if this exists already
+			local_constant_t* existing_string_lc = get_string_local_constant(&(cfg->local_string_constants), const_node->string_value.string);
 
-			//Now we'll assign the appropriate values
+			/**
+			 * If we don't already have it then we'll need to emit and add this to the CFG
+			 */
+			if(existing_string_lc == NULL){
+				existing_string_lc = string_local_constant_alloc(const_node->inferred_type, &(const_node->string_value));
+				add_local_constant_to_cfg(cfg, existing_string_lc);
+			}
+
+			//Now that we're here we can create the three_addr_var_t that represents this local constant address
+			three_addr_var_t* local_constant_address = emit_local_constant_temp_var(existing_string_lc);
+
+			//Flag this as a REL_ADDRESS_CONSTANT and store the address
+			constant->constant_value.local_constant_address = local_constant_address;
 			constant->const_type = REL_ADDRESS_CONST;
-
-			//Extract what we need out of it
-			constant->constant_value.local_constant_address = string_local_constant;
-
 			break;
+		}
 			
 		//Some very weird error here
 		default:

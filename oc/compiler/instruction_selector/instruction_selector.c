@@ -5666,10 +5666,11 @@ static inline void convert_OIR_constant_to_local_constant_if_required(instructio
 	}
 
 	/**
-	 * Flag this as changed and rebuild our window around the current instruction
+	 * Flag this as a change. Specifically do *NOT* reconstruct the window after doing this
+	 * because we want to go in sequential order, and rebuilding the window would mess
+	 * that up
 	 */
 	*changed = TRUE;
-	reconstruct_window(window, instruction);
 }
 
 
