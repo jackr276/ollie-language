@@ -820,6 +820,8 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 /**
  * Part of optimizer's mark and sweep - remove any local constants
  * with a reference count of 0
+ *
+ * TODO IS THIS EVEN WORTH ANYTHING
  */
 void sweep_local_constants(cfg_t* cfg){
 	//An array that marks given constants for deletion
@@ -2634,6 +2636,8 @@ cfg_t* optimize(cfg_t* cfg){
 		 * PASS 6.5: Now that all of our marking and sweeping is done, it is possible that we'll
 		 * have some orphaned local constants. We will go through now and sweep them all up if 
 		 * any of them end up being completely unused
+		 *
+		 * TODO IS THIS EVEN WORTH HAVING
 		 */
 		sweep_local_constants(cfg);
 

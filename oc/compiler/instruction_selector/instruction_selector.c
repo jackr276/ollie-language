@@ -5315,6 +5315,170 @@ static inline void remove_memory_region_init_statement_if_found(instruction_wind
 }
 
 
+//TODO LOOK AT ME
+
+
+		case STR_CONST:
+			//Let's first see if we already have it
+			local_constant = get_string_local_constant(&(cfg->local_string_constants), constant_node->string_value.string);
+
+			/**
+			 * If we couldn't find it, we'll create it. Otherwise, we'll just use what we found
+			 * to get our temp var
+			 */
+			if(local_constant == NULL){
+				local_constant_val = emit_string_local_constant(cfg, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
+
+			//We'll emit an instruction that adds this constant value to the %rip to accurately calculate an address to jump to
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), local_constant_val, instruction_pointer_var, constant_node->line_number);
+
+			//Add this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * This is always a variable constant - we will package it up and return now
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
+			return constant_result_package;
+
+		//For float constants, we need to emit the local constant equivalent via the helper
+		case FLOAT_CONST:
+			/**
+			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
+			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
+			 * first check if the constant value is 0 to see if that's a viable option. We do *not* count -0.0 in this
+			 * because that would have the sign bit set
+			 */
+			if(constant_node->constant_value.float_value == 0.0f && is_f32_negative(constant_node->constant_value.float_value) == FALSE){
+				//Emit a temp var for this value
+				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
+
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
+
+				//Add it into the block
+				add_statement(basic_block, clear_instruction);
+
+				/**
+				 * We are done - let's now package up and return the variable that we need to
+				 */
+				constant_result_package.type = CFG_RESULT_TYPE_VAR;
+				constant_result_package.result_value.result_var = cleared_var;
+				return constant_result_package;
+			}
+
+			//Let's first see if we can find it
+			local_constant = get_f32_local_constant(&(cfg->local_f32_constants), constant_node->constant_value.float_value);
+
+			//Either create a new local constant or update it accordingly
+			if(local_constant == NULL){
+				local_constant_val = emit_f32_local_constant(cfg, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
+
+			/**
+			 * Emit a rip-relative load to get this local constant out
+			 */
+			const_assignment = emit_load_rip_relative(emit_temp_var(f32), local_constant_val, instruction_pointer_var, f32, constant_node->line_number);
+
+			//Now add the actual assignment into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Package up and get out of here with our final result
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
+			return constant_result_package;
+
+		//For double constants, we need to emit the local constant equivalent via the helper
+		case DOUBLE_CONST:
+			/**
+			 * For a floating point constant, if the value is 0 we can avoid all of this mess by emitting a PXOR clear
+			 * instruction on a variable. That will allow us to avoid emitting a constant here if we don't need to. Let's
+			 * first check if the constant value is 0 to see if that's a viable option. Note that if we have -0.0, it does
+			 * not count because -0.0 would still have the sign bit set, so doing a PXOR_CLEAR would not represent that
+			 * properly
+			 */
+			if(constant_node->constant_value.double_value == 0.0 && is_f64_negative(constant_node->constant_value.double_value) == FALSE){
+				//Emit a temp var for this value
+				three_addr_var_t* cleared_var = emit_temp_var(constant_node->inferred_type);
+
+				/**
+				 * We will now use a specialized IR instruction to clear this variable out. In reality
+				 * this clearing will be a PXOR statement
+				 */
+				instruction_t* clear_instruction = emit_clear_instruction(cleared_var, constant_node->line_number);
+
+				//Add it into the block
+				add_statement(basic_block, clear_instruction);
+
+				/**
+				 * Package up and return the final result type
+				 */
+				constant_result_package.type = CFG_RESULT_TYPE_VAR;
+				constant_result_package.result_value.result_var = cleared_var;
+				return constant_result_package;
+			}
+
+			//Let's first see if we can find it
+			local_constant = get_f64_local_constant(&(cfg->local_f64_constants), constant_node->constant_value.double_value);
+
+			//Either create a new local constant or update it accordingly
+			if(local_constant == NULL){
+				local_constant_val = emit_f64_local_constant(cfg, constant_node);
+			} else {
+				local_constant_val = emit_local_constant_temp_var(local_constant);
+			}
+
+			/**
+			 * Emit a rip-relative load to get this local constant out
+			 */
+			const_assignment = emit_load_rip_relative(emit_temp_var(f64), local_constant_val, instruction_pointer_var, f64, constant_node->line_number);
+
+			//Get this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Now we can package up and return the entire result struct
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
+			return constant_result_package;
+
+		//Special case here - we need to emit a variable for the function pointer itself
+		case FUNC_CONST: {
+			//Emit the variable first
+			function_pointer_variable = emit_function_pointer_temp_var(constant_node->func_record);
+
+			//Now emit the rip-relative assignment used to load the address
+			const_assignment = emit_lea_rip_relative_constant(emit_temp_var(constant_node->inferred_type), function_pointer_variable, instruction_pointer_var, constant_node->line_number);
+
+			//Get this into the block
+			add_statement(basic_block, const_assignment);
+
+			/**
+			 * Package up and return the resulting constant that we got
+			 */
+			constant_result_package.type = CFG_RESULT_TYPE_VAR;
+			constant_result_package.result_value.result_var = const_assignment->operands.oir.assignee;
+			return constant_result_package;
+		}
+
+
+
+
+
+
+
 /**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
