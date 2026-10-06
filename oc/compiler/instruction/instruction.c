@@ -2838,6 +2838,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 						case PARAM_RESULT_TYPE_CONST:
 							print_three_addr_constant(fl, result->param_result.constant_result);
 							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							print_initializer(fl, result->param_result.initializer_result, PRINTING_VAR_INLINE);
+							break;
 					}
 
 					//Comma printing if appropriate
@@ -2913,6 +2916,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 							break;
 						case PARAM_RESULT_TYPE_CONST:
 							print_three_addr_constant(fl, result->param_result.constant_result);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							print_initializer(fl, result->param_result.initializer_result, PRINTING_VAR_INLINE);
 							break;
 					}
 

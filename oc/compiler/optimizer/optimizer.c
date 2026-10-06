@@ -611,17 +611,21 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 
 			//If we have a function call, everything in the function call is important
-			//
-			// TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 			case THREE_ADDR_CODE_FUNC_CALL:
 				//Run through them all and mark them
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
 					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-					//If it's a variable then add it
-					if(result->result_type == PARAM_RESULT_TYPE_VAR){
-						mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							break;
 					}
 				}
 
@@ -631,8 +635,6 @@ static void mark(dynamic_array_t* function_blocks){
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
-			 *
-			 * TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 				//Mark the op1 of this function as being important
@@ -643,9 +645,15 @@ static void mark(dynamic_array_t* function_blocks){
 					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-					//If it's a variable then add it
-					if(result->result_type == PARAM_RESULT_TYPE_VAR){
-						mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							break;
 					}
 				}
 
