@@ -12,11 +12,20 @@ define struct return_struct {
 
 define error invalid_input_error;
 
+//Just to force %rax to clear so we can weed out bug behavior with return by copy
+fn return_0() -> i32 {
+	ret 0;
+}
+
 
 //Define a dummy that will raise an error
 fn! return_by_copy_with_errors(x:i32, y:i32) -> struct return_struct raises (invalid_input_error){
-	if(x < 0 || y < 0) {
+	if(x < 0) {
 		raise invalid_input_error;
+	}
+
+	if(y < 0){
+		raise error;
 	}
 
 	ret {x, y, [1, 2, 3, 4, 5], 4.44d};
@@ -26,10 +35,13 @@ fn! return_by_copy_with_errors(x:i32, y:i32) -> struct return_struct raises (inv
 pub fn main() -> i32 {
 	declare ret_val1:mut struct return_struct;
 
-	//See how this works, we should trigger a copy assignment
-	ret_val1 = @return_by_copy_with_errors(-1, 1) handle (invalid_input_error => {0, 77, [0,0,0,0,0], 0},
-														error => {0, 77, [0,0,0,0,0], 0});
+	//Dummy just to make %rax clear
+	@return_0();
 
-	OUNIT: [exit_status = 77]
+	//See how this works, we should trigger a copy assignment into a properly populated %rax
+	ret_val1 = @return_by_copy_with_errors(1, -1) handle (invalid_input_error => {0, 77, [0,0,0,0,0], 0},
+															error => {0, 88, [0,0,0,0,0], 0});
+
+	OUNIT: [exit_status = 88]
 	ret ret_val1:y;
 }
