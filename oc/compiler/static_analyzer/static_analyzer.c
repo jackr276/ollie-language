@@ -1315,13 +1315,23 @@ static void rename_block(basic_block_t* entry){
 				parameter_results_array_t* func_params = &(cursor->parameter_results);
 
 				for(int32_t k = 0; k < func_params->current_index; k++){
-					//TODO INITIALIZER TYPES HERE
 					parameter_result_t* current_param = get_result_at_index(func_params, k);
 
-					//If we have a variable result we'll run through now and put it in
-					if(current_param->result_type == PARAM_RESULT_TYPE_VAR
-						&& is_variable_ssa_eligible(current_param->param_result.variable_result) == TRUE){
-						rhs_new_name(current_param->param_result.variable_result);
+					switch(current_param->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							//Make sure that it's eligible before doing this
+							if(is_variable_ssa_eligible(current_param->param_result.variable_result) == TRUE){
+								rhs_new_name(current_param->param_result.variable_result);
+							}
+
+							break;
+
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							rename_intitializer_members(current_param->param_result.initializer_result);
+							break;
+
+						case PARAM_RESULT_TYPE_CONST:
+							break;
 					}
 				}
 
@@ -1928,10 +1938,15 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 		//Get the parameter result
 		parameter_result_t* result = get_result_at_index(&(instruction->parameter_results), i);
 
-		//If it's a variable we'll check it
-		//TODO WILL NEED SUPPORT HERE
-		if(result->result_type == PARAM_RESULT_TYPE_VAR){
-			overall_result &= check_variable_for_definite_assignment(instruction, result->param_result.variable_result);
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR:
+				overall_result &= check_variable_for_definite_assignment(instruction, result->param_result.variable_result);
+				break;
+			case PARAM_RESULT_TYPE_INITIALIZER:
+				overall_result &= check_initializer_for_definite_assignment(instruction, result->param_result.initializer_result);
+				break;
+			case PARAM_RESULT_TYPE_CONST:
+				break;
 		}
 	}
 
