@@ -13,6 +13,7 @@
 
 #include "../three_address_constant.h"
 #include "../three_address_variable.h"
+#include "../three_address_initializer.h"
 #include <sys/types.h>
 
 typedef struct parameter_result_t parameter_result_t;
@@ -28,6 +29,7 @@ typedef struct parameter_results_array_t parameter_results_array_t;
 typedef enum {
 	PARAM_RESULT_TYPE_CONST,
 	PARAM_RESULT_TYPE_VAR,
+	PARAM_RESULT_TYPE_INITIALIZER,
 } parameter_result_type_t;
 
 
@@ -47,6 +49,7 @@ struct parameter_result_t {
 	union {
 		three_addr_const_t* constant_result;
 		three_addr_var_t* variable_result;
+		three_addr_initializer_t* initializer_result;
 	} param_result;
 };
 
@@ -107,11 +110,19 @@ static inline void add_parameter_result_to_results_array(parameter_results_array
 		case PARAM_RESULT_TYPE_CONST:{
 			new_result->result_type = result_type;
 			new_result->param_result.constant_result = (three_addr_const_t*)result;
+			break;
 		}
 
 		case PARAM_RESULT_TYPE_VAR: {
 			new_result->result_type = result_type;
 			new_result->param_result.variable_result = (three_addr_var_t*)result;
+			break;
+		}
+
+		case PARAM_RESULT_TYPE_INITIALIZER:  {
+			new_result->result_type = result_type;
+			new_result->param_result.initializer_result = (three_addr_initializer_t*)result;
+			break;
 		}
 	}
 
