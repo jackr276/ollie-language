@@ -236,27 +236,6 @@ static inline u_int8_t is_f64_negative(double value){
 
 
 /**
- * Clone a constant. This will create separate memory so we maintain
- * complete separation
- */
-static inline three_addr_const_t* copy_constant(three_addr_const_t* constant){
-	//If it's empty just leave
-	if(constant == NULL){
-		return NULL;
-	}
-
-	//Complete duplication
-	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
-
-	//And a full copy over
-	memcpy(copy, constant, sizeof(three_addr_const_t));
-
-	//Give it back
-	return copy;
-}
-
-
-/**
  * Quick helper to see if an instruction is a binary operation with a constant - this
  * also handles NULL checking
  */
