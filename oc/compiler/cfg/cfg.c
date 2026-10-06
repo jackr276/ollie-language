@@ -7073,6 +7073,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
 					break;
 
+				//TODO THIS NEEDS TO BE TESTED
 				case CFG_RESULT_TYPE_INITIALIZER:
 					printf("TODO NOT IMPLEMENTED\n");
 					exit(1);
@@ -7187,8 +7188,8 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 			break;
 
 		case CFG_RESULT_TYPE_INITIALIZER:
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			add_parameter_result_to_results_array(results, results_package.result_value.result_initializer, PARAM_RESULT_TYPE_INITIALIZER);
+			break;
 	}
 
 	//Give back the results in the end
@@ -7235,8 +7236,8 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 				break;
 			
 			case CFG_RESULT_TYPE_INITIALIZER:
-				printf("TODO NOT IMPLEMENTED\n");
-				exit(1);
+				add_parameter_result_to_results_array(results, expression_results.result_value.result_initializer, PARAM_RESULT_TYPE_INITIALIZER);
+				break;
 		}
 
 		child_cursor = child_cursor->next_sibling;
@@ -11915,11 +11916,6 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	 */
 	three_addr_var_t* assignee = NULL;
 
-	//TODO DO WE REALLY NEED ALL THIS????
-	//
-	//
-	//
-	//
 	switch(type->type_class){
 		/**
 		 * Array, structures and unions are all stored on the stack. So, when
@@ -13299,28 +13295,6 @@ static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_
 
 
 /**
- * Unpack a parameter result and emit a simple assignment. This is only meant to be used for parameters that
- * are passed via register. This should not be used for stack variables
- */
-static inline void emit_register_parameter_result_assignment(basic_block_t* function_entry, three_addr_var_t* parameter_assignee,
-																parameter_result_t* result, u_int32_t line_number){
-	switch(result->result_type){
-		case PARAM_RESULT_TYPE_VAR:{
-			instruction_t* assignment = emit_assignment_instruction(parameter_assignee, result->param_result.variable_result, line_number);
-			add_statement(function_entry, assignment);
-			break;
-		}
-
-		case PARAM_RESULT_TYPE_CONST:{
-			instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee, result->param_result.constant_result, line_number);
-			add_statement(function_entry, assignment);
-			break;
-		}
-	}
-}
-
-
-/**
  * Unpack a parameter result and emit a  assignment. This is only meant to be used for parameters that
  * are passed via stack because we will be emitting a store statement. We are going to assume that the
  * parameter assignee is a memory address variable here
@@ -13328,19 +13302,6 @@ static inline void emit_register_parameter_result_assignment(basic_block_t* func
 static inline void emit_stack_parameter_result_store(basic_block_t* function_entry, three_addr_var_t* parameter_stack_address,
 																parameter_result_t* result, generic_type_t* memory_write_type,
 															   	u_int32_t line_number){
-	switch(result->result_type){
-		case PARAM_RESULT_TYPE_VAR:{
-			instruction_t* store_stmt = emit_store_base_address_only(parameter_stack_address, result->param_result.variable_result, memory_write_type, line_number);
-			add_statement(function_entry, store_stmt);
-			break;
-		}
-
-		case PARAM_RESULT_TYPE_CONST:{
-			instruction_t* store_stmt = emit_constant_store_base_address_only(parameter_stack_address, result->param_result.constant_result, memory_write_type, line_number);
-			add_statement(function_entry, store_stmt);
-			break;
-		}
-	}
 }
 
 
@@ -13478,8 +13439,6 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 	int32_t parameter_index = 0;
 	int32_t results_index = 0;
 	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
-
-
 		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
 		generic_type_t* parameter_type = parameter_variable->type_defined_as;
@@ -13503,8 +13462,11 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 * doing memory copying, we will handle it here. There could still be stack
 		 * storage here if we exceed the maximum number of parameter passing variables
 		 * for either floats/general purpose, but this will handle all of that
+		 *
+		 * We will also gate against any initializer types in here as well as those will be
+		 * handled differently
 		 */
-		if(is_type_stack_passed_by_copy(parameter_type) == FALSE){
+		if(is_type_stack_passed_by_copy(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 			/**
 			 * Let's get the current class parameter order and the maximum
 			 * number of register passed params for this given class now based
@@ -13527,7 +13489,29 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 */
 			if(*class_parameter_order <= max_class_register_params){
 				three_addr_var_t* parameter_assignee = emit_var(cloned_parameter);
-				emit_register_parameter_result_assignment(function_entry, parameter_assignee, result, line_number);
+
+				/**
+				 * Store the result using a plain register assignment - no stack memory
+				 */
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_VAR:{
+						instruction_t* assignment = emit_assignment_instruction(parameter_assignee, result->param_result.variable_result, line_number);
+						add_statement(function_entry, assignment);
+						break;
+					}
+
+					case PARAM_RESULT_TYPE_CONST:{
+						instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee, result->param_result.constant_result, line_number);
+						add_statement(function_entry, assignment);
+						break;
+					}
+
+					//This should be impossible in our logic flow
+					case PARAM_RESULT_TYPE_INITIALIZER:{
+						trigger_ice_panic("Initializer result type detected in impossible path\n");
+						break;
+					}
+				}
 
 			/**
 			 * Otherwise we are over the limit, so the function body is expecting that
@@ -13557,12 +13541,42 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 				instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), line_number);
 				add_statement(function_entry, synthetic_init);
 
-				//Once we have that we can emit the store instruction
-				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, parameter_type, line_number);
+				/**
+				 * Since we've overflowed the limit we will need to store this result inside of the memory
+				 * region that we've just created
+				 */
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_VAR:{
+						instruction_t* store_stmt = emit_store_base_address_only(emit_memory_address_var(cloned_parameter), result->param_result.variable_result, parameter_type, line_number);
+						add_statement(function_entry, store_stmt);
+						break;
+					}
+
+					case PARAM_RESULT_TYPE_CONST:{
+						instruction_t* store_stmt = emit_constant_store_base_address_only(emit_memory_address_var(cloned_parameter), result->param_result.constant_result, parameter_type, line_number);
+						add_statement(function_entry, store_stmt);
+						break;
+					}
+
+					//This should be impossible in our logic flow
+					case PARAM_RESULT_TYPE_INITIALIZER:{
+						trigger_ice_panic("Initializer result type detected in impossible path\n");
+						break;
+					}
+				}
 			}
 
 			//Regardless of how we stored it, we need to bump the parameter order
 			(*class_parameter_order)++;
+
+		/**
+		 * If we get here it means that we have an initializer type, in which case we won't
+		 * need a memory copy but instead an initializer statement to be emitted
+		 */
+		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+
+			//TODO IMPEMENT ME
+
 
 		/**
 		 * Struct and unions are always passed by copy. This will involve creating a new memory region
