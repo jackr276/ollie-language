@@ -13295,17 +13295,6 @@ static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_
 
 
 /**
- * Unpack a parameter result and emit a  assignment. This is only meant to be used for parameters that
- * are passed via stack because we will be emitting a store statement. We are going to assume that the
- * parameter assignee is a memory address variable here
- */
-static inline void emit_stack_parameter_result_store(basic_block_t* function_entry, three_addr_var_t* parameter_stack_address,
-																parameter_result_t* result, generic_type_t* memory_write_type,
-															   	u_int32_t line_number){
-}
-
-
-/**
  * Do all of the setup for an elaborative param which includes storing the paramcount and any
  * of the results. This will clone the parameter variable so we should have a basis for when
  * we encounter elaborative param references inside of the function body
@@ -13397,8 +13386,36 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 		 * to facilitate this. If we are passed by copy then we need to do
 		 * a memory copy assignment
 		 */
-		if(is_type_stack_passed_by_copy(elaborated_type) == FALSE){
-			emit_stack_parameter_result_store(function_entry, emit_memory_address_var(temp_var), result, elaborated_type, line_number);
+		if(is_type_stack_passed_by_copy(elaborated_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
+			/**
+			 * Since we've overflowed the limit we will need to store this result inside of the memory
+			 * region that we've just created
+			 */
+			switch(result->result_type){
+				case PARAM_RESULT_TYPE_VAR:{
+					instruction_t* store_stmt = emit_store_base_address_only(emit_memory_address_var(temp_var), result->param_result.variable_result, elaborated_type, line_number);
+					add_statement(function_entry, store_stmt);
+					break;
+				}
+
+				case PARAM_RESULT_TYPE_CONST:{
+					instruction_t* store_stmt = emit_constant_store_base_address_only(emit_memory_address_var(temp_var), result->param_result.constant_result, elaborated_type, line_number);
+					add_statement(function_entry, store_stmt);
+					break;
+				}
+
+				//This should be impossible in our logic flow
+				case PARAM_RESULT_TYPE_INITIALIZER:{
+					trigger_ice_panic("Initializer result type detected in impossible path\n");
+					break;
+				}
+			}
+
+		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+			//TODO NEEDS TO BE IMPLEMENTED
+
 
 		} else {
 			//This is as easy as memory copying and adding it in
@@ -13574,6 +13591,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 * need a memory copy but instead an initializer statement to be emitted
 		 */
 		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 
 			//TODO IMPEMENT ME
 
