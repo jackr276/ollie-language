@@ -7073,14 +7073,20 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 					break;
 				}
 
-				//TODO THIS NEEDS TO BE TESTED
-				//TODO DOUBT THIS WILL WORK
+				/**
+				 * If we have an initializer, we know that we are initializing into the return by copy memory region. Luckily
+				 * for us, we know that the function assignee(%rax register) when the function returns contains the address
+				 * of the return by copy parameter that we've created(%rdi param register). Because of this, we can emit
+				 * our initializer into the function assignee first and then assign that over to our "function result var"
+				 * so that it's carried through the rest of the handle statement. This allows us to avoid the creation of
+				 * any new memory regions
+				 */
 				case CFG_RESULT_TYPE_INITIALIZER: {
 					//First initialize right into the function assignee
 					instruction_t* initialization = emit_initialization_instruction(function_assignee, handle_results.result_value.result_initializer, handle_node->line_number);
 					insert_instruction_before_given(initialization, last_instruction);
 
-					//NOw assign this over as our result(it's a pointer)
+					//Now assign the pointer represented by %rax over to our function result var, as it now contains our initializer
 					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, handle_node->line_number);
 					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
@@ -7393,7 +7399,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		error_assignee = assignment->operands.oir.assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		//TODO THIS MAY NEED A COMPLETE REDESIGN FOR INITIALIZERS
 		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
 
 	} else {
@@ -14163,7 +14168,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
