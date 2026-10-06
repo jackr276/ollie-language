@@ -7388,6 +7388,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		error_assignee = assignment->operands.oir.assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
+		//TODO THIS MAY NEED A COMPLETE REDESIGN FOR INITIALIZERS
 		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
 
 	} else {

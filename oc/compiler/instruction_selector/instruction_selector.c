@@ -1473,6 +1473,7 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 				 */
 				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
 				insert_instruction_before_given(store_statement, call_statement);
+				break;
 			}
 
 			//Control flow should never allow this to occur
@@ -1587,6 +1588,7 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 				 */
 				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
 				insert_instruction_before_given(store_statement, call_statement);
+				break;
 			}
 
 			//Control flow should never allow this to occur
