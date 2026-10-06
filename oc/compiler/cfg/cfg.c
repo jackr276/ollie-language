@@ -12868,6 +12868,9 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * by assignment and then jumping to the exit
 		 */
 		case THREE_ADDR_CODE_RAISE_STMT: {
+			//We'll need this
+			symtab_function_record_t* cloning_function = ((basic_block_t*)source_instruction->block_contained_in)->function_defined_in;
+
 			//Raise always has an assignee unlike return
 			instruction_t* simulated_raise_assignment = emit_assignment_instruction(emit_var(raise_variable),
 																	clone_variable(source_instruction->operands.oir.operand1, variable_map),
@@ -12877,10 +12880,20 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			/**
 			 * If we have a return variable we'll need it to be assigned. We will use the specialized
 			 * clear function to make this happen
+			 *
+			 * TODO THIS DOES NOT MAKE SENSE
 			 */
 			if(return_variable != NULL){
-				instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
-				add_statement(cloning_into_block, clear_instruction);
+				if(cloning_function->return_by_copy_variable != NULL){
+					variable_mapping_t* return_by_copy_mapping = get_mapping_for_symtab_variable(variable_map, cloning_function->return_by_copy_variable);
+
+					instruction_t* return_by_copy_addr_assignment = emit_assignment_instruction(emit_var(return_variable), emit_var(return_by_copy_mapping->destination.symtab_variable), 0);
+					add_statement(cloning_into_block, return_by_copy_addr_assignment);
+
+				} else {
+					instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
+					add_statement(cloning_into_block, clear_instruction);
+				}
 			}
 			
 			//To actually simulate we will jump from this block to the exit block
