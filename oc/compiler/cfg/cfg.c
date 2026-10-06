@@ -6938,7 +6938,6 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	branch_instruction->inverse_branch = FALSE;
 }
 
-
 /**
  * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
  * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
@@ -7058,30 +7057,35 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * in the function
 		 */
 		if(is_result_package_empty(&handle_results) == FALSE){
-			//Final result assignment instruction
-			instruction_t* result_assignment;
-
 			//Emit our jump first - this is our anchor point for the assignment insertion
 			last_instruction = emit_jump(handle_results.final_block, error_handling_ending_block);
 
 			switch(handle_results.type){
-				case CFG_RESULT_TYPE_CONST:
-					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+				case CFG_RESULT_TYPE_CONST: {
+					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
+				}
 
-				case CFG_RESULT_TYPE_VAR:
-					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
+				case CFG_RESULT_TYPE_VAR: {
+					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
+				}
 
 				//TODO THIS NEEDS TO BE TESTED
 				//TODO DOUBT THIS WILL WORK
-				case CFG_RESULT_TYPE_INITIALIZER:
-					result_assignment = emit_initialization_instruction(emit_var(function_result_var), handle_results.result_value.result_initializer, handle_node->line_number);
-					break;
-			}
+				case CFG_RESULT_TYPE_INITIALIZER: {
+					//First initialize right into the function assignee
+					instruction_t* initialization = emit_initialization_instruction(function_assignee, handle_results.result_value.result_initializer, handle_node->line_number);
+					insert_instruction_before_given(initialization, last_instruction);
 
-			//This goes in right after the given last instruction
-			insert_instruction_before_given(result_assignment, last_instruction);
+					//NOw assign this over as our result(it's a pointer)
+					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
+					break;
+				}
+			}
 
 		/**
 		 * Otherwise the result package is empty. This could mean a few things - we could
@@ -14159,6 +14163,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
