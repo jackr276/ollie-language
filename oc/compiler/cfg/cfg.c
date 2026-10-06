@@ -1614,13 +1614,18 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL: {
-					//TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
 						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
-						//If it's a variable result we add it
-						if(result->result_type == PARAM_RESULT_TYPE_VAR){
-							add_variable_to_use_set(result->param_result.variable_result, block);
+						switch(result->result_type){
+							case PARAM_RESULT_TYPE_VAR:
+								add_variable_to_use_set(result->param_result.variable_result, block);
+								break;
+							case PARAM_RESULT_TYPE_INITIALIZER:
+								add_initializer_members_to_use_set(result->param_result.initializer_result, block);
+								break;
+							case PARAM_RESULT_TYPE_CONST:
+								break;
 						}
 					}
 
@@ -1639,13 +1644,18 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
-					//TODO WILL NEED TO ACCOUNT FOR INITIALIZERS
 					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
 						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
-						//If it's a variable result we add it
-						if(result->result_type == PARAM_RESULT_TYPE_VAR){
-							add_variable_to_use_set(result->param_result.variable_result, block);
+						switch(result->result_type){
+							case PARAM_RESULT_TYPE_VAR:
+								add_variable_to_use_set(result->param_result.variable_result, block);
+								break;
+							case PARAM_RESULT_TYPE_INITIALIZER:
+								add_initializer_members_to_use_set(result->param_result.initializer_result, block);
+								break;
+							case PARAM_RESULT_TYPE_CONST:
+								break;
 						}
 					}
 
@@ -13006,16 +13016,20 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 				 */
 				switch(source_result->result_type){
 					case PARAM_RESULT_TYPE_CONST:{
-						//Clone the constant and add it in
 						three_addr_const_t* cloned_constant = clone_constant(source_result->param_result.constant_result);
 						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_VAR:{
-						//Clone the parameter variable and add it in
 						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map);
 						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
+						break;
+					}
+
+					case PARAM_RESULT_TYPE_INITIALIZER: {
+						three_addr_initializer_t* cloned_initializer = clone_initializer(source_result->param_result.initializer_result, variable_map);
+						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_initializer, PARAM_RESULT_TYPE_INITIALIZER);
 						break;
 					}
 				}
