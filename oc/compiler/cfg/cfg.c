@@ -7074,9 +7074,10 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 					break;
 
 				//TODO THIS NEEDS TO BE TESTED
+				//TODO DOUBT THIS WILL WORK
 				case CFG_RESULT_TYPE_INITIALIZER:
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
+					result_assignment = emit_initialization_instruction(emit_var(function_result_var), handle_results.result_value.result_initializer, handle_node->line_number);
+					break;
 			}
 
 			//This goes in right after the given last instruction
