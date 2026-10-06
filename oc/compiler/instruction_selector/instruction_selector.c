@@ -1413,6 +1413,12 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 				insert_instruction_before_given(param_assignment, call_statement);
 				break;
 			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
+			}
 		}
 
 		//Once done we can add this to the list of parameters
@@ -1467,6 +1473,12 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 				 */
 				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
 				insert_instruction_before_given(store_statement, call_statement);
+			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
 			}
 		}
 	}
@@ -1524,6 +1536,12 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 				insert_instruction_before_given(param_assignment, call_statement);
 				break;
 			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
+			}
 		}
 
 		//Once done we can add this to the list of parameters
@@ -1570,6 +1588,12 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
 				insert_instruction_before_given(store_statement, call_statement);
 			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
+			}
 		}
 	}
 
@@ -1598,7 +1622,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 	 * variable result. There's no need to split along SSE/GP because we are always storing to
 	 * the stack
 	 */
-	if(is_pass_by_copy_type(parameter_type) == FALSE){
+	if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 		//Allocate a fresh region for this and get a variable for it
 		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
@@ -1627,7 +1651,18 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 				insert_instruction_before_given(store_statement, call_statement);
 				break;
 			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
+			}
 		}
+
+	} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+
 
 	/**
 	 * Otherwise we're going to need a full memory copy into the elaborative parameter region and not just
@@ -1763,12 +1798,16 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * This branching is arranged in order of what should be most common. GP is
 		 * most common, then comes SSE, and then pass by copy
 		 */
-		if(is_pass_by_copy_type(parameter_type) == FALSE){
+		if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 			if(IS_FLOATING_POINT(parameter_type) == FALSE){
 				store_gp_parameter(call_statement, parameter_type, result, &current_gp_parameter_order, &memory_addresses_to_adjust);
 			} else {
 				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
 			}
+
+		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
 
 		} else {
 			store_pass_by_copy_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
