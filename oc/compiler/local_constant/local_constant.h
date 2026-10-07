@@ -42,11 +42,10 @@ struct local_constant_t{
 	union {
 		//Local constants can be strings
 		dynamic_string_t string_value;
-
-		//In the case where we have f32/f64, we store the *bit equivalent*
-		//i32/i64 value inside of here and print that out
-		u_int64_t float_bit_equivalent;
-
+		//32 bit integer to store the float bits
+		u_int32_t f32_bit_equivalent;
+		//64 bit integer to store the double bits
+		u_int64_t f64_bit_equivalent;
 		//We have a 128 bit type with both upper and lower bits
 		struct {
 			u_int64_t lower_64_bits;

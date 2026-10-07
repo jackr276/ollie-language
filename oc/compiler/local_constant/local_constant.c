@@ -56,7 +56,7 @@ local_constant_t* f32_local_constant_alloc(generic_type_t* f32_type, float value
 
 	//Copy the dynamic string in. We cannot print out floats directly, so we instead
 	//use the bits that make up the float and cast them to an i32 *without rounding*
-	local_const->local_constant_value.float_bit_equivalent = *((int32_t*)(&value));
+	local_const->local_constant_value.f32_bit_equivalent = *((u_int32_t*)(&value));
 
 	//Now we'll add the ID
 	local_const->local_constant_id = increment_and_get_local_constant_id();
@@ -81,7 +81,7 @@ local_constant_t* f64_local_constant_alloc(generic_type_t* f64_type, double valu
 
 	//Copy the dynamic string in. We cannot print out floats directly, so we instead
 	//use the bits that make up the float and cast them to an i32 *without rounding*
-	local_const->local_constant_value.float_bit_equivalent = *((int64_t*)(&value));
+	local_const->local_constant_value.f64_bit_equivalent = *((u_int64_t*)(&value));
 
 	//Now we'll add the ID
 	local_const->local_constant_id = increment_and_get_local_constant_id();
@@ -150,13 +150,13 @@ local_constant_t* get_string_local_constant(dynamic_array_t* records, char* stri
  */
 local_constant_t* get_f32_local_constant(dynamic_array_t* records, float float_value){
 	//Run through all of the local constants
-	for(u_int16_t i = 0; i < records->current_index; i++){
+	for(int32_t i = 0; i < records->current_index; i++){
 		//Extract the candidate
 		local_constant_t* candidate = dynamic_array_get_at(records, i);
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
-		if(candidate->local_constant_value.float_bit_equivalent == *((u_int32_t*)&float_value)){
+		if(candidate->local_constant_value.f32_bit_equivalent == *((u_int32_t*)&float_value)){
 			return candidate;
 		}
 	}
@@ -179,7 +179,7 @@ local_constant_t* get_f64_local_constant(dynamic_array_t* records, double double
 
 		//We will be comparing the values at a byte level. We do not compare the raw values because
 		//that would use FP comparison
-		if(candidate->local_constant_value.float_bit_equivalent == *((u_int64_t*)&double_value)){
+		if(candidate->local_constant_value.f64_bit_equivalent == *((u_int64_t*)&double_value)){
 			return candidate;
 		}
 	}
@@ -247,7 +247,7 @@ void print_local_constants(FILE* fl, dynamic_array_t* string_local_constants, dy
 			local_constant_t* constant = dynamic_array_get_at(f32_local_constants, i);
 
 			//Extract the floating point equivalent using the mask
-			int32_t float_equivalent = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
+			int32_t float_equivalent = constant->local_constant_value.f32_bit_equivalent & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
 			fprintf(fl, "\t.align 4\n.LC%d:\n\t.long %d\n", constant->local_constant_id, float_equivalent);
@@ -265,8 +265,8 @@ void print_local_constants(FILE* fl, dynamic_array_t* string_local_constants, dy
 			local_constant_t* constant = dynamic_array_get_at(f64_local_constants, i);
 
 			//These are in little-endian order. Lower 32 bits comes first, then the upper 32 bits
-			int32_t lower32 = constant->local_constant_value.float_bit_equivalent & 0xFFFFFFFF;
-			int32_t upper32 = (constant->local_constant_value.float_bit_equivalent >> 32) & 0xFFFFFFFF;
+			int32_t lower32 = constant->local_constant_value.f64_bit_equivalent & 0xFFFFFFFF;
+			int32_t upper32 = (constant->local_constant_value.f64_bit_equivalent >> 32) & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
 			fprintf(fl, "\t.align 8\n.LC%d:\n\t.long %d\n\t.long %d\n", constant->local_constant_id, lower32, upper32);
