@@ -10,12 +10,12 @@
 #include <string.h>
 
 //Keep an atomically incrementing integer for the local constant ID
-static u_int32_t local_constant_id = 0;
+static int32_t local_constant_id = 0;
 
 /**
  * Atomically increment and return the local constant id
  */
-static inline u_int32_t increment_and_get_local_constant_id(){
+static inline int32_t increment_and_get_local_constant_id(){
 	return local_constant_id++;
 }
 
@@ -105,10 +105,10 @@ local_constant_t* xmm128_local_constant_alloc(generic_type_t* f64_type, int64_t 
 
 	//Store the type as well
 	local_const->type = f64_type;
-	
-	//Store the lower and upper 64 bits for this local constant
-	local_const->local_constant_value.lower_64_bits = lower_64_bits;
-	local_const->upper_64_bits = upper_64_bits;
+
+	//Store the lower and upper 64 bits
+	local_const->local_constant_value.xmm128_value.lower_64_bits = lower_64_bits;
+	local_const->local_constant_value.xmm128_value.upper_64_bits = upper_64_bits;
 
 	//Now we'll add the ID
 	local_const->local_constant_id = increment_and_get_local_constant_id();
@@ -200,10 +200,12 @@ local_constant_t* get_xmm128_local_constant(dynamic_array_t* records, int64_t up
 		//Extract the candidate
 		local_constant_t* candidate = dynamic_array_get_at(records, i);
 
-		//We will be comparing at the byte level for both the lower and upper 64 bits
-		if((candidate->local_constant_value.lower_64_bits ^ lower_64_bits) == 0
-			&& (candidate->upper_64_bits ^ upper_64_bits) == 0){
+		//Extract these bits from our candidate
+		int64_t candidate_lower_64 = candidate->local_constant_value.xmm128_value.lower_64_bits;
+		int64_t candidate_upper_64 = candidate->local_constant_value.xmm128_value.upper_64_bits;
 
+		//If both bit regions match then we're good(XOR'ing a number with itself is always 0)
+		if((candidate_lower_64 ^ lower_64_bits) == 0 && (candidate_upper_64 ^ upper_64_bits) == 0){
 			return candidate;
 		}
 	}
@@ -281,11 +283,14 @@ void print_local_constants(FILE* fl, dynamic_array_t* string_local_constants, dy
 			//Grab the constant out
 			local_constant_t* constant = dynamic_array_get_at(xmm128_local_constants, i);
 
+			int64_t lower_64_bits = constant->local_constant_value.xmm128_value.lower_64_bits;
+			int64_t upper_64_bits = constant->local_constant_value.xmm128_value.upper_64_bits;
+
 			//Extract all of the value in 32 bit chunks
-			int32_t first32 = constant->local_constant_value.lower_64_bits & 0xFFFFFFFF;
-			int32_t second32 = (constant->local_constant_value.lower_64_bits >> 32) & 0xFFFFFFFF;
-			int32_t third32 = constant->upper_64_bits & 0xFFFFFFFF;
-			int32_t fourth32 = (constant->upper_64_bits >> 32) & 0xFFFFFFFF;
+			int32_t first32 = lower_64_bits & 0xFFFFFFFF;
+			int32_t second32 = (lower_64_bits >> 32) & 0xFFFFFFFF;
+			int32_t third32 = upper_64_bits & 0xFFFFFFFF;
+			int32_t fourth32 = (upper_64_bits >> 32) & 0xFFFFFFFF;
 
 			//Otherwise, we'll begin to print, starting with the constant name
 			fprintf(fl, "\t.align 16\n.LC%d:\n\t.long %d\n\t.long %d\n\t.long %d\n\t.long %d\n", constant->local_constant_id, first32, second32, third32, fourth32);
