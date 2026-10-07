@@ -34,27 +34,32 @@ typedef enum {
  * fields than an actual basic block
  */
 struct local_constant_t{
-	//What is the type of the local constant?
-	generic_type_t* type;
+	//Type and ID are frequently accessed
+	local_constant_type_t local_constant_type;
+	int32_t local_constant_id;
+
 	//Holds the actual value
 	union {
 		//Local constants can be strings
 		dynamic_string_t string_value;
+
 		//In the case where we have f32/f64, we store the *bit equivalent*
 		//i32/i64 value inside of here and print that out
 		u_int64_t float_bit_equivalent;
-		//For the 128 bit section - we need to store the 2 64 bit sections
-		//separately
-		u_int64_t lower_64_bits;
+
+		//We have a 128 bit type with both upper and lower bits
+		struct {
+			u_int64_t lower_64_bits;
+			u_int64_t upper_64_bits;
+		} xmm128_value;
+
 	} local_constant_value;
-	//Unfortunately we can't hold it all in the union
-	u_int64_t upper_64_bits;
-	//And the ID of it
-	u_int16_t local_constant_id;
+
+	//Actual Ollie type
+	generic_type_t* type;
+
 	//The reference count of the local constant
-	u_int16_t reference_count;
-	//What is the type of it
-	local_constant_type_t local_constant_type;
+	int32_t reference_count;
 };
 
 
