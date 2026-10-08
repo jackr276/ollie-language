@@ -137,6 +137,14 @@ struct generic_type_t{
 	 * exclusive fields in an efficient way
 	 */
 	union {
+		/**
+		 * For elaborative parameters *THAT ARE ARRAYS*, we actually
+		 * pass the arrays as pointers. Ollie does not do pass-by-copy
+		 * with arrays. To avoid repeatedly converting between arrays and
+		 * pointers, we will instead store the equivalent pointer
+		 * type here
+		 */
+		generic_type_t* elaborated_array_pointer_equivalent;
 		//What is the integer type that an enum uses?
 		generic_type_t* enum_integer_type;
 		//The largest member type in a struct/union
