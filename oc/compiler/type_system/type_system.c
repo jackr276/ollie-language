@@ -2682,9 +2682,8 @@ generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t li
 	 * pointers, then this is a non-contiguous memory region
 	 *
 	 * Since arrays are always passed by pointer, they are also lumped in with
-	 * pointers in being non-contiguous
-	 *
-	 * TODO WHAT ABOUT THIS???
+	 * pointers in being non-contiguous. This is especially important
+	 * for elaborative types
 	 */
 	switch(elaborates->type_class){
 		case TYPE_CLASS_POINTER:
