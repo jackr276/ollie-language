@@ -2719,6 +2719,12 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				//Extract the elaborated type - this is what we'll be comparing to
 				generic_type_t* type_being_elaborated = parameter_type->internal_types.elaborates;
 
+				//TODO MUST BE A BUG IN ELABORATIVE PARAM THAT IS MAKING ARRAYS I32*
+
+				printf("TYPE BEING ELABORATED\n");
+				fflush(stdout);
+				printf("%s\n", type_being_elaborated->type_name.string);
+
 				/**
 				 * Now we need to run through everything remaining in the parameter result list and 
 				 * process each one
