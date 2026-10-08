@@ -1340,6 +1340,9 @@ static inline void store_pass_by_initializer_parameter(instruction_t* call_state
 	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type); 
 	three_addr_var_t* pass_by_initializer_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_initializer_region);
 
+
+	//TODO MEMORY ADDRESSES TO ADJUST
+
 	//Emit the initializer and insert it right before the call instruction
 	instruction_t* initializer_instruction = emit_initialization_instruction(pass_by_initializer_memory_address, result_initializer, call_statement->line_number);
 	insert_instruction_before_given(initializer_instruction, call_statement);
@@ -1687,9 +1690,18 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 	 * is going to require us to create a memory region and "initialize" into it
 	 */
 	} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		//Extract for convenience
+		three_addr_initializer_t* initializer = result->param_result.initializer_result;
 
+		//Allocate a fresh region for this and get a variable for it
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		three_addr_var_t* storing_into_region_address = emit_memory_address_temp_var(parameter_type, storing_into_region);
+		
+		//TODO MEMORY ADDRESSES TO ADJUST
+
+		//Emit and insert this right before the call statement
+		instruction_t* initialization = emit_initialization_instruction(storing_into_region_address, initializer, call_statement->line_number);
+		insert_instruction_before_given(initialization, call_statement);
 
 	/**
 	 * Otherwise we're going to need a full memory copy into the elaborative parameter region and not just
