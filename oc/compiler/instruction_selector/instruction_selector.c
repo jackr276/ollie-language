@@ -1749,6 +1749,15 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		//Let's extract what the type being elaborated is
 		generic_type_t* elaborated_type = get_elaborated_type(called_function_signature);
 
+		/**
+		 * If we have an elaborated type that's really an array, we will convert it to be
+		 * a pointer type because we do not pass arrays by copy. This conversion ensures
+		 * that the actual sizes are correct
+		 */
+		if(elaborated_type->type_class == TYPE_CLASS_ARRAY){
+			elaborated_type = convert_array_type_to_equivalent_pointer(elaborated_type);
+		}
+
 		//The number is however many results we have left over. This is our "paramcount"
 		int32_t elaborative_paramcount = call_statement->parameter_results.current_index - parameter_result_index;
 		three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(elaborative_paramcount, i32);
