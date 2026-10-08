@@ -1588,6 +1588,28 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		return print_and_return_error(info, parser_line_num);
 	}
 
+	/**
+	 * If we get here and we have an initializer, we need to be very careful about what
+	 * we allow. The only things that we "return by copy" are unions and structs. Initializers
+	 * work great for those because we have a region to initialize into. Arrays and strings however
+	 * we never return by copy, so an initializer fundamentally will never work
+	 */
+	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
+						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
+						current_function_signature->return_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	/**
+	 * If we are having a copy assignment, we need to propogate down the chain in the expression
+	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
+	 * the value, we do not accidentally copy from already dereferenced memory
+	 */
+	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
+		propogate_no_dereference_required_flag(expr_node);
+	}
+
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
 
@@ -2627,6 +2649,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				return print_and_return_error(info, parser_line_num);
 			}
 
+			//TODO ADD IT HERE
+
 			/**
 			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
 			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
@@ -2692,6 +2716,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 						return print_and_return_error(info, parser_line_num);
 					}
+
+					//TODO ADD IT HERE
 
 					/**
 					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
@@ -2964,6 +2990,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				return print_and_return_error(info, parser_line_num);
 			}
 
+			//TODO ADD THE CHECK HERE
+
 			/**
 			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
 			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
@@ -3029,6 +3057,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 						return print_and_return_error(info, parser_line_num);
 					}
+
+					//TODO ADD THE CHECK HERE
 
 					/**
 					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
@@ -11109,7 +11139,10 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	 * we never return by copy, so an initializer fundamentally will never work
 	 */
 	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
-		printf("HERE\n");
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
+						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
+						current_function_signature->return_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
 	}
 
 	/**
