@@ -11103,6 +11103,16 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	}
 
 	/**
+	 * If we get here and we have an initializer, we need to be very careful about what
+	 * we allow. The only things that we "return by copy" are unions and structs. Initializers
+	 * work great for those because we have a region to initialize into. Arrays and strings however
+	 * we never return by copy, so an initializer fundamentally will never work
+	 */
+	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
+		printf("HERE\n");
+	}
+
+	/**
 	 * If we are having a copy assignment, we need to propogate down the chain in the expression
 	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
 	 * the value, we do not accidentally copy from already dereferenced memory
