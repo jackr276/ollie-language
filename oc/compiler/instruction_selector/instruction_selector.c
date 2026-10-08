@@ -1326,9 +1326,23 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 }
 
 
+/**
+ * We are passing to this memory region parameter via an initializer. Since this is the case, we will need to create
+ * a memory region for this type and emit the proper initializations into it. We need to also make a close
+ * note of any "memory addresses to adjust" that come from inside the initializer
+ */
 static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
 														parameter_result_t* initializer_result, dynamic_array_t* memory_addresses_to_adjust){
+	//Extract this to have it on hand
+	three_addr_initializer_t* result_initializer = initializer_result->param_result.initializer_result;
 
+	//Create the pass-by-initializer region and create a memory address variable for it
+	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type); 
+	three_addr_var_t* pass_by_initializer_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_initializer_region);
+
+	//Emit the initializer and insert it right before the call instruction
+	instruction_t* initializer_instruction = emit_initialization_instruction(pass_by_initializer_memory_address, result_initializer, call_statement->line_number);
+	insert_instruction_before_given(initializer_instruction, call_statement);
 }
 
 
