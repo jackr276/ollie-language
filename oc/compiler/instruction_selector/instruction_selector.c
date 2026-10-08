@@ -1326,6 +1326,13 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 }
 
 
+static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
+														parameter_result_t* initializer_result, dynamic_array_t* memory_addresses_to_adjust){
+
+}
+
+
+
 /**
  * If we have a struct or union type, we automatically will be passing it by copy.
  * This means that it is treated entirely separate from the way in which we handle
@@ -1661,6 +1668,10 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 			}
 		}
 
+	/**
+	 * Otherwise if we get here then we have an initializer parameter type. This
+	 * is going to require us to create a memory region and "initialize" into it
+	 */
 	} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
@@ -1807,10 +1818,16 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
 			}
 
+		/**
+		 * Otherwise if we get here then we have an initializer parameter type. This
+		 * is going to require us to create a memory region and "initialize" into it
+		 */
 		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			store_pass_by_initializer_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
 
+		/**
+		 * Final option is that we have a pure pass by copy parameter that is not using any initialization
+		 */
 		} else {
 			store_pass_by_copy_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
 		}
