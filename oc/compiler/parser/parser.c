@@ -2719,12 +2719,6 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				//Extract the elaborated type - this is what we'll be comparing to
 				generic_type_t* type_being_elaborated = parameter_type->internal_types.elaborates;
 
-				//TODO MUST BE A BUG IN ELABORATIVE PARAM THAT IS MAKING ARRAYS I32*
-
-				printf("TYPE BEING ELABORATED\n");
-				fflush(stdout);
-				printf("%s\n", type_being_elaborated->type_name.string);
-
 				/**
 				 * Now we need to run through everything remaining in the parameter result list and 
 				 * process each one
@@ -2754,8 +2748,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 					 */
 					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
 						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-										(parameter_type->mutability == MUTABLE ? "mut" : ""),
-										parameter_type->type_name.string);
+										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
+										type_being_elaborated->type_name.string);
 						return print_and_return_error(info, parser_line_num);
 					}
 
