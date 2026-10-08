@@ -2746,7 +2746,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 					 * created for them that we can initialize into. Non pass-by-copy types will not. For this reason,
 					 * the ollie compiler bars this
 					 */
-					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
+					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(type_being_elaborated) == FALSE){
 						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
 										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
 										type_being_elaborated->type_name.string);
