@@ -897,6 +897,32 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 
 
 /**
+ * Create and return a three address initializer of a given type
+ */
+three_addr_initializer_t* emit_initializer(generic_type_t* type_initializing, initializer_type_t initializer_type){
+	//Dynamically allocate it
+	three_addr_initializer_t* initializer = calloc(1, sizeof(three_addr_initializer_t));
+
+	//Store the given type and initializer type
+	initializer->type = type_initializing;
+	initializer->initializer_type = initializer_type;
+
+	/**
+	 * IMPORTANT - this needs to have its own unique variable ID that will
+	 * never clash with any actual variable, so we use the variable ID system
+	 */
+	initializer->variable_id = get_next_variable_id();
+
+	//Now let's allocate the initializer list itself
+	initializer->results.results_max_index = DEFAULT_INITIALIZER_LIST_SIZE;
+	initializer->results.result_array = calloc(sizeof(initializer_result_t), DEFAULT_INITIALIZER_LIST_SIZE);
+
+	//Give back the pointer
+	return initializer;
+}
+
+
+/**
  * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
  * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
  * that they share is the overall variable that they're linked back to, which stores their type information,
@@ -1170,6 +1196,20 @@ three_addr_var_t* emit_var_copy(three_addr_var_t* var){
 	emitted_var->ssa_generation = var->ssa_generation;
 
 	return emitted_var;
+}
+
+
+/**
+ * Emit a constant that is copied from another constant
+ */
+three_addr_const_t* emit_constant_copy(three_addr_const_t* constant){
+	//Clone the constant
+	three_addr_const_t* emitted_const = calloc(1, sizeof(three_addr_const_t));
+
+	//Direct copy over
+	memcpy(emitted_const, constant, sizeof(three_addr_const_t));
+
+	return emitted_const;
 }
 
 
@@ -2350,6 +2390,45 @@ static void print_three_addr_constant(FILE* fl, three_addr_const_t* constant){
 
 
 /**
+ * Print a three address initializer. These should only exist during the OIR stage, once these
+ * have been converted to assembly they should not exist anymore
+ */
+void print_initializer(FILE* fl, three_addr_initializer_t* initializer, variable_printing_mode_t mode){
+	//Determine if this was an array or struct initializer
+	const char* initializer_start_delimiter = initializer->initializer_type == INITIALIZER_TYPE_ARRAY ? "[" : "{";
+	const char* initializer_end_delimiter = initializer->initializer_type == INITIALIZER_TYPE_ARRAY ? "]" : "}";
+
+	//Print out the start delimeter
+	fprintf(fl, "%s", initializer_start_delimiter);
+
+	//Now run through every single result and print
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		//Get the result out
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				print_variable(fl, result->value.variable_value, mode);
+				break;
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				print_three_addr_constant(fl, result->value.constant_value);
+				break;
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				print_initializer(fl, result->value.initializer_value, mode);
+				break;
+		}
+
+		if(i != initializer->results.results_current_index - 1){
+			fprintf(fl, ", ");
+		}
+	}
+
+	//Print out the end delimeter
+	fprintf(fl, "%s", initializer_end_delimiter);
+}
+
+
+/**
  * Turn an operand into a string
  */
 static char* op_to_string(ollie_token_t op){
@@ -2759,6 +2838,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 						case PARAM_RESULT_TYPE_CONST:
 							print_three_addr_constant(fl, result->param_result.constant_result);
 							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							print_initializer(fl, result->param_result.initializer_result, PRINTING_VAR_INLINE);
+							break;
 					}
 
 					//Comma printing if appropriate
@@ -2834,6 +2916,9 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 							break;
 						case PARAM_RESULT_TYPE_CONST:
 							print_three_addr_constant(fl, result->param_result.constant_result);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							print_initializer(fl, result->param_result.initializer_result, PRINTING_VAR_INLINE);
 							break;
 					}
 
@@ -3034,21 +3119,18 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "clear_register ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
-
 			break;
 
 		case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
 			fprintf(fl, "Stack Allocate <- ");
 			print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			fprintf(fl, " bytes\n");
-
 			break;
 
 		case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
 			fprintf(fl, "Stack Deallocate <- ");
 			print_three_addr_constant(fl, stmt->operands.oir.constant_operand);
 			fprintf(fl, " bytes\n");
-
 			break;
 
 		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
@@ -3056,6 +3138,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, " <- Starting Offset of Elaborative Param <");
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, ">\n");
+			break;
+
+		case THREE_ADDR_CODE_INITIALIZER_STMT:
+			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+			fprintf(fl, " <- initialize from ");
+			print_initializer(fl, stmt->operands.oir.initializer_operand, PRINTING_VAR_INLINE);
+			fprintf(fl, "\n");
 			break;
 
 		default:
@@ -5789,6 +5878,27 @@ instruction_t* emit_binary_operation_with_const_instruction(three_addr_var_t* as
 	stmt->operands.oir.constant_operand = op2;
 
 	stmt->line_number = line_number;
+	return stmt;
+}
+
+
+/**
+ * Emit a three address initializer expression
+ *
+ * NOTE: the destination is in the first address operand
+ */
+instruction_t* emit_initialization_instruction(three_addr_var_t* being_initialized, three_addr_initializer_t* initializer, u_int32_t line_number){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_INITIALIZER_STMT;
+	stmt->operands.oir.address_operand1 = being_initialized;
+	stmt->operands.oir.initializer_operand = initializer;
+	stmt->line_number = line_number;
+
+	//This is a write to memory statement
+	stmt->memory_access_type = WRITE_TO_MEMORY;
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
 	return stmt;
 }
 

@@ -84,12 +84,13 @@ static dependency_graph_node_t* current_dependency_node = NULL;
 static heap_queue_t traversal_queue;
 
 /**
- * The actual result type that defines whether we have a struct
- * or constant or variable result
+ * The result type defines what we have stored inside of our
+ * cfg_result_package tagged union
  */
 typedef enum {
 	CFG_RESULT_TYPE_VAR,
 	CFG_RESULT_TYPE_CONST,
+	CFG_RESULT_TYPE_INITIALIZER,
 } cfg_result_type_t;
 
 
@@ -123,6 +124,7 @@ typedef struct {
 	union {
 		three_addr_var_t* result_var;
 		three_addr_const_t* result_const;
+		three_addr_initializer_t* result_initializer;
 	} result_value;
 
 	cfg_result_type_t type;
@@ -207,13 +209,12 @@ static cfg_result_package_t emit_in_expression(basic_block_t* basic_block, gener
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node);
 static cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression);
 static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_ast_node_t* expr_node);
-static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer);
-static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer);
 static void emit_global_struct_initializer(generic_ast_node_t* struct_initializer, dynamic_array_t* intializer_values);
 static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basic_block, three_addr_var_t* assignee, three_addr_var_t* op1, ollie_token_t op, three_addr_const_t* constant, u_int32_t line_number);
 static void visit_declaration_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static void visit_static_let_statement(generic_ast_node_t* node);
 static inline void visit_static_declare_statement(generic_ast_node_t* node);
+static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent);
 static inline void handle_raise_statement(basic_block_t* basic_block, generic_ast_node_t* node);
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, u_int32_t line_number);
 
@@ -281,12 +282,13 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 
 	switch(result_package->type){
 		//Variable - just give it back
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
 			returned_variable = result_package->result_value.result_var;
 			break;
+		}
 
 		//Constant - unpack with an assignment and give the temp var back
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			constant_value = result_package->result_value.result_const;
 
 			//Emit the assignment
@@ -298,6 +300,12 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
 			//This is the variable that we end up returning
 			returned_variable = const_assignment->operands.oir.assignee;
 			break;
+		}
+
+		//We shouldn't be seeing initializers in this
+		default: {
+			trigger_ice_panic("Invalid result type detected in result package unpacker");
+		}
 	}
 
 	//Give back the returned variable in the end
@@ -320,7 +328,7 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 
 	switch(result_package->type){
 		//Unpack by performing a temporary assignment
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
 			variable_value = result_package->result_value.result_var;
 
 			//Emit the assignment into the block
@@ -330,9 +338,10 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 			//We will return the temp
 			returned_variable = temp_assignment->operands.oir.assignee;
 			break;
+		}
 
 		//Constant - unpack with an assignment and give the temp var back
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			constant_value = result_package->result_value.result_const;
 
 			//Emit the assignment
@@ -344,10 +353,41 @@ static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_r
 			//This is the variable that we end up returning
 			returned_variable = const_assignment->operands.oir.assignee;
 			break;
+		}
+
+		//We shouldn't be seeing initializers in this
+		default: {
+			trigger_ice_panic("Invalid result type detected in result package unpacker");
+		}
 	}
 
 	//Give back the returned variable in the end
 	return returned_variable;
+}
+
+
+
+/**
+ * This helper function is used to determine if we need to place a global variable
+ * in the ".rel.local" section. This is only done for char* variables *or* anything
+ * that decays into a char*
+ */
+static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_ARRAY:
+			return does_type_decay_to_char_pointer(type->internal_types.member_type);
+
+		case TYPE_CLASS_POINTER:
+			//This is what we're after
+			if(type->internal_types.points_to == char_type){
+				return TRUE;
+			}
+			
+			return does_type_decay_to_char_pointer(type->internal_types.points_to);
+
+		default:
+			return FALSE;
+	}
 }
 
 
@@ -427,6 +467,10 @@ static inline u_int8_t is_result_package_empty(cfg_result_package_t* result_pack
 
 		case CFG_RESULT_TYPE_CONST:
 			result = result_package->result_value.result_const == NULL ? TRUE : FALSE;
+			break;
+
+		case CFG_RESULT_TYPE_INITIALIZER:
+			result = result_package->result_value.result_initializer == NULL ? TRUE : FALSE;
 			break;
 	}
 
@@ -1500,6 +1544,32 @@ static inline void add_variable_to_def_set(three_addr_var_t* variable, basic_blo
 
 
 /**
+ * Recursively add all of the members of an initializer to a use set. Remember that initializers
+ * may be made up of sub-initializers so this rule itself can be recursive
+ */
+static void add_initializer_members_to_use_set(three_addr_initializer_t* initializer, basic_block_t* block){
+	//Run through all of the initializer results
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				add_variable_to_use_set(result->value.variable_value, block);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				add_initializer_members_to_use_set(result->value.initializer_value, block);
+				break;
+
+			//Constants are irrelevant for use sets so we can skip
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
+}
+
+
+/**
  * Compute the USE and DEF sets for every single block inside of a function
  *
  * USE[b] -> the set of all variables that are used *before assignment* in block b
@@ -1543,13 +1613,19 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * Function calls contain parameters inside of their parameter results array. These may
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
-				case THREE_ADDR_CODE_FUNC_CALL:
+				case THREE_ADDR_CODE_FUNC_CALL: {
 					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
 						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
-						//If it's a variable result we add it
-						if(result->result_type == PARAM_RESULT_TYPE_VAR){
-							add_variable_to_use_set(result->param_result.variable_result, block);
+						switch(result->result_type){
+							case PARAM_RESULT_TYPE_VAR:
+								add_variable_to_use_set(result->param_result.variable_result, block);
+								break;
+							case PARAM_RESULT_TYPE_INITIALIZER:
+								add_initializer_members_to_use_set(result->param_result.initializer_result, block);
+								break;
+							case PARAM_RESULT_TYPE_CONST:
+								break;
 						}
 					}
 
@@ -1557,12 +1633,13 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
 					break;
+				}
 
 				/**
 				 * Inidrect function calls contain parameters inside of their parameter results array. These may
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
-				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 					//Indirect function calls also have their op1's used
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
@@ -1570,9 +1647,15 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
 						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
 
-						//If it's a variable result we add it
-						if(result->result_type == PARAM_RESULT_TYPE_VAR){
-							add_variable_to_use_set(result->param_result.variable_result, block);
+						switch(result->result_type){
+							case PARAM_RESULT_TYPE_VAR:
+								add_variable_to_use_set(result->param_result.variable_result, block);
+								break;
+							case PARAM_RESULT_TYPE_INITIALIZER:
+								add_initializer_members_to_use_set(result->param_result.initializer_result, block);
+								break;
+							case PARAM_RESULT_TYPE_CONST:
+								break;
 						}
 					}
 
@@ -1580,12 +1663,28 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
 					break;
+				}
+
+				/**
+				 * Initialize statements have the distinction of using the special "three_addr_initializer_t"
+				 * type, which itself may be made up of a bunch of variables and sub-initializers. For this
+				 * reason, we need to make sure that the initializer and its members are begin counted
+				 * properly
+				 */
+				case THREE_ADDR_CODE_INITIALIZER_STMT: {
+					//Initializers are addressing mode compatible
+					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
+					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
+
+					add_initializer_members_to_use_set(cursor->operands.oir.initializer_operand, block);
+					break;
+				}
 
 				/**
 				 * In the default case, we just add the USE/DEF for each 
 				 * variable that we can see
 				 */
-				default:
+				default: {
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 					add_variable_to_use_set(cursor->operands.oir.operand2, block);
 					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
@@ -1594,6 +1693,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					//The assignee is in the def set
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					break;
+				}
 			}
 
 			//Bump it up
@@ -1832,7 +1932,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 		 * we will need to unpack the result here and act accordingly
 		 */
 		switch(expression_package.type){
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				//Extract the returned variable
 				return_variable = expression_package.result_value.result_var;
 
@@ -1908,8 +2008,9 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				}
 
 				break;
+			}
 
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				//For a const type we'll need our own returned variable
 				return_variable = emit_temp_var(ret_node->inferred_type);
 
@@ -1920,6 +2021,37 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 				add_statement(current, const_assignment);
 
 				break;
+			}
+
+			/**
+			 * If we have an initializer return type, then by default we're dealing with a return by copy variable. In this
+			 * case, we'll need to emit an initialization into the return by copy variable itself
+			 */
+			case CFG_RESULT_TYPE_INITIALIZER: {
+				/**
+				 * The return by copy variable that we created during setup will always be cached in the current
+				 * function record. It was aliased but that's of no concern to us. All that we need to do now
+				 * emit a variable based on that created return by copy variable
+				 */
+				three_addr_var_t* return_by_copy_address_var = emit_var(current_function->return_by_copy_variable);
+
+				//Emit and add the initializer in
+				instruction_t* initializer = emit_initialization_instruction(return_by_copy_address_var, expression_package.result_value.result_initializer, ret_node->line_number);
+				add_statement(current, initializer);
+
+				/**
+				 * Now that we've actually done the initialization, we'll need to move the return by copy var(in %rdi) into
+				 * %rax as it is what will be returned. We'll achieve this via a simple copy
+				 */
+				three_addr_var_t* copy_to_rax_var = emit_temp_var(void_ptr);
+				instruction_t* copy_to_rax = emit_assignment_instruction(copy_to_rax_var, return_by_copy_address_var, ret_node->line_number);
+				add_statement(current, copy_to_rax);
+
+				//Now the actual return variable is the new temp we have to represent the copy to %rax
+				return_variable = copy_to_rax_var;
+
+				break;
+			}
 		}
 	}
 
@@ -2181,7 +2313,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 		switch(binary_results.type){
 			//For a constant type, we are going to need to emit an assignment
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
 
 				//Get it in the block
@@ -2189,14 +2321,19 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 				//This now is our decider
 				conditional_decider = constant_assignment->operands.oir.assignee;
-
 				break;
+			}
 
 			//For this we can extract the result var
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				conditional_decider = binary_results.result_value.result_var;
-
 				break;
+			}
+
+			//We should never see an initializer here
+			default: {
+				trigger_ice_panic("Invalid result type detected in branch emitter");
+			}
 		}
 
 		/**
@@ -2469,7 +2606,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 
 		switch(conditional_results.type){
 			//For a constant type, we are going to need to emit an assignment
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type), conditional_results.result_value.result_const, conditional_node->line_number);
 
 				//Get it in the block
@@ -2477,14 +2614,19 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 
 				//This now is our decider
 				conditional_decider = constant_assignment->operands.oir.assignee;
-
 				break;
+			}
 
 			//For this we can extract the result var
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				conditional_decider = conditional_results.result_value.result_var;
-
 				break;
+			}
+
+			//It is never valid to see an initializer here
+			default: {
+				trigger_ice_panic("Invalid result type detected in branch emitter");
+			}
 		}
 
 		/**
@@ -3124,12 +3266,186 @@ static three_addr_var_t* emit_binary_operation_with_constant(basic_block_t* basi
 
 
 /**
+ * Emit the initializer three address code for a string type. String initializers are really just array
+ * initializers, so this code will generate an array initializer. It is worth noting that it's not possible
+ * to have sub-initializers from this
+ *
+ * Say we have: let x:char[] = "Hello World";
+ * 
+ * Generates: ['H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd', '\0']
+ */
+static cfg_result_package_t emit_string_initializer(basic_block_t* block, generic_ast_node_t* initializer_node){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//First allocate this as an array initializer
+	three_addr_initializer_t* string_intializer = emit_initializer(initializer_node->inferred_type, INITIALIZER_TYPE_ARRAY);
+
+	/**
+	 * Now let's get the string value out and run through all of the individual characters,
+	 * adding each one as a char constant to the initializer
+	 */
+	dynamic_string_t* initializer_string = &(initializer_node->string_value);
+	for(u_int32_t i = 0; i < initializer_string->current_length; i++){
+		char value = dynamic_string_get_char_at(initializer_string, i);
+
+		//Emit and add this to the initializer
+		three_addr_const_t* initializer_const = emit_direct_integer_or_char_constant(value, char_type);
+		add_intializer_result(string_intializer, initializer_const, INITIALIZER_RESULT_TYPE_CONSTANT);
+	}
+
+	/**
+	 * Even though we've added everything, we still need to add the null terminator(\0) character at
+	 * the very end so we'll do that now
+	 */
+	three_addr_const_t* null_terminator_const = emit_direct_integer_or_char_constant('\0', char_type);
+	add_intializer_result(string_intializer, null_terminator_const, INITIALIZER_RESULT_TYPE_CONSTANT);
+
+	//We can now package up and return our results
+	results.starting_block = block;
+	results.final_block = block;
+	results.type = CFG_RESULT_TYPE_INITIALIZER;
+	results.result_value.result_initializer = string_intializer;
+	return results;
+}
+
+
+/**
+ * Emit initializer three address code. This is designed to be lightweight here, we will do all of the
+ * actual heavy lifting in the simplifier to keep our lives simple
+ *
+ * Say we have something like: let x:struct my_struct = {[1, 2, 3, 4, 5], x + 5, y - 2}
+ *
+ * This will be converted into three address code as
+ * 
+ * t3 <- x + 5 <--- necessary precomputation
+ * t4 <- y - 2
+ * Generates: {[1, 2, 3, 4, 5], t3, t4}
+ *
+ * This is what we will give back as a CFG results. We will *NOT* be adding stuff to the block besides
+ * from the necessary initializer value computations themselves
+ */
+static cfg_result_package_t emit_struct_initializer(basic_block_t* block, generic_ast_node_t* initializer_node){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Maintain a pointer for our current block
+	basic_block_t* current_block = block;
+
+	//First allocate the new initializer
+	three_addr_initializer_t* struct_initializer = emit_initializer(initializer_node->inferred_type, INITIALIZER_TYPE_STRUCT);
+
+	/**
+	 * Grab a cursor to the initializer values and run through all values, adding
+	 * them to the list each time. Remember that recursive initializers are completely
+	 * possible so we'll need to account for that too by calling the emit_primary_expr()
+	 * code on each one
+	 */
+	generic_ast_node_t* initializer_cursor = initializer_node->first_child;
+	while(initializer_cursor != NULL){
+		//Emit using the primary expression rule
+		cfg_result_package_t child_results = emit_primary_expr_code(current_block, initializer_cursor);
+		
+		//Update the current block after the expression
+		current_block = child_results.final_block;
+
+		switch(child_results.type){
+			case CFG_RESULT_TYPE_CONST:
+				add_intializer_result(struct_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_CONSTANT);
+				break;
+			case CFG_RESULT_TYPE_VAR:
+				add_intializer_result(struct_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_VARIABLE);
+				break;
+			case CFG_RESULT_TYPE_INITIALIZER:
+				add_intializer_result(struct_initializer, child_results.result_value.result_initializer, INITIALIZER_RESULT_TYPE_SUB_INITIALIZER);
+				break;
+		}
+
+		//Bump up to the next one
+		initializer_cursor = initializer_cursor->next_sibling;
+	}
+
+	//Now that we've emitted everything we can package up and return the result package
+	results.type = CFG_RESULT_TYPE_INITIALIZER;
+	results.starting_block = block;
+	results.final_block = current_block;
+	results.operator = BLANK;
+	results.result_value.result_initializer = struct_initializer;
+	return results;
+}
+
+
+/**
+ * Emit an array initializer instruction using the given pattern that we want. 
+ *
+ * For example, say that we have: let x:i32[5] = [y - 1, y + 2, y + 3, z - 4, a + 1]
+ * This will be translated in three address code to
+ *
+ * t2 <- y - 1
+ * t3 <- y + 2
+ * t4 <- y + 3
+ * t5 <- z - 4
+ * t6 <- a + 1
+ *
+ * Generates: [t2, t3, t4, t5, t6]
+ *
+ * This is what we will give back as a CFG result as it is on our RHS. It will *NOT* be added
+ * to the block. Instead it will be handled by the original caller who will do with it what
+ * they see fit
+ */
+static cfg_result_package_t emit_array_initializer(basic_block_t* block, generic_ast_node_t* initializer_node){
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+
+	//Maintain a pointer for our current block
+	basic_block_t* current_block = block;
+
+	//First allocate the new initializer
+	three_addr_initializer_t* array_initializer = emit_initializer(initializer_node->inferred_type, INITIALIZER_TYPE_ARRAY);
+
+	/**
+	 * Grab a cursor to the initializer values and run through all values, adding
+	 * them to the list each time. Remember that recursive initializers are completely
+	 * possible so we'll need to account for that too by calling the emit_primary_expr()
+	 * code on each one
+	 */
+	generic_ast_node_t* initializer_cursor = initializer_node->first_child;
+	while(initializer_cursor != NULL){
+		//Emit using the primary expression rule
+		cfg_result_package_t child_results = emit_primary_expr_code(current_block, initializer_cursor);
+		
+		//Update the current block after the expression
+		current_block = child_results.final_block;
+
+		switch(child_results.type){
+			case CFG_RESULT_TYPE_CONST:
+				add_intializer_result(array_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_CONSTANT);
+				break;
+			case CFG_RESULT_TYPE_VAR:
+				add_intializer_result(array_initializer, child_results.result_value.result_const, INITIALIZER_RESULT_TYPE_VARIABLE);
+				break;
+			case CFG_RESULT_TYPE_INITIALIZER:
+				add_intializer_result(array_initializer, child_results.result_value.result_initializer, INITIALIZER_RESULT_TYPE_SUB_INITIALIZER);
+				break;
+		}
+
+		//Bump up to the next one
+		initializer_cursor = initializer_cursor->next_sibling;
+	}
+
+	//Now that we've emitted everything we can package up and return the result package
+	results.type = CFG_RESULT_TYPE_INITIALIZER;
+	results.starting_block = block;
+	results.final_block = current_block;
+	results.operator = BLANK;
+	results.result_value.result_initializer = array_initializer;
+	return results;
+}
+
+
+/**
  * Emit the abstract machine code for a primary expression. Remember that a primary
  * expression could be an identifier, a constant, a function call, or a nested expression
  * tree
  */
 static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
-	//Holder for the result var/constant
 	three_addr_var_t* result_variable;
 
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
@@ -3142,14 +3458,21 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 			cfg_result_package_t result_package = {basic_block, basic_block, {result_variable}, CFG_RESULT_TYPE_VAR, BLANK};
 			return result_package;
 
-		//Same in this case - just an assignee in basic block
 		case AST_NODE_TYPE_CONSTANT:
 			return emit_constant_from_node(basic_block, primary_parent);
 
-		//We handle direct/indirect calls all in the same rule
 		case AST_NODE_TYPE_FUNCTION_CALL:
 		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
 			return emit_function_call(basic_block, primary_parent);
+
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			return emit_string_initializer(basic_block, primary_parent);
+
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+			return emit_struct_initializer(basic_block, primary_parent);
+
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+			return emit_array_initializer(basic_block, primary_parent);
 
 		//By default, we're emitting some kind of expression here
 		default:
@@ -3513,6 +3836,13 @@ static cfg_result_package_t emit_array_offset_calculation(basic_block_t* block, 
 
 			break;
 		}
+
+		/**
+		 * If we ever see an intializer then something here is very wrong
+		 */
+		case CFG_RESULT_TYPE_INITIALIZER: {
+			trigger_ice_panic("Initializer result type found in postfix expression emitter");
+	 	}
 	}
 
 	/**
@@ -4851,6 +5181,10 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 		case CFG_RESULT_TYPE_CONST:
 			if_assignment = emit_assignment_with_const_instruction(if_result, if_branch.result_value.result_const, ternary_operation->line_number);
 			break;
+
+		//Should never see an initializer here
+		default:
+			trigger_ice_panic("Invalid result type detected in ternary expression emitter");
 	}
 
 	//Add this into the if block regardless of the result
@@ -4880,6 +5214,10 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 		case CFG_RESULT_TYPE_CONST:
 			else_assignment = emit_assignment_with_const_instruction(else_result, else_branch.result_value.result_const, ternary_operation->line_number);
 			break;
+
+		//Never valid to see an initializer here
+		default:
+			trigger_ice_panic("Invalid result type detected in ternary expression emitter");
 	}
 
 	//Add this into the else block
@@ -5581,7 +5919,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 			 * This will become:
 			 * 	result <- operand1 + <type_size_multiplier> * constant_operand
 			 */
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				//Extract it
 				constant_operand = right_operand_results.result_value.result_const;
 
@@ -5596,8 +5934,9 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				//Throw this into the current block
 				add_statement(current_block, computation);
 				break;
+			}
 
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				//Extract it
 				operand2 = right_operand_results.result_value.result_var;
 
@@ -5639,6 +5978,12 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				}
 
 				break;
+			}
+
+			//Never valid to see an initializer result here
+			default: {
+				trigger_ice_panic("Invalid result type detected in pointer arithmetic emittier");
+			}
 		}
 
 	} else {
@@ -5652,7 +5997,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 			 * This will become:
 			 * 	result <- operand1 - <type_size_multiplier> * constant_operand
 			 */
-			case CFG_RESULT_TYPE_CONST:
+			case CFG_RESULT_TYPE_CONST: {
 				//Extract it
 				constant_operand = right_operand_results.result_value.result_const;
 
@@ -5667,13 +6012,14 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 				//Throw this into the current block
 				add_statement(current_block, computation);
 				break;
+			}
 
 			/**
 			 * This will become:
 			 * 	subtrahend <- operand2 * <type_size_multiplier>
 			 * 	result <- operand1 - subtrahend
 			 */
-			case CFG_RESULT_TYPE_VAR:
+			case CFG_RESULT_TYPE_VAR: {
 				//Extract it
 				operand2 = right_operand_results.result_value.result_var;
 
@@ -5694,6 +6040,12 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 
 				add_statement(current_block, pointer_arithmetic);
 				break;
+			}
+
+			//We should never see an initializer type here
+			default: {
+				trigger_ice_panic("Invalid result type detected in pointer arithmetic emittier");
+			}
 		}
 	}
 
@@ -5867,23 +6219,31 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				 * If we have a constant, we can go straight for a bin_op_with_const statement
 				 * and save the extra assignments and simplifications down the road
 				 */
-				case CFG_RESULT_TYPE_CONST:
+				case CFG_RESULT_TYPE_CONST: {
 					op1_const = right_side.result_value.result_const;
 
 					//We default to op1 for a constant
 					final_result_type = op1->type;
 					break;
+				}
 
 				/**
 				 * Otherwise we have a regular variable value so we will
 				 * unpack it accordingly and use it to help use get the result type
 				 */
-				case CFG_RESULT_TYPE_VAR:
+				case CFG_RESULT_TYPE_VAR: {
 					op2 = right_side.result_value.result_var;
 
 					//Now use the helper to get the final result type
 					final_result_type = get_operand_type_for_relational_operation(type_symtab, op1->type, op2->type);
 					break;
+				}
+
+				//We should never see an initializer here
+				default: {
+					trigger_ice_panic("Invalid result type detected in binary expression emitter");
+				}
+
 			}
 
 			/**
@@ -5923,6 +6283,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 				case CFG_RESULT_TYPE_VAR:
 					op2 = right_side.result_value.result_var;
 					break;
+
+				//We should never see an initializer type here
+				default:
+					trigger_ice_panic("Invalid result type detected in binary expression emitter");
 			}
 
 			break;
@@ -6030,9 +6394,6 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
  * with it
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
-	//For unpacking
-	three_addr_var_t* result_var;
-	//Final return package here - this will be updated as we go
 	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
@@ -6076,9 +6437,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 		 * For result types, there are many different things that we need to account
 		 * for like copy assignees, store operations, and optimizations for binary expressions
 		 */
-		case CFG_RESULT_TYPE_VAR:
+		case CFG_RESULT_TYPE_VAR: {
 			//Extract the result variable
-			result_var = right_hand_package.result_value.result_var;
+			three_addr_var_t* result_var = right_hand_package.result_value.result_var;
 
 			/**
 			 * Is a copy assignment required between the destination and source types? This
@@ -6189,12 +6550,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			}
 			
 			break;
+		}
 
 		/**
 		 * For constant result types, really the only thing that we have
 		 * to worry about is whether or not we have a store.
 		 */
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			/**
 			 * First case: we have a store statement that just needs a constant put to it
 			 */
@@ -6234,15 +6596,49 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			}
 			
 			break;
+		}
+
+		/**
+		 * Handle the special case of an initializer after an assignment expression
+		 */
+		case CFG_RESULT_TYPE_INITIALIZER: {
+			three_addr_initializer_t* initializer = right_hand_package.result_value.result_initializer;
+
+			/**
+			 * Option 1: if we have a store statement on the LHS, we can simply 
+			 * convert it into an initializer statement and tack the result initializer
+			 * on
+			 */
+			if(current_block->exit_statement != NULL
+				&& is_store_operation(current_block->exit_statement) == TRUE
+				&& current_block->exit_statement->operands.oir.address_operand1 == left_hand_var){
+
+				//Extract this and convert it
+				instruction_t* initializer_statement = current_block->exit_statement;
+				initializer_statement->statement_type = THREE_ADDR_CODE_INITIALIZER_STMT;
+				
+				//Tack the initializer on
+				initializer_statement->operands.oir.initializer_operand = initializer;
+
+			/**
+			 * Option 2: we don't have a premade store statement so we'll have to emit
+			 * the intiailization statement from scratch here
+			 */
+			} else {
+				instruction_t* initializer_statement = emit_initialization_instruction(left_hand_var, initializer, parent_node->line_number);
+				add_statement(current_block, initializer_statement);
+			}
+			
+			break;
+		}
 	}
 
-	//Now pack the return value here - this is always a variable type
+	/**
+	 * Package up and return all of our results
+	 */
 	result_package.type = CFG_RESULT_TYPE_VAR;
 	result_package.result_value.result_var = left_hand_var;
-	//This is whatever the current block is
 	result_package.final_block = current_block;
-
-	//And give the results back
 	return result_package;
 }
 
@@ -6542,7 +6938,6 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	branch_instruction->inverse_branch = FALSE;
 }
 
-
 /**
  * A handle statement internally becomes a switch statement based on the returned error of the function(%rdx). We will switch
  * based on %rdx and handle things accordingly. Remember that this is only a thing that exists for functions that error, non-errorable
@@ -6662,24 +7057,41 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * in the function
 		 */
 		if(is_result_package_empty(&handle_results) == FALSE){
-			//Final result assignment instruction
-			instruction_t* result_assignment;
-
 			//Emit our jump first - this is our anchor point for the assignment insertion
 			last_instruction = emit_jump(handle_results.final_block, error_handling_ending_block);
 
 			switch(handle_results.type){
-				case CFG_RESULT_TYPE_CONST:
-					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+				case CFG_RESULT_TYPE_CONST: {
+					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
+				}
 
-				case CFG_RESULT_TYPE_VAR:
-					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
+				case CFG_RESULT_TYPE_VAR: {
+					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
+				}
+
+				/**
+				 * If we have an initializer, we know that we are initializing into the return by copy memory region. Luckily
+				 * for us, we know that the function assignee(%rax register) when the function returns contains the address
+				 * of the return by copy parameter that we've created(%rdi param register). Because of this, we can emit
+				 * our initializer into the function assignee first and then assign that over to our "function result var"
+				 * so that it's carried through the rest of the handle statement. This allows us to avoid the creation of
+				 * any new memory regions
+				 */
+				case CFG_RESULT_TYPE_INITIALIZER: {
+					//First initialize right into the function assignee
+					instruction_t* initialization = emit_initialization_instruction(function_assignee, handle_results.result_value.result_initializer, handle_node->line_number);
+					insert_instruction_before_given(initialization, last_instruction);
+
+					//Now assign the pointer represented by %rax over to our function result var, as it now contains our initializer
+					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
+					break;
+				}
 			}
-
-			//This goes in right after the given last instruction
-			insert_instruction_before_given(result_assignment, last_instruction);
 
 		/**
 		 * Otherwise the result package is empty. This could mean a few things - we could
@@ -6785,6 +7197,10 @@ static inline cfg_result_package_t emit_parameter_expression(basic_block_t* basi
 		case CFG_RESULT_TYPE_VAR:
 			add_parameter_result_to_results_array(results, results_package.result_value.result_var, PARAM_RESULT_TYPE_VAR);
 			break;
+
+		case CFG_RESULT_TYPE_INITIALIZER:
+			add_parameter_result_to_results_array(results, results_package.result_value.result_initializer, PARAM_RESULT_TYPE_INITIALIZER);
+			break;
 	}
 
 	//Give back the results in the end
@@ -6828,6 +7244,10 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 
 			case CFG_RESULT_TYPE_VAR:
 				add_parameter_result_to_results_array(results, expression_results.result_value.result_const, PARAM_RESULT_TYPE_VAR);
+				break;
+			
+			case CFG_RESULT_TYPE_INITIALIZER:
+				add_parameter_result_to_results_array(results, expression_results.result_value.result_initializer, PARAM_RESULT_TYPE_INITIALIZER);
 				break;
 		}
 
@@ -11279,7 +11699,6 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 				break;
 					
 			default:
-				printf("%d\n\n\n", cursor->ast_node_type);
 				printf("Fatal internal compiler error: Invalid or unimplemented global initializer node encountered\n");
 				exit(1);
 		}
@@ -11304,34 +11723,15 @@ static void emit_global_struct_initializer(generic_ast_node_t* struct_initialize
 
 
 /**
- * This helper function is used to determine if we need to place a global variable
- * in the ".rel.local" section. This is only done for char* variables *or* anything
- * that decays into a char*
- */
-static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
-	switch(type->type_class){
-		case TYPE_CLASS_ARRAY:
-			return does_type_decay_to_char_pointer(type->internal_types.member_type);
-
-		case TYPE_CLASS_POINTER:
-			//This is what we're after
-			if(type->internal_types.points_to == char_type){
-				return TRUE;
-			}
-			
-			return does_type_decay_to_char_pointer(type->internal_types.points_to);
-
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Visit a global let statement and handle the initializer appropriately.
  * Do note that we have already checked that the entire initialization
  * only contains constants, so we can assume we're only processing constants
  * here
+ *
+ * This is a very special case because we will be writing these initializer
+ * values literally into the program in .data segment. If in the future
+ * we do any kind of assignment initialization that will be a different
+ * story
  */
 static void visit_global_let_statement(generic_ast_node_t* node){
 	/**
@@ -11348,54 +11748,30 @@ static void visit_global_let_statement(generic_ast_node_t* node){
 
 	//Grab out the initializer node
 	generic_ast_node_t* initializer = node->first_child;
-
-	//We can see arrays or constants here
 	switch(initializer->ast_node_type){
-		//Array init list - goes to the helper
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//Initialized to an array
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
-
-			//Give it an array of values
 			global_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
-
-			//Let the helper take care of it
 			emit_global_array_initializer(initializer, &(global_variable->initializer_value.array_initializer_values));
-
 			break;
 		
-		//Should be our most common case - we just have a constant
 		case AST_NODE_TYPE_CONSTANT:
-			//Initialized to a constant
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
-
-			//All we need to do here
 			global_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
-
 			break;
 
-		//Let the helper take over with this one as well
 		case AST_NODE_TYPE_STRING_INITIALIZER:
-			//This is a special kind of constant
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
-
-			//This will handle a variety of cases for us
 			global_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
-
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			//Initialized to a struct
 			global_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRUCT;
-
-			//Give it an array of our struct values and padding
 			global_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
-
-			//Let the helper deal with it
 			emit_global_struct_initializer(initializer, &(global_variable->initializer_value.struct_initializer_values));
 			break;
 
-		//This shouldn't be reachable
+		//Unreachable/invalid
 		default:
 			printf("Fatal internal compiler error: Unrecognized/unimplemented global initializer node type encountered\n");
 			exit(1);
@@ -11408,6 +11784,10 @@ static void visit_global_let_statement(generic_ast_node_t* node){
  * Do note that we have already checked that the entire initialization
  * only contains constants, so we can assume we're only processing constants
  * here
+ *
+ * This is a special case compared to all other let statements and initializers
+ * because the initializer values will be literally written into the program
+ * in the .data segment
  */
 static void visit_static_let_statement(generic_ast_node_t* node){
 	/**
@@ -11424,54 +11804,30 @@ static void visit_static_let_statement(generic_ast_node_t* node){
 
 	//Grab out the initializer node
 	generic_ast_node_t* initializer = node->first_child;
-
-	//We can see arrays or constants here
 	switch(initializer->ast_node_type){
-		//Array init list - goes to the helper
 		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//Initialized to an array
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
-
-			//Give it an array of values
 			static_variable->initializer_value.array_initializer_values = dynamic_array_alloc();
-
-			//Let the helper take care of it
 			emit_global_array_initializer(initializer, &(static_variable->initializer_value.array_initializer_values));
-
 			break;
 		
-		//Should be our most common case - we just have a constant
 		case AST_NODE_TYPE_CONSTANT:
-			//Initialized to a constant
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_CONSTANT;
-
-			//All we need to do here
 			static_variable->initializer_value.constant_value = emit_global_variable_constant(initializer);
-
 			break;
 
-		//Let the helper take over with this one as well
 		case AST_NODE_TYPE_STRING_INITIALIZER:
-			//This is a special kind of constant
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_STRING;
-
-			//This will handle a variety of cases for us
 			static_variable->initializer_value.constant_value = emit_global_variable_string_constant(initializer);
-
 			break;
 
 		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			//Initialized to a struct
 			static_variable->initializer_type = GLOBAL_VAR_INITIALIZER_ARRAY;
-
-			//Initialize the struct value list
 			static_variable->initializer_value.struct_initializer_values = dynamic_array_alloc();
-
-			//Let the helper take care of it
 			emit_global_struct_initializer(initializer, &(static_variable->initializer_value.struct_initializer_values));
 			break;
 
-		//This shouldn't be reachable
+		//Invalid/unreachable
 		default:
 			printf("Fatal internal compiler error: Unrecognized/unimplemented static initializer node type encountered\n");
 			exit(1);
@@ -11548,312 +11904,111 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
 
 
 /**
- * Emit a base level intialization given an offset, base address and a node. When we do this,
- * we'll have something like:
- *
- * store base_address[offset] <- emit_expression(node)
+ * Visit a let statement
  */
-static cfg_result_package_t emit_final_initialization(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* expression_node){
-	//Holder for the final assignee
-	three_addr_var_t* final_assignee;
-	//Initialize our final results
-	cfg_result_package_t final_results = {current_block, current_block, {base_address}, CFG_RESULT_TYPE_VAR, BLANK};
+static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
+	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
-	//Now let's emit the expression using the node
-	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
-
-	//The type that we're after
-	generic_type_t* inferred_type = expression_node->inferred_type;
-	
-	//Update this
-	current_block = expression_results.final_block;
-
-	//This is now the final block
-	final_results.final_block = current_block;
-
-	//First we emit the offset
-	three_addr_const_t* offset_constant = emit_direct_integer_or_char_constant(offset, u64);
-
-	//Now we need to emit the store operation
-	instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address, offset_constant, NULL, inferred_type, expression_node->line_number);
+	//Useful things to hold onto
+	symtab_variable_record_t* variable = node->variable;
+	basic_block_t* current_block = starting_block;
+	generic_type_t* type = node->inferred_type;
 
 	/**
-	 * Based on what result type we have we can process accordingly
+	 * Record that this variable was *defined* in this
+	 * block. Notice how it's *defined* and NOT *initialized*,
+	 * they mean two different things
 	 */
-	switch(expression_results.type){
-		/**
-		 * Constant type is simple - just assign over the result value
-		 */
-		case CFG_RESULT_TYPE_CONST:
-			store_instruction->operands.oir.constant_operand = expression_results.result_value.result_const;
-			break;
+	variable->block_declared_in = starting_block;
 
+	/**
+	 * The assignee of the let statement. This could either be a variable or it could represent
+	 * a memory address. Based on the type we will create this assignee appropriately
+	 */
+	three_addr_var_t* assignee = NULL;
+
+	switch(type->type_class){
 		/**
-		 * For variable types we have some specialized rules around memory address variables
-		 * that we need to account for
+		 * Array, structures and unions are all stored on the stack. So, when
+		 * we see one, we need to make sure that we are actually allocating the stack space for it
 		 */
-		case CFG_RESULT_TYPE_VAR:
-			//Extract the final assignee
-			final_assignee = expression_results.result_value.result_var;
+		case TYPE_CLASS_ARRAY:
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION: {
+			//Create a stack region for this variable and store it in the associated region
+			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), type);
 
 			/**
-			 * If we have a memory address variable, we need to emit a final assignment
-			 * to because our instruction selector is not designed to handle MEM<> variables
-			 * on the RHS of an initializer equation. This is an easy fix
+			 * Let's now emit the synthetic initialization for assignment
+			 * analysis purposes
 			 */
-			if(final_assignee->variable_type == VARIABLE_TYPE_MEMORY_ADDRESS){
-				//Assign this over
-				instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(final_assignee->type), final_assignee, expression_node->line_number);
+			instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
+			add_statement(current_block, synethtic_initialization);
 
-				//Add it into the block
-				add_statement(current_block, temp_assignment);
+			//Emit the memory address variable
+			assignee = emit_memory_address_var(node->variable);
+			break;
+		}
+			
+		default: {
+			/**
+			 * If we have a stack variable we will handle the stack region here and
+			 * emit the synthetic initialization for assignment analysis purposes
+			 */
+			if(node->variable->storage_class == STORAGE_CLASS_STACK){
+				//Create a stack region for this variable and store it in the associated region
+				variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
 
-				//This now is the final assignee
-				final_assignee = temp_assignment->operands.oir.assignee;
+				//Now emit the synthetic initialization
+				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
+				add_statement(current_block, synethtic_initialization);
 			}
 
-			//This is now our store instruction operand 
-			store_instruction->operands.oir.operand1 = final_assignee;
+			//We'll have just a regular variable here
+			assignee = emit_var(variable);
 			break;
-	}
-
-	//Add it into the block
-	add_statement(current_block, store_instruction);
-
-	//Give this back
-	return final_results;
-}
-
-
-/**
- * Emit all array intializer assignments. To do this, we'll need the base address and the initializer
- * node that contains all elements to add in. We'll leverage the root level "emit_initializer" here
- * and let it do all of the heavy lifting in terms of assignment operations. This rule
- * will just compute the addresses that we need
- */
-static cfg_result_package_t emit_array_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t current_offset, generic_ast_node_t* array_initializer){
-	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//Grab a cursor to the child
-	generic_ast_node_t* cursor = array_initializer->first_child;
-
-	//What is the current index of the initializer? We start at 0
-	u_int32_t current_array_index = 0;
-
-	//For storing all of our results
-	cfg_result_package_t initializer_results;
-
-	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
-	while(cursor != NULL){
-		//This is the type of the value. We'll need it's size
-		generic_type_t* base_type = cursor->inferred_type;
-
-		//Calculate the correct offset for our member
-		u_int32_t offset = current_offset + current_array_index * base_type->type_size;
-
-		//Determine if we need to emit an indirection instruction or not
-		switch(cursor->ast_node_type){
-			//If we have special cases, then the individual rules handle these
-			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-				//Pass the new base offset along to this rule
-				initializer_results = emit_array_initializer(current_block, base_address, offset, cursor);
-				break;
-
-			case AST_NODE_TYPE_STRING_INITIALIZER:
-				//Pass the new base offset along to this rule
-				initializer_results = emit_string_initializer(current_block, base_address, offset, cursor);
-				break;
-
-			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-				//Pass the new base offset along to this rule
-				initializer_results = emit_struct_initializer(current_block, base_address, offset, cursor);
-				break;
-
-			//When we hit the default case, that means that we've stopped seeing initializer values
-			default:
-				//Once we get here, we need to let the helper finish it off
-				initializer_results = emit_final_initialization(current_block, base_address, offset, cursor);
-				break;
 		}
-
-		//Update the current block
-		current_block = initializer_results.final_block;
-
-		//The current array index goes up by one
-		current_array_index++;
-
-		//Advance to the next one
-		cursor = cursor->next_sibling;
 	}
-
-	//This could have changed throughout the function's executions
-	results.final_block = current_block;
-	
-	//Give back the results package
-	return results;
-}
-
-
-/**
- * Emit all string intializer assignments. To do this, we'll need the base address and the initializer's string
- * itself.
- */
-static cfg_result_package_t emit_string_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* string_initializer){
-	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//The string index starts off at 0
-	u_int32_t current_index = 0;
-
-	//Now we'll go through every single character here and emit a load instruction for them
-	while(current_index <= string_initializer->string_value.current_length){
-		//Grab the value that we want out
-		char char_value = string_initializer->string_value.string[current_index];
-
-		//The relative address is always just whatever offset we were given in the param plus the current index. Char size is 1 byte so
-		//there's nothing to multiply by
-		u_int64_t stack_offset = offset + current_index; 
-
-		//Create the character type itself
-		three_addr_const_t* constant = emit_direct_integer_or_char_constant(char_value, char_type);
-
-		//Now finally we'll store it
-		instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address, emit_direct_integer_or_char_constant(stack_offset, u64), NULL, char_type, string_initializer->line_number);
-
-		//We can skip the assignment here and just directly put the constant in
-		store_instruction->operands.oir.constant_operand = constant;
-
-		//Add the instruction in
-		add_statement(current_block, store_instruction);
-
-		//Once this is all done, we'll loop back up to the top
-		current_index++;
-	}
-
-	//The results package shouldn't have much at all that changes. There is no chance
-	//to have any ternary operations at all here
-	return results;
-}
-
-
-/**
- * Emit all struct intializer assignments. To do this, we'll need the base address and the initializer
- * node that contains all elements to add in
- */
-static cfg_result_package_t emit_struct_initializer(basic_block_t* current_block, three_addr_var_t* base_address, u_int32_t offset, generic_ast_node_t* struct_initializer){
-	//Initialize the results package here to start
-	cfg_result_package_t results = {current_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//Grab the struct type out for reference
-	generic_type_t* struct_type = struct_initializer->inferred_type;
-
-	//Grab a cursor to the child
-	generic_ast_node_t* cursor = struct_initializer->first_child;
-
-	//The member index
-	u_int32_t member_index = 0;
-
-	//The initializer results
-	cfg_result_package_t initializer_results;
-
-	//Run through every child in the array_initializer node and invoke the proper address assignment and rule
-	while(cursor != NULL){
-		//Grab it out
-		symtab_variable_record_t* member_variable = dynamic_array_get_at(&(struct_type->internal_types.struct_table), member_index);
-
-		//We can calculate the offset by adding the struct offset to the starting offset
-		u_int32_t current_offset = offset + member_variable->struct_offset;
-
-		//Determine if we need to emit an indirection instruction or not
-		switch(cursor->ast_node_type){
-			//Handle an array initializer
-			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-				initializer_results = emit_array_initializer(current_block, base_address, current_offset, cursor);
-				break;
-			case AST_NODE_TYPE_STRING_INITIALIZER:
-				initializer_results = emit_string_initializer(current_block, base_address, current_offset, cursor);
-				break;
-			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-				initializer_results = emit_struct_initializer(current_block, base_address, current_offset, cursor);
-				break;
-
-			default:
-				initializer_results = emit_final_initialization(current_block, base_address, current_offset, cursor);
-				break;
-		}
-
-		//Update the current block
-		current_block = initializer_results.final_block;
-
-		//Increment this by one
-		member_index++;
-
-		//Advance to the next one
-		cursor = cursor->next_sibling;
-	}
-
-	//This could have changed throughout the function's executions
-	results.final_block = current_block;
-	
-	//Give back the results package
-	return results;
-}
-
-
-/**
- * Emit a normal intialization
- *
- * We'll hit this when we have something like:
- *
- * let x:i32 = a + b + c;
- *
- * No array/string/struct initializers here
- */
-static cfg_result_package_t emit_simple_initialization(basic_block_t* current_block, three_addr_var_t* let_variable, generic_ast_node_t* expression_node){
-	//Holder for the let result var
-	three_addr_var_t* let_result_var;
-	//Allocate the return package here
-	cfg_result_package_t let_results = {current_block, current_block, {let_variable}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//Emit the right hand expression here
-	cfg_result_package_t expression_results = emit_expression(current_block, expression_node);
-
-	//Reassign what the current block is in case it's changed
-	current_block = expression_results.final_block;
 
 	/**
-	 * Go based on what the final result type is
+	 * Emit an expression based on the let initializer and then go based on what we end up with
+	 * in the end. It is valid for us to see a variable, constant or a complx initializer here
 	 */
-	switch(expression_results.type){
-		case CFG_RESULT_TYPE_VAR:
-			//Extract the variable now
-			let_result_var = expression_results.result_value.result_var;
+	generic_ast_node_t* expression_node = node->first_child;
+	cfg_result_package_t let_initializer_results = emit_expression(current_block, expression_node);
+
+	//Update the current block
+	current_block = let_initializer_results.final_block;
+
+	switch(let_initializer_results.type){
+		case CFG_RESULT_TYPE_VAR:{
+			//Get this for convenience
+			three_addr_var_t* let_result_var = let_initializer_results.result_value.result_var;
 
 			/**
 			 * Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
 			 */
-			if(is_copy_assignment_required(let_variable->type, expression_node->inferred_type) == TRUE){
-				//Emit the copy from the left hand var to the final op1. The copy size is always the let variable's size
-				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(let_variable, let_result_var, let_variable->type->type_size, expression_node->line_number);
+			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
 
 				//Get it into the block
 				add_statement(current_block, copy_statement);
+
 			/**
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			} else if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
+			} else if(assignee->linked_var != NULL && is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
 				 */
-				generic_type_t* true_stored_type = let_variable->type;
+				generic_type_t* true_stored_type = assignee->type;
 
 				//NOTE: We use the type of our let variable here for the address assignment
-				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
+				three_addr_var_t* base_address = emit_memory_address_var(assignee->linked_var);
 				
 				//Emit the store code
 				instruction_t* store_statement = emit_store_base_address_only(base_address, let_result_var, true_stored_type, expression_node->line_number);
@@ -11862,10 +12017,6 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				add_statement(current_block, store_statement);
 
 			} else {
-				//Holders
-				instruction_t* binary_operation;
-				instruction_t* assignment_statement;
-
 				/**
 				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
 				 * be able to shrink our footprint here
@@ -11880,24 +12031,26 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 						 * For binary operations we can hijack the statement itself
 						 */
 						case THREE_ADDR_CODE_BIN_OP_STMT:
-						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-							binary_operation = current_block->exit_statement;
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
+							instruction_t* binary_operation = current_block->exit_statement;
 
 							//Just replace it with our variable
-							binary_operation->operands.oir.assignee = let_variable;
+							binary_operation->operands.oir.assignee = assignee;
 
 							break;
+						}
 
 						/**
 						 * Something else here - don't know what it is but we play it safe
 						 * and assign things over
 						 */
-						default:
+						default:{
 							//The actual statement is the assignment of right to left
-							assignment_statement = emit_assignment_instruction(let_variable, let_result_var, expression_node->line_number);
+							instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
 
 							//Finally we'll add this into the overall block
 							add_statement(current_block, assignment_statement);
+						}
 					}
 
 				/**
@@ -11906,7 +12059,7 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 				 */
 				} else {
 					//The actual statement is the assignment of right to left
-					instruction_t* assignment_statement = emit_assignment_instruction(let_variable, let_result_var, expression_node->line_number);
+					instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
 
 					//Finally we'll add this into the overall block
 					add_statement(current_block, assignment_statement);
@@ -11914,34 +12067,35 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			}
 
 			break;
+		}
 
 		/**
 		 * Constant results can either require a store instruction or they can
 		 * require a simple initialization. We account for both of these cases
 		 * here
 		 */
-		case CFG_RESULT_TYPE_CONST:
+		case CFG_RESULT_TYPE_CONST: {
 			/**
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			if(let_variable->linked_var != NULL && is_store_assignment_required_for_variable(let_variable->linked_var) == TRUE){
+			if(assignee->linked_var != NULL && is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
 				 */
-				generic_type_t* true_stored_type = let_variable->type;
+				generic_type_t* true_stored_type = assignee->type;
 
 				//NOTE: We use the type of our let variable here for the address assignment
-				three_addr_var_t* base_address = emit_memory_address_var(let_variable->linked_var);
+				three_addr_var_t* base_address = emit_memory_address_var(assignee->linked_var);
 				
 				//Emit the store code
 				instruction_t* store_statement = emit_store_base_address_only(base_address, NULL, true_stored_type, expression_node->line_number);
 
 				//Set the store statement's op1_const to be this
-				store_statement->operands.oir.constant_operand = expression_results.result_value.result_const;
+				store_statement->operands.oir.constant_operand = let_initializer_results.result_value.result_const;
 
-				//Now add thi statement in here
+				//Now add this statement in here
 				add_statement(current_block, store_statement);
 
 			/**
@@ -11949,145 +12103,31 @@ static cfg_result_package_t emit_simple_initialization(basic_block_t* current_bl
 			 * emit that now
 			 */
 			} else {
-				//Get the assignment out
-				instruction_t* assignment = emit_assignment_with_const_instruction(let_variable, expression_results.result_value.result_const, expression_node->line_number);
-
-				//Add it into the block
+				//Emit an add the assignment
+				instruction_t* assignment = emit_assignment_with_const_instruction(assignee, let_initializer_results.result_value.result_const, expression_node->line_number);
 				add_statement(current_block, assignment);
 			}
 
 			break;
+		}
+
+		/**
+		 * Initializer types are simple - all we need to do is emit the appropriate three address code statement and we're done
+		 */
+		case CFG_RESULT_TYPE_INITIALIZER: {
+			instruction_t* initilialization_stmt = emit_initialization_instruction(assignee, let_initializer_results.result_value.result_initializer, expression_node->line_number);
+			add_statement(current_block, initilialization_stmt);
+
+			break;
+		}
 	}
 
-	//Now update the final block
+	//Package up and give back the results
+	let_results.starting_block = starting_block;
 	let_results.final_block = current_block;
-
-	//And give it back
+	let_results.type = CFG_RESULT_TYPE_VAR;
+	let_results.result_value.result_var = assignee;
 	return let_results;
-}
-
-
-/**
- * Emit an initialization statement given only a variable and
- * the top level of what could be a larger initialization sequence
- *
- * For more complex initializers, we're able to bypass the emitting of extra instructions and simply emit the 
- * offset that we need directly. We're able to do this because all array and struct initialization statements at
- * the end of the day just calculate offsets.
- *
- * There is chance that we'll need to just default to a regular simple initialization here in the event that
- * we have a struct copy. This is no big deal and a supported use case
- */
-static inline cfg_result_package_t emit_complex_initialization(basic_block_t* current_block, three_addr_var_t* base_address, generic_ast_node_t* initializer_root){
-	switch(initializer_root->ast_node_type){
-		//Make a direct call to the rule. Seed with 0 as the initial offset
-		case AST_NODE_TYPE_STRING_INITIALIZER:
-			return emit_string_initializer(current_block, base_address, 0, initializer_root);
-
-		//Make a direct call to the rule. Seed with 0 as the initial offset
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			return emit_struct_initializer(current_block, base_address, 0, initializer_root);
-		
-		//Make a direct call to the array initializer. We'll "seed" with 0 as the starting address
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			return emit_array_initializer(current_block, base_address, 0, initializer_root);
-
-		/**
-		 * It is possible for our struct copy assignments that we may hit a simple initialization here. This
-		 * is perfectly fine, and we will just let this rule handle it
-		 */
-		default:
-			return emit_simple_initialization(current_block, base_address, initializer_root);
-	}
-}
-
-
-/**
- * Visit a let statement
- */
-static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
-	//Create the return package here
-	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//Extract the variable
-	symtab_variable_record_t* variable = node->variable;
-
-	/**
-	 * Record that this variable was *defined* in this
-	 * block. Notice how it's *defined* and NOT *initialized*,
-	 * they mean two different things
-	 */
-	variable->block_declared_in = starting_block;
-
-	//The current block is the start block
-	basic_block_t* current_block = starting_block;
-
-	//Extract the type here
-	generic_type_t* type = node->inferred_type;
-
-	//The assignee of the let statement. This could either be a variable or it could represent
-	//a base address for an array
-	three_addr_var_t* assignee;
-
-	//Based on what type we have, we'll need to do some special intialization
-	switch(type->type_class){
-		/**
-		 * Array, structures and unions are all stored on the stack. So, when
-		 * we see one, we need to make sure that we are actually allocating the stack space for it
-		 */
-		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
-		case TYPE_CLASS_UNION:
-			//Create a stack region for this variable and store it in the associated region
-			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
-
-			/**
-			 * Let's now emit the synthetic initialization for assignment
-			 * analysis purposes
-			 */
-			instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
-			add_statement(current_block, synethtic_initialization);
-
-			//Emit the memory address variable
-			assignee = emit_memory_address_var(node->variable);
-
-			//The left hand var is our assigned var
-			let_results.type = CFG_RESULT_TYPE_VAR;
-			let_results.result_value.result_var = assignee;
-
-			//We know that this will be the lead block
-			let_results.starting_block = current_block;
-			
-			//Invoke the complex initialization method. We know that we have a struct, array or string initializer here
-			cfg_result_package_t package = emit_complex_initialization(current_block, assignee, node->first_child);
-
-			//This is also the final block for now, unless a ternary comes along
-			let_results.final_block = package.final_block;
-
-			//And give the block back
-			return let_results;
-			
-		//Otherwise we just have a garden variety variable - no stack allocation required
-		default:
-			/**
-			 * If we have a stack variable we will handle the stack region here and
-			 * emit the synthetic initialization for assignment analysis purposes
-			 */
-			if(node->variable->storage_class == STORAGE_CLASS_STACK){
-				//Create a stack region for this variable and store it in the associated region
-				variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), node->inferred_type);
-
-				//Now emit the synthetic initialization
-				instruction_t* synethtic_initialization = emit_synthetic_memory_initialization(emit_var(variable), node->line_number);
-				add_statement(current_block, synethtic_initialization);
-			}
-
-			//Emit it
-			assignee = emit_var(variable);
-
-			//Let the helper rule deal with the rest here
-			return emit_simple_initialization(current_block, assignee, node->first_child);
-	}
 }
 
 
@@ -12491,7 +12531,7 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
  */
-static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
+static three_addr_var_t* clone_variable(three_addr_var_t* source_variable, variable_map_t* variable_map){
 	/**
 	 * This is a completely valid and frequent case. In this case, just leave
 	 */
@@ -12723,7 +12763,7 @@ static inline three_addr_var_t* clone_variable(three_addr_var_t* source_variable
  * Clone a constant. This will create separate memory so we maintain
  * complete separation
  */
-static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
+static three_addr_const_t* clone_constant(three_addr_const_t* constant){
 	//If it's empty just leave
 	if(constant == NULL){
 		return NULL;
@@ -12737,6 +12777,39 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
 
 	//Give it back
 	return copy;
+}
+
+
+/**
+ * Clone the initializer over by cloning over every single variable/constant
+ * in it using the apporopriate helpers
+ */
+static three_addr_initializer_t* clone_initializer(three_addr_initializer_t* initializer, variable_map_t* map){
+	//First emit the clone the normal way
+	three_addr_initializer_t* clone = emit_initializer(initializer->type, initializer->initializer_type);
+
+	//Run through every single result and clone it
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:{
+				add_intializer_result(clone, clone_initializer(result->value.initializer_value, map), INITIALIZER_RESULT_TYPE_SUB_INITIALIZER);
+				break;
+			}
+
+			case INITIALIZER_RESULT_TYPE_CONSTANT:{
+				add_intializer_result(clone, clone_constant(result->value.constant_value), INITIALIZER_RESULT_TYPE_CONSTANT);
+				break;
+		  	}
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				add_intializer_result(clone, clone_variable(result->value.variable_value, map), INITIALIZER_RESULT_TYPE_VARIABLE);
+				break;
+		}
+	}
+
+	return clone;
 }
 
 
@@ -12804,6 +12877,8 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			/**
 			 * If we have a return variable we'll need it to be assigned. We will use the specialized
 			 * clear function to make this happen
+			 *
+			 * TODO WE WILL BE HANDLING THIS INSIDE OF THE TRIAGE ITEM OPENED UP
 			 */
 			if(return_variable != NULL){
 				instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
@@ -12950,16 +13025,20 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 				 */
 				switch(source_result->result_type){
 					case PARAM_RESULT_TYPE_CONST:{
-						//Clone the constant and add it in
 						three_addr_const_t* cloned_constant = clone_constant(source_result->param_result.constant_result);
 						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_VAR:{
-						//Clone the parameter variable and add it in
 						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map);
 						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
+						break;
+					}
+
+					case PARAM_RESULT_TYPE_INITIALIZER: {
+						three_addr_initializer_t* cloned_initializer = clone_initializer(source_result->param_result.initializer_result, variable_map);
+						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_initializer, PARAM_RESULT_TYPE_INITIALIZER);
 						break;
 					}
 				}
@@ -13083,7 +13162,43 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		}
 
 		/**
-		 * By default we need to clone every single variable that 
+		 * Initializers mimic store statements in how they use addressing modes
+		 * and the like
+		 */
+		case THREE_ADDR_CODE_INITIALIZER_STMT: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			/**
+			 * Clone over all of the addressing variables as we don't know which are populated and which aren't
+			 */
+			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
+			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			/**
+			 * IMPORTANT - let the helper clone over the entire initializer. This is a more
+			 * involved process os we won't do it locally
+			 */
+			new_instruction->operands.oir.initializer_operand = clone_initializer(source_instruction->operands.oir.initializer_operand, variable_map);
+
+			add_statement(cloning_into_block, new_instruction);
+			return;
+		}
+
+		/**
+		 * By default we need to clone every single variable that could be in an instruction
 		 */
 		default: {
 			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
@@ -13193,52 +13308,6 @@ static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_
 
 
 /**
- * Unpack a parameter result and emit a simple assignment. This is only meant to be used for parameters that
- * are passed via register. This should not be used for stack variables
- */
-static inline void emit_register_parameter_result_assignment(basic_block_t* function_entry, three_addr_var_t* parameter_assignee,
-																parameter_result_t* result, u_int32_t line_number){
-	switch(result->result_type){
-		case PARAM_RESULT_TYPE_VAR:{
-			instruction_t* assignment = emit_assignment_instruction(parameter_assignee, result->param_result.variable_result, line_number);
-			add_statement(function_entry, assignment);
-			break;
-		}
-
-		case PARAM_RESULT_TYPE_CONST:{
-			instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee, result->param_result.constant_result, line_number);
-			add_statement(function_entry, assignment);
-			break;
-		}
-	}
-}
-
-
-/**
- * Unpack a parameter result and emit a  assignment. This is only meant to be used for parameters that
- * are passed via stack because we will be emitting a store statement. We are going to assume that the
- * parameter assignee is a memory address variable here
- */
-static inline void emit_stack_parameter_result_store(basic_block_t* function_entry, three_addr_var_t* parameter_stack_address,
-																parameter_result_t* result, generic_type_t* memory_write_type,
-															   	u_int32_t line_number){
-	switch(result->result_type){
-		case PARAM_RESULT_TYPE_VAR:{
-			instruction_t* store_stmt = emit_store_base_address_only(parameter_stack_address, result->param_result.variable_result, memory_write_type, line_number);
-			add_statement(function_entry, store_stmt);
-			break;
-		}
-
-		case PARAM_RESULT_TYPE_CONST:{
-			instruction_t* store_stmt = emit_constant_store_base_address_only(parameter_stack_address, result->param_result.constant_result, memory_write_type, line_number);
-			add_statement(function_entry, store_stmt);
-			break;
-		}
-	}
-}
-
-
-/**
  * Do all of the setup for an elaborative param which includes storing the paramcount and any
  * of the results. This will clone the parameter variable so we should have a basis for when
  * we encounter elaborative param references inside of the function body
@@ -13330,8 +13399,36 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 		 * to facilitate this. If we are passed by copy then we need to do
 		 * a memory copy assignment
 		 */
-		if(is_type_stack_passed_by_copy(elaborated_type) == FALSE){
-			emit_stack_parameter_result_store(function_entry, emit_memory_address_var(temp_var), result, elaborated_type, line_number);
+		if(is_type_stack_passed_by_copy(elaborated_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
+			/**
+			 * Since we've overflowed the limit we will need to store this result inside of the memory
+			 * region that we've just created
+			 */
+			switch(result->result_type){
+				case PARAM_RESULT_TYPE_VAR:{
+					instruction_t* store_stmt = emit_store_base_address_only(emit_memory_address_var(temp_var), result->param_result.variable_result, elaborated_type, line_number);
+					add_statement(function_entry, store_stmt);
+					break;
+				}
+
+				case PARAM_RESULT_TYPE_CONST:{
+					instruction_t* store_stmt = emit_constant_store_base_address_only(emit_memory_address_var(temp_var), result->param_result.constant_result, elaborated_type, line_number);
+					add_statement(function_entry, store_stmt);
+					break;
+				}
+
+				//This should be impossible in our logic flow
+				case PARAM_RESULT_TYPE_INITIALIZER:{
+					trigger_ice_panic("Initializer result type detected in impossible path\n");
+					break;
+				}
+			}
+
+		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+			//TODO NEEDS TO BE IMPLEMENTED
+
 
 		} else {
 			//This is as easy as memory copying and adding it in
@@ -13349,6 +13446,8 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
  * Setup all of our function parameters for the inlined call. With the current implementation, it is important that anything
  * that is a stack variable in the original non-inlined call is a stack variable here as well. All stack passed variables
  * will have their stack regions setup in the callee's local stack instead of a separate stack region as is usually done
+ *
+ * TODO WILL NEED TESTING AND SETUP FOR THIS
  */
 static inline void setup_function_parameters_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
 															  variable_map_t* variable_map, parameter_results_array_t* parameter_results,
@@ -13370,8 +13469,6 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 	int32_t parameter_index = 0;
 	int32_t results_index = 0;
 	for(; parameter_index < non_elaborative_parameter_count; parameter_index++, results_index++){
-
-
 		//Extract the parameter variable and the type
 		symtab_variable_record_t* parameter_variable = dynamic_array_get_at(&(function_to_clone->function_parameters), parameter_index);
 		generic_type_t* parameter_type = parameter_variable->type_defined_as;
@@ -13395,8 +13492,11 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 * doing memory copying, we will handle it here. There could still be stack
 		 * storage here if we exceed the maximum number of parameter passing variables
 		 * for either floats/general purpose, but this will handle all of that
+		 *
+		 * We will also gate against any initializer types in here as well as those will be
+		 * handled differently
 		 */
-		if(is_type_stack_passed_by_copy(parameter_type) == FALSE){
+		if(is_type_stack_passed_by_copy(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 			/**
 			 * Let's get the current class parameter order and the maximum
 			 * number of register passed params for this given class now based
@@ -13419,7 +13519,29 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			 */
 			if(*class_parameter_order <= max_class_register_params){
 				three_addr_var_t* parameter_assignee = emit_var(cloned_parameter);
-				emit_register_parameter_result_assignment(function_entry, parameter_assignee, result, line_number);
+
+				/**
+				 * Store the result using a plain register assignment - no stack memory
+				 */
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_VAR:{
+						instruction_t* assignment = emit_assignment_instruction(parameter_assignee, result->param_result.variable_result, line_number);
+						add_statement(function_entry, assignment);
+						break;
+					}
+
+					case PARAM_RESULT_TYPE_CONST:{
+						instruction_t* assignment = emit_assignment_with_const_instruction(parameter_assignee, result->param_result.constant_result, line_number);
+						add_statement(function_entry, assignment);
+						break;
+					}
+
+					//This should be impossible in our logic flow
+					case PARAM_RESULT_TYPE_INITIALIZER:{
+						trigger_ice_panic("Initializer result type detected in impossible path\n");
+						break;
+					}
+				}
 
 			/**
 			 * Otherwise we are over the limit, so the function body is expecting that
@@ -13449,12 +13571,44 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 				instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), line_number);
 				add_statement(function_entry, synthetic_init);
 
-				//Once we have that we can emit the store instruction
-				emit_stack_parameter_result_store(function_entry, emit_memory_address_var(cloned_parameter), result, parameter_type, line_number);
+				/**
+				 * Since we've overflowed the limit we will need to store this result inside of the memory
+				 * region that we've just created
+				 */
+				switch(result->result_type){
+					case PARAM_RESULT_TYPE_VAR:{
+						instruction_t* store_stmt = emit_store_base_address_only(emit_memory_address_var(cloned_parameter), result->param_result.variable_result, parameter_type, line_number);
+						add_statement(function_entry, store_stmt);
+						break;
+					}
+
+					case PARAM_RESULT_TYPE_CONST:{
+						instruction_t* store_stmt = emit_constant_store_base_address_only(emit_memory_address_var(cloned_parameter), result->param_result.constant_result, parameter_type, line_number);
+						add_statement(function_entry, store_stmt);
+						break;
+					}
+
+					//This should be impossible in our logic flow
+					case PARAM_RESULT_TYPE_INITIALIZER:{
+						trigger_ice_panic("Initializer result type detected in impossible path\n");
+						break;
+					}
+				}
 			}
 
 			//Regardless of how we stored it, we need to bump the parameter order
 			(*class_parameter_order)++;
+
+		/**
+		 * If we get here it means that we have an initializer type, in which case we won't
+		 * need a memory copy but instead an initializer statement to be emitted
+		 */
+		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+
+			//TODO IMPEMENT ME
+
 
 		/**
 		 * Struct and unions are always passed by copy. This will involve creating a new memory region

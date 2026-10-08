@@ -45,9 +45,6 @@ static cfg_t* cfg_reference;
 //Maintain a reference to the use count tracker
 static use_count_tracker_t use_count_tracker;
 
-static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
-static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
-
 //The window for our "sliding window" optimizer
 typedef struct instruction_window_t instruction_window_t;
 
@@ -110,7 +107,38 @@ struct instruction_window_t{
 };
 
 
+//Predeclared functions for reference
+static instruction_t* emit_register_movement_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register);
+static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
+static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
+static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+
+
 /**
+ * Trigger a fatal internal compiler error panic with the given message
+ * 
+ * NOTE: THIS WILL CRASH THE PROGRAM DELIBERATELY
+ */
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
+	exit(1);
+}
+
+
+/**
+ * Is the given type always assigned by copy?
+ */
+static inline u_int8_t is_type_assigned_by_copy(generic_type_t* type){
+	switch(type->type_class){
+		case TYPE_CLASS_UNION:
+		case TYPE_CLASS_STRUCT:	
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+/*
  * An instruction copy pair struct contains a load and a store
  * instruction. The result of the load is the source for the store
  */
@@ -118,7 +146,6 @@ struct instruction_copy_pair_t {
 	instruction_t* load_instruction;
 	instruction_t* store_instruction;
 };
-
 
 /**
  * Simple utility for us to print out an instruction window in its three address code
@@ -205,27 +232,6 @@ static inline u_int8_t is_f64_negative(double value){
 	u_int64_t sign_bit = (double_as_long >> 63);
 
 	return sign_bit == 1 ? TRUE : FALSE;
-}
-
-
-/**
- * Clone a constant. This will create separate memory so we maintain
- * complete separation
- */
-static inline three_addr_const_t* copy_constant(three_addr_const_t* constant){
-	//If it's empty just leave
-	if(constant == NULL){
-		return NULL;
-	}
-
-	//Complete duplication
-	three_addr_const_t* copy = calloc(1, sizeof(three_addr_const_t));
-
-	//And a full copy over
-	memcpy(copy, constant, sizeof(three_addr_const_t));
-
-	//Give it back
-	return copy;
 }
 
 
@@ -1210,6 +1216,36 @@ static inline void decrement_use_count_for_variable(three_addr_var_t* variable){
 
 
 /**
+ * Increment the use counts for all initializer members. Remember that initializers can have
+ * sub-initializers as members, so this rule will work recursively
+ */
+static void increment_use_counts_for_intializer_members(three_addr_initializer_t* initializer){
+	//Skip if it's NULL(very common)
+	if(initializer == NULL){
+		return;
+	}
+
+	//Run through all members in the initializer and dispatch appropriately
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				increment_use_count(&use_count_tracker, result->value.variable_value->variable_id);
+				break;
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				increment_use_counts_for_intializer_members(result->value.initializer_value);
+				break;
+
+			//Constants do not have this use count concept
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
+}
+
+
+/**
  * Wrapper around the get use count by ID function. Grabs the use count for any
  * given variable so long as it isn't NULL. If it is NULL we return -1
  */
@@ -1288,6 +1324,76 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 */
 	dynamic_array_add_if_allocated(memory_addresses_to_adjust, region_memory_address);
 }
+
+
+/**
+ * In the event that we have stack allocations required for the parameter passing setup in a function call, we will
+ * need to adjust their memory addresses with an offset of however much additional stack space we allocated for the 
+ * function call stack passed parameters(see diagram in function call handler). This is the same for values in initializers.
+ * This helper will go through and add all values in an initializer that need to be adjusted
+ */
+static void add_initializer_members_to_memory_address_adjustment_list(three_addr_initializer_t* initializer, dynamic_array_t* memory_addresses_to_adjust){
+	/**
+	 * This wasn't allocated so we believe it to be useless - just
+	 * get out in this case
+	 */
+	if(memory_addresses_to_adjust->internal_array == NULL){
+		return;
+	}
+
+	//Run through all of our results
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+
+			//Recursively deal with all members in that subinitializer
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				add_initializer_members_to_memory_address_adjustment_list(result->value.initializer_value, memory_addresses_to_adjust);
+				break;
+
+			/**
+			 * If we have a variable that is a memory address of any kind, we will need to adjust
+			 * it after we emit the function call stack allocation statement
+			 */
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				three_addr_var_t* result_variable = result->value.variable_value;
+
+				if(is_memory_address_variable(result_variable) == TRUE){
+					dynamic_array_add(memory_addresses_to_adjust, result_variable);
+				}
+
+				break;
+		    }
+		}
+	}
+}
+
+
+/**
+ * We are passing to this memory region parameter via an initializer. Since this is the case, we will need to create
+ * a memory region for this type and emit the proper initializations into it. We need to also make a close
+ * note of any "memory addresses to adjust" that come from inside the initializer
+ */
+static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
+														parameter_result_t* initializer_result, dynamic_array_t* memory_addresses_to_adjust){
+	//Extract this to have it on hand
+	three_addr_initializer_t* result_initializer = initializer_result->param_result.initializer_result;
+
+	//Create the pass-by-initializer region and create a memory address variable for it
+	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type); 
+	three_addr_var_t* pass_by_initializer_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_initializer_region);
+
+	//Let the helper store any memory addresses that will need adjustment
+	add_initializer_members_to_memory_address_adjustment_list(result_initializer, memory_addresses_to_adjust);
+
+	//Emit the initializer and insert it right before the call instruction
+	instruction_t* initializer_instruction = emit_initialization_instruction(pass_by_initializer_memory_address, result_initializer, call_statement->line_number);
+	insert_instruction_before_given(initializer_instruction, call_statement);
+}
+
 
 
 /**
@@ -1377,6 +1483,12 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 				insert_instruction_before_given(param_assignment, call_statement);
 				break;
 			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
+			}
 		}
 
 		//Once done we can add this to the list of parameters
@@ -1431,6 +1543,13 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 				 */
 				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
 				insert_instruction_before_given(store_statement, call_statement);
+				break;
+			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
 			}
 		}
 	}
@@ -1488,6 +1607,12 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 				insert_instruction_before_given(param_assignment, call_statement);
 				break;
 			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
+			}
 		}
 
 		//Once done we can add this to the list of parameters
@@ -1533,6 +1658,13 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 				 */
 				instruction_t* store_statement = emit_constant_store_base_address_only(stack_region_address, result_const, parameter_type, call_statement->line_number);
 				insert_instruction_before_given(store_statement, call_statement);
+				break;
+			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
 			}
 		}
 	}
@@ -1553,7 +1685,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 	 * variable result. There's no need to split along SSE/GP because we are always storing to
 	 * the stack
 	 */
-	if(is_pass_by_copy_type(parameter_type) == FALSE){
+	if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 		//Allocate a fresh region for this and get a variable for it
 		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
@@ -1582,7 +1714,32 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 				insert_instruction_before_given(store_statement, call_statement);
 				break;
 			}
+
+			//Control flow should never allow this to occur
+			case PARAM_RESULT_TYPE_INITIALIZER:{
+				trigger_ice_panic("Initializer result type reached in impossible path");
+				break;
+			}
 		}
+
+	/**
+	 * Otherwise if we get here then we have an initializer parameter type. This
+	 * is going to require us to create a memory region and "initialize" into it
+	 */
+	} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+		//Extract for convenience
+		three_addr_initializer_t* initializer = result->param_result.initializer_result;
+
+		//Allocate a fresh region for this and get a variable for it
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		three_addr_var_t* storing_into_region_address = emit_memory_address_temp_var(parameter_type, storing_into_region);
+		
+		//Let the helper deal with any memory addresses that require adjustment
+		add_initializer_members_to_memory_address_adjustment_list(initializer, memory_addresses_to_adjust);
+
+		//Emit and insert this right before the call statement
+		instruction_t* initialization = emit_initialization_instruction(storing_into_region_address, initializer, call_statement->line_number);
+		insert_instruction_before_given(initialization, call_statement);
 
 	/**
 	 * Otherwise we're going to need a full memory copy into the elaborative parameter region and not just
@@ -1718,13 +1875,23 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * This branching is arranged in order of what should be most common. GP is
 		 * most common, then comes SSE, and then pass by copy
 		 */
-		if(is_pass_by_copy_type(parameter_type) == FALSE){
+		if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 			if(IS_FLOATING_POINT(parameter_type) == FALSE){
 				store_gp_parameter(call_statement, parameter_type, result, &current_gp_parameter_order, &memory_addresses_to_adjust);
 			} else {
 				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
 			}
 
+		/**
+		 * Otherwise if we get here then we have an initializer parameter type. This
+		 * is going to require us to create a memory region and "initialize" into it
+		 */
+		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
+			store_pass_by_initializer_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
+
+		/**
+		 * Final option is that we have a pure pass by copy parameter that is not using any initialization
+		 */
 		} else {
 			store_pass_by_copy_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
 		}
@@ -1906,6 +2073,9 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
 			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
 			increment_use_count_for_variable(instruction_cursor->relies_on);
+
+			//If we have an initializer we'll increment it's use count as well
+			increment_use_counts_for_intializer_members(instruction_cursor->operands.oir.initializer_operand);
 
 			//If we have function parameters be sure to include those as well
 			for(int32_t j = 0; j < instruction_cursor->parameters.current_index; j++){
@@ -2640,7 +2810,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 */
 			case ADDRESSING_MODE_OFFSET_ONLY: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 				//Add this additional offset in
@@ -2665,7 +2835,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 				//Add this additional offset in
@@ -2690,7 +2860,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
 				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 				//Add this additional offset in
@@ -2717,7 +2887,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
 				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 				//Add this additional offset in
@@ -2742,7 +2912,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
 				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 				//Add this additional offset in
@@ -2769,7 +2939,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 
 		//Because of the potential for address offset manipulation we need this to be distinct
 		if(base_address->address_offset != NULL){
-			store_instruction->operands.oir.address_offset = copy_constant(base_address->address_offset);
+			store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
 		}
 	}
 
@@ -8526,6 +8696,33 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 
 
 /**
+ * Mark all values inside of the special three address initializer. Note that
+ * this helper can be called recursively because initializers themselves can
+ * be recursive
+ */
+static void mark_initializer_values(three_addr_initializer_t* initializer, dynamic_array_t* function_blocks, dynamic_array_t* worklist){
+	//Run through every single initializer result
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				mark_and_add_definition(function_blocks, result->value.variable_value, worklist);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				mark_initializer_values(result->value.initializer_value, function_blocks, worklist);
+				break;
+
+			//Constants don't need to be marked at all
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -8636,9 +8833,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_IDLE_STMT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -8657,6 +8852,16 @@ static void mark(dynamic_array_t* function_blocks){
 				 * optimizer regardless of use count tracking
 				 */
 				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * Initializers are always considered to be useful seeing
+				 * as they are in a way equivalent to stores
+				 */
+				case THREE_ADDR_CODE_INITIALIZER_STMT:
 					current_stmt->mark = TRUE;
 					dynamic_array_add(&worklist, current_stmt);
 					current->contains_mark = TRUE;
@@ -8740,6 +8945,19 @@ static void mark(dynamic_array_t* function_blocks){
 					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
 				}
 
+				break;
+
+			/**
+			 * For an initializer statement there are special steps that we 
+			 * need to take to work on the 
+			 */
+			case THREE_ADDR_CODE_INITIALIZER_STMT:
+				//The address that we're writing to will always be needed
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+
+				//Now let the recursive helper mark all of our initializer values
+				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
 
 			/**
@@ -8868,6 +9086,519 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 
 
 /**
+ * Emit a variable copy if and only if this is not a NULL pointer
+ */
+static inline three_addr_var_t* emit_variable_copy_if_not_null(three_addr_var_t* variable){
+	return variable != NULL ? emit_var_copy(variable) : NULL;
+}
+
+
+/**
+ * Emit a constant copy if and only if this is not a NULL pointer
+ */
+static inline three_addr_const_t* emit_constant_copy_if_not_null(three_addr_const_t* constant){
+	return constant != NULL ? emit_constant_copy(constant) : NULL;
+}
+
+
+/**
+ * Generate an OIR store instruction using the addressing mode operands given *and* accounting
+ * for the given additional offset. 
+ *
+ * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
+ * result that is an actual initializer here. This is just for variables and constants
+ */
+static instruction_t* generate_OIR_store_with_additional_offset(addressing_operands_t* base_address, int32_t additional_offset,
+																initializer_result_t* result_to_store, generic_type_t* memory_write_type){
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	/**
+	 * If we have a type that is not assigned by copy we will need
+	 * a store statement. Otherwise if we have a type that is assigned by copy
+	 * we will need a memory copy statement
+	 */
+	if(is_type_assigned_by_copy(memory_write_type) == FALSE){
+		store_instruction->memory_access_type = WRITE_TO_MEMORY;
+		store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+		store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	} else {
+		store_instruction->memory_access_type = WRITE_TO_MEMORY;
+		store_instruction->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
+		store_instruction->type_storage.memory_read_write_type = memory_write_type;
+		store_instruction->optional_storage.byte_amount_to_copy = memory_write_type->type_size;
+	}
+
+
+	/**
+	 * Based on the addressing mode *and8 the value of the additional offset
+	 * we may have an addressing mode that varies slightly from the one
+	 * that was provided. It's only going to really vary though if said additional
+	 * offset is not 0. If it is 0, then we can just copy everything over 
+	 * literally
+	 *
+	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
+	 */
+	if(additional_offset != 0){
+		/**
+		 * Remember that ending up in here means that the constant is specifically
+		 * nonzero so we're going to need to change addressing modes that don't have
+		 * constants to ones that do
+		 */
+		switch(base_address->addressing_mode){
+			/**
+			 * We'll end up with something like store 4(x_0) <- 5
+			 */
+			case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				break;
+			}
+
+			/**
+			 * With this if we have an additional offset of 4 and already
+			 * have something like store 4(x_0) <- 5 we'll just add to it
+			 * to get store 8(x_0) <- 5
+			 */
+			case ADDRESSING_MODE_OFFSET_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
+
+			/**
+			 * Going to end up with something like store 4(x_0, y_0) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_ONLY: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				break;
+			}
+
+			/**
+			 * We're going to end up with something like store 4 + 8(x_0, y_0) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
+
+			/**
+			 * We'll get something like store 4(, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_INDEX_AND_SCALE: {
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+				break;
+			}
+
+			/**
+			 * We'll get something like store 4 + 8(, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+		 	}
+
+			/**
+			 * We'll get something like store 4(x_0, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				break;
+			}
+
+			/**
+			 * We'll get something like store 4+8(x_0, y_0, 8) <- 5
+			 */
+			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
+
+			/**
+			 * We'll get something like store 4+x_0(%rip) <- 5
+			 */
+			case ADDRESSING_MODE_RIP_RELATIVE: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				break;
+			}
+
+			/**
+			 * We'll get something like store 4+8+x_0(%rip) <- 5
+			 */
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
+				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+
+				//Add this additional offset in
+				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				break;
+			}
+
+			default: {
+				trigger_ice_panic("Invalid addressing mode detected");
+				break;
+		 	}
+		}
+
+	/**
+	 * Additional offset is 0 so we don't need to do anything besides copy over all of the addressing
+	 * mode operands from the given base address pointer
+	 */
+	} else {
+		store_instruction->addressing_mode = base_address->addressing_mode;
+		store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
+		store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
+		store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
+		store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
+
+		//Because of the potential for address offset manipulation we need this to be distinct
+		store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
+	}
+
+	/**
+	 * Now that we're done emitting everything we can store the result in here
+	 */
+	if(result_to_store->result_type == INITIALIZER_RESULT_TYPE_CONSTANT){
+		store_instruction->operands.oir.constant_operand = result_to_store->value.constant_value;
+	} else {
+		store_instruction->operands.oir.operand1 = result_to_store->value.variable_value;
+	}
+
+	return store_instruction;
+}
+
+
+/**
+ * Create a new addressing mode operands struct based on the original operands given, with an
+ * additional offset added in. This is meant to be used for the recursive initializer rules
+ * where we'll need to pass in the current base address with an additional offset accounted
+ * for
+ */
+static inline addressing_operands_t package_new_addressing_operands_with_additional_offset(addressing_operands_t* original_operands, int32_t offset){
+	//Get a direct copy of these operands
+	addressing_operands_t new_operands = *original_operands;
+
+	//We need to clone this always to avoid different calls stepping over eachother
+	new_operands.address_offset = emit_constant_copy_if_not_null(new_operands.address_offset);
+
+	switch(new_operands.addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_ONLY:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+			break;
+
+		case ADDRESSING_MODE_RIP_RELATIVE:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+			break;
+
+		case ADDRESSING_MODE_INDEX_AND_SCALE:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+			break;
+
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
+			new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+			break;
+
+		/**
+		 * These all already have offsets, so we won't need to change the type at all,
+		 * we just need to sum the additional offset with it
+		 */
+		case ADDRESSING_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+			sum_constant_with_raw_int64_value(new_operands.address_offset, i64, offset);
+			break;
+
+		default:
+			trigger_ice_panic("Invalid addressing mode detected");
+			break;
+	}
+
+	return new_operands;
+}
+
+
+/**
+ * Go through all of the members of the given struct initializer and create the equivalent OIR store statement
+ * for each member along the way. In the event that a recursive initializer is hit, we will package up a fresh
+ * addressing_operands_t struct and invoke that
+ */
+static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction){
+	//Extract the struct type
+	generic_type_t* struct_type = struct_initializer->type;
+
+	//Maintain a current offset for us to go through
+	int32_t current_offset = 0;
+
+	/**
+	 * Run through all of the results and dispatch accordingly based on what
+	 * the given result actually is
+	 */
+	for(int32_t i = 0; i < struct_initializer->results.results_current_index; i++){
+		/**
+		 * We'll need the initializer and the struct member itself here
+		 */
+		initializer_result_t* result = get_intializer_result_at_index(struct_initializer, i);
+		symtab_variable_record_t* struct_record = get_struct_member_at_index(struct_type, i);
+
+		//The current offset will always just be this struct offset
+		current_offset = struct_record->struct_offset;
+
+		switch(result->result_type){
+			/**
+			 * If we have variables or constant results then all we'll need to do is emit the equivalent
+			 * OIR store statement 
+			 */
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+			case INITIALIZER_RESULT_TYPE_CONSTANT:{
+				instruction_t* store_statement = generate_OIR_store_with_additional_offset(base_address, current_offset, result, struct_record->type_defined_as);
+				insert_instruction_before_given(store_statement, original_instruction);
+				break;
+		 	}
+
+			/**
+			 * For a sub-initializer we will need to recursively invoke the initializer
+			 * rule. Before doing that, we will need to create a new operands struct and
+			 * create a new offset that accounts for the current offset
+			 */
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+				//Let the helper do all of our packaging
+				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_offset);
+
+				/**
+				 * Now that we've packaged up the new operands, we can recursively call
+				 * the appropriate emitter based on the initializer result
+				 */
+				three_addr_initializer_t* initializer = result->value.initializer_value;
+				switch(initializer->initializer_type){
+					case INITIALIZER_TYPE_ARRAY:
+						convert_array_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
+
+					case INITIALIZER_TYPE_STRUCT:
+						convert_struct_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
+				}
+
+				break;
+			}
+		}
+	}
+}
+
+
+/**
+ * Go through all of the members of the given array initializer and create the equivalent OIR store statement for each one
+ * along the way. In the event that a recursive initializer is hit, we will package up a fresh addressing_operands_t 
+ * struct and invoke that
+ */
+static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction){
+	/**
+	 * The array type and member type should always be stored inside of this
+	 * given initializer so we can extract that now
+	 */
+	generic_type_t* array_type = array_initializer->type;
+	generic_type_t* member_type = array_type->internal_types.member_type;
+	int32_t member_type_size = member_type->type_size;
+
+	//Maintain the current offset from our perspective inside of this initializer
+	int32_t current_array_offset = 0;
+
+	/**
+	 * Crawl the initializer's members and dispatch to the appropriate rule
+	 * based on each member type. Even though arrays are homogenous in Ollie types,
+	 * the initializer could have a mismatch of variables and constants
+	 */
+	for(int32_t i = 0; i < array_initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(array_initializer, i);
+
+		switch(result->result_type){
+			/**
+			 * For variables and constants we will emit the store with the additional
+			 * offset using the helper. The helper itself will deal with cloning the constants
+			 * if needed for us
+			 */
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+			case INITIALIZER_RESULT_TYPE_CONSTANT: {
+				//Emit and get this inserted right *BEFORE* the original
+				instruction_t* result_storage = generate_OIR_store_with_additional_offset(base_address, current_array_offset, result, member_type);
+				insert_instruction_before_given(result_storage, original_instruction);
+				break;
+			}
+
+			/**
+			 * For a sub-initializer we will need to recursively invoke the initializer
+			 * rule. Before doing that, we will need to create a new operands struct and
+			 * create a new offset that accounts for the current offset
+			 */
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+				//Let the helper do all of our packaging
+				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_array_offset);
+
+				/**
+				 * Now that we've packaged up the new operands, we can recursively call
+				 * the appropriate emitter based on the initializer result
+				 */
+				three_addr_initializer_t* initializer = result->value.initializer_value;
+				switch(initializer->initializer_type){
+					case INITIALIZER_TYPE_ARRAY:
+						convert_array_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
+
+					case INITIALIZER_TYPE_STRUCT:
+						convert_struct_initializer_into_OIR_stores(&new_operands, initializer, original_instruction);
+						break;
+				}
+
+				break;
+			}
+		}
+
+		/**
+		 * The current offset is always updated by adding one more member
+		 * type size to it for each element that we process. This is done
+		 * after the fact because we're preparing for the next element. Unlike
+		 * with structs, array members are homogenous so this is always the
+		 * same
+		 */
+		current_array_offset += member_type_size;
+	}
+}
+
+
+/**
+ * Convert an initializer statement into OIR store statements. This represents the final
+ * lowering step for intializers before we end up converting it all into x86 assembly. This
+ * step will generate a lot of instructions as each individual member needs at least one store,
+ * with recursive initializers needing more. We will rebuild the window from the very first
+ * statement once we are done with this, and the original instruction will be deleted
+ *
+ * NOTE: this function will return the final created statement to the caller
+ */
+static instruction_t* convert_initializer_statement_into_OIR_store_statements(instruction_t* initializer_statement){
+	/**
+	 * We will need to know the base address, so we'll pass around this instruction's
+	 * current base address inside of this specialized struct. We will want to make
+	 * copies of the variables in here when we actually use them, but this will
+	 * give us a jumping off point
+	 */
+	addressing_operands_t base_address = {
+											initializer_statement->operands.oir.address_operand1,
+											initializer_statement->operands.oir.address_operand2,
+											initializer_statement->operands.oir.address_offset,
+											initializer_statement->operands.oir.address_multiplier,
+											initializer_statement->operands.oir.rip_offset_var,
+											initializer_statement->addressing_mode
+										  };
+
+	//Extract the initializer and call out to the appropriate rule
+	three_addr_initializer_t* initializer = initializer_statement->operands.oir.initializer_operand;
+	switch(initializer->initializer_type){
+		case INITIALIZER_TYPE_ARRAY:
+			convert_array_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
+			break;
+
+		case INITIALIZER_TYPE_STRUCT:
+			convert_struct_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
+			break;
+	}
+
+	/**
+	 * Once we've reached the end, the original statement is useless. As the return
+	 * value of the function we will give back the very last store statement that we
+	 * create, which will be the statement immediately before the old initializer
+	 */
+	instruction_t* last_store_statement = initializer_statement->previous_statement;
+	delete_statement(initializer_statement);
+	return last_store_statement;
+}
+
+
+/**
+ * Crawl over the entire function, lowering any initializers that we see into equivalent store statement
+ * chains in OIR. This represents the final lowering step for initializers and will leave the entire function
+ * ready for instruction selection. This function returns TRUE if we found at least one initializer which
+ * will tell the caller that it needs to trigger additional simplification
+ */
+static inline u_int8_t lower_all_initializer_statements(dynamic_array_t* function_blocks){
+	//By default assume we found no initializers
+	u_int8_t found_initializer = FALSE;
+
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block_to_process = dynamic_array_get_at(function_blocks, i);
+
+		//Run through every statement and perform the lowering
+		instruction_t* instruction_cursor = block_to_process->leader_statement;
+		while(instruction_cursor != NULL){
+			/**
+			 * If we see an initializer call out to the helper. Remember that the
+			 * helper returns a pointer to the last statement created, so we'll need 
+			 * to reassign the cursor to that
+			 */
+			if(instruction_cursor->statement_type == THREE_ADDR_CODE_INITIALIZER_STMT) {
+				//Flag that we did find an initializer
+				found_initializer = TRUE;
+
+				instruction_cursor = convert_initializer_statement_into_OIR_store_statements(instruction_cursor);
+			}
+
+			instruction_cursor = instruction_cursor->next_statement;
+		}
+	}
+
+	return found_initializer;
+}
+
+
+/*
  * Emit a 16 byte load/store copy instruction pair. This instruction will be using the specialized
  * movdqu instruction when it eventually gets selected later on down the road and will use the specialied
  * F128 basic type to represent the 16 byte copy
@@ -8896,7 +9627,7 @@ static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* s
 }
 
 
-/**
+/*
  * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
  * it gets instruction selected down the road
  *
@@ -9256,6 +9987,25 @@ static void simplify(cfg_t* cfg){
 		}
 
 		/**
+		 * The second to last thing that we'll need to do is run through the function and
+		 * convert all initializer statements from the high level OIR that they come to us
+		 * in into lower-level OIR store statements. This is the final step in priming
+		 * all instructions for instruction selection. This helper will return TRUE
+		 * if we have at least one initializer that was simplified, which will tell us
+		 * that we need to trigger the simplifier
+		 */
+		if(lower_all_initializer_statements(&(function->function_blocks)) == TRUE){
+			/**
+			 * After we do all of this, one run final simplifier pass to ensure everything
+			 * is in the simplest form that we can get it in
+			 */
+			do {
+				reset_all_use_counts(&use_count_tracker);
+				populate_use_counts_for_function(&(function->function_blocks));
+			} while(simplifier_pass(function_entry) == TRUE);
+		}
+
+		/*
 		 * Now that we have everything simplified, we can convert any/all memory copy
 		 * statements into equivalent load and store statements. This generates a large
 		 * volume of instructions which is why we want to do it later on. If at any

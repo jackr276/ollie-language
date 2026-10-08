@@ -1123,7 +1123,7 @@ static inline void non_pruned_phi_function_insertion(symtab_variable_record_t* v
  * 		by whether or not the variable is LIVE_IN at the start of the join
  * 		node. See the full algorithm in the dedicated function
  *
- * 	2.) Non-mutable non-user defined: these variables do have constraints on
+ * 	2.) Non-mutable user defined: these variables do have constraints on
  * 		mutability so we need to keep track of every place where the value
  * 		could be overwritten. To do this, we do not prune SSA using live in
  *		and insert phi functions at every join node that is dominated by
@@ -1186,6 +1186,37 @@ static inline void insert_phi_functions(variable_symtab_t* var_symtab){
 
 	//Scrap this once done
 	dynamic_array_dealloc(&worklist);
+}
+
+
+/**
+ * Rename all of the members inside of an intializer. Remember that initializers
+ * can be recursive so this rule may have to recrusively call itself
+ *
+ * NOTE: initializer members are always on the RHS only
+ */
+static void rename_intitializer_members(three_addr_initializer_t* initializer){
+	//Run through every single result in the initializer
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			//Constants are irrelevant
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				if(is_variable_ssa_eligible(result->value.variable_value) == TRUE){
+					rhs_new_name(result->value.variable_value);
+				}
+
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				rename_intitializer_members(result->value.initializer_value);
+				break;
+		}
+	}
 }
 
 
@@ -1260,7 +1291,7 @@ static void rename_block(basic_block_t* entry){
 	 */
 	while(cursor != NULL){
 		switch(cursor->statement_type){
-			case THREE_ADDR_CODE_PHI_STMT:
+			case THREE_ADDR_CODE_PHI_STMT: {
 				/**
 				 * Phi functions are a special case because they overwrite
 				 * multiple definitions, not just one. We'll use a special
@@ -1268,13 +1299,14 @@ static void rename_block(basic_block_t* entry){
 				 */
 				phi_function_lhs_new_name(cursor->operands.oir.assignee);
 				break;
+			}
 				
 			/**
 			 * Function calls are a special case because they have a parameter
 			 * array that we'll need to conisder
 			 */
 			case THREE_ADDR_CODE_FUNC_CALL:
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand1);
 				}
@@ -1285,10 +1317,21 @@ static void rename_block(basic_block_t* entry){
 				for(int32_t k = 0; k < func_params->current_index; k++){
 					parameter_result_t* current_param = get_result_at_index(func_params, k);
 
-					//If we have a variable result we'll run through now and put it in
-					if(current_param->result_type == PARAM_RESULT_TYPE_VAR
-						&& is_variable_ssa_eligible(current_param->param_result.variable_result) == TRUE){
-						rhs_new_name(current_param->param_result.variable_result);
+					switch(current_param->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							//Make sure that it's eligible before doing this
+							if(is_variable_ssa_eligible(current_param->param_result.variable_result) == TRUE){
+								rhs_new_name(current_param->param_result.variable_result);
+							}
+
+							break;
+
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							rename_intitializer_members(current_param->param_result.initializer_result);
+							break;
+
+						case PARAM_RESULT_TYPE_CONST:
+							break;
 					}
 				}
 
@@ -1297,11 +1340,32 @@ static void rename_block(basic_block_t* entry){
 				}
 
 				break;
+			}
+
+			/**
+			 * Initializer statements contain initializers, which themselves have nested
+			 * variables and sub initializers. In light of this, we'll need special
+			 * handling for these instructinos
+			 */
+			case THREE_ADDR_CODE_INITIALIZER_STMT: {
+				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.address_operand1);
+				}
+
+				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
+					rhs_new_name(cursor->operands.oir.address_operand2);
+				}
+
+				//Call out to the helper for this renaming
+				rename_intitializer_members(cursor->operands.oir.initializer_operand);
+
+				break;
+			}
 
 			/**
 			 * All other cases we just rename as we see appropriate
 			 */
-			default:
+			default: {
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand1);
 				}
@@ -1327,6 +1391,7 @@ static void rename_block(basic_block_t* entry){
 				}
 
 				break;
+			}
 		}
 
 		//Advance up to the next statement
@@ -1396,6 +1461,12 @@ static void rename_block(basic_block_t* entry){
 	 * Once we're done, we'll need to unwind our stack here. Anything that involves an assignee, we'll
 	 * need to pop it's stack so we don't have excessive variable numbers. We'll now iterate over again
 	 * and perform pops whereever we see a variable being assigned
+	 *
+	 * Note that this is done after we recursively rename all blocks that this given block dominates,
+	 * so all of those will have the most up-to-date names with the assignments in here. Once we unwind,
+	 * all blocks that are not dominated by this block(don't have to flow through this block) will not be tainted
+	 * by the numbers on the stack that come in this block, because of course this block is not guaranteed
+	 * to execute before those it does not dominate directly so those numbers in theory don't exist
 	 */
 	cursor = entry->leader_statement;
 	while(cursor != NULL){
@@ -1799,6 +1870,42 @@ static u_int8_t check_variable_for_definite_assignment(instruction_t* instructio
 
 
 /**
+ * Does the given initializer comply with definite assignment rules. Remember that initializers
+ * can have recursive definitions so this rule itself can be called recursively
+ */
+static u_int8_t check_initializer_for_definite_assignment(instruction_t* instruction, three_addr_initializer_t* initializer){
+	//If it's NULL then we're good just get out
+	if(initializer == NULL){
+		return SUCCESS;
+	}
+
+	//By default assume success(1)
+	u_int8_t overall_result = SUCCESS;
+
+	//Run through every result
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			//Constants don't matter to use here
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				overall_result &= check_variable_for_definite_assignment(instruction, result->value.variable_value);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				overall_result &= check_initializer_for_definite_assignment(instruction, result->value.initializer_value);
+				break;
+		}
+	}
+
+	return overall_result;
+}
+
+
+/**
  * Does the given instruction comply with the definite assignment rules? We will check 
  * every single eligible variable for compliance. If one variable fails, the whole thing
  * fails out
@@ -1823,14 +1930,23 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
 
+	//If we have an initializer then we'll check that(null check is in the helper)
+	overall_result &= check_initializer_for_definite_assignment(instruction, instruction->operands.oir.initializer_operand);
+
 	//Check all parameters as well for function calls
 	for(int32_t i = 0; i < instruction->parameter_results.current_index; i++){
 		//Get the parameter result
 		parameter_result_t* result = get_result_at_index(&(instruction->parameter_results), i);
 
-		//If it's a variable we'll check it
-		if(result->result_type == PARAM_RESULT_TYPE_VAR){
-			overall_result &= check_variable_for_definite_assignment(instruction, result->param_result.variable_result);
+		switch(result->result_type){
+			case PARAM_RESULT_TYPE_VAR:
+				overall_result &= check_variable_for_definite_assignment(instruction, result->param_result.variable_result);
+				break;
+			case PARAM_RESULT_TYPE_INITIALIZER:
+				overall_result &= check_initializer_for_definite_assignment(instruction, result->param_result.initializer_result);
+				break;
+			case PARAM_RESULT_TYPE_CONST:
+				break;
 		}
 	}
 

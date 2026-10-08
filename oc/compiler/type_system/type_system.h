@@ -460,6 +460,12 @@ void print_full_type_name(generic_type_t* type, char* name);
 void* get_struct_member(generic_type_t* structure, char* name);
 
 /**
+ * Get the struct member at a given index. If the index is out of bounds
+ * then we will return NULL
+ */
+void* get_struct_member_at_index(generic_type_t* structure, int32_t index);
+
+/**
  * Does this union contain said member? Return the variable if yes, NULL if not
  */
 void* get_union_member(generic_type_t* union_type, char* name);

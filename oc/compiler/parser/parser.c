@@ -134,7 +134,7 @@ static generic_ast_node_t* defer_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* idle_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, side_type_t side);
-static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side);
+static generic_ast_node_t* initializer_expression(ollie_token_stream_t* token_stream, side_type_t side);
 static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream);
 static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream);
@@ -142,9 +142,10 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream, generic_type_t* union_type);
 static inline u_int8_t parse_parameter_type_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
 static inline u_int8_t parse_function_return_type_and_error_list(ollie_token_stream_t* token_stream, generic_type_t* function_signature);
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node);
+static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node);
 //Definition is a special compiler-directive, it's executed here, and as such does not produce any nodes
 static u_int8_t definition(ollie_token_stream_t* token_stream, u_int8_t in_global_scope);
-static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership);
 static inline generic_type_t* handle_elaborative_param_type(generic_type_t* elaborated_type);
 static inline u_int8_t validate_function_parameter_list(generic_type_t* function_type);
 
@@ -292,6 +293,23 @@ static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 	}
 }
 
+
+/**
+ * Is a given node an initializer node or not? Initializer nodes get special
+ * treatment by the CFG constructor so we may need to exclude them from certain checks
+ */
+static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node){
+	switch(initializer_node->ast_node_type){
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
 /**
  * Does an enum list contain a given value for a member?
  */
@@ -325,6 +343,49 @@ static inline u_int8_t does_type_require_i64_conversion(generic_type_t* type){
 			return TRUE;
 		default:
 			return FALSE;
+	}
+}
+
+
+/**
+ * Is a given initializer node made up of all constants? This is needed for global
+ * variables and the like
+ *
+ * NOTE: this rule is recursive
+ */
+static u_int8_t is_intializer_node_all_constant(generic_ast_node_t* initializer_node){
+	switch(initializer_node->ast_node_type){
+		/**
+		 * For a struct/array initializer list we'll validate all child nodes recursively
+		 */
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST: {
+			generic_ast_node_t* child_cursor = initializer_node->first_child;
+			while(child_cursor != NULL){
+				//Fail out on the first one
+				if(is_intializer_node_all_constant(child_cursor) == FALSE){
+					return FALSE;
+				}
+
+				child_cursor = child_cursor->next_sibling;
+			}
+
+			return TRUE;
+		}
+
+		/**
+		 * Strings are always constant
+		 */
+		case AST_NODE_TYPE_STRING_INITIALIZER: {
+			return TRUE;
+		}
+
+		/**
+		 * Anything else just check if it's consant or not
+		 */
+		default: {
+			return initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT ? TRUE : FALSE;
+		}
 	}
 }
 
@@ -504,16 +565,13 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 		return;
 	}
 
-	generic_ast_node_t* ternary_cursor;
-
 	switch(node->ast_node_type){
 		/**
 		 * For a ternary expression we need to flag the left and right children
 		 * as not requiring any kind of dereference
 		 */
-		case AST_NODE_TYPE_TERNARY_EXPRESSION:
-			//First we have the expression
-			ternary_cursor = node->first_child;
+		case AST_NODE_TYPE_TERNARY_EXPRESSION: {
+			generic_ast_node_t* ternary_cursor = node->first_child;
 
 			//Then the left child which we flag first
 			ternary_cursor = ternary_cursor->next_sibling;
@@ -528,18 +586,264 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 			propogate_no_dereference_required_flag(ternary_cursor);
 
 			return;
+		}
 
 		/**
 		 * Flag here that we do not need a dereference on the 
 		 * postfix expression if we have one
 		 */
-		case AST_NODE_TYPE_POSTFIX_EXPR:
+		case AST_NODE_TYPE_POSTFIX_EXPR: {
 			node->dereference_needed = FALSE;
 			return;
+		}
 
 		//Whatever this is we aren't interested
 		default:
 			return;
+	}
+}
+
+
+/**
+ * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
+ */
+static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
+	/**
+	 * The user is trying to initialize a non-array with an array type we hard fail
+	 */
+	if(array_type->type_class != TYPE_CLASS_ARRAY){
+		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", array_type->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	/**
+	 * Get the member type and expected number of members out
+	 */
+	generic_type_t* member_type = array_type->internal_types.member_type;
+	u_int32_t num_members = array_type->internal_values.num_members;
+	u_int32_t seen_initializer_list_members = 0;
+
+	/**
+	 * Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
+	 * to the given array type
+	 */
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+	while(cursor != NULL){
+		/**
+		 * Recursively call out to the validator type here to process this
+		 */
+		if(validate_initializer_types(member_type, cursor) == NULL){
+			return FALSE;
+		}
+
+		//Increment and push to the next sibling
+		seen_initializer_list_members++;
+		cursor = cursor->next_sibling;
+	}
+
+	/**
+	 * The final check down here has 2 options:
+	 * 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
+	 * 2.) The length was set, in which case, we validate the length here
+	 */
+	if(num_members != 0){
+		//Validate that they match here
+		if(num_members != seen_initializer_list_members){
+			sprintf(info, "Attempt to assign %d members to an array of size %d", seen_initializer_list_members, num_members);
+			return print_and_return_failure(info, parser_line_num);
+		}
+
+	//Otherwise, we'll need to set the number of members accordingly here
+	} else {
+		array_type->internal_values.num_members = seen_initializer_list_members;
+		array_type->type_size = seen_initializer_list_members * array_type->internal_types.member_type->type_size;
+
+		//Flag that this is now a complete type
+		array_type->type_complete = TRUE;
+	}
+
+	//If we make it here, then we can set the type of the initializer list to match the array
+	initializer_list_node->inferred_type = array_type;
+	return TRUE;
+}
+
+
+/**
+ * Struct initializers, unlike array intializers, only have one way of working. The user needs to properly define all of the
+ * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
+ * up
+ */
+static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node){
+	/**
+	 * What if the user is trying to use an array initializer on a non-array type? If so, this should fail
+	 */
+	if(struct_type->type_class != TYPE_CLASS_STRUCT){
+		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", struct_type->type_name.string);
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	/**
+	 * Extract the struct table and our number of fields expected
+	 */
+	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
+	u_int32_t num_fields = struct_table.current_index;
+	u_int32_t seen_fields_count = 0;
+
+	/**
+	 * Run through every child node in the initailizer list
+	 */
+	generic_ast_node_t* cursor = initializer_list_node->first_child;
+	while(cursor != NULL){
+		//If we exceed the number of fields given, we error out
+		if(seen_fields_count > num_fields){
+			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+			return print_and_return_failure(info, parser_line_num);
+		}
+
+		/**
+		 * Recursively call out to the parent validator rule using the variable's type
+		 */
+		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_fields_count);
+		if(validate_initializer_types(variable->type_defined_as, cursor) == NULL){
+			return FALSE;
+		}
+
+		/**
+		 * Bump up the cursor and the number of fields we've seen
+		 */
+		seen_fields_count++;
+		cursor = cursor->next_sibling;
+	}
+
+	//One final validation - we need to check if the field counts match
+	if(num_fields != seen_fields_count){
+		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+		return print_and_return_failure(info, parser_line_num);
+	}
+
+	//Set the struct type here accordingly
+	initializer_list_node->inferred_type = struct_type; 
+	return TRUE;
+}
+
+
+/**
+ * There are two options that we could see for a string initializer:
+ *
+ * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
+ * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
+ *
+ * Returns NULL if bad. If good, we return a string initializer node with the string constant
+ * node as its child
+ */
+static generic_ast_node_t* validate_and_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
+	//Extract some values first
+	u_int32_t num_members = array_type->internal_values.num_members;
+	generic_type_t* member_type = array_type->internal_types.member_type;
+
+	/**
+	 * If we do not have a char type as our underlying, then this is invalid
+	 */
+	if(member_type->type_class != TYPE_CLASS_BASIC || member_type->basic_type_token != CHAR){
+		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	/**
+	 * Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
+	 * we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant.
+	 * If the length is nonzero, we'll need to validate the length. Otherwise, we'll need to set the length
+	 */
+	u_int32_t string_length = string_constant->string_value.current_length + 1;
+	if(num_members == 0){
+		//Set the number of members and the overall size
+		array_type->internal_values.num_members = string_length;
+		array_type->type_size = string_length;
+
+	} else {
+		//If these are different, then we fail out
+		if(num_members != string_length){
+			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", num_members, string_length);
+			return print_and_return_error(info, parser_line_num);
+		}
+	}
+
+	//Update the node type and inferred type, and get out
+	string_constant->ast_node_type = AST_NODE_TYPE_STRING_INITIALIZER;
+	string_constant->inferred_type = array_type;
+	return string_constant;
+}
+
+
+/**
+ * Top level initializer value for type validation. Each sub-initializer type has its own rule, and those rules 
+ * will be called out to where appropriate. The exception is the string initializer which is a bit unique, see
+ * more below
+ *
+ * This function will return NULL if a failure occurs
+ */
+static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node){
+	//Dealias this just to be safe
+	target_type = dealias_type(target_type);
+
+	switch(initializer_node->ast_node_type){
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST: {
+			if(validate_types_for_array_initializer_list(target_type, initializer_node) == FALSE){
+				return print_and_return_null("Invalid array initializer given", parser_line_num);
+			}
+
+			//Always give back the target type
+			return target_type;
+		}
+			
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST: {
+			if(validate_types_for_struct_initializer_list(target_type, initializer_node) == FALSE){
+				return print_and_return_null("Invalid struct intializer given", initializer_node->line_number);
+			}
+
+			//Always give back the target type
+			return target_type;
+		}
+			
+		default: {
+			/**
+			 * If we have a string constant, there's a chance that we could be seeing a string
+			 * initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
+			 * the helper deal with it
+			 */
+			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
+				&& initializer_node->constant_type == STR_CONST
+				&& target_type->type_class == TYPE_CLASS_ARRAY){
+				/**
+				 * Call out to this helper rule to do all the underlying work for us. If
+				 * this returns successfully the initializer will be 100% correct
+				 */
+				initializer_node = validate_and_set_bounds_for_string_initializer(target_type, initializer_node);
+				if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return NULL;
+				}
+
+				return target_type;
+			}
+
+			/**
+			 * If we get here with an array type then this is incorrect. Array types can only
+			 * be initialized using the [] syntax
+			 */
+			if(target_type->type_class == TYPE_CLASS_ARRAY){
+				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
+				return print_and_return_null(info, parser_line_num);
+			}
+
+			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
+			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
+			if(final_type == NULL){
+				return NULL;
+			}
+			
+			//Give back the return type
+			return final_type;
+		}
 	}
 }
 
@@ -550,106 +854,173 @@ static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
  * relying on types_assignable in the type system
  */
 static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic_type_t* destination_type, generic_ast_node_t* source_node){
-	/**
-	 * If this is not a constant then use the regular rules to get this done
-	 */
-	if(source_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-		return types_assignable(destination_type, source_node->inferred_type);
+	switch(source_node->ast_node_type){
+		/**
+		 * Initializer nodes require special validations using the initializer list
+		 *
+		 * Unlike the other values, this is the only case where we will not generate
+		 * any special failure message if we get here
+		 */
+		case AST_NODE_TYPE_STRING_INITIALIZER:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:{
+			return validate_initializer_types(destination_type, source_node);
+		}
 
-	/**
-	 * Otherwise it is a constant. We will need to do processing based on what
-	 * kind of constant we have. Certain constants will require more work/different
-	 * treatment as compared to others
-	 */
-	} else {
-		switch(source_node->constant_type){
-			case STR_CONST:
-			case REL_ADDRESS_CONST: {
-				return types_assignable(destination_type, source_node->inferred_type);
-			}
+		/**
+		 * Otherwise it is a constant. We will need to do processing based on what
+		 * kind of constant we have. Certain constants will require more work/different
+		 * treatment as compared to others
+		 */
+		case AST_NODE_TYPE_CONSTANT:{
+			switch(source_node->constant_type){
+				/**
+				 * String constants are a bit special. This may very well be an initializer
+				 * if we're trying to assign it to an array type, so we'll need to check for
+				 * that
+				 */
+				case STR_CONST: {
+					/**
+					 * If the target type is not an array then we'll process this normally. However
+					 * if the target type is an array we likely have an initializer here, so we'll
+					 * handle it with the initializer helper
+					 */
+					if(destination_type->type_class != TYPE_CLASS_ARRAY){
+						//Call out to the helper
+						generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
+						if(final_type == NULL){
+							generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+							return print_and_return_null(info, parser_line_num);
+						}
 
-			/**
-			 * Function constants need to account for overloading. It's not as simple as
-			 * just taking the function record and doing a types_assignable check on it
-			 */
-			case FUNC_CONST: {
-				//Grab the original record out and make room for the found record
-				symtab_function_record_t* original_record = source_node->func_record;
-				symtab_function_record_t* found_record = NULL;
+						return final_type;
 
-				//Run through all records until we have a match
-				for(int32_t i = 0; i < original_record->overload_table.current_index; i++){
-					symtab_function_record_t* candidate = dynamic_array_get_at(&(original_record->overload_table), i);
-
-					//As soon as we find a match we are done
-					if(types_assignable(destination_type, candidate->signature) != NULL){
-						found_record = candidate;
-						break;
+					} else {
+						return validate_initializer_types(destination_type, source_node);
 					}
 				}
 
-				//If this is still Null we found nothign
-				if(found_record == NULL){
-					sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
-									original_record->func_name.string,
-									destination_type->type_name.string);
-					return print_and_return_null(info, parser_line_num);
-				}
-
-				/**
-				 * Otherwise we did find it. We will need to retroactively update this
-				 * node with the correct info and type
-				 */
-				source_node->func_record = found_record;
-				source_node->inferred_type = destination_type;
-
-				return destination_type;
-			}
-
-			default: {
-				/**
-				 * Let types_assignable run. We will need the types to all be original here in order for this
-				 * to work properly
-				 */
-				generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
-
-				//If it failed then just leave now
-				if(result_type == NULL){
-					return NULL;
-				}
-
-				/**
-				 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
-				 * correlates to it properly. If we are trying to assign a constant value that is not in
-				 * the enum's range of valid values, that would cause issues down the line and we will
-				 * not allow it
-				 */
-				if(is_enum_type(destination_type) == TRUE){
-					if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
-						sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-									destination_type->type_name.string, source_node->constant_value.signed_int_value);
+				case REL_ADDRESS_CONST: {
+					//Call out to the helper
+					generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
+					if(final_type == NULL){
+						generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
 						return print_and_return_null(info, parser_line_num);
 					}
-				} 
 
-				/**
-				 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
-				 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
-				 * but has different rules inside of Ollie
-				 */
-				if(result_type->type_class == TYPE_CLASS_POINTER){
-					result_type = immut_u64;
+					return final_type;
 				}
 
-				//Reassign the constant's type at this point
-				source_node->inferred_type = result_type;
+				/**
+				 * Function constants need to account for overloading. It's not as simple as
+				 * just taking the function record and doing a types_assignable check on it
+				 */
+				case FUNC_CONST: {
+					//Grab the original record out and make room for the found record
+					symtab_function_record_t* original_record = source_node->func_record;
+					symtab_function_record_t* found_record = NULL;
 
-				//While we're here we will coerce the constant itself
-				coerce_constant(source_node);
+					//Run through all records until we have a match
+					for(int32_t i = 0; i < original_record->overload_table.current_index; i++){
+						symtab_function_record_t* candidate = dynamic_array_get_at(&(original_record->overload_table), i);
 
-				//Give this back
-				return result_type;
+						//As soon as we find a match we are done
+						if(types_assignable(destination_type, candidate->signature) != NULL){
+							found_record = candidate;
+							break;
+						}
+					}
+
+					//If this is still Null we found nothing
+					if(found_record == NULL){
+						//First print out this error
+						sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
+										original_record->func_name.string,
+										destination_type->type_name.string);
+						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+						//Then the generic one we always have
+						generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+						return print_and_return_null(info, parser_line_num);
+					}
+
+					/**
+					 * Otherwise we did find it. We will need to retroactively update this
+					 * node with the correct info and type
+					 */
+					source_node->func_record = found_record;
+					source_node->inferred_type = destination_type;
+
+					return destination_type;
+				}
+
+				default: {
+					/**
+					 * Let types_assignable run. We will need the types to all be original here in order for this
+					 * to work properly
+					 */
+					generic_type_t* result_type = types_assignable_constant(destination_type, source_node->inferred_type);
+
+					//If it failed then just leave now with the generated error message
+					if(result_type == NULL){
+						generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+						return print_and_return_null(info, parser_line_num);
+					}
+
+					/**
+					 * Enum type checking - if we have an enum type we need to make sure that whatever we're doing
+					 * correlates to it properly. If we are trying to assign a constant value that is not in
+					 * the enum's range of valid values, that would cause issues down the line and we will
+					 * not allow it
+					 */
+					if(is_enum_type(destination_type) == TRUE){
+						if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
+							//First print out this failure
+							sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
+										destination_type->type_name.string, source_node->constant_value.signed_int_value);
+							print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
+
+							//Then the types assignable failure
+							generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+							return print_and_return_null(info, parser_line_num);
+						}
+					} 
+
+					/**
+					 * IMPORTANT - if we have a constant here and the result type is a pointer, we'll want to
+					 * adjust the constant's type to end up as a U64. This is physically equivalent to a pointer
+					 * but has different rules inside of Ollie
+					 */
+					if(result_type->type_class == TYPE_CLASS_POINTER){
+						result_type = immut_u64;
+					}
+
+					//Reassign the constant's type at this point
+					source_node->inferred_type = result_type;
+
+					//While we're here we will coerce the constant itself
+					coerce_constant(source_node);
+
+					//Give this back
+					return result_type;
+				}
 			}
+		}
+
+		/**
+		 * If this is not a constant or initializer then use the regular rules to get this done
+		 */
+		default: {
+			//First let this rule handle it
+			generic_type_t* final_type = types_assignable(destination_type, source_node->inferred_type);
+
+			//If we have a failure then generate the error message
+			if(final_type == NULL){
+				generate_types_assignable_failure_message(info, source_node->inferred_type, destination_type);
+				return print_and_return_null(info, parser_line_num);
+			}
+
+			return final_type;
 		}
 	}
 }
@@ -938,14 +1309,11 @@ static inline u_int8_t is_postfix_expression_tree_address_eligible(generic_ast_n
 		case AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR:
 		case AST_NODE_TYPE_UNION_ACCESSOR:
 		case AST_NODE_TYPE_UNION_POINTER_ACCESSOR:
-			break;
+			return TRUE;
 		default:
 			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid return value for address operation &", parser_line_num);
 			return FAILURE;
 	}
-
-	//Return true if we made it here
-	return TRUE;
 }
 
 
@@ -1197,7 +1565,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* expr_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1218,6 +1586,28 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		  		expr_node->inferred_type->type_name.string);
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
+	}
+
+	/**
+	 * If we get here and we have an initializer, we need to be very careful about what
+	 * we allow. The only things that we "return by copy" are unions and structs. Initializers
+	 * work great for those because we have a region to initialize into. Arrays and strings however
+	 * we never return by copy, so an initializer fundamentally will never work
+	 */
+	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
+						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
+						current_function_signature->return_type->type_name.string);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	/**
+	 * If we are having a copy assignment, we need to propogate down the chain in the expression
+	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
+	 * the value, we do not accidentally copy from already dereferenced memory
+	 */
+	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
+		propogate_no_dereference_required_flag(expr_node);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -1464,7 +1854,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			push_back_token(token_stream, &parser_line_num);
 
 			//Now we can invoke the helper
-			result_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
+			result_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 			//If this fails then we're done
 			if(result_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1484,6 +1874,18 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 							function_signature->type_name.string,
 							called_function_signature->return_type->type_name.string,
 							result_node->inferred_type->type_name.string); 
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * If we ahve an initializer result *and* we are not returning by copy, then this is fundamentally invalid and we must
+			 * fail out. Only return by copy functions will ever have a memory address for us to "initialize" into, and if we don't
+			 * have that we will get segfaults. For that reason Ollie disallows stuff like this
+			 */
+			if(is_initializer_node(result_node) == TRUE && is_type_returned_by_copy(called_function_signature->return_type) == FALSE){
+				sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
+								(called_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
+								called_function_signature->return_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1734,7 +2136,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 		//Forever loop until we hit the R_PAREN
 		do {
 			//Handle the actual parameter
-			generic_ast_node_t* elaborated_param = in_expression(token_stream, side);
+			generic_ast_node_t* elaborated_param = initializer_expression(token_stream, side);
 
 			//It failed so we just get out here
 			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -1746,10 +2148,6 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 			//If this is null, it means that our check failed
 			if(final_type == NULL){
-				//Let's first generate the types_assignable failure message
-				generate_types_assignable_failure_message(info, elaborated_param->inferred_type, type_being_elaborated);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 				//Following that we'll generate another error message to make it more clear
 				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
 						(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
@@ -2095,7 +2493,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		 */
 		while(TRUE){
 			//Invoke the "in_expression" rule to parse this parameter
-			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			generic_ast_node_t* parameter_expression = initializer_expression(token_stream, side);
 			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
@@ -2249,9 +2647,6 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 				sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 						function_name->string,
 						function_signature->type_name.string,
@@ -2263,6 +2658,19 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 						current_param->inferred_type->type_name.string, function_signature->type_name.string);
 
 				//Use the helper to return this
+				return print_and_return_error(info, parser_line_num);
+			}
+
+			/**
+			 * If we have an initializer node *and* a type that is *not* stack passed by copy, this will not work
+			 * on a fundamental level. This is because types that are passed by copy will have memory regions
+			 * created for them that we can initialize into. Non pass-by-copy types will not. For this reason,
+			 * the ollie compiler bars this
+			 */
+			if(is_initializer_node(current_param) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
+				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
+								(parameter_type->mutability == MUTABLE ? "mut" : ""),
+								parameter_type->type_name.string);
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2323,15 +2731,25 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
 								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 								type_being_elaborated->type_name.string,
 								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
 								param_expression->inferred_type->type_name.string);
 
+						return print_and_return_error(info, parser_line_num);
+					}
+
+					/**
+					 * If we have an initializer node *and* a type that is *not* stack passed by copy, this will not work
+					 * on a fundamental level. This is because types that are passed by copy will have memory regions
+					 * created for them that we can initialize into. Non pass-by-copy types will not. For this reason,
+					 * the ollie compiler bars this
+					 */
+					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(type_being_elaborated) == FALSE){
+						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
+										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
+										type_being_elaborated->type_name.string);
 						return print_and_return_error(info, parser_line_num);
 					}
 
@@ -2511,7 +2929,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		 */
 		while(TRUE){
 			//Invoke the "in_expression" rule to parse this parameter
-			generic_ast_node_t* parameter_expression = in_expression(token_stream, side);
+			generic_ast_node_t* parameter_expression = initializer_expression(token_stream, side);
 			if(parameter_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 				return print_and_return_error("Bad parameter passed to function call", parser_line_num);
 			}
@@ -2593,9 +3011,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, current_param->inferred_type, parameter_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 						function_signature->type_name.string,
 						(parameter_type->mutability == MUTABLE ? "mut ": ""),
@@ -2608,6 +3023,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				//Use the helper to return this
 				return print_and_return_error(info, parser_line_num);
 			}
+
+			//TODO ADD THE CHECK HERE
 
 			/**
 			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
@@ -2666,9 +3083,6 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						generate_types_assignable_failure_message(info, param_expression->inferred_type, type_being_elaborated);
-						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-
 						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
 								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 								type_being_elaborated->type_name.string,
@@ -2677,6 +3091,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 						return print_and_return_error(info, parser_line_num);
 					}
+
+					//TODO ADD THE CHECK HERE
 
 					/**
 					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
@@ -3315,6 +3731,8 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
  * 									| typesize(<type-name>)
  * 									| paramcount(<identifier>)
  * 									| <function-call>
+ * 									| <array-initializer>
+ * 									| <struct-initializer>
  */
 static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Grab the next token, we'll multiplex on this
@@ -3430,10 +3848,14 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  *
  * Cases that we cover:
  * 1.) Attempting to assign to an immutable static or global variable
- * 2.) Attempting to assign to an immutable "field variable" - think struct/union field
- * 3.) Attempting to assign to an immutable array area
+ * 2.) Attempting to initialize an immutable array or struct
+ * 3.) Attempting to assign to an immutable "field variable" - think struct/union field
+ * 4.) Attempting to assign to an immutable array/struct area
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
+	//Get the left handle type out
+	generic_type_t* left_hand_type = dealias_type(left_hand_expression_tree->inferred_type);
+
 	/**
 	 * Easy case to handle first: If we have a variable and it's static or global, we will perform our
 	 * regular mutability checking now. We do this here becuase our SSA analysis does not work on these
@@ -3450,6 +3872,18 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 				print_variable_name_to_buffer(info, variable);
 				return print_and_return_error(info, parser_line_num);
 			}
+		}
+	}
+
+	/**
+	 * Another easy case: are we attempting to assign to(initialize) an immutable struct
+	 * or union variable? This is invalid because immutable memory types may only be initialized
+	 * in a let statement
+	 */
+	if(left_hand_type->type_class == TYPE_CLASS_ARRAY || left_hand_type->type_class == TYPE_CLASS_STRUCT){
+		if(left_hand_type->mutability == NOT_MUTABLE){
+			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", left_hand_type->type_name.string);
+			return print_and_return_error(info, parser_line_num);
 		}
 	}
 
@@ -3515,6 +3949,8 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			}
 		}
 	}
+
+
 
 	//Just give this back as a flag that we're fine
 	return left_hand_expression_tree;
@@ -3630,7 +4066,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 loop_end:
 	//If whatever our operator here is is not an assignment operator, we can just use the in expression rule
 	if(is_assignment_operator(assignment_operator) == FALSE){
-		return in_expression(token_stream, SIDE_TYPE_RIGHT);
+		return initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 	}
 
 	//If we make it here however, that means that we did see the assign keyword. Since
@@ -3652,14 +4088,6 @@ loop_end:
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
-	/**
-	 * Sanitize based on the types here. Arrays and references specifically
-	 * cannot be assigned in a traditional sense
-	 */
-	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY){
-		return print_and_return_error("Array types are not assignable", left_hand_unary->line_number);
-	}
-
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
@@ -3672,12 +4100,19 @@ loop_end:
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Holder for our expression
-	generic_ast_node_t* expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
+	//Parse the initializer_expression
+	generic_ast_node_t* expr = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
+	}
+
+	/**
+	 * We can only every assign to array types using an initailizer type in this scenario
+	 */
+	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY && is_initializer_node(expr) == FALSE){
+		return print_and_return_error("Array types cannot be assigned to unless using an initializer", parser_line_num);
 	}
 
 	//Let the helper do all mutability checking
@@ -3688,7 +4123,6 @@ loop_end:
 
 	//Let's now see if we have compatible types
 	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
-	generic_type_t* right_hand_type = expr->inferred_type;
 
 	//What is our final type?
 	generic_type_t* final_type = NULL;
@@ -3700,9 +4134,7 @@ loop_end:
 
 		//If they're not, we fail here
 		if(final_type == NULL){
-			//Let the helper generate
-			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
-			return print_and_return_error(info, parser_line_num);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		/**
@@ -3711,7 +4143,7 @@ loop_end:
 		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
 		 * doing an address calculation.
 		 */
-		if(is_copy_assignment_required(left_hand_type, right_hand_type) == TRUE){
+		if(is_copy_assignment_required(left_hand_type, expr->inferred_type) == TRUE){
 			/**
 			 * If the left hand unary is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 
@@ -3760,13 +4192,19 @@ loop_end:
 
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", left_hand_type->type_name.string, operator_token_to_string(assignment_operator));
+			sprintf(info, "Type %s is invalid for operation %s",
+					left_hand_type->type_name.string,
+					operator_token_to_string(assignment_operator));
+
 			return print_and_return_error(info, parser_line_num);
 		}
 
 		//Let's also see if the right hand type is valid
-		if(is_binary_operation_valid_for_type(right_hand_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s", right_hand_type->type_name.string, operator_token_to_string(assignment_operator));
+		if(is_binary_operation_valid_for_type(expr->inferred_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
+			sprintf(info, "Type %s is invalid for operation %s",
+					expr->inferred_type->type_name.string,
+					operator_token_to_string(assignment_operator));
+
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3789,8 +4227,7 @@ loop_end:
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			generate_types_assignable_failure_message(info, right_hand_type, left_hand_type);
-			return print_and_return_error(info, parser_line_num);
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
 		//We'll also want to create a complete, distinct copy of the subtree here
@@ -3804,7 +4241,11 @@ loop_end:
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", left_hand_duplicate->inferred_type->type_name.string, right_hand_type->type_name.string, operator_token_to_string(assignment_operator));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					left_hand_duplicate->inferred_type->type_name.string,
+					expr->inferred_type->type_name.string,
+					operator_token_to_string(assignment_operator));
+
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -4158,8 +4599,10 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Now we are required to see a valid constant expression representing what
-	//the actual index is.
+	/**
+	 * Now we are required to see a valid constant expression representing what
+	 * the actual index is.
+	 */
 	generic_ast_node_t* expr = in_expression(token_stream, side);
 
 	//If we fail, automatic exit here
@@ -6910,152 +7353,6 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 }
 
 
-
-/**
- * An array initializer is a set of one or more initializers in between
- * [], separated by commas
- *
- * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
- *
- * REMEMBER: by the time that we've arrived here, we've already seen and consumed the
- * first [ token
- */
-static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream, side_type_t side){
-	//Lookahead token for parsing
-	lexitem_t lookahead;
-
-	//Let's first allocate our initializer node. The initializer node will store
-	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
-
-	//Store the line number
-	initializer_list_node->line_number = parser_line_num;
-
-	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
-	//to process
-	do{
-		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer(token_stream, side);
-
-		//If this is an error, then the whole thing is invalid
-		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid initializer given in array initializer", parser_line_num);
-		}
-
-		//Add this in as a child of the initializer list
-		add_child_node(initializer_list_node, initializer_node);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//So long as we keep seeing commas, we continue
-	} while(lookahead.tok == COMMA);
-
-	//Once we reach down here, we need to check and see if we have the closing bracket that would
-	//mark a valid end for us
-	if(lookahead.tok != R_BRACKET){
-		return print_and_return_error("Closing bracket(]) required at the end of array initializer", parser_line_num);
-	}
-
-	//Pop the grouping stack and ensure it matches
-	if(pop_token(&grouping_stack).tok != L_BRACKET){
-		return print_and_return_error("Unmatched brackets detected in array initializer", parser_line_num);
-	}
-
-	//Give back the intializer list node
-	return initializer_list_node;
-}
-
-
-/**
- * A struct initializer is a set of one or more initializers in between
- * [], separated by commas
- *
- * BNF Rule: <struct-initializer> ::= {<intializer>{, <initializer>}*}
- */
-static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream, side_type_t side){
-	//Lookahead token for parsing
-	lexitem_t lookahead;
-
-	//Let's first allocate our initializer node. The initializer node will store
-	//all of our ternary expressions inside of it as children
-	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
-
-	//Store the line number
-	initializer_list_node->line_number = parser_line_num;
-
-	//We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
-	//to process
-	do{
-		//We now must see an initializer node
-		generic_ast_node_t* initializer_node = initializer(token_stream, side);
-
-		//If this is an error, then the whole thing is invalid
-		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-			return print_and_return_error("Invalid initializer given in struct initializer", parser_line_num);
-		}
-
-		//Add this in as a child of the initializer list
-		add_child_node(initializer_list_node, initializer_node);
-
-		//Refresh the lookahead
-		lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//So long as we keep seeing commas, we continue
-	} while(lookahead.tok == COMMA);
-
-	//Once we reach down here, we need to check and see if we have the closing bracket that would
-	//mark a valid end for us
-	if(lookahead.tok != R_CURLY){
-		return print_and_return_error("Closing curly brace(}) required at the end of struct initializer", parser_line_num);
-	}
-
-	//Pop the grouping stack and ensure it matches
-	if(pop_token(&grouping_stack).tok != L_CURLY){
-		return print_and_return_error("Unmatched brackets detected in struct initializer", parser_line_num);
-	}
-
-	//Give back the intializer list node
-	return initializer_list_node;
-}
-
-
-/**
- * An initializer can either decay into an expression chain or it can turn into an initializer of
- * some kind(string or list)
- *
- * BNF Rule: <initializer> ::= <in_expression> | <initializer_list>
- */
-static generic_ast_node_t* initializer(ollie_token_stream_t* token_stream, side_type_t side){
-	//Grab the next token
-	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	switch(lookahead.tok){
-		//A left bracket symbol means that we're encountering an array initializer
-		case L_BRACKET:
-			//Push this onto the grouping stack
-			push_token(&grouping_stack, lookahead);
-
-			//Let the helper handle it
-			return array_initializer(token_stream, side);
-
-		//An L_CURLY signifies the start of a struct initializer
-		case L_CURLY:
-			//Push this onto the grouping stack for matching later
-			push_token(&grouping_stack, lookahead);
-
-			//Let the helper handle it
-			return struct_initializer(token_stream, side);
-
-		//By default, we haven't found anything in here that would indicate we'll need an initializer.
-		//As such, we'll push the token back and call the ternary expression rule
-		default:
-			push_back_token(token_stream, &parser_line_num);
-			return in_expression(token_stream, side);
-	}
-}
-
-
 /**
  * A ternary expression is a kind of syntactic sugar that allows if/else chains to be
  * inlined. They can be nested, though this is not recommended
@@ -7183,10 +7480,8 @@ static inline u_int8_t is_type_valid_for_in_statement(generic_type_t* type){
  * here like us not being able to mix floats and enums 
  */
 static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* in_comparator_type, generic_ast_node_t* constant_node){
-	//Needed local variables
-	generic_type_t* result_type;
+	//Extract now for convenience
 	generic_type_t* constant_node_type = constant_node->inferred_type;
-
 
 	switch(in_comparator_type->type_class){
 		/**
@@ -7195,7 +7490,7 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 		 * 	1.) No floats - enum types must be compatible enums or integers
 		 * 	2.) If we have raw constants, then we need to make sure that they are potential values
 		 */
-		case TYPE_CLASS_ENUMERATED:
+		case TYPE_CLASS_ENUMERATED: {
 			/**
 			 * Option 1: Our constant came from an enum.
 			 * If they have the literal exact same enum type, then we're good.
@@ -7208,9 +7503,7 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 					sprintf(info, "Attempt to use separate enum type %s in comparison with enum %s",
 			 						constant_node_type->type_name.string,
 			 						in_comparator_type->type_name.string);
-					print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-					num_errors++;
-					return FALSE;
+					return print_and_return_failure(info, parser_line_num);
 				}
 			}
 
@@ -7219,24 +7512,18 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			 * as we don't have a floating point number
 			 */
 			if(IS_FLOATING_POINT(constant_node_type) == TRUE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Floating point values may not be used in in statement with enum comparator", parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure("Floating point values may not be used in in statement with enum comparator", parser_line_num);
 			}
 
 			/**
 			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
 			 */
-			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
-			
-			//Fail out if we get a bad result
+			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
 								constant_node_type->type_name.string,
 								in_comparator_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure(info, parser_line_num);
 			}
 
 			//Once we're done we can assign and coerce our constant here
@@ -7249,43 +7536,36 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			 */
 			if(does_enum_contain_integer_member(in_comparator_type, constant_node->constant_value.signed_int_value) == FALSE){
 				sprintf(info, "Enum type %s contains no member that maps to integer value %d", in_comparator_type->type_name.string, constant_node->constant_value.signed_int_value);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure(info, parser_line_num);
 			}
 
 			//If we survived to here then this worked
 			return TRUE;
+		}
 
 		/**
 		 * For basic types we really just rely on the types_assignable_constant rule
 		 */
-		case TYPE_CLASS_BASIC:
+		case TYPE_CLASS_BASIC: {
 			/**
 			 * If our constant node was an enum, we bar it from being compared with floating point
 			 * values
 			 */
 			if(constant_node->optional_storage.enum_type != NULL){
 				if(IS_FLOATING_POINT(in_comparator_type) == TRUE){
-					print_parse_message(MESSAGE_TYPE_ERROR, "Enums may not be used in in statement with floating point comparator", parser_line_num);
-					num_errors++;
-					return FALSE;
+					return print_and_return_failure("Enums may not be used in in statement with floating point comparator", parser_line_num);
 				}
 			}
 
 			/**
 			 * If we survive to here then we can run the types_assignable on this and see if we get a non-null answer
 			 */
-			result_type = types_assignable_constant(in_comparator_type, constant_node_type);
-			
-			//Fail out if we get a bad result
+			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
 								constant_node_type->type_name.string,
 								in_comparator_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				num_errors++;
-				return FALSE;
+				return print_and_return_failure(info, parser_line_num);
 			}
 
 			//Once we're done we can assign and coerce our constant here
@@ -7294,11 +7574,13 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 
 			//If we survived to here then this worked
 			return TRUE;
+		}
 
 		//This should be impossible
-		default:
+		default: {
 			printf("Fatal internal compiler error. Invalid in comparator type detected\n");
 			exit(1);
+		}
 	}
 }
 
@@ -7594,6 +7876,163 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 
 	//Give back the root of this node
 	return root_node;
+}
+
+
+/**
+ * An array initializer is a set of one or more initializers in between
+ * [], separated by commas
+ *
+ * BNF Rule: <array-initializer> ::= [<intializer>{, <initializer>}*]
+ */
+static generic_ast_node_t* array_initializer(ollie_token_stream_t* token_stream, side_type_t side){
+	lexitem_t lookahead;
+
+	/**
+	 * We are first required to see an L_BRACKET
+	 */
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_BRACKET){
+		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	/**
+	 * Let's first allocate our initializer node. The initializer node will store
+	 * all of our sub-intializer expressions inside of it as children
+	 */
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_INITIALIZER_LIST, side);
+	initializer_list_node->line_number = parser_line_num;
+
+	/**
+	 * We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	 * to process. So long as we keep seeing commas, we continue to process
+	 */
+	do{
+		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
+		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in array initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
+
+	/**
+	 * Once we reach down here, we need to check and see if we have the closing bracket that would
+	 * mark a valid end for us
+	 */
+	if(lookahead.tok != R_BRACKET){
+		return print_and_return_error("Closing bracket(]) required at the end of array initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(&grouping_stack).tok != L_BRACKET){
+		return print_and_return_error("Unmatched brackets detected in array initializer", parser_line_num);
+	}
+
+	return initializer_list_node;
+}
+
+
+/**
+ * A struct initializer is a set of one or more initializers in between
+ * {}, separated by commas
+ *
+ * BNF Rule: <struct-initializer> ::= {<intializer>{, <initializer>}*}
+ */
+static generic_ast_node_t* struct_initializer(ollie_token_stream_t* token_stream, side_type_t side){
+	lexitem_t lookahead;
+
+	//Must see an L_CURLY first
+	lookahead = get_next_token(token_stream, &parser_line_num);
+	if(lookahead.tok != L_CURLY){
+		return print_and_return_error("Opening { expected in struct initializer\n", parser_line_num);
+	}
+
+	//Push this onto the grouping stack
+	push_token(&grouping_stack, lookahead);
+
+	/**
+	 * Let's first allocate our initializer node. The initializer node will store
+	 * all of our sub-initializers inside of it as children
+	 */
+	generic_ast_node_t* initializer_list_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_INITIALIZER_LIST, side);
+	initializer_list_node->line_number = parser_line_num;
+
+	/**
+	 * We are required to see at least one initializer inside of here. As such, we'll use a do-while loop
+	 * to process. So long as we keep seeing commas, we continue
+	 */
+	do{
+		generic_ast_node_t* initializer_node = initializer_expression(token_stream, side);
+		if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			return print_and_return_error("Invalid initializer given in struct initializer", parser_line_num);
+		}
+
+		//Add this in as a child of the initializer list
+		add_child_node(initializer_list_node, initializer_node);
+
+		//Refresh the lookahead
+		lookahead = get_next_token(token_stream, &parser_line_num);
+
+	} while(lookahead.tok == COMMA);
+
+	/**
+	 * Once we reach down here, we need to check and see if we have the closing bracket that would
+	 * mark a valid end for us
+	 */
+	if(lookahead.tok != R_CURLY){
+		return print_and_return_error("Closing curly brace(}) required at the end of struct initializer", parser_line_num);
+	}
+
+	//Pop the grouping stack and ensure it matches
+	if(pop_token(&grouping_stack).tok != L_CURLY){
+		return print_and_return_error("Unmatched brackets detected in struct initializer", parser_line_num);
+	}
+
+	return initializer_list_node;
+}
+
+
+
+/**
+ * An initializer can either decay into an expression chain or it can turn into an initializer of
+ * some kind(string or list)
+ *
+ * BNF Rule: <initializer> ::= <in_expression> | <array_initializer> | <struct_initializer>
+ */
+static generic_ast_node_t* initializer_expression(ollie_token_stream_t* token_stream, side_type_t side){
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	
+	switch(lookahead.tok){
+		//A left bracket symbol means that we're encountering an array initializer
+		case L_BRACKET: {
+			push_back_token(token_stream, &parser_line_num);
+			return array_initializer(token_stream, side);
+		}
+
+		//An L_CURLY signifies the start of a struct initializer
+		case L_CURLY: {
+			push_back_token(token_stream, &parser_line_num);
+			return struct_initializer(token_stream, side);
+		}
+
+		/**
+		 * By default, we haven't found anything in here that would indicate we'll need an initializer.
+		 * As such, we'll push the token back and call the ternary expression rule
+		 */
+		default: {
+			push_back_token(token_stream, &parser_line_num);
+			return in_expression(token_stream, side);
+		}
+	}
 }
 
 
@@ -10185,7 +10624,7 @@ static generic_ast_node_t* labeled_statement(ollie_token_stream_t* token_stream)
  * 	This is what we'll need to parse through and translate. This structure is chosen so that we have a minimal
  * 	memory footprint. We rely on this context being completely understood by the CFG converter here to work
  *
- * BNF Rule: <if-statement> ::= if( <logical-or-expression> ) then <compound-statement> {else if statement}* {else-statement}?
+ * BNF Rule: <if-statement> ::= if( <in_expression> ) then <compound-statement> {else if statement}* {else-statement}?
  */
 static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 	//Lookahead tokens
@@ -10705,8 +11144,10 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		push_back_token(token_stream, &parser_line_num);
 	}
 
-	//Otherwise if we get here, we need to see a valid conditional expression
-	generic_ast_node_t* expr_node = in_expression(token_stream, SIDE_TYPE_RIGHT);
+	/**
+	 * For return statements we could see an intializer or an expression
+	 */
+	generic_ast_node_t* expr_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If this is bad, we fail out
 	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -10731,6 +11172,19 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		  		(expr_node->inferred_type->mutability == MUTABLE ? "mut " : ""),
 		  		expr_node->inferred_type->type_name.string);
 		print_function_name_to_buffer(info, current_function);
+		return print_and_return_error(info, parser_line_num);
+	}
+
+	/**
+	 * If we get here and we have an initializer, we need to be very careful about what
+	 * we allow. The only things that we "return by copy" are unions and structs. Initializers
+	 * work great for those because we have a region to initialize into. Arrays and strings however
+	 * we never return by copy, so an initializer fundamentally will never work
+	 */
+	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
+						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
+						current_function_signature->return_type->type_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -12616,348 +13070,12 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 
 /**
- * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
- */
-static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
-	//Grab the member type here out as well
-	generic_type_t* member_type = array_type->internal_types.member_type;
-
-	//Let's extract the number of records that we expect. It could either be 0(implicitly initialized) or it could be a nonzero value
-	u_int32_t num_members = array_type->internal_values.num_members;
-
-	//Let's also keep a record of the number of members that we've seen in total
-	u_int32_t initializer_list_members = 0;
-
-	//Grab a cursor to iterate over the children of the initializer list
-	generic_ast_node_t* cursor = initializer_list_node->first_child;
-
-	//Now for each value in the initializer node, we need to verify that it matches the array type. In otherwords, is it assignable
-	//to the given array type
-	while(cursor != NULL){
-		//We'll use the same top level initialization check for this rule as well
-		generic_type_t* final_type = validate_initializer_types(member_type, cursor, membership);
-
-		//If these fail, then we're done here. No need for an error message, they'll have already been printed
-		if(final_type == NULL){
-			return FALSE;
-		}
-
-		//Increment the member count by 1
-		initializer_list_members++;
-
-		//Push this up to the next sibling
-		cursor = cursor->next_sibling;
-	}
-
-	/**
-	 * The final check down here has 2 options:
-	 * 1.) The node's length was 0, in which case, we set the length based on the number of members we saw
-	 * 2.) The length was set, in which case, we validate the length here
-	 */
-	if(num_members != 0){
-		//Validate that they match here
-		if(num_members != initializer_list_members){
-			sprintf(info, "Attempt to assign %d members to an array of size %d", initializer_list_members, num_members);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-			return FALSE;
-		}
-	//Otherwise, we'll need to set the number of members accordingly here
-	} else {
-		array_type->internal_values.num_members = initializer_list_members;
-
-		//Reup the acutal size here
-		array_type->type_size = initializer_list_members * array_type->internal_types.member_type->type_size;
-
-		//Flag that this is now a complete type
-		array_type->type_complete = TRUE;
-	}
-
-	//If we make it here, then we can set the type of the initializer list to match the array
-	initializer_list_node->inferred_type = array_type;
-
-	//If we made it here, then we know that we're good
-	return TRUE;
-}
-
-
-/**
- * Struct initializers, unlike array intializers, only have one way of working. The user needs to properly define all of the
- * fields in the struct in the initializer. Unlike in C or other languages, we will not allows users to partially fill a struct
- * up
- */
-static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struct_type, generic_ast_node_t* initializer_list_node, variable_membership_t membership){
-	//We'll need to extract the struct table and that max index that it holds
-	dynamic_array_t struct_table = struct_type->internal_types.struct_table;
-
-	//The number of fields that were defined in the type is here
-	u_int32_t num_fields = struct_table.current_index;
-
-	//Initialize a cursor to the initializer list node itself
-	generic_ast_node_t* cursor = initializer_list_node->first_child;
-
-	//Keep a count of how many fields we've seen
-	u_int32_t seen_count = 0;
-
-	//Run through every node in here
-	while(cursor != NULL){
-		//If we exceed the number of fields given, we error out
-		if(seen_count > num_fields){
-			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-			print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-			return FALSE;
-		}
-
-		//Grab the variable out
-		symtab_variable_record_t* variable = dynamic_array_get_at(&struct_table, seen_count);
-
-		//Recursively call the initializer processor rule. This allows us to handle nested initializations
-		generic_type_t* final_type = validate_initializer_types(variable->type_defined_as, cursor, membership);
-
-		//Let's check to see if the types are assignable
-		if(final_type == NULL){
-			return FALSE;
-		}
-
-		//Increment this counter
-		seen_count++;
-
-		//Advance to the next sibling
-		cursor = cursor->next_sibling;
-	}
-
-	//One final validation - we need to check if the field counts match
-	if(num_fields != seen_count){
-		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_count);
-		print_parse_message(MESSAGE_TYPE_ERROR, info, initializer_list_node->line_number);
-		return FALSE;
-	}
-
-	//Set the struct type here accordingly
-	initializer_list_node->inferred_type = struct_type; 
-
-	//If we made it here, then we know that we're good
-	return TRUE;
-}
-
-
-/**
- * There are two options that we could see for a string initializer:
- *
- * 1.) let a:char[] := "hello"; //We auto set the bounds to be 6 here
- * 2.) let a:char[6] := "hello"; //This is also valid, we just need to ensure that things match
- *
- * Returns an error node if bad. If good, we return a string initializer node with the string constant
- * node as its child
- */
-static generic_ast_node_t* validate_or_set_bounds_for_string_initializer(generic_type_t* array_type, generic_ast_node_t* string_constant){
-	//Let's first validate that this array actually is a char[]
-	if(array_type->internal_types.member_type->type_class != TYPE_CLASS_BASIC || array_type->internal_types.member_type->basic_type_token != CHAR){
-		//Print out the full error message
-		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
-
-		//Fail out here
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Now we have two possible options here. We could either be seeing a completely "raw" array type(where the length is set to 0) or
-	//we could be seeing an array type where the length is already set. Either way, we'll need to get the string length of the constant
-	
-	//A dynamic string stores a string lenght, it does not account for the null terminator. As such, we'll need to have the null terminator
-	//accounted for by adding 1 to it
-	u_int32_t length = string_constant->string_value.current_length + 1;
-	
-	//Now we have two options - if the length is 0, then we'll need to validate the length. Otherwise, we'll need set the 
-	//lenght of the array to be whatever we have in here
-	if(array_type->internal_values.num_members == 0){
-		//Set the number of members
-		array_type->internal_values.num_members = length;
-
-		//Since these are all chars, the size of the array is just the length
-		array_type->type_size = length;
-	} else {
-		//If these are different, then we fail out
-		if(array_type->internal_values.num_members != length){
-			sprintf(info, "String initializer length mismatch: array length is %d but string length is %d", array_type->internal_values.num_members, length);
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Otherwise we're all set
-	}
-
-	//Reassign the class here from a constant to a string initializer
-	string_constant->ast_node_type = AST_NODE_TYPE_STRING_INITIALIZER;
-
-	//Reassign the type to match what was sent in
-	string_constant->inferred_type = array_type;
-
-	//And give this node back
-	return string_constant;
-}
-
-
-/**
- * Top level initializer value for type validation
- */
-static generic_type_t* validate_initializer_types(generic_type_t* target_type, generic_ast_node_t* initializer_node, variable_membership_t membership){
-	//Dealias this just to be safe
-	target_type = dealias_type(target_type);
-
-	//By default, we assume we will fail. The validation step will need to prove us wrong
-	u_int8_t validation_succeeded = FALSE;
-
-	//Based on what the class of this initializer node is, there are several different
-	//paths that we can take
-	switch(initializer_node->ast_node_type){
-		//If it's in error itself, we just leave
-		case AST_NODE_TYPE_ERR_NODE:
-			//Throw an error here
-			print_parse_message(MESSAGE_TYPE_ERROR, "Invalid expression given as intializer", parser_line_num);
-			//Return null to mean failure
-			return NULL;
-
-		//An array initializer list has a special checking function
-		//that we must use
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
-			if(target_type->type_class != TYPE_CLASS_ARRAY){
-				sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Null signifies failure
-				return NULL;
-			}
-
-			//Run the validation step for the intializer list
-			validation_succeeded = validate_types_for_array_initializer_list(target_type, initializer_node, membership);
-
-			//If this didn't work we fail out
-			if(validation_succeeded == FALSE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid array intializer given", initializer_node->line_number);
-				return NULL;
-			}
-
-			//Give back the return type
-			return target_type;
-			
-		//A struct initializer list also has it's own special checking function that we must use
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-			//What if the user is trying to use an array initializer on a non-array type? If so, this should fail
-			if(target_type->type_class != TYPE_CLASS_STRUCT){
-				sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				//Null signifies failure
-				return NULL;
-			}
-
-			//Run the validation step for a struct
-			validation_succeeded = validate_types_for_struct_initializer_list(target_type, initializer_node, membership);
-
-			//If this didn't work we fail out
-			if(validation_succeeded == FALSE){
-				print_parse_message(MESSAGE_TYPE_ERROR, "Invalid struct intializer given", initializer_node->line_number);
-				return NULL;
-			}
-
-			//Give back the return type
-			return target_type;
-			
-		//Otherwise we'll just take the standard path
-		default:
-			/**
-			 * If we have a string constant, there's a chance that we could be seeing a string
-			 * initializer of the form let a:char[] := "Hi";. If that's the case, we'll let
-			 * the helper deal with it
-			 */
-			if(initializer_node->ast_node_type == AST_NODE_TYPE_CONSTANT 
-				&& initializer_node->constant_type == STR_CONST
-				&& target_type->type_class == TYPE_CLASS_ARRAY){
-				
-				//Dynamically set the initializer node here in the helper function
-				initializer_node = validate_or_set_bounds_for_string_initializer(target_type, initializer_node);
-
-				//If it's an error, we need to fail out now
-				if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-					//Throw it up the chain by return null
-					return NULL;
-				}
-
-				/**
-				 * Otherwise we'll just break out. The initializer node will have been properly
-				 * set by the function above
-				 */
-				return target_type;
-			}
-
-			/**
-			 * For static and global variables, we cannot initialize to anything
-			 * that is not a constant. Failure to enforce this will lead
-			 * to invalid assembly so we check here
-			 */
-			switch(membership){
-				case STATIC_VARIABLE:
-				case GLOBAL_VARIABLE:
-					//Not a constant is invalid
-					if(initializer_node->ast_node_type != AST_NODE_TYPE_CONSTANT){
-						print_parse_message(MESSAGE_TYPE_ERROR, "Initializer value is not a compile-time constant", parser_line_num);
-						num_errors++;
-						return NULL;
-					}
-					
-					break;
-
-				default:
-					break;
-			}
-
-			/**
-			 * If we somehow get here and we have either an array type
-			 * this is incorrect. This type can only be initialized using
-			 * the initializer strategy
-			 */
-			if(target_type->type_class == TYPE_CLASS_ARRAY){
-				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				return NULL;
-			}
-
-			//Use the helper to determine if the types are assignable. This handles any/all constant coercion
-			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(target_type, initializer_node);
-
-			//Will be null if we have a failure
-			if(final_type == NULL){
-				generate_types_assignable_failure_message(info, initializer_node->inferred_type, target_type);
-				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
-				return NULL;
-			}
-			
-			//Give back the return type
-			return final_type;
-	}
-}
-
-
-/**
- * Is a given node an initializer node or not? Initializer nodes get special
- * treatment by the CFG constructor so we may need to exclude them from certain checks
- */
-static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node){
-	switch(initializer_node->ast_node_type){
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
-		case AST_NODE_TYPE_STRING_INITIALIZER:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * A let statement is always the child of an overall declaration statement. Like a declare statement, it also
  * performs type checking and inference and all needed symbol table manipulation
  *
  * NOTE: By the time we get here, we've already consumed the let keyword
  *
- * BNF Rule: <let-statement> ::= let {pub | static}? <identifier> : <type-specifier> := <in_expression>
+ * BNF Rule: <let-statement> ::= let {pub | static}? <identifier> : <type-specifier> := <initializer>
  */
 static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_int8_t is_global){
 	//Freeze the line number
@@ -13080,17 +13198,30 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	}
 
 	//Now we need to see a valid initializer
-	generic_ast_node_t* initializer_node = initializer(token_stream, SIDE_TYPE_RIGHT);
+	generic_ast_node_t* initializer_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(initializer_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		print_parse_message(MESSAGE_TYPE_ERROR, "Invalid expression given as intializer", parser_line_num);
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 	
 	/**
 	 * Store the return type here after we do all needed validations. This rule allows 
 	 * for recursive validation, so that we can handle recursive initialization
 	 */
-	generic_type_t* return_type = validate_initializer_types(type_spec, initializer_node, membership);
-
-	//If the return type is NULL, we fail out here
+	generic_type_t* return_type = is_ast_node_assignable_to_destination_type(type_spec, initializer_node);
 	if(return_type == NULL){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
+
+	/**
+	 * For static and global variables, we cannot initialize to anything
+	 * that is not a constant. Failure to enforce this will lead
+	 * to invalid assembly so we check here
+	 */
+	if(membership == STATIC_VARIABLE || membership == GLOBAL_VARIABLE){
+		if(is_intializer_node_all_constant(initializer_node) == FALSE){
+			return print_and_return_error("Initializer contains one or more values that are not compile-time constants", parser_line_num);
+		}
 	}
 
 	//If the return type of the logical or expression is an address, is it an address of a mutable variable?
