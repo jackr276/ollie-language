@@ -13273,7 +13273,7 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 	 * it into an equivalent pointer
 	 */
 	if(elaborated_type->type_class == TYPE_CLASS_ARRAY){
-		elaborated_type = convert_array_type_to_equivalent_pointer(elaborated_type);
+		elaborated_type = elaborative_param_type->internal_values.elaborated_array_pointer_equivalent;
 	}
 
 	/**

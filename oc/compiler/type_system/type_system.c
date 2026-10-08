@@ -2655,16 +2655,6 @@ generic_type_t* create_error_type(char* type_name, u_int32_t line_number){
  * Dynamically allocate and create an elaborative stack param type
  */
 generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t line_number){
-	/**
-	 * If we are trying to elaborate an array type, we actually need to first convert
-	 * it to the equivalent pointer type. This will avoid any/all confusion with type
-	 * sizes
-	 */
-	if(elaborates->type_class == TYPE_CLASS_ARRAY){
-		//Convert over to a pointer
-		elaborates = convert_array_type_to_equivalent_pointer(elaborates);
-	}
-
 	//Allocate it first
 	generic_type_t* type = calloc(1, sizeof(generic_type_t));
 
@@ -2692,11 +2682,22 @@ generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t li
 	 * pointers, then this is a non-contiguous memory region
 	 *
 	 * Since arrays are always passed by pointer, they are also lumped in with
-	 * pointers in being non-contiguous
+	 * pointers in being non-contiguous. This is especially important
+	 * for elaborative types
 	 */
 	switch(elaborates->type_class){
 		case TYPE_CLASS_POINTER:
+			type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+			break;
+
+		/**
+		 * Elaborative parameters of arrays do not pass arrays by copy - they instead
+		 * pass pointers to arrays. This makes the data-structure non-contiguous. To avoid
+		 * repeated conversions between the array type and the pointer type, we maintain
+		 * the converted pointer type in a special field for easy access
+		 */
 		case TYPE_CLASS_ARRAY:
+			type->internal_values.elaborated_array_pointer_equivalent = convert_array_type_to_equivalent_pointer(elaborates);
 			type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
 			break;
 
