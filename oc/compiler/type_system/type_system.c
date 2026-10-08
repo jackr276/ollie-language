@@ -2687,7 +2687,17 @@ generic_type_t* create_elaborative_type(generic_type_t* elaborates, u_int32_t li
 	 */
 	switch(elaborates->type_class){
 		case TYPE_CLASS_POINTER:
+			type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
+			break;
+
+		/**
+		 * Elaborative parameters of arrays do not pass arrays by copy - they instead
+		 * pass pointers to arrays. This makes the data-structure non-contiguous. To avoid
+		 * repeated conversions between the array type and the pointer type, we maintain
+		 * the converted pointer type in a special field for easy access
+		 */
 		case TYPE_CLASS_ARRAY:
+			type->internal_values.elaborated_array_pointer_equivalent = convert_array_type_to_equivalent_pointer(elaborates);
 			type->memory_layout_type = MEMORY_LAYOUT_TYPE_NON_CONTIGUOUS;
 			break;
 

@@ -4121,11 +4121,14 @@ static inline generic_type_t* get_member_type_after_array_access(generic_type_t*
 		case TYPE_CLASS_ARRAY:
 			return parent_type->internal_types.member_type;
 		case TYPE_CLASS_ELABORATIVE:
-			//TODO POLISH UP SOME MORE
-			if(parent_type->internal_types.elaborates->type_class == TYPE_CLASS_ARRAY){
-				return convert_array_type_to_equivalent_pointer(parent_type->internal_types.elaborates); 
-			} else {
+			/**
+			 * For elaborative parameters, if we have an array type as the elaborated
+			 * type we will need to switch over to using the pointer equivalent
+			 */
+			if(parent_type->internal_types.elaborates->type_class != TYPE_CLASS_ARRAY){
 				return parent_type->internal_types.elaborates;
+			} else {
+				return parent_type->internal_values.elaborated_array_pointer_equivalent;
 			}
 
 		default:
