@@ -1877,6 +1877,18 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 				return print_and_return_error(info, parser_line_num);
 			}
 
+			/**
+			 * If we ahve an initializer result *and* we are not returning by copy, then this is fundamentally invalid and we must
+			 * fail out. Only return by copy functions will ever have a memory address for us to "initialize" into, and if we don't
+			 * have that we will get segfaults. For that reason Ollie disallows stuff like this
+			 */
+			if(is_initializer_node(result_node) == TRUE && is_type_returned_by_copy(called_function_signature->return_type) == FALSE){
+				sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
+								(called_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
+								called_function_signature->return_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
+
 			break;
 	}
 
