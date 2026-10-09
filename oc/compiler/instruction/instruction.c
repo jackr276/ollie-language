@@ -2659,7 +2659,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			}
 			
-			//No matter what, print a newline
+			fprintf(fl, "\n");
+			break;
+
+		case THREE_ADDR_CODE_RAISE_STMT:
+			fprintf(fl, "raise ");
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 

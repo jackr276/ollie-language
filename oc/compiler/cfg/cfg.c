@@ -1874,8 +1874,11 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 					 * The return by copy variable that we created during setup will always be cached in the current
 					 * function record. It was aliased but that's of no concern to us. All that we need to do now
 					 * emit a variable based on that created return by copy variable
+					 *
+					 * NOTE: we'll use the alias here to cut down on any register interference
 					 */
-					three_addr_var_t* return_by_copy_address_var = emit_var(current_function->return_by_copy_variable);
+					symtab_variable_record_t* return_by_copy_variable = current_function->return_by_copy_variable;
+					three_addr_var_t* return_by_copy_address_var = emit_var(return_by_copy_variable->alias);
 
 					/**
 					 * Now that we have the dummy variable, we will copy from the returned variable over into the return-by-copy
