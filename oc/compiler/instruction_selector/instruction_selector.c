@@ -15403,8 +15403,17 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
 		instruction->operands.x86.source_register1 = rax_register;
 
 	} else {
-		//Emit the return by copy variable for our return register
-		instruction->operands.x86.source_register1 = emit_var(function->return_by_copy_variable);
+		//These all have aliases - which we should be using
+		symtab_variable_record_t* return_by_copy_alias = function->return_by_copy_variable->alias;
+
+		//Emit an assignment to rax instruction here
+		instruction_t* assign_to_rax = emit_and_insert_move_instruction(emit_temp_var(return_by_copy_alias->type_defined_as), 
+																		emit_var(return_by_copy_alias),
+																		instruction,
+																		INSERTION_ORDER_BEFORE);
+
+		//The assignee is our final result
+		instruction->operands.x86.source_register1 = assign_to_rax->operands.x86.destination_register;
 	}
 
 	//The value that we're raising always comes from op1
