@@ -2663,17 +2663,6 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "\n");
 			break;
 
-		case THREE_ADDR_CODE_RAISE_STMT:
-			fprintf(fl, "raise ");
-
-			//This will always have a raised variable that comes
-			//from a constant assignment
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-			
-			//No matter what, print a newline
-			fprintf(fl, "\n");
-			break;
-
 		/**
 		 * These print out as
 		 *

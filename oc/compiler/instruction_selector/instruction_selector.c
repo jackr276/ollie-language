@@ -15378,6 +15378,12 @@ static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab
  * name. We will convert to a return here 
  */
 static inline void handle_raise_instruction(instruction_t* instruction){
+
+
+
+
+
+
 	//This is a RET instruction under the hood, but for reasons of differentiating we'll
 	//call it a "RAISE" instruction here
 	instruction->instruction_type = RAISE_INSTRUCTION;
