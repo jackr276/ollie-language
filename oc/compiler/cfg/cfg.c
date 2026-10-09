@@ -6662,24 +6662,43 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * in the function
 		 */
 		if(is_result_package_empty(&handle_results) == FALSE){
-			//Final result assignment instruction
-			instruction_t* result_assignment;
-
 			//Emit our jump first - this is our anchor point for the assignment insertion
 			last_instruction = emit_jump(handle_results.final_block, error_handling_ending_block);
 
 			switch(handle_results.type){
-				case CFG_RESULT_TYPE_CONST:
-					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+				case CFG_RESULT_TYPE_CONST: {
+					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
+				}
 
-				case CFG_RESULT_TYPE_VAR:
-					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
+				/**
+				 * For a variable result - if we have a function variable that is returned by copy, then
+				 * we need to uphold the return-by-copy contract by copying the handles result into the 
+				 * given return-by-copy stack region. If not then we just assign to our function result-
+				 * variable
+				 */
+				case CFG_RESULT_TYPE_VAR: {
+					//Extract for our convenience
+					three_addr_var_t* result_var = handle_results.result_value.result_var;
+
+					if(is_type_returned_by_copy(function_assignee->type) == FALSE){
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), result_var, handle_node->line_number);
+						insert_instruction_before_given(result_assignment, last_instruction);
+
+					} else {
+						//First we copy into the return region
+						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(emit_var_copy(function_assignee), result_var, function_assignee->type->type_size, handle_node->line_number);
+						insert_instruction_before_given(copy_to_ret_region, last_instruction);
+
+						//Then we come through and assign the function assignee to the result var, just to keep SSA happy
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, handle_node->line_number);
+						insert_instruction_before_given(result_assignment, last_instruction);
+					}
+
 					break;
+				}
 			}
-
-			//This goes in right after the given last instruction
-			insert_instruction_before_given(result_assignment, last_instruction);
 
 		/**
 		 * Otherwise the result package is empty. This could mean a few things - we could
