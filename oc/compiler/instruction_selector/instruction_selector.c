@@ -15392,30 +15392,23 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
 	 * (parameter passed to us in %rdi) over to %rax
 	 */
 	if(function_type->returns_by_copy == FALSE){
+		//We'll need something to represent %rax
+		three_addr_var_t* rax_register = emit_temp_var(i64);
+
+		//Emit the register clear and insert it before the return
+		instruction_t* clear_rax = emit_gp_register_clear_instruction(rax_register);
+		insert_instruction_before_given(clear_rax, instruction);
+
+		//RAX is always in the first source register
+		instruction->operands.x86.source_register1 = rax_register;
 
 	} else {
-
+		//Emit the return by copy variable for our return register
+		instruction->operands.x86.source_register1 = emit_var(function->return_by_copy_variable);
 	}
 
-
-
-
 	//The value that we're raising always comes from op1
-	instruction->operands.oir.operand2 = instruction->operands.oir.operand1;
-
-
-
-
-
-
-
-
-	//This is a RET instruction under the hood, but for reasons of differentiating we'll
-	//call it a "RAISE" instruction here
-	instruction->instruction_type = RAISE_INSTRUCTION;
-	
-	//We are returning the value in %rdx(the error register)
-	instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
+	instruction->operands.x86.source_register2 = instruction->operands.oir.operand1;
 }
 
 
@@ -16934,7 +16927,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			handle_ret_instruction(instruction, function);
 			break;
 		case THREE_ADDR_CODE_RAISE_STMT:
-			handle_raise_instruction(instruction);
+			handle_raise_instruction(instruction, function);
 			break;
 		case THREE_ADDR_CODE_JUMP_STMT:
 			instruction->instruction_type = JMP;

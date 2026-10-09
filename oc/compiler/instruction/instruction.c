@@ -4934,13 +4934,6 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "\n");
 			break;
 
-		//Raise instructions are ret instructions. They are guaranteed to have a return value
-		case RAISE_INSTRUCTION:
-			fprintf(fl, "ret /* --> raises error ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
-			fprintf(fl, " */\n");
-			break;
-
 		case NOP:
 			fprintf(fl, "nop\n");
 			break;
