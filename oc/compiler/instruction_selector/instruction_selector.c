@@ -15373,11 +15373,37 @@ static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab
 
 
 /**
- * Handle a raise instruction. Raise instructions really
- * under the hood are return instructions by a different
- * name. We will convert to a return here 
+ * Raise statements are really just return statements under the hood. In an OIR RET
+ * instruction, the first source register is always the %rax value and second is the
+ * error(%rdx) value. For a raise instruction, it is important that we always do *something*
+ * with %rax. For return by copy functions, we *MUST* populate %rax with the return by copy
+ * address that came to us in %rdi. Otherwise, we'll clear it out using xor
  */
-static inline void handle_raise_instruction(instruction_t* instruction){
+static inline void handle_raise_instruction(instruction_t* instruction, symtab_function_record_t* function){
+	//Extract for convenience
+	function_type_t* function_type = function->signature->internal_types.function_type;
+
+	//These are all RET instructions
+	instruction->instruction_type = RET;
+	
+	/**
+	 * If we do not return by copy, then we are fine to just XOR clear out %rax. However
+	 * if we do return by copy, it is essential that we assign the return by copy variable
+	 * (parameter passed to us in %rdi) over to %rax
+	 */
+	if(function_type->returns_by_copy == FALSE){
+
+	} else {
+
+	}
+
+
+
+
+	//The value that we're raising always comes from op1
+	instruction->operands.oir.operand2 = instruction->operands.oir.operand1;
+
+
 
 
 
