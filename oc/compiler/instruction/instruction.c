@@ -4921,16 +4921,21 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 	//This will be null often, but if we need it it'll be here
 	basic_block_t* jumping_to_block = instruction->if_block;
 
-	//Switch based on what type we have
 	switch (instruction->instruction_type) {
-		//These first ones are very simple - no real variations here
 		case RET:
+			//TODO UPDATE PRINTING ON THIS
 			fprintf(fl, "ret");
 			if(instruction->operands.x86.source_register1 != NULL){
 				fprintf(fl, " /* --> ");
 				print_variable(fl, instruction->operands.x86.source_register1, mode);
 				fprintf(fl, " */");
 			}
+
+			if(instruction->operands.x86.source_register2 != NULL){
+
+			}
+
+
 			fprintf(fl, "\n");
 			break;
 
