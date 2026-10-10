@@ -6695,7 +6695,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 						insert_instruction_before_given(copy_to_ret_region, last_instruction);
 
 						//Then we come through and assign the function assignee to the result var, just to keep SSA happy
-						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, handle_node->line_number);
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), handle_node->line_number);
 						insert_instruction_before_given(result_assignment, last_instruction);
 					}
 
