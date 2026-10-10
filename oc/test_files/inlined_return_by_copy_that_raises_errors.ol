@@ -14,6 +14,10 @@ define struct my_struct{
 
 define error invalid_input_error_t;
 
+fn zero_rax() -> i32{
+	ret 0;
+}
+
 
 pub inline fn! return_by_copy_with_error(x:i32, y:i64) -> struct my_struct raises (invalid_input_error_t) {
 	if(x < 0) {
@@ -28,6 +32,9 @@ pub inline fn! return_by_copy_with_error(x:i32, y:i64) -> struct my_struct raise
 pub fn main() -> i32 {
 	//This will be our substitute
 	let dummy_struct:struct my_struct = {[1, 2, 3, 4, 5], 8, 7};
+
+	//Zero out %rax
+	@zero_rax();
 
 	let result1:struct my_struct = @return_by_copy_with_error(-1, 8) handle(
 																			error => dummy_struct,
