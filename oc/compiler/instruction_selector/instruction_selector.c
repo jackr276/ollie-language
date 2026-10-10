@@ -15387,20 +15387,30 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
 	instruction->instruction_type = RET;
 	
 	/**
-	 * If we do not return by copy, then we are fine to just XOR clear out %rax. However
+	 * If we do not return by copy, then we are fine to just XOR clear out %rax/xmm0. However
 	 * if we do return by copy, it is essential that we assign the return by copy variable
 	 * (parameter passed to us in %rdi) over to %rax
 	 */
 	if(function_type->returns_by_copy == FALSE){
-		//We'll need something to represent %rax
-		three_addr_var_t* rax_register = emit_temp_var(i64);
+		//Hold onto the return register
+		three_addr_var_t* return_register;
 
-		//Emit the register clear and insert it before the return
-		instruction_t* clear_rax = emit_gp_register_clear_instruction(rax_register);
-		insert_instruction_before_given(clear_rax, instruction);
+		/**
+		 * Emit either a GP register clear(%rax) or an SSE register clear(%xmm0)
+		 */
+		if(IS_FLOATING_POINT(function_type->return_type) == FALSE){
+			return_register = emit_temp_var(i64);
+			instruction_t* clear_rax = emit_gp_register_clear_instruction(return_register);
+			insert_instruction_before_given(clear_rax, instruction);
 
-		//RAX is always in the first source register
-		instruction->operands.x86.source_register1 = rax_register;
+		} else {
+			return_register = emit_temp_var(f64);
+			instruction_t* clear_xmm0 = emit_sse_register_clear_instruction(return_register);
+			insert_instruction_before_given(clear_xmm0, instruction);
+		}
+
+		//The return register is always the first source
+		instruction->operands.x86.source_register1 = return_register;
 
 	} else {
 		//These all have aliases - which we should be using
