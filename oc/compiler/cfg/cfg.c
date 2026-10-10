@@ -12842,9 +12842,18 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 					instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
 					add_statement(cloning_into_block, clear_instruction);
 
+				/**
+				 * Otherwise we have a function that raises errors. We'll need to clone the return by copy
+				 * variable and emit an assignment of that to our return variable
+				 */
 				} else {
-					printf("TODO NOT IMPLEMENTED\n");
-					exit(1);
+					symtab_variable_record_t* return_by_copy_variable = function_to_clone->return_by_copy_variable;
+					//We know that the mapping must exist by this point
+					symtab_variable_record_t* return_by_copy_clone = get_mapping_for_symtab_variable(variable_map, return_by_copy_variable)->destination.symtab_variable;
+
+					//Get this into the block
+					instruction_t* ret_by_copy_assignment = emit_assignment_instruction(emit_var(return_variable), emit_var(return_by_copy_clone), source_instruction->line_number);
+					add_statement(cloning_into_block, ret_by_copy_assignment);
 				}
 			}
 
