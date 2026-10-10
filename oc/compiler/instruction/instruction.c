@@ -4937,6 +4937,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			//If they're both NULL then we're done
 			if(rax_var == NULL && rdx_var == NULL){
+				fprintf(fl, "\n");
 				break;
 			}
 
@@ -4950,6 +4951,11 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 
 			//And the raise
 			if(rdx_var != NULL){
+				//Comma separate so it looks nice
+				if(rax_var != NULL){
+					fprintf(fl, ", ");
+				}
+
 				fprintf(fl, "raise error ");
 				print_variable(fl, rdx_var, mode);
 			}
