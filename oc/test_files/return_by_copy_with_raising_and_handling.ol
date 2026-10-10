@@ -13,6 +13,11 @@ define struct return_struct {
 
 define error invalid_input_error;
 
+//Zero out %rax
+fn zero_rax() -> i32 {
+	ret 0;
+}
+
 
 //Define a dummy that will raise an error
 fn! return_by_copy_with_errors(x:i32, y:i32) -> struct return_struct raises (invalid_input_error){
@@ -29,6 +34,9 @@ pub fn main() -> i32 {
 	declare ret_val1:mut struct return_struct;
 
 	let null_struct:struct return_struct = {0, 77, [0,0,0,0,0], 0};
+
+	//Wipe this out
+	@zero_rax();
 
 	//See how this works, we should trigger a copy assignment
 	ret_val1 = @return_by_copy_with_errors(-1, 1) handle (invalid_input_error => null_struct,

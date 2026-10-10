@@ -40,5 +40,6 @@ pub fn main() -> i32 {
 											   );
 
 
+	OUNIT: [exit_status = 1]
 	ret result;
 }

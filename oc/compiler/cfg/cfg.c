@@ -1874,8 +1874,11 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 					 * The return by copy variable that we created during setup will always be cached in the current
 					 * function record. It was aliased but that's of no concern to us. All that we need to do now
 					 * emit a variable based on that created return by copy variable
+					 *
+					 * NOTE: we'll use the alias here to cut down on any register interference
 					 */
-					three_addr_var_t* return_by_copy_address_var = emit_var(current_function->return_by_copy_variable);
+					symtab_variable_record_t* return_by_copy_variable = current_function->return_by_copy_variable;
+					three_addr_var_t* return_by_copy_address_var = emit_var(return_by_copy_variable->alias);
 
 					/**
 					 * Now that we have the dummy variable, we will copy from the returned variable over into the return-by-copy
@@ -6662,24 +6665,43 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		 * in the function
 		 */
 		if(is_result_package_empty(&handle_results) == FALSE){
-			//Final result assignment instruction
-			instruction_t* result_assignment;
-
 			//Emit our jump first - this is our anchor point for the assignment insertion
 			last_instruction = emit_jump(handle_results.final_block, error_handling_ending_block);
 
 			switch(handle_results.type){
-				case CFG_RESULT_TYPE_CONST:
-					result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+				case CFG_RESULT_TYPE_CONST: {
+					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
+				}
 
-				case CFG_RESULT_TYPE_VAR:
-					result_assignment = emit_assignment_instruction(emit_var(function_result_var), handle_results.result_value.result_var, handle_node->line_number);
+				/**
+				 * For a variable result - if we have a function variable that is returned by copy, then
+				 * we need to uphold the return-by-copy contract by copying the handles result into the 
+				 * given return-by-copy stack region. If not then we just assign to our function result-
+				 * variable
+				 */
+				case CFG_RESULT_TYPE_VAR: {
+					//Extract for our convenience
+					three_addr_var_t* result_var = handle_results.result_value.result_var;
+
+					if(is_type_returned_by_copy(function_assignee->type) == FALSE){
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), result_var, handle_node->line_number);
+						insert_instruction_before_given(result_assignment, last_instruction);
+
+					} else {
+						//First we copy into the return region
+						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(emit_var_copy(function_assignee), result_var, function_assignee->type->type_size, handle_node->line_number);
+						insert_instruction_before_given(copy_to_ret_region, last_instruction);
+
+						//Then we come through and assign the function assignee to the result var, just to keep SSA happy
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), handle_node->line_number);
+						insert_instruction_before_given(result_assignment, last_instruction);
+					}
+
 					break;
+				}
 			}
-
-			//This goes in right after the given last instruction
-			insert_instruction_before_given(result_assignment, last_instruction);
 
 		/**
 		 * Otherwise the result package is empty. This could mean a few things - we could
@@ -12749,8 +12771,8 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * is done so as new instruction fields are added we don't just blindly copy
  * over everything, the author will have to come in here and update it
  */
-static inline void clone_instruction_into_block(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map,
-											   	symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
+static inline void clone_instruction_into_block(symtab_function_record_t* function_to_clone, basic_block_t* cloning_into_block, instruction_t* source_instruction,
+												variable_map_t* variable_map, symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
 												basic_block_t* inlined_exit_block){
 	/**
 	 * Now certain instruction types may require special treatment due to blocks,
@@ -12793,6 +12815,12 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * A raise statement is essentially a return statement that always takes
 		 * in a constant. We will do the same thing where we simulate returning
 		 * by assignment and then jumping to the exit
+		 *
+		 * It is important to note that, just like regular raise statements, we will
+		 * always need to either clear or assign the return variable here. This is especially
+		 * important for return-by-copy functions because we may have handles statements
+		 * that specifically rely on the return variable being populated with the return
+		 * by copy address
 		 */
 		case THREE_ADDR_CODE_RAISE_STMT: {
 			//Raise always has an assignee unlike return
@@ -12802,14 +12830,33 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			add_statement(cloning_into_block, simulated_raise_assignment);
 
 			/**
-			 * If we have a return variable we'll need it to be assigned. We will use the specialized
-			 * clear function to make this happen
+			 * If we have a return variable we'll need it to be assigned even in the scenario
+			 * where we have a raise
 			 */
 			if(return_variable != NULL){
-				instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
-				add_statement(cloning_into_block, clear_instruction);
+				/**
+				 * If we have a function that does *not* return by copy, we are able to just emit
+				 * a clear statement here to 0 out the return variable and that'll be good enough
+				 */
+				if(function_to_clone->signature->internal_types.function_type->returns_by_copy == FALSE){
+					instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
+					add_statement(cloning_into_block, clear_instruction);
+
+				/**
+				 * Otherwise we have a function that raises errors. We'll need to clone the return by copy
+				 * variable and emit an assignment of that to our return variable
+				 */
+				} else {
+					symtab_variable_record_t* return_by_copy_variable = function_to_clone->return_by_copy_variable;
+					//We know that the mapping must exist by this point
+					symtab_variable_record_t* return_by_copy_clone = get_mapping_for_symtab_variable(variable_map, return_by_copy_variable)->destination.symtab_variable;
+
+					//Get this into the block
+					instruction_t* ret_by_copy_assignment = emit_assignment_instruction(emit_var(return_variable), emit_memory_address_var(return_by_copy_clone), source_instruction->line_number);
+					add_statement(cloning_into_block, ret_by_copy_assignment);
+				}
 			}
-			
+
 			//To actually simulate we will jump from this block to the exit block
 			emit_jump(cloning_into_block, inlined_exit_block);
 			return;
@@ -13631,7 +13678,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 			}
 
 			//Survived so clone it
-			clone_instruction_into_block(new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
+			clone_instruction_into_block(function_to_clone, new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
 
 			//Onto the next one
 			cursor = cursor->next_statement;

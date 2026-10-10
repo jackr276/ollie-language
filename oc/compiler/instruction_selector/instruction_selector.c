@@ -15373,17 +15373,63 @@ static inline void handle_ret_instruction(instruction_t* ret_instruction, symtab
 
 
 /**
- * Handle a raise instruction. Raise instructions really
- * under the hood are return instructions by a different
- * name. We will convert to a return here 
+ * Raise statements are really just return statements under the hood. In an OIR RET
+ * instruction, the first source register is always the %rax value and second is the
+ * error(%rdx) value. For a raise instruction, it is important that we always do *something*
+ * with %rax. For return by copy functions, we *MUST* populate %rax with the return by copy
+ * address that came to us in %rdi. Otherwise, we'll clear it out using xor
  */
-static inline void handle_raise_instruction(instruction_t* instruction){
-	//This is a RET instruction under the hood, but for reasons of differentiating we'll
-	//call it a "RAISE" instruction here
-	instruction->instruction_type = RAISE_INSTRUCTION;
+static inline void handle_raise_instruction(instruction_t* instruction, symtab_function_record_t* function){
+	//Extract for convenience
+	function_type_t* function_type = function->signature->internal_types.function_type;
+
+	//These are all RET instructions
+	instruction->instruction_type = RET;
 	
-	//We are returning the value in %rdx(the error register)
-	instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
+	/**
+	 * If we do not return by copy, then we are fine to just XOR clear out %rax/xmm0. However
+	 * if we do return by copy, it is essential that we assign the return by copy variable
+	 * (parameter passed to us in %rdi) over to %rax
+	 */
+	if(function_type->returns_void == FALSE){
+		if(function_type->returns_by_copy == FALSE){
+			//Hold onto the return register
+			three_addr_var_t* return_register;
+
+			/**
+			 * Emit either a GP register clear(%rax) or an SSE register clear(%xmm0)
+			 */
+			if(IS_FLOATING_POINT(function_type->return_type) == FALSE){
+				return_register = emit_temp_var(i64);
+				instruction_t* clear_rax = emit_gp_register_clear_instruction(return_register);
+				insert_instruction_before_given(clear_rax, instruction);
+
+			} else {
+				return_register = emit_temp_var(f64);
+				instruction_t* clear_xmm0 = emit_sse_register_clear_instruction(return_register);
+				insert_instruction_before_given(clear_xmm0, instruction);
+			}
+
+			//The return register is always the first source
+			instruction->operands.x86.source_register1 = return_register;
+
+		} else {
+			//These all have aliases - which we should be using
+			symtab_variable_record_t* return_by_copy_alias = function->return_by_copy_variable->alias;
+
+			//Emit an assignment to rax instruction here
+			instruction_t* assign_to_rax = emit_and_insert_move_instruction(emit_temp_var(return_by_copy_alias->type_defined_as), 
+																			emit_var(return_by_copy_alias),
+																			instruction,
+																			INSERTION_ORDER_BEFORE);
+
+			//The assignee is our final result
+			instruction->operands.x86.source_register1 = assign_to_rax->operands.x86.destination_register;
+		}
+	}
+
+	//The value that we're raising always comes from op1
+	instruction->operands.x86.source_register2 = instruction->operands.oir.operand1;
 }
 
 
@@ -16902,7 +16948,7 @@ static void select_instruction_patterns(instruction_window_t* window, symtab_fun
 			handle_ret_instruction(instruction, function);
 			break;
 		case THREE_ADDR_CODE_RAISE_STMT:
-			handle_raise_instruction(instruction);
+			handle_raise_instruction(instruction, function);
 			break;
 		case THREE_ADDR_CODE_JUMP_STMT:
 			instruction->instruction_type = JMP;

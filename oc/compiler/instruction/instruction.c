@@ -2659,18 +2659,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 				print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			}
 			
-			//No matter what, print a newline
 			fprintf(fl, "\n");
 			break;
 
 		case THREE_ADDR_CODE_RAISE_STMT:
 			fprintf(fl, "raise ");
-
-			//This will always have a raised variable that comes
-			//from a constant assignment
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
-			
-			//No matter what, print a newline
 			fprintf(fl, "\n");
 			break;
 
@@ -4932,25 +4926,44 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 	//This will be null often, but if we need it it'll be here
 	basic_block_t* jumping_to_block = instruction->if_block;
 
-	//Switch based on what type we have
 	switch (instruction->instruction_type) {
-		//These first ones are very simple - no real variations here
-		case RET:
-			fprintf(fl, "ret");
-			if(instruction->operands.x86.source_register1 != NULL){
-				fprintf(fl, " /* --> ");
-				print_variable(fl, instruction->operands.x86.source_register1, mode);
-				fprintf(fl, " */");
-			}
-			fprintf(fl, "\n");
-			break;
+		case RET: {
+			//Either/or may be NULL
+			three_addr_var_t* rax_var = instruction->operands.x86.source_register1;
+			three_addr_var_t* rdx_var = instruction->operands.x86.source_register2;
 
-		//Raise instructions are ret instructions. They are guaranteed to have a return value
-		case RAISE_INSTRUCTION:
-			fprintf(fl, "ret /* --> raises error ");
-			print_variable(fl, instruction->operands.x86.source_register1, mode);
+			//We always see the ret
+			fprintf(fl, "ret");
+
+			//If they're both NULL then we're done
+			if(rax_var == NULL && rdx_var == NULL){
+				fprintf(fl, "\n");
+				break;
+			}
+
+			//Otherwise we need to see the opening comment
+			fprintf(fl, " /* --> ");
+
+			//Print the return if need be
+			if(rax_var != NULL){
+				print_variable(fl, rax_var, mode);
+			}
+
+			//And the raise
+			if(rdx_var != NULL){
+				//Comma separate so it looks nice
+				if(rax_var != NULL){
+					fprintf(fl, ", ");
+				}
+
+				fprintf(fl, "raise error ");
+				print_variable(fl, rdx_var, mode);
+			}
+
+			//Finally the closing comment
 			fprintf(fl, " */\n");
 			break;
+		}
 
 		case NOP:
 			fprintf(fl, "nop\n");

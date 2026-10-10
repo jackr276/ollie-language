@@ -25,5 +25,6 @@ pub fn main() -> i32 {
 												divide_by_zero_error_t => <i8>0,
 												error => <i8>5
 												);
+	OUNIT: [exit_status = 0]
 	ret result;
 }
