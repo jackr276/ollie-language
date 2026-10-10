@@ -4927,22 +4927,37 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 	basic_block_t* jumping_to_block = instruction->if_block;
 
 	switch (instruction->instruction_type) {
-		case RET:
-			//TODO UPDATE PRINTING ON THIS
+		case RET: {
+			//Either/or may be NULL
+			three_addr_var_t* rax_var = instruction->operands.x86.source_register1;
+			three_addr_var_t* rdx_var = instruction->operands.x86.source_register2;
+
+			//We always see the ret
 			fprintf(fl, "ret");
-			if(instruction->operands.x86.source_register1 != NULL){
-				fprintf(fl, " /* --> ");
-				print_variable(fl, instruction->operands.x86.source_register1, mode);
-				fprintf(fl, " */");
+
+			//If they're both NULL then we're done
+			if(rax_var == NULL && rdx_var == NULL){
+				break;
 			}
 
-			if(instruction->operands.x86.source_register2 != NULL){
+			//Otherwise we need to see the opening comment
+			fprintf(fl, " /* --> ");
 
+			//Print the return if need be
+			if(rax_var != NULL){
+				print_variable(fl, rax_var, mode);
 			}
 
+			//And the raise
+			if(rdx_var != NULL){
+				fprintf(fl, "raise error ");
+				print_variable(fl, rdx_var, mode);
+			}
 
-			fprintf(fl, "\n");
+			//Finally the closing comment
+			fprintf(fl, " */\n");
 			break;
+		}
 
 		case NOP:
 			fprintf(fl, "nop\n");
