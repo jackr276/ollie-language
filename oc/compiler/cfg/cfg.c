@@ -12771,8 +12771,8 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * is done so as new instruction fields are added we don't just blindly copy
  * over everything, the author will have to come in here and update it
  */
-static inline void clone_instruction_into_block(basic_block_t* cloning_into_block, instruction_t* source_instruction, variable_map_t* variable_map,
-											   	symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
+static inline void clone_instruction_into_block(symtab_function_record_t* function_to_clone, basic_block_t* cloning_into_block, instruction_t* source_instruction,
+												variable_map_t* variable_map, symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
 												basic_block_t* inlined_exit_block){
 	/**
 	 * Now certain instruction types may require special treatment due to blocks,
@@ -12815,6 +12815,12 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 		 * A raise statement is essentially a return statement that always takes
 		 * in a constant. We will do the same thing where we simulate returning
 		 * by assignment and then jumping to the exit
+		 *
+		 * It is important to note that, just like regular raise statements, we will
+		 * always need to either clear or assign the return variable here. This is especially
+		 * important for return-by-copy functions because we may have handles statements
+		 * that specifically rely on the return variable being populated with the return
+		 * by copy address
 		 */
 		case THREE_ADDR_CODE_RAISE_STMT: {
 			//Raise always has an assignee unlike return
@@ -12824,14 +12830,24 @@ static inline void clone_instruction_into_block(basic_block_t* cloning_into_bloc
 			add_statement(cloning_into_block, simulated_raise_assignment);
 
 			/**
-			 * If we have a return variable we'll need it to be assigned. We will use the specialized
-			 * clear function to make this happen
+			 * If we have a return variable we'll need it to be assigned even in the scenario
+			 * where we have a raise
 			 */
 			if(return_variable != NULL){
-				instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
-				add_statement(cloning_into_block, clear_instruction);
+				/**
+				 * If we have a function that does *not* return by copy, we are able to just emit
+				 * a clear statement here to 0 out the return variable and that'll be good enough
+				 */
+				if(function_to_clone->signature->internal_types.function_type->returns_by_copy == FALSE){
+					instruction_t* clear_instruction = emit_clear_instruction(emit_var(return_variable), source_instruction->line_number);
+					add_statement(cloning_into_block, clear_instruction);
+
+				} else {
+					printf("TODO NOT IMPLEMENTED\n");
+					exit(1);
+				}
 			}
-			
+
 			//To actually simulate we will jump from this block to the exit block
 			emit_jump(cloning_into_block, inlined_exit_block);
 			return;
@@ -13653,7 +13669,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 			}
 
 			//Survived so clone it
-			clone_instruction_into_block(new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
+			clone_instruction_into_block(function_to_clone, new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
 
 			//Onto the next one
 			cursor = cursor->next_statement;
