@@ -60,14 +60,23 @@ typedef enum {
  */
 struct variable_mapping_t {
 	union {
-		u_int32_t temporary_id;
+		int32_t temporary_id;
 		symtab_variable_record_t* symtab_variable;
 	} source;
 
 	union {
-		u_int32_t temporary_id;
+		int32_t temporary_id;
 		symtab_variable_record_t* symtab_variable;
 	} destination;
+
+	/**
+	 * We maintain a special atomically increasing ID
+	 * that determines what actual inline call we're currently
+	 * on. When we do our lookup, if we happen to find a mapping
+	 * that has a different call_inline_id, we know that it's
+	 * "stale" and should be disregarded
+	 */
+	int32_t call_inline_id;
 
 	//Are we mapping temp-to-temp or symtab-to-symtab
 	variable_mapping_type_t mapping_type;
@@ -106,25 +115,13 @@ struct variable_map_t {
  */
 variable_map_t variable_map_alloc();
 
-
-/**
- * Deallocate a given variable map
- */
-void variable_map_dealloc(variable_map_t* map);
-
-//TODO
-//
-//
-//
-
-
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
  * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id);
+void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id, int32_t call_inlining_id);
 
 /**
  * Create a new mapping for a symtab variable that goes from the source to the destination
@@ -132,7 +129,7 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
  * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable);
+void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable, int32_t call_inlining_id);
 
 /**
  * Create a new mapping that goes from a temp var to a symtab variable
@@ -140,8 +137,12 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
  * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
+void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable, int32_t call_inlining_id);
 
+/**
+ * Deallocate a given variable map
+ */
+void variable_map_dealloc(variable_map_t* map);
 //====================================== Non-Inlined Functions ===============================================================
 //====================================== Inlined Utility Functions ===========================================================
 /**
@@ -153,7 +154,7 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, in
  *
  * If the page is NULL then return NULL. Otherwise get page[offset]
  */
-static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id){
+static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t call_inline_id){
 	//Compute the page number and offset
 	int32_t page_number = source_temp_var_id / VARIABLE_MAPPING_PAGE_SIZE;
 	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
@@ -170,11 +171,18 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
 	}
 
 	/**
-	 * If we get here and we see it's not unimplemented, then we get the mapping,
-	 * otherwise we return NULL
+	 * We've gotten a mapping but need to check 2 things:
+	 * 	1.) If the mapping is not implemented we disregard
+	 * 	2.) If the mapping has a different "call_inline_id", that means that it is from a prior
+	 * 		run and is therefore "stale". Remember that the same function may be inlined dozens
+	 * 		of times.
 	 */
 	variable_mapping_t* mapping = &(page->mappings[page_offset]);
-	return mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED ? mapping : NULL;
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == call_inline_id){
+		return mapping;
+	} else {
+		return NULL;
+	}
 }
 
 
@@ -191,7 +199,7 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
  *
  * If the page is NULL then return NULL. Otherwise get page[offset]
  */
-static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
+static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, int32_t call_inline_id){
 	/**
 	 * For the source variable ID, we will default to use the regular "variable_id" if it's not unset.
 	 * However, if it does not exist, we will fallback to the memory address variable id. Some variables
@@ -218,13 +226,20 @@ static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t
 	if(page == NULL){
 		return NULL;
 	}
-
+	
 	/**
-	 * If we get here and we see it's not unimplemented, then we get the mapping,
-	 * otherwise we return NULL
+	 * We've gotten a mapping but need to check 2 things:
+	 * 	1.) If the mapping is not implemented we disregard
+	 * 	2.) If the mapping has a different "call_inline_id", that means that it is from a prior
+	 * 		run and is therefore "stale". Remember that the same function may be inlined dozens
+	 * 		of times.
 	 */
 	variable_mapping_t* mapping = &(page->mappings[page_offset]);
-	return mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED ? mapping : NULL;
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == call_inline_id){
+		return mapping;
+	} else {
+		return NULL;
+	}
 }
 //====================================== Inlined Utility Functions ===========================================================
 #endif /* VARIABLE_MAPPING_H */
