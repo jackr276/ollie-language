@@ -5,6 +5,27 @@
 
 #include "variable_mapping.h"
 
+
+/**
+ * Allocate the variable map. Remember that our intention is to only have one variable map per compilation
+ * run, so this is intentionally a relatively large upfront allocation(8kb) in the hopes of rarely having
+ * to resize
+ */
+variable_map_t variable_map_alloc(){
+	variable_map_t map;
+
+	/**
+	 * Dynamically allocate the page table as an array of pointers
+	 * to pages themselves
+	 */
+	map.page_count = DEFAULT_PAGE_COUNT;
+	map.page_table = calloc(sizeof(variable_mapping_page_t*), DEFAULT_PAGE_COUNT);
+
+	return map;
+}
+
+
+
 /**
  * Allocate a variable map designed specifically for a given function. Remember that variable
  * maps are specific to a given function that we're inlining. They may not be reused and
@@ -123,11 +144,21 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, in
 
 
 /**
- * Deallocate a given variable map
+ * Deallocate a given variable map by crawling over every entry
+ * and deallocating if need be
  */
 void variable_map_dealloc(variable_map_t* map){
-	//Destroy the mappings
-	free(map->mappings);
-	map->mapping_count = 0;
-	map->index_adjustment = 0;
+	//Crawl through every page in the page table and free them
+	for(int32_t i = 0; i < map->page_count; i++){
+		//Get the page out
+		variable_mapping_page_t* page = map->page_table[i];
+
+		if(page != NULL){
+			free(page);
+		}
+	}
+
+	//Free the table and 0 out the count
+	free(map->page_table);
+	map->page_count = 0;
 }

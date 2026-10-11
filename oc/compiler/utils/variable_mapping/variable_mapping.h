@@ -93,7 +93,7 @@ struct variable_mapping_page_t {
  * resize these rarely
  */
 struct variable_map_t {
-	variable_mapping_page_t** pages;
+	variable_mapping_page_t** page_table;
 	int32_t page_count;
 };
 
@@ -107,6 +107,10 @@ struct variable_map_t {
 variable_map_t variable_map_alloc();
 
 
+/**
+ * Deallocate a given variable map
+ */
+void variable_map_dealloc(variable_map_t* map);
 
 //TODO
 //
@@ -138,10 +142,6 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  */
 void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
 
-/**
- * Deallocate a given variable map
- */
-void variable_map_dealloc(variable_map_t* map);
 //====================================== Non-Inlined Functions ===============================================================
 
 //====================================== Inlined Utility Functions ===========================================================
