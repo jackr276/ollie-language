@@ -72,45 +72,16 @@ use_count_tracker_page_t* get_use_count_page_for_id(use_count_tracker_t* tracker
 	}
 
 
-
-
-
-}
-
-
-
-
-
-/**
- * Perform a dynamic resize on the use count tracker based on the ID that was requested. To
- * be safe, we will always reallocate with double what was requested
- *
- * It is smart to call this before populating use counts on any new function, just to make sure 
- * you have enough space
- */
-void use_count_tracker_dynamic_resize_for_id(use_count_tracker_t* tracker, u_int32_t requested_id){
-	//Nothing to worry about here
-	if(tracker->variable_count > requested_id){
-		return;
+	/**
+	 * Case 2 - we know that there is enough space for the page table that holds this ID, but now we
+	 * need to make sure that the page itself is allocated
+	 */
+	if(tracker->page_table[page_index] == NULL){
+		tracker->page_table[page_index] = calloc(1, sizeof(use_count_tracker_page_t));
 	}
 
-	//Cache the old variable count and reup it
-	u_int32_t old_variable_count = tracker->variable_count;
-	tracker->variable_count = requested_id * 2;
-
-	//Reallocate our map with the new count
-	tracker->map = realloc(tracker->map, sizeof(u_int16_t) * tracker->variable_count);
-
-	/**
-	 * We need to make sure that this is all set to 0's. So, grab a pointer to the new 
-	 * region by skipping over all of the variables that already exist, and set all of
-	 * that memory to be 0's
-	 *
-	 * Do a memset where we bump the pointer up to past the old region, and wipe the entire
-	 * thing out starting after the already populated region by setting all the bytes to
-	 * be 0
-	 */
-	memset(tracker->map + old_variable_count, 0, sizeof(u_int16_t) * (tracker->variable_count - old_variable_count));
+	//Give back a valid pointer to this page
+	return tracker->page_table[page_index];
 }
 
 
