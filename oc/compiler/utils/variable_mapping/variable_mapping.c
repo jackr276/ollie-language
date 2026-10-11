@@ -77,18 +77,19 @@ static inline variable_mapping_page_t* get_or_create_page_for_index(variable_map
  */
 void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id){
 	/**
-	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
-	 * by variable ID, regardless of what the actual ID is
+	 * First let the helper determine the correct page to add this mapping into
 	 */
-	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
+	variable_mapping_page_t* page = get_or_create_page_for_index(variable_map, source_temp_var_id);
 
-	//Grab a reference just to make this neater
-	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
+	/**
+	 * Now that we have a page, offset into the page to get a pointer to the mapping that we're
+	 * after
+	 */
+	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
 
-	//This is a temp mapping
+	//Populate the mapping with everything that we need
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_TEMP;
-
-	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.temporary_id = dest_temp_var_id;
 }
