@@ -27,11 +27,11 @@
 #include "../../symtab/symtab.h"
 #include "../constants.h"
 
-//We hold 128 mappings per page
-#define VARIABLE_MAPPING_PAGE_SIZE 128
+//We hold 256 mappings per page
+#define VARIABLE_MAPPING_PAGE_SIZE 256
 
-//By default we hold 1024 pages(8kb array of pointers)
-#define DEFAULT_PAGE_COUNT 1024
+//By default we hold 512 pages(4kb array of pointers)
+#define DEFAULT_PAGE_COUNT 512
 
 //Individual variable mappings
 typedef struct variable_mapping_t variable_mapping_t;
@@ -84,7 +84,7 @@ struct variable_mapping_t {
 
 
 /**
- * A variable mapping "page" consists of 128 variable
+ * A variable mapping "page" consists of 256 variable
  * mappings stored in a flat array. Each mapping is
  * logically keyed by the source variable's unique
  * "variable_id"
@@ -173,7 +173,7 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
 	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
 
 	//Fail case 1 - we've exceeded the page count
-	if(page_number > variable_map->page_count){
+	if(page_number >= variable_map->page_count){
 		return NULL;
 	}
 
@@ -230,7 +230,7 @@ static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t
 	int32_t page_offset = source_var_id % VARIABLE_MAPPING_PAGE_SIZE;
 
 	//Fail case 1 - we've exceeded the page count
-	if(page_number > variable_map->page_count){
+	if(page_number >= variable_map->page_count){
 		return NULL;
 	}
 
