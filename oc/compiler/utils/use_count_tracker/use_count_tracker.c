@@ -40,6 +40,48 @@ use_count_tracker_t use_count_tracker_alloc(int32_t initial_variable_count){
 
 
 /**
+ * Retrieve the appropriate pointer for a variable ID. If the page table is too small
+ * to support the theoretical page that this ID woudl be in, we will reallocate it. Additionally,
+ * if the page for said ID does not exist, we will allocate it. This helper will always return a valid
+ * pointer to a page
+ */
+use_count_tracker_page_t* get_use_count_page_for_id(use_count_tracker_t* tracker, int32_t requested_id){
+	//Get the page index that this ID belongs to
+	int32_t page_index = requested_id / USE_COUNT_PAGE_SIZE;
+
+	/**
+	 * Case 1 - we do not have enough space to hold the page that this would
+	 * in theory belong to. If this is the case we'll need to reallocate the
+	 * page table. Since we rely on NULL pointers for pages that need to be
+	 * allocated, we will need to 0 out the newly reallocated portion of
+	 * the page table
+	 */
+	if(page_index >= tracker->page_count){
+		//Hang onto this for later
+		int32_t old_page_count = tracker->page_count;
+		
+		//Always double this to hopefully avoid more reallocations
+		int32_t new_page_count = page_index * 2;
+
+		//Store the new page count and reallocate our page table
+		tracker->page_count = new_page_count;
+		tracker->page_table = realloc(tracker->page_table, new_page_count * sizeof(use_count_tracker_page_t*));
+
+		//0 out everything new that we've added in the reallocation
+		memset(tracker->page_table + old_page_count, 0, sizeof(use_count_tracker_page_t*) * (new_page_count - old_page_count));
+	}
+
+
+
+
+
+}
+
+
+
+
+
+/**
  * Perform a dynamic resize on the use count tracker based on the ID that was requested. To
  * be safe, we will always reallocate with double what was requested
  *

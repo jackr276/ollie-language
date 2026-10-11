@@ -70,13 +70,12 @@ struct use_count_tracker_t {
 use_count_tracker_t use_count_tracker_alloc(int32_t initial_variable_count);
 
 /**
- * Perform a dynamic resize on the use count tracker based on the ID that was requested. To
- * be safe, we will always reallocate with double what was requested
- *
- * It is smart to call this before populating use counts on any new function, just to make sure 
- * you have enough space
+ * Retrieve the appropriate pointer for a variable ID. If the page table is too small
+ * to support the theoretical page that this ID woudl be in, we will reallocate it. Additionally,
+ * if the page for said ID does not exist, we will allocate it. This helper will always return a valid
+ * pointer to a page
  */
-void use_count_tracker_dynamic_resize_for_id(use_count_tracker_t* tracker, u_int32_t requested_id);
+use_count_tracker_page_t* get_use_count_page_for_id(use_count_tracker_t* tracker, int32_t requested_id);
 
 /**
  * Dump the use count for every single ID that currently exists

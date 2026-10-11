@@ -39,13 +39,13 @@ void begin_new_inline_call(variable_map_t* variable_map){
 
 
 /**
- * Get or create the page for the given index. The index represents a source variable
+ * Get or create the page for the given variable id. The index represents a source variable
  * ID. In the event that the page table itself does not have enough space to hold the
  * new proposed page, we'll also reallocate the page table
  */
-static inline variable_mapping_page_t* get_or_create_page_for_index(variable_map_t* variable_map, int32_t index){
+static inline variable_mapping_page_t* get_or_create_page_for_id(variable_map_t* variable_map, int32_t variable_id){
 	//Get the page index that we are looking for
-	int32_t page_index = index / VARIABLE_MAPPING_PAGE_SIZE;
+	int32_t page_index = variable_id / VARIABLE_MAPPING_PAGE_SIZE;
 
 	/**
 	 * First option: we do not currently have a sufficient number of pages
@@ -91,7 +91,7 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t
 	/**
 	 * First let the helper determine the correct page to add this mapping into
 	 */
-	variable_mapping_page_t* page = get_or_create_page_for_index(variable_map, source_temp_var_id);
+	variable_mapping_page_t* page = get_or_create_page_for_id(variable_map, source_temp_var_id);
 
 	/**
 	 * Now that we have a page, offset into the page to get a pointer to the mapping that we're
@@ -137,7 +137,7 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	/**
 	 * First let the helper determine the correct page to add this mapping into
 	 */
-	variable_mapping_page_t* page = get_or_create_page_for_index(variable_map, source_var_id);
+	variable_mapping_page_t* page = get_or_create_page_for_id(variable_map, source_var_id);
 
 	/**
 	 * Now that we have the page use the page offset to get a pointer to hte
@@ -171,7 +171,7 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, in
 	/**
 	 * First let the helper determine the correct page to add this mapping into
 	 */
-	variable_mapping_page_t* page = get_or_create_page_for_index(variable_map, source_temp_var_id);
+	variable_mapping_page_t* page = get_or_create_page_for_id(variable_map, source_temp_var_id);
 
 	/**
 	 * Now that we have the page use the page offset to get a pointer to hte
