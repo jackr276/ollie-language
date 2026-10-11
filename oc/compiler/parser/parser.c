@@ -174,6 +174,23 @@ static inline char* extract_file_name_from_fully_qualified_name(char* fully_qual
 
 
 /**
+ * Generate the full type name from the given AST node. This is done for
+ * us to guard against trying to grab type names that are not there. This
+ * is specifically true for initializer nodes which *DO NOT* have a type
+ * stamped on them until *AFTER* the validate_initializer_types() is invoked
+ *
+ *
+ *
+ * TODO if you see <ast_node>->inferred_type->type_name.string, REPLACE IT WITH
+ * THIS
+ */
+static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
+
+	//TODO
+}
+
+
+/**
  * Simply prints a parse message in a nice formatted way
 */
 static void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
