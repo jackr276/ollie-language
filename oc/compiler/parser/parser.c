@@ -191,6 +191,18 @@ static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
 
 
 /**
+ * Get the full type name from the given type. This will account for
+ * mutability printing as well
+ *
+ * WARNING: DO NOT USE THIS FOR AST NODES. AST NODES SHOULD USE 
+ * get_full_type_name_from_ast_node ONLY!
+ */
+static char* get_full_type_name_from_type(generic_type_t* type){
+
+}
+
+
+/**
  * Simply prints a parse message in a nice formatted way
 */
 static void print_parse_message(error_message_type_t message_type, char* info, u_int32_t line_num){
@@ -1599,7 +1611,10 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
-		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function_signature->return_type->type_name.string,
+		sprintf(info,
+				"Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
+				current_function->func_name.string,
+				current_function_signature->return_type->type_name.string,
 		  		expr_node->inferred_type->type_name.string);
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
@@ -1887,10 +1902,11 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 
 			//Fail out here
 			if(final_type == NULL){
-				sprintf(info, "Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
-							function_signature->type_name.string,
-							called_function_signature->return_type->type_name.string,
-							result_node->inferred_type->type_name.string); 
+				sprintf(info, 
+						"Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
+						function_signature->type_name.string,
+						called_function_signature->return_type->type_name.string,
+						result_node->inferred_type->type_name.string); 
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2664,7 +2680,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+				sprintf(info, 
+						"Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 						function_name->string,
 						function_signature->type_name.string,
 						(parameter_type->mutability == MUTABLE ? "mut ": ""),
@@ -2748,7 +2765,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+						sprintf(info, 
+								"Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
 								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 								type_being_elaborated->type_name.string,
 								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
@@ -3028,7 +3046,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+				sprintf(info, 
+						"Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
 						function_signature->type_name.string,
 						(parameter_type->mutability == MUTABLE ? "mut ": ""),
 						parameter_type->type_name.string,
