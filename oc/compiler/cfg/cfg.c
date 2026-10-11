@@ -13474,6 +13474,10 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 				}
 			}
 
+		/**
+		 * If we have an initializer parameter result, we'll need to emit an initialization from the parameter
+		 * result into the memory region that is described by "temp_var" in the case of this elaborative parameter
+		 */
 		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
 			printf("TODO NOT IMPLEMENTED\n");
 			exit(1);
@@ -13496,8 +13500,6 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
  * Setup all of our function parameters for the inlined call. With the current implementation, it is important that anything
  * that is a stack variable in the original non-inlined call is a stack variable here as well. All stack passed variables
  * will have their stack regions setup in the callee's local stack instead of a separate stack region as is usually done
- *
- * TODO WILL NEED TESTING AND SETUP FOR THIS
  */
 static inline void setup_function_parameters_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
 															  variable_map_t* variable_map, parameter_results_array_t* parameter_results,
