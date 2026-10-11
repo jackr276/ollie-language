@@ -26,6 +26,12 @@
 #define USE_COUNT_PAGE_SIZE 4096
 
 /**
+ * The default number of pages in the event that the program
+ * is too small to even fill up a full page
+ */
+#define DEFAULT_NUM_USE_COUNT_PAGES 2
+
+/**
  * The two structs that we have are a page struct that contains 
  * a bunch of records in a contiguous fixed-size array and an overall
  * use_count_tracker struct that contains the page table
@@ -33,21 +39,35 @@
 typedef struct use_count_tracker_page_t use_count_tracker_page_t;
 typedef struct use_count_tracker_t use_count_tracker_t;
 
+
 /**
- * Very simple structure. All we really need is the array
- * and then the overall count. 32 bit integers for the count
- * may be overkill but it's ok I'm not sweating it
+ * Each page is simply a fixed size 4096 record
+ * array. Use counts are keyed by variable ID so there
+ * is no need to store that along with the count
+ */
+struct use_count_tracker_page_t {
+	int16_t use_counts[USE_COUNT_PAGE_SIZE];
+};
+
+
+/**
+ * The actual use count tracker itself contains
+ * a dynamically resizeable array of pointers to
+ * each page and a page count
  */
 struct use_count_tracker_t {
-	u_int16_t* map;
-	u_int32_t variable_count;
+	use_count_tracker_page_t** page_table;
+	int32_t page_count;
 };
 
 //================================ Non-Inlined Functions ======================================
 /**
- * Allocate the underlying data structures in the use count tracker
+ * Allocate the underlying data structures in the use count tracker. The initial
+ * variable count is used to estimate a good number of pages to start off with
+ * to avoid excessive reallocations, though reallocations of the page table
+ * are always a possibility
  */
-use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count);
+use_count_tracker_t use_count_tracker_alloc(int32_t initial_variable_count);
 
 /**
  * Perform a dynamic resize on the use count tracker based on the ID that was requested. To

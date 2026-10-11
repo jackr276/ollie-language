@@ -13,6 +13,32 @@
 #include <string.h>
 #include <sys/types.h>
 
+
+/**
+ * Allocate the underlying data structures in the use count tracker. The initial
+ * variable count is used to estimate a good number of pages to start off with
+ * to avoid excessive reallocations, though reallocations of the page table
+ * are always a possibility
+ */
+use_count_tracker_t use_count_tracker_alloc(int32_t initial_variable_count){
+	//Stack allocate
+	use_count_tracker_t tracker;
+
+	/**
+	 * Get the estimated page count by dividing the initial variable count
+	 * by the page size. If the program is too small to even justify a full page, we
+	 * will default to a set number of pages to be safe
+	 */
+	int32_t estimated_page_count = initial_variable_count / USE_COUNT_PAGE_SIZE;
+	int32_t initial_page_count = estimated_page_count > 0 ? estimated_page_count : DEFAULT_NUM_USE_COUNT_PAGES;
+
+	//Store the initial page count in the tracker and allocate the page table
+	tracker.page_count = initial_page_count;
+	tracker.page_table = calloc(initial_page_count, sizeof(use_count_tracker_page_t*));
+	return tracker;
+}
+
+
 /**
  * Allocate the underlying data structures in the use count tracker
  */
