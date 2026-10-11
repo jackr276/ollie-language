@@ -45,7 +45,7 @@ use_count_tracker_t use_count_tracker_alloc(int32_t initial_variable_count){
  * if the page for said ID does not exist, we will allocate it. This helper will always return a valid
  * pointer to a page
  */
-use_count_tracker_page_t* get_use_count_page_for_id(use_count_tracker_t* tracker, int32_t requested_id){
+use_count_tracker_page_t* get_or_create_use_count_page_for_id(use_count_tracker_t* tracker, int32_t requested_id){
 	//Get the page index that this ID belongs to
 	int32_t page_index = requested_id / USE_COUNT_PAGE_SIZE;
 

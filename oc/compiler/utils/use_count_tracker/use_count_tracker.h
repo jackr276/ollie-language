@@ -75,7 +75,7 @@ use_count_tracker_t use_count_tracker_alloc(int32_t initial_variable_count);
  * if the page for said ID does not exist, we will allocate it. This helper will always return a valid
  * pointer to a page
  */
-use_count_tracker_page_t* get_use_count_page_for_id(use_count_tracker_t* tracker, int32_t requested_id);
+use_count_tracker_page_t* get_or_create_use_count_page_for_id(use_count_tracker_t* tracker, int32_t requested_id);
 
 /**
  * Dump the use count for every single ID that currently exists
@@ -93,27 +93,30 @@ void use_count_tracker_dealloc(use_count_tracker_t* tracker);
 /**
  * Retrieve the use count for a given ID
  */
-static inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, u_int32_t id){
-	//Perform the dynamic resize if needed
-	if(id >= tracker->variable_count){
-		use_count_tracker_dynamic_resize_for_id(tracker, id);
-	}
+static inline u_int32_t get_use_count_by_id(use_count_tracker_t* tracker, int32_t id){
+	//Compute the offset into the page
+	int32_t page_offset = id % USE_COUNT_PAGE_SIZE;
+
+	//Let the helper retrieve or create the page
+	use_count_tracker_page_t* page = get_or_create_use_count_page_for_id(tracker, id);
 
 	//Get the ID out
-	return tracker->map[id];
+	return page->use_counts[page_offset];
 }
 
 
 /**
  * Increment the use count for a given ID
  */
-static inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t id){
-	//Perform the dynamic resize if needed
-	if(id >= tracker->variable_count){
-		use_count_tracker_dynamic_resize_for_id(tracker, id);
-	}
+static inline void increment_use_count(use_count_tracker_t* tracker, int32_t id){
+	//Compute the offset into the page
+	int32_t page_offset = id % USE_COUNT_PAGE_SIZE;
 
-	(tracker->map[id])++;
+	//Let the helper retrieve or create the page
+	use_count_tracker_page_t* page = get_or_create_use_count_page_for_id(tracker, id);
+
+	//Increment the use count at that offset
+	(page->use_counts[page_offset])++;
 }
 
 
@@ -121,20 +124,21 @@ static inline void increment_use_count(use_count_tracker_t* tracker, u_int32_t i
  * Decrement the use count for a given ID. If the use count is already
  * at 0, we will never go negative and will stay at 0
  */
-static inline void decrement_use_count(use_count_tracker_t* tracker, u_int32_t id){
-	//Perform the dynamic resize if needed
-	if(id >= tracker->variable_count){
-		use_count_tracker_dynamic_resize_for_id(tracker, id);
-	}
+static inline void decrement_use_count(use_count_tracker_t* tracker, int32_t id){
+	//Compute the offset into the page
+	int32_t page_offset = id % USE_COUNT_PAGE_SIZE;
+
+	//Let the helper retrieve or create the page
+	use_count_tracker_page_t* page = get_or_create_use_count_page_for_id(tracker, id);
 
 	/**
 	 * Make sure that we never end up with a negative
 	 * use count for our variables here
 	 */
-	if(tracker->map[id] > 0){
-		(tracker->map[id])--;
+	if(page->use_counts[page_offset] > 0){
+		(page->use_counts[page_offset])--;
 	} else {
-		tracker->map[id] = 0;
+		page->use_counts[page_offset] = 0;
 	}
 }
 
