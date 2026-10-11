@@ -5,6 +5,11 @@
  *
  * This header file contains API definitions that are implemented in the use_count_tracker.c
  * file but also contains several simple inlined helpers
+ *
+ * The use count tracker, under the hood, is a paged sparse array structure with a relatively
+ * large page size. The large page size means that most individual functions will fit into one
+ * page, allowing us to benefit from cache locality, while being small enough to prevent massive
+ * chunks of memory from being hogged
  */
 
 #ifndef USE_COUNT_TRACKER_H
@@ -14,7 +19,18 @@
 #include <string.h>
 #include <stdlib.h>
 
-//Predeclare the struct itself
+/**
+ * The use count page size will be quite large because each record is 
+ * just an int16_t, so overall each page will be 8kb in size
+ */
+#define USE_COUNT_PAGE_SIZE 4096
+
+/**
+ * The two structs that we have are a page struct that contains 
+ * a bunch of records in a contiguous fixed-size array and an overall
+ * use_count_tracker struct that contains the page table
+ */
+typedef struct use_count_tracker_page_t use_count_tracker_page_t;
 typedef struct use_count_tracker_t use_count_tracker_t;
 
 /**
