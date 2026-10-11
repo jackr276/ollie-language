@@ -17778,9 +17778,7 @@ static void select_instructions(cfg_t* cfg){
 		symtab_function_record_t* function_record = function_entry->function_defined_in;
 
 		/**
-		 * Before we select anything let's do one final use count revamp
-		 *
-		 * TODO CAN MOVE THIS OUT?
+		 * Before we select anything let's do one final use count revamp for this function
 		 */
 		reset_all_use_counts(&use_count_tracker);
 		populate_use_counts_for_function(&(function_record->function_blocks));
