@@ -3024,7 +3024,18 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//TODO ADD THE CHECK HERE
+			/**
+			 * If we have an initializer node *and* a type that is *not* stack passed by copy, this will not work
+			 * on a fundamental level. This is because types that are passed by copy will have memory regions
+			 * created for them that we can initialize into. Non pass-by-copy types will not. For this reason,
+			 * the ollie compiler bars this
+			 */
+			if(is_initializer_node(current_param) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
+				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
+								(parameter_type->mutability == MUTABLE ? "mut" : ""),
+								parameter_type->type_name.string);
+				return print_and_return_error(info, parser_line_num);
+			}
 
 			/**
 			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
@@ -3092,7 +3103,18 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 						return print_and_return_error(info, parser_line_num);
 					}
 
-					//TODO ADD THE CHECK HERE
+					/**
+					 * If we have an initializer node *and* a type that is *not* stack passed by copy, this will not work
+					 * on a fundamental level. This is because types that are passed by copy will have memory regions
+					 * created for them that we can initialize into. Non pass-by-copy types will not. For this reason,
+					 * the ollie compiler bars this
+					 */
+					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(type_being_elaborated) == FALSE){
+						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
+										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
+										type_being_elaborated->type_name.string);
+						return print_and_return_error(info, parser_line_num);
+					}
 
 					/**
 					 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
