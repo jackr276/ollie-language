@@ -13479,10 +13479,10 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 		 * result into the memory region that is described by "temp_var" in the case of this elaborative parameter
 		 */
 		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
-			//TODO NEEDS TO BE IMPLEMENTED
-
+			instruction_t* initialization_statement = emit_initialization_instruction(emit_memory_address_var(temp_var),
+																						result->param_result.initializer_result,
+																						line_number);
+			add_statement(function_entry, initialization_statement);
 
 		} else {
 			//This is as easy as memory copying and adding it in
