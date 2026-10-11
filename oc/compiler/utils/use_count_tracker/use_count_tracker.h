@@ -144,10 +144,20 @@ static inline void decrement_use_count(use_count_tracker_t* tracker, int32_t id)
 
 
 /**
- * Clear out all of the use counts and start fresh
+ * Wipe out all of the use counts by resetting every allocated page
+ * to 0 via memset. We will not do any fresh allocations as a part of
+ * this
  */
 static inline void reset_all_use_counts(use_count_tracker_t* tracker){
-	memset(tracker->map, 0, sizeof(u_int16_t) * tracker->variable_count);
+	//Run through every single page pointer in the table
+	for(int32_t i = 0; i < tracker->page_count; i++){
+		use_count_tracker_page_t* page = tracker->page_table[i];
+
+		//Set the entire page to 0 if it is not NULL
+		if(page != NULL){
+			memset(page, 0, sizeof(use_count_tracker_page_t));
+		}
+	}
 }
 //================================ Inlined Utility Functions ==================================
 #endif /* USE_COUNT_TRACKER_H */
