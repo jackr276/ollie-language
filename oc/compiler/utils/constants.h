@@ -46,6 +46,9 @@
 //All error sizes are 2000
 #define ERROR_SIZE 2000
 
+//Default initializer list is of size 8
+#define DEFAULT_INITIALIZER_LIST_SIZE 8
+
 /**
  * The maximum number of register passed parameters - this differs
  * for each class of register. General purpose has 6, SSE has 8

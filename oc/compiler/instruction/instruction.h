@@ -171,6 +171,11 @@ three_addr_var_t* emit_function_pointer_temp_var(symtab_function_record_t* funct
 three_addr_var_t* emit_temp_var_from_live_range(live_range_t* range);
 
 /**
+ * Create and return a three address initializer of a given type
+ */
+three_addr_initializer_t* emit_initializer(generic_type_t* type_initializing, initializer_type_t initializer_type);
+
+/**
  * Create and return a three address var from an existing variable. If 
  * we are assigning to a variable, that will create a new generation of variable.
 */
@@ -210,6 +215,11 @@ three_addr_var_t* emit_memory_address_var(symtab_variable_record_t* var);
  * Emit a variable copied from another variable
  */
 three_addr_var_t* emit_var_copy(three_addr_var_t* var);
+
+/**
+ * Emit a constant that is copied from another constant
+ */
+three_addr_const_t* emit_constant_copy(three_addr_const_t* constant);
 
 /**
  * Create and return a constant three address var
@@ -324,6 +334,13 @@ instruction_t* emit_assignment_instruction(three_addr_var_t* assignee, three_add
  * optimizer
  */
 instruction_t* emit_synthetic_memory_initialization(three_addr_var_t* memory_address_var, u_int32_t line_number);
+
+/**
+ * Emit a three address initializer expression
+ *
+ * NOTE: the destination is in the first address operand
+ */
+instruction_t* emit_initialization_instruction(three_addr_var_t* being_initialized, three_addr_initializer_t* initializer, u_int32_t line_number);
 
 /**
  * Emit a statement that only uses two vars of the form var1 <- var2
@@ -670,6 +687,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt);
  * Print an instruction that has not yet been given registers
  */
 void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode);
+
+/**
+ * Print a three address initializer. These should only exist during the OIR stage, once these
+ * have been converted to assembly they should not exist anymore
+ */
+void print_initializer(FILE* fl, three_addr_initializer_t* initializer, variable_printing_mode_t mode);
 
 /**
  * Print a variable and everything about it. If the variable is in

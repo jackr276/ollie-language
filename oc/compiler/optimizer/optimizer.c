@@ -396,6 +396,33 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 
 
 /**
+ * Mark all values inside of the special three address initializer. Note that
+ * this helper can be called recursively because initializers themselves can
+ * be recursive
+ */
+static void mark_initializer_values(three_addr_initializer_t* initializer, dynamic_array_t* function_blocks, dynamic_array_t* worklist){
+	//Run through every single initializer result
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_VARIABLE:
+				mark_and_add_definition(function_blocks, result->value.variable_value, worklist);
+				break;
+
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				mark_initializer_values(result->value.initializer_value, function_blocks, worklist);
+				break;
+
+			//Constants don't need to be marked at all
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+		}
+	}
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -452,11 +479,8 @@ static void mark(dynamic_array_t* function_blocks){
 				 * Return statements are always considered important
 				 */
 				case THREE_ADDR_CODE_RET_STMT:
-					//Mark this as useful
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -465,11 +489,8 @@ static void mark(dynamic_array_t* function_blocks){
 				 * and are thus also always considered important
 				 */
 				case THREE_ADDR_CODE_RAISE_STMT:
-					//Mark as useful
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//This block does contain a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -481,9 +502,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_ASM_INLINE_STMT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -494,9 +513,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -508,9 +525,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -521,9 +536,7 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_IDLE_STMT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
 					current->contains_mark = TRUE;
 					break;
 
@@ -533,9 +546,17 @@ static void mark(dynamic_array_t* function_blocks){
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT:
 					current_stmt->mark = TRUE;
-					//Add it to the list
 					dynamic_array_add(&worklist, current_stmt);
-					//The block now has a mark
+					current->contains_mark = TRUE;
+					break;
+
+				/**
+				 * All initializers are basically like store statements. They are always considered
+				 * useful because we are writiing to memory
+				 */
+				case THREE_ADDR_CODE_INITIALIZER_STMT:
+					current_stmt->mark = TRUE;
+					dynamic_array_add(&worklist, current_stmt);
 					current->contains_mark = TRUE;
 					break;
 
@@ -596,9 +617,15 @@ static void mark(dynamic_array_t* function_blocks){
 					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-					//If it's a variable then add it
-					if(result->result_type == PARAM_RESULT_TYPE_VAR){
-						mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							break;
 					}
 				}
 
@@ -618,12 +645,31 @@ static void mark(dynamic_array_t* function_blocks){
 					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-					//If it's a variable then add it
-					if(result->result_type == PARAM_RESULT_TYPE_VAR){
-						mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							break;
 					}
 				}
 
+				break;
+
+			/**
+			 * For an initializer statement there are special steps that we 
+			 * need to take to work on the 
+			 */
+			case THREE_ADDR_CODE_INITIALIZER_STMT:
+				//The address that we're writing to will always be needed
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+
+				//Now let the recursive helper mark all of our initializer values
+				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
 
 			/**
@@ -1063,6 +1109,8 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
  * good thing is that we're able to keep this entire algorithm block-local
  *
  * NOTE: we guarantee that the end statement is a branch
+ *
+ * This is deprecated as of 09/27/2026
  */
 static inline void mark_all_branch_related_statements(basic_block_t* block){
 	//Guarantee that the exit statement is a branch statement

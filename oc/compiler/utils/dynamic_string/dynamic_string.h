@@ -102,6 +102,15 @@ static inline void clear_dynamic_string(dynamic_string_t* dynamic_string){
 
 
 /**
+ * Get a character at a certain index. We assume that the caller is not going
+ * out of bounds with this so there are no checks on it
+ */
+static inline char dynamic_string_get_char_at(dynamic_string_t* string, int32_t index){
+	return string->string[index];
+}
+
+
+/**
  * Are two dynamic strings identical?
  */
 static inline u_int8_t dynamic_strings_equal(dynamic_string_t* a, dynamic_string_t* b){
