@@ -30,6 +30,9 @@
 //We hold 128 mappings per page
 #define VARIABLE_MAPPING_PAGE_SIZE 128
 
+//By default we hold 1000 pages(8kb array of pointers)
+#define DEFAULT_PAGE_COUNT 1000
+
 //Individual variable mappings
 typedef struct variable_mapping_t variable_mapping_t;
 //A "page" of variable maps
@@ -72,37 +75,44 @@ struct variable_mapping_t {
 
 
 /**
- * A variable mapping "page" consists of 256 variable
- * mappings stored in a flat array
+ * A variable mapping "page" consists of 128 variable
+ * mappings stored in a flat array. Each mapping is
+ * logically keyed by the source variable's unique
+ * "variable_id"
  */
 struct variable_mapping_page_t {
-
-
+	variable_mapping_t mappings[VARIABLE_MAPPING_PAGE_SIZE];
 };
 
 
 /**
- * Mappings are stored as a contiguous memory chunk, not pointers
- *
- * The variable mapping is designed to use positional encoding
- * based on the "variable_id" of the three_addr_var_t. However, for
- * any given function, the lowest possible variable_id could be anywhere.
- * As such, we will store the lowest possible variable ID as an "index_adjustment"
- * that we'll subtract whenever we do a lookup query from the source ID
+ * The variable map itself consists of "pages" of mappings that are
+ * contiguous 128 mapping chunks. The overall mapping_count tells
+ * us how many mapping pages there are. We will try to allocate a large
+ * number of pages to start off with and should hopefully only need to
+ * resize these rarely
  */
 struct variable_map_t {
-	variable_mapping_t* mappings;
-	int32_t mapping_count;
-	int32_t index_adjustment;
+	variable_mapping_page_t** pages;
+	int32_t page_count;
 };
+
 
 //====================================== Non-Inlined Functions ===============================================================
 /**
- * Allocate a variable map designed specifically for a given function. Remember that variable
- * maps are specific to a given function that we're inlining. They may not be reused and
- * must be rebuilt upon every single inline request
+ * Allocate the variable map. Remember that our intention is to only have one variable map per compilation
+ * run, so this is intentionally a relatively large upfront allocation(8kb) in the hopes of rarely having
+ * to resize
  */
-variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function);
+variable_map_t variable_map_alloc();
+
+
+
+//TODO
+//
+//
+//
+
 
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination

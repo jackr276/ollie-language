@@ -13724,6 +13724,8 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 											   	basic_block_t** function_entry, basic_block_t** function_exit,
 												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
 											   	parameter_results_array_t* parameter_results){
+
+	//TODO JUST MAKE IT ONE BIG ONE
 	//Initialize a brand new variable mapping for our uses
 	variable_map_t variable_map = variable_map_alloc(function_to_clone);
 	//Grab this for ease of use
