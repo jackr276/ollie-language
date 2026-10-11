@@ -13656,11 +13656,22 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 		 * need a memory copy but instead an initializer statement to be emitted
 		 */
 		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
+			//Create a region for this in the local stack
+			stack_region_t* region = create_stack_region_for_type(&(current_function->local_stack), parameter_type);
 
-			//TODO IMPEMENT ME
+			//Flag that the old stack region maps to this one
+			parameter_variable->stack_region->maps_to = region;
+			cloned_parameter->stack_region = region;
 
+			//Synthetically initializer this memory region so that static analysis is happy
+			instruction_t* synthetic_init = emit_synthetic_memory_initialization(emit_var(cloned_parameter), line_number);
+			add_statement(function_entry, synthetic_init);
+
+			//Emit an add the initialization into the block
+			instruction_t* initialization = emit_initialization_instruction(emit_memory_address_var(cloned_parameter),
+																			result->param_result.initializer_result,
+																			line_number);
+			add_statement(function_entry, initialization);
 
 		/**
 		 * Struct and unions are always passed by copy. This will involve creating a new memory region
