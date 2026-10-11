@@ -115,18 +115,19 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	}
 
 	/**
-	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
-	 * by variable ID, regardless of what the actual ID is
+	 * First let the helper determine the correct page to add this mapping into
 	 */
-	int32_t adjusted_index = source_var_id - variable_map->index_adjustment; 
+	variable_mapping_page_t* page = get_or_create_page_for_index(variable_map, source_var_id);
 
-	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
+	/**
+	 * Now that we have the page use the page offset to get a pointer to hte
+	 * mapping that we're after
+	 */
+	int32_t page_offset = source_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
 
-	//This is a symtab mapping
+	//Populate the mapping with what's needed
 	mapping->mapping_type = MAPPING_TYPE_SYMTAB_TO_SYMTAB;
-
-	//Store the source and dest
 	mapping->source.symtab_variable = source_variable;
 	mapping->destination.symtab_variable = destination_variable;
 }
@@ -140,18 +141,19 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  */
 void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable){
 	/**
-	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
-	 * by variable ID, regardless of what the actual ID is
+	 * First let the helper determine the correct page to add this mapping into
 	 */
-	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
+	variable_mapping_page_t* page = get_or_create_page_for_index(variable_map, source_temp_var_id);
 
-	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
+	/**
+	 * Now that we have the page use the page offset to get a pointer to hte
+	 * mapping that we're after
+	 */
+	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
 
-	//This is a symtab mapping
+	//Populate the mapping with what's needed
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_SYMTAB;
-
-	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.symtab_variable = destination_variable;
 }
