@@ -30,8 +30,8 @@
 //We hold 128 mappings per page
 #define VARIABLE_MAPPING_PAGE_SIZE 128
 
-//By default we hold 1000 pages(8kb array of pointers)
-#define DEFAULT_PAGE_COUNT 1000
+//By default we hold 1024 pages(8kb array of pointers)
+#define DEFAULT_PAGE_COUNT 1024
 
 //Individual variable mappings
 typedef struct variable_mapping_t variable_mapping_t;
@@ -143,23 +143,38 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
 
 //====================================== Non-Inlined Functions ===============================================================
-
 //====================================== Inlined Utility Functions ===========================================================
 /**
- * Get the mapping from the mapping list if it exists. If it does not exist, we return NULL
+ * Get the mapping from the list if it exists. If it does not then we return NULL
+ *
+ * To get the indices we will do:
+ * 		page_number = source_id / PAGE_SIZE
+ * 		page_offset = source_id % PAGE_SIZE
+ *
+ * If the page is NULL then return NULL. Otherwise get page[offset]
  */
 static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id){
-	variable_mapping_t* mapping = &(variable_map->mappings[source_temp_var_id - variable_map->index_adjustment]);
+	//Compute the page number and offset
+	int32_t page_number = source_temp_var_id / VARIABLE_MAPPING_PAGE_SIZE;
+	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+
+	//Fail case 1 - we've exceeded the page count
+	if(page_number > variable_map->page_count){
+		return NULL;
+	}
+
+	//Fail case 2 - the page was never allocated
+	variable_mapping_page_t* page = variable_map->page_table[page_number];
+	if(page == NULL){
+		return NULL;
+	}
 
 	/**
 	 * If we get here and we see it's not unimplemented, then we get the mapping,
 	 * otherwise we return NULL
 	 */
-	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED){
-		return mapping;
-	} else {
-		return NULL;
-	}
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
+	return mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED ? mapping : NULL;
 }
 
 
