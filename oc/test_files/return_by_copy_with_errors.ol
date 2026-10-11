@@ -13,6 +13,11 @@ define struct return_struct {
 
 define error invalid_input_error;
 
+//Just to get a 0 into %rax
+fn null_out_rax() -> i32 {
+	ret 0;
+}
+
 
 //Define a dummy that will raise an error
 fn! return_by_copy_with_errors(x:i32, y:i32) -> struct return_struct raises (invalid_input_error){
@@ -27,6 +32,9 @@ fn! return_by_copy_with_errors(x:i32, y:i32) -> struct return_struct raises (inv
 
 pub fn main() -> i32 {
 	let null_struct:struct return_struct = {0, 0, [0,0,0,0,0], 0};
+
+	//Call this just to make %rax 0 for a true test
+	@null_out_rax();
 
 	//See how this works
 	let ret_val1:struct return_struct = @return_by_copy_with_errors(-1, 1) 
