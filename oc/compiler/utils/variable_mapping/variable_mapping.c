@@ -6,6 +6,12 @@
 #include "variable_mapping.h"
 #include <string.h>
 
+/**
+ * The atomically increasing ID that tells us what inline call we're
+ * on. This is also a proxy for the number of inlines that we've completed
+ */
+static int32_t call_inline_id = 0;
+
 
 /**
  * Allocate the variable map. Remember that our intention is to only have one variable map per compilation
@@ -23,6 +29,17 @@ variable_map_t variable_map_alloc(){
 	map.page_table = calloc(sizeof(variable_mapping_page_t*), DEFAULT_PAGE_COUNT);
 
 	return map;
+}
+
+
+/**
+ * IMPORTANT - every time we begin a new inline call, we *MUST* invoke this function
+ * to go through and bump up the "call_inline_id" up by 1. This mechanism is the only
+ * way that we know how to avoid reusing "stale" mappings if we inline the same function
+ * repeatedly
+ */
+void begin_new_inline_call(){
+	call_inline_id++;
 }
 
 

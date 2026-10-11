@@ -116,12 +116,20 @@ struct variable_map_t {
 variable_map_t variable_map_alloc();
 
 /**
+ * IMPORTANT - every time we begin a new inline call, we *MUST* invoke this function
+ * to go through and bump up the "call_inline_id" up by 1. This mechanism is the only
+ * way that we know how to avoid reusing "stale" mappings if we inline the same function
+ * repeatedly
+ */
+void begin_new_inline_call();
+
+/**
  * Create a new mapping for a temporary variable that goes from the source to the destination
  *
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
  * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id, int32_t call_inlining_id);
+void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id);
 
 /**
  * Create a new mapping for a symtab variable that goes from the source to the destination
@@ -129,7 +137,7 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
  * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable, int32_t call_inlining_id);
+void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, symtab_variable_record_t* destination_variable);
 
 /**
  * Create a new mapping that goes from a temp var to a symtab variable
@@ -137,7 +145,7 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  * NOTE: this function will not do duplicate checking. If you mistakenly make a duplicate mapping
  * that overwrites a previous mapping, that is on you
  */
-void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable, int32_t call_inlining_id);
+void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable);
 
 /**
  * Deallocate a given variable map
