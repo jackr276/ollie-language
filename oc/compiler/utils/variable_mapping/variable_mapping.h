@@ -14,6 +14,10 @@
  * RESTRICTIONS: we assume that in any one mapping, one unique variable ID may only be mapped once.
  * In other words, we may not map the variable with ID 2 twice in distinct mappings. This would make
  * no sense and would violate our positional encoding
+ *
+ * Architecture: the variable map is made of a paged sparse array where each page has a size of 128
+ * records. Most functions that are inlined will not require 128 variables so this size is chosen
+ * to encapsulate most functions in one allocation
  */
 
 #ifndef VARIABLE_MAPPING_H
@@ -23,8 +27,13 @@
 #include "../../symtab/symtab.h"
 #include "../constants.h"
 
+//We hold 128 mappings per page
+#define VARIABLE_MAPPING_PAGE_SIZE 128
+
 //Individual variable mappings
 typedef struct variable_mapping_t variable_mapping_t;
+//A "page" of variable maps
+typedef struct variable_mapping_page_t variable_mapping_page_t;
 //The overall map itself
 typedef struct variable_map_t variable_map_t;
 
@@ -59,6 +68,16 @@ struct variable_mapping_t {
 
 	//Are we mapping temp-to-temp or symtab-to-symtab
 	variable_mapping_type_t mapping_type;
+};
+
+
+/**
+ * A variable mapping "page" consists of 256 variable
+ * mappings stored in a flat array
+ */
+struct variable_mapping_page_t {
+
+
 };
 
 
