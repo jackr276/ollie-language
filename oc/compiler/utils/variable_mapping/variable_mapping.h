@@ -14,6 +14,10 @@
  * RESTRICTIONS: we assume that in any one mapping, one unique variable ID may only be mapped once.
  * In other words, we may not map the variable with ID 2 twice in distinct mappings. This would make
  * no sense and would violate our positional encoding
+ *
+ * Architecture: the variable map is made of a paged sparse array where each page has a size of 128
+ * records. Most functions that are inlined will not require 128 variables so this size is chosen
+ * to encapsulate most functions in one allocation
  */
 
 #ifndef VARIABLE_MAPPING_H
@@ -23,8 +27,16 @@
 #include "../../symtab/symtab.h"
 #include "../constants.h"
 
+//We hold 256 mappings per page
+#define VARIABLE_MAPPING_PAGE_SIZE 256
+
+//By default we hold 512 pages(4kb array of pointers)
+#define DEFAULT_PAGE_COUNT 512
+
 //Individual variable mappings
 typedef struct variable_mapping_t variable_mapping_t;
+//A "page" of variable maps
+typedef struct variable_mapping_page_t variable_mapping_page_t;
 //The overall map itself
 typedef struct variable_map_t variable_map_t;
 
@@ -48,14 +60,23 @@ typedef enum {
  */
 struct variable_mapping_t {
 	union {
-		u_int32_t temporary_id;
+		int32_t temporary_id;
 		symtab_variable_record_t* symtab_variable;
 	} source;
 
 	union {
-		u_int32_t temporary_id;
+		int32_t temporary_id;
 		symtab_variable_record_t* symtab_variable;
 	} destination;
+
+	/**
+	 * We maintain a special atomically increasing ID
+	 * that determines what actual inline call we're currently
+	 * on. When we do our lookup, if we happen to find a mapping
+	 * that has a different call_inline_id, we know that it's
+	 * "stale" and should be disregarded
+	 */
+	int32_t call_inline_id;
 
 	//Are we mapping temp-to-temp or symtab-to-symtab
 	variable_mapping_type_t mapping_type;
@@ -63,27 +84,49 @@ struct variable_mapping_t {
 
 
 /**
- * Mappings are stored as a contiguous memory chunk, not pointers
- *
- * The variable mapping is designed to use positional encoding
- * based on the "variable_id" of the three_addr_var_t. However, for
- * any given function, the lowest possible variable_id could be anywhere.
- * As such, we will store the lowest possible variable ID as an "index_adjustment"
- * that we'll subtract whenever we do a lookup query from the source ID
+ * A variable mapping "page" consists of 256 variable
+ * mappings stored in a flat array. Each mapping is
+ * logically keyed by the source variable's unique
+ * "variable_id"
+ */
+struct variable_mapping_page_t {
+	variable_mapping_t mappings[VARIABLE_MAPPING_PAGE_SIZE];
+};
+
+
+/**
+ * The variable map itself consists of "pages" of mappings that are
+ * contiguous 128 mapping chunks. The overall mapping_count tells
+ * us how many mapping pages there are. We will try to allocate a large
+ * number of pages to start off with and should hopefully only need to
+ * resize these rarely
  */
 struct variable_map_t {
-	variable_mapping_t* mappings;
-	int32_t mapping_count;
-	int32_t index_adjustment;
+	variable_mapping_page_t** page_table;
+	int32_t page_count;
+	/**
+	 * The atomically increasing ID that tells us what inline call we're
+	 * on. This is also a proxy for the number of inlines that we've completed
+	 */
+	int32_t call_inline_id;
 };
+
 
 //====================================== Non-Inlined Functions ===============================================================
 /**
- * Allocate a variable map designed specifically for a given function. Remember that variable
- * maps are specific to a given function that we're inlining. They may not be reused and
- * must be rebuilt upon every single inline request
+ * Allocate the variable map. Remember that our intention is to only have one variable map per compilation
+ * run, so this is intentionally a relatively large upfront allocation(8kb) in the hopes of rarely having
+ * to resize
  */
-variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function);
+variable_map_t variable_map_alloc();
+
+/**
+ * IMPORTANT - every time we begin a new inline call, we *MUST* invoke this function
+ * to go through and bump up the "call_inline_id" up by 1. This mechanism is the only
+ * way that we know how to avoid reusing "stale" mappings if we inline the same function
+ * repeatedly
+ */
+void begin_new_inline_call(variable_map_t* variable_map);
 
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
@@ -114,19 +157,41 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, in
  */
 void variable_map_dealloc(variable_map_t* map);
 //====================================== Non-Inlined Functions ===============================================================
-
 //====================================== Inlined Utility Functions ===========================================================
 /**
- * Get the mapping from the mapping list if it exists. If it does not exist, we return NULL
+ * Get the mapping from the list if it exists. If it does not then we return NULL
+ *
+ * To get the indices we will do:
+ * 		page_number = source_id / PAGE_SIZE
+ * 		page_offset = source_id % PAGE_SIZE
+ *
+ * If the page is NULL then return NULL. Otherwise get page[offset]
  */
 static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id){
-	variable_mapping_t* mapping = &(variable_map->mappings[source_temp_var_id - variable_map->index_adjustment]);
+	//Compute the page number and offset
+	int32_t page_number = source_temp_var_id / VARIABLE_MAPPING_PAGE_SIZE;
+	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+
+	//Fail case 1 - we've exceeded the page count
+	if(page_number >= variable_map->page_count){
+		return NULL;
+	}
+
+	//Fail case 2 - the page was never allocated
+	variable_mapping_page_t* page = variable_map->page_table[page_number];
+	if(page == NULL){
+		return NULL;
+	}
 
 	/**
-	 * If we get here and we see it's not unimplemented, then we get the mapping,
-	 * otherwise we return NULL
+	 * We've gotten a mapping but need to check 2 things:
+	 * 	1.) If the mapping is not implemented we disregard
+	 * 	2.) If the mapping has a different "call_inline_id", that means that it is from a prior
+	 * 		run and is therefore "stale". Remember that the same function may be inlined dozens
+	 * 		of times.
 	 */
-	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED){
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == variable_map->call_inline_id){
 		return mapping;
 	} else {
 		return NULL;
@@ -140,6 +205,12 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
  *
  * NOTE: for symtab variables we always use the "variable_id" and we ignore the memory
  * address variable ID
+ *
+ * To get the indices we will do:
+ * 		page_number = source_id / PAGE_SIZE
+ * 		page_offset = source_id % PAGE_SIZE
+ *
+ * If the page is NULL then return NULL. Otherwise get page[offset]
  */
 static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
 	/**
@@ -154,14 +225,30 @@ static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t
 		source_var_id = source_variable->associated_three_addr_var_ids.memory_address_variable_id;
 	}
 
-	//Get the mapping using this source var ID with the adjustment
-	variable_mapping_t* mapping = &(variable_map->mappings[source_var_id - variable_map->index_adjustment]);
+	//Compute the page number and offset
+	int32_t page_number = source_var_id / VARIABLE_MAPPING_PAGE_SIZE;
+	int32_t page_offset = source_var_id % VARIABLE_MAPPING_PAGE_SIZE;
 
+	//Fail case 1 - we've exceeded the page count
+	if(page_number >= variable_map->page_count){
+		return NULL;
+	}
+
+	//Fail case 2 - the page was never allocated
+	variable_mapping_page_t* page = variable_map->page_table[page_number];
+	if(page == NULL){
+		return NULL;
+	}
+	
 	/**
-	 * If we get here and we see it's not unimplemented, then we get the mapping,
-	 * otherwise we return NULL
+	 * We've gotten a mapping but need to check 2 things:
+	 * 	1.) If the mapping is not implemented we disregard
+	 * 	2.) If the mapping has a different "call_inline_id", that means that it is from a prior
+	 * 		run and is therefore "stale". Remember that the same function may be inlined dozens
+	 * 		of times.
 	 */
-	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED){
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == variable_map->call_inline_id){
 		return mapping;
 	} else {
 		return NULL;

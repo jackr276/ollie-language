@@ -4,36 +4,82 @@
  */
 
 #include "variable_mapping.h"
+#include <string.h>
+
 
 /**
- * Allocate a variable map designed specifically for a given function. Remember that variable
- * maps are specific to a given function that we're inlining. They may not be reused and
- * must be rebuilt upon every single inline request
+ * Allocate the variable map. Remember that our intention is to only have one variable map per compilation
+ * run, so this is intentionally a relatively large upfront allocation(8kb) in the hopes of rarely having
+ * to resize
  */
-variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
-	//Stack allocate the map
+variable_map_t variable_map_alloc(){
 	variable_map_t map;
 
 	/**
-	 * IMPORTANT - we will maintain a so-called "index-adjustment"
-	 * so that the smallest variable ID inside of this function will
-	 * map to index 0 when we add/retrieve
+	 * Dynamically allocate the page table as an array of pointers
+	 * to pages themselves
 	 */
-	map.index_adjustment = mapped_function->min_variable_id;
+	map.page_count = DEFAULT_PAGE_COUNT;
+	map.page_table = calloc(sizeof(variable_mapping_page_t*), DEFAULT_PAGE_COUNT);
+	map.call_inline_id = 0;
 
-	/**
-	 * Say our function has the lowest variable at ID 15 and the highest variable
-	 * ID at 57. We will need to store 43 values(we need to store 15 too), so 
-	 * we're storing 57 - 15 + 1
-	 */
-	map.mapping_count = mapped_function->max_variable_id - mapped_function->min_variable_id + 1;
-
-	//Allcoate based on our size
-	map.mappings = calloc(sizeof(variable_mapping_t), map.mapping_count);
-
-	//Return a copy
 	return map;
 }
+
+
+/**
+ * IMPORTANT - every time we begin a new inline call, we *MUST* invoke this function
+ * to go through and bump up the "call_inline_id" up by 1. This mechanism is the only
+ * way that we know how to avoid reusing "stale" mappings if we inline the same function
+ * repeatedly
+ */
+void begin_new_inline_call(variable_map_t* variable_map){
+	(variable_map->call_inline_id)++;
+}
+
+
+/**
+ * Get or create the page for the given variable id. The index represents a source variable
+ * ID. In the event that the page table itself does not have enough space to hold the
+ * new proposed page, we'll also reallocate the page table
+ */
+static inline variable_mapping_page_t* get_or_create_page_for_id(variable_map_t* variable_map, int32_t variable_id){
+	//Get the page index that we are looking for
+	int32_t page_index = variable_id / VARIABLE_MAPPING_PAGE_SIZE;
+
+	/**
+	 * First option: we do not currently have a sufficient number of pages
+	 * to hold this index. If this is the case we will need to first reallocate
+	 * the entire page table so that we have physical space to hold this
+	 */
+	if(page_index >= variable_map->page_count){
+		//Hang onto this for when we 0 out
+		int32_t previous_page_count = variable_map->page_count;
+
+		/**
+		 * Double the page index and reallocate. Since we rely on unallocated
+		 * pages being NULL, we will need to go through and set all of the
+		 * new space to be 0
+		 */
+		variable_map->page_count = page_index * 2;
+		variable_map->page_table = realloc(variable_map->page_table, sizeof(variable_mapping_page_t*) * variable_map->page_count);
+
+		//Set everything after the prior page table that we've allocated to be 0
+		memset(variable_map->page_table + previous_page_count, 0, sizeof(variable_mapping_page_t*) * (variable_map->page_count - previous_page_count));
+	}
+
+	/**
+	 * If we get here, we know that we have enough space to hold the page. However, it may not have been created
+	 * yet, so now is the time where we'll allocate it if we need to
+	 */
+	if(variable_map->page_table[page_index] == NULL){
+		variable_map->page_table[page_index] = calloc(1, sizeof(variable_mapping_page_t));
+	}
+
+	//Give back the pointer to it
+	return variable_map->page_table[page_index];
+}
+
 
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
@@ -43,20 +89,29 @@ variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
  */
 void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t dest_temp_var_id){
 	/**
-	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
-	 * by variable ID, regardless of what the actual ID is
+	 * First let the helper determine the correct page to add this mapping into
 	 */
-	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
+	variable_mapping_page_t* page = get_or_create_page_for_id(variable_map, source_temp_var_id);
 
-	//Grab a reference just to make this neater
-	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
+	/**
+	 * Now that we have a page, offset into the page to get a pointer to the mapping that we're
+	 * after
+	 */
+	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
 
-	//This is a temp mapping
+	//Populate the mapping with everything that we need
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_TEMP;
-
-	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.temporary_id = dest_temp_var_id;
+
+	/**
+	 * IMPORTANT - save the call inline ID that tells us what inlined
+	 * call we're on currently. This is how we avoid accidentally 
+	 * reusing stale mappings if we inline the same function multiple
+	 * times. IF THIS IS NOT ADDED, BAD THINGS WILL HAPPEN
+	 */
+	mapping->call_inline_id = variable_map->call_inline_id;
 }
 
 
@@ -80,20 +135,29 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	}
 
 	/**
-	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
-	 * by variable ID, regardless of what the actual ID is
+	 * First let the helper determine the correct page to add this mapping into
 	 */
-	int32_t adjusted_index = source_var_id - variable_map->index_adjustment; 
+	variable_mapping_page_t* page = get_or_create_page_for_id(variable_map, source_var_id);
 
-	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
+	/**
+	 * Now that we have the page use the page offset to get a pointer to hte
+	 * mapping that we're after
+	 */
+	int32_t page_offset = source_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
 
-	//This is a symtab mapping
+	//Populate the mapping with what's needed
 	mapping->mapping_type = MAPPING_TYPE_SYMTAB_TO_SYMTAB;
-
-	//Store the source and dest
 	mapping->source.symtab_variable = source_variable;
 	mapping->destination.symtab_variable = destination_variable;
+
+	/**
+	 * IMPORTANT - save the call inline ID that tells us what inlined
+	 * call we're on currently. This is how we avoid accidentally 
+	 * reusing stale mappings if we inline the same function multiple
+	 * times. IF THIS IS NOT ADDED, BAD THINGS WILL HAPPEN
+	 */
+	mapping->call_inline_id = variable_map->call_inline_id;
 }
 
 
@@ -105,29 +169,48 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
  */
 void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, int32_t source_temp_var_id, symtab_variable_record_t* destination_variable){
 	/**
-	 * IMPORTANT - adjust the index for the source ID so that we have a 0-indexed array of mappings
-	 * by variable ID, regardless of what the actual ID is
+	 * First let the helper determine the correct page to add this mapping into
 	 */
-	int32_t adjusted_index = source_temp_var_id - variable_map->index_adjustment;
+	variable_mapping_page_t* page = get_or_create_page_for_id(variable_map, source_temp_var_id);
 
-	//Grab a reference to the region to make this easier
-	variable_mapping_t* mapping = &(variable_map->mappings[adjusted_index]);
+	/**
+	 * Now that we have the page use the page offset to get a pointer to hte
+	 * mapping that we're after
+	 */
+	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
 
-	//This is a symtab mapping
+	//Populate the mapping with what's needed
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_SYMTAB;
-
-	//Store the source and dest
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.symtab_variable = destination_variable;
+
+	/**
+	 * IMPORTANT - save the call inline ID that tells us what inlined
+	 * call we're on currently. This is how we avoid accidentally 
+	 * reusing stale mappings if we inline the same function multiple
+	 * times. IF THIS IS NOT ADDED, BAD THINGS WILL HAPPEN
+	 */
+	mapping->call_inline_id = variable_map->call_inline_id;
 }
 
 
 /**
- * Deallocate a given variable map
+ * Deallocate a given variable map by crawling over every entry
+ * and deallocating if need be
  */
 void variable_map_dealloc(variable_map_t* map){
-	//Destroy the mappings
-	free(map->mappings);
-	map->mapping_count = 0;
-	map->index_adjustment = 0;
+	//Crawl through every page in the page table and free them
+	for(int32_t i = 0; i < map->page_count; i++){
+		//Get the page out
+		variable_mapping_page_t* page = map->page_table[i];
+
+		if(page != NULL){
+			free(page);
+		}
+	}
+
+	//Free the table and 0 out the count
+	free(map->page_table);
+	map->page_count = 0;
 }

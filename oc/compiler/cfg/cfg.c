@@ -11381,15 +11381,6 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	//Store this in the entry block
 	function_starting_block->function_defined_in = func_record;
 
-	/**
-	 * IMPORTANT BOOKEEPING: in the event that we do some kind of function inlining,
-	 * we will need to know the minimum variable ID and maximum variable ID that is used
-	 * in this function. Since we're at the start of the function now, the minimum variable
-	 * ID must be the current variable ID as it can only go up from here. We'll record the
-	 * maximum variable ID later on
-	 */
-	current_function->min_variable_id = get_current_variable_id();
-
 	//We need to store the function entry block inside of the record for later use
 	func_record->function_entry_block = function_starting_block;
 
@@ -11457,12 +11448,6 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 
 	//We'll need to go through and finalize all user defined jump statements if there are any
 	finalize_all_user_defined_jump_statements(&current_function_user_defined_jump_statements);
-
-	/**
-	 * Now that this function has been entirely emitted, we know that the maximum variable
-	 * ID used in this function will have to whatever the next variable ID is
-	 */
-	current_function->max_variable_id = get_current_variable_id();
 
 	//Remove it now that we're done
 	pop_nesting_level(&nesting_stack);
@@ -13723,9 +13708,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, symtab_function_record_t* function_to_clone,
 											   	basic_block_t** function_entry, basic_block_t** function_exit,
 												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
-											   	parameter_results_array_t* parameter_results){
-	//Initialize a brand new variable mapping for our uses
-	variable_map_t variable_map = variable_map_alloc(function_to_clone);
+											   	parameter_results_array_t* parameter_results, variable_map_t* variable_map){
+
 	//Grab this for ease of use
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 	//Store the estimated execution frequency of the block that we've inlined in
@@ -13794,7 +13778,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	 * function itself
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		setup_return_by_copy_for_inlined_call(function_to_clone, *function_entry, &variable_map, &current_gp_parameter_order);
+		setup_return_by_copy_for_inlined_call(function_to_clone, *function_entry, variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
@@ -13815,7 +13799,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 	 * This has enough complexity to warrant a helper function, more documentation in that
 	 * function itself
 	 */
-	setup_function_parameters_for_inlined_call(function_to_clone, *function_entry, &variable_map, parameter_results, current_gp_parameter_order, current_sse_parameter_order);
+	setup_function_parameters_for_inlined_call(function_to_clone, *function_entry, variable_map, parameter_results, current_gp_parameter_order, current_sse_parameter_order);
 
 	/**
 	 * Step 5: clone all instructions over
@@ -13848,7 +13832,7 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 			}
 
 			//Survived so clone it
-			clone_instruction_into_block(function_to_clone, new_block, cursor, &variable_map, return_variable, raise_variable, *function_exit);
+			clone_instruction_into_block(function_to_clone, new_block, cursor, variable_map, return_variable, raise_variable, *function_exit);
 
 			//Onto the next one
 			cursor = cursor->next_statement;
@@ -13867,9 +13851,6 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
 			add_successor(new_block, new_successor);
 		}
 	}
-
-	//Now that we're done destroy the variable map
-	variable_map_dealloc(&variable_map);
 }
 
 
@@ -13880,7 +13861,15 @@ static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, 
  * that the inlined function is a 100% new copy of the original one, as one function
  * may be inlined 100s of times throughout the process
  */
-static void inline_function_call(instruction_t* call_to_inline){
+static void inline_function_call(instruction_t* call_to_inline, variable_map_t* variable_map){
+	/**
+	 * IMPORTANT - before we do any variable mapping, we must flag that we are in a new
+	 * inlined call by incrementing the call_inline_id in the variable map. This mechanism
+	 * allows us to avoid accidentally grabbing "stale" mapping from previous inlined calls.
+	 * If this is not done bad things will happen
+	 */
+	begin_new_inline_call(variable_map);
+
 	//Extract the signature of the function that we're calling
 	function_type_t* inlined_function_signature = call_to_inline->called_function->signature->internal_types.function_type;
 
@@ -13931,7 +13920,14 @@ static void inline_function_call(instruction_t* call_to_inline){
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
 	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(block_inlined_in, inlined_function, &inlined_function_entry, &inlined_function_exit, symtab_return_variable, symtab_raise_variable, &(call_to_inline->parameter_results));
+	clone_entire_function_for_inlining(block_inlined_in,
+										inlined_function,
+										&inlined_function_entry,
+										&inlined_function_exit,
+										symtab_return_variable,
+										symtab_raise_variable,
+										&(call_to_inline->parameter_results),
+										variable_map);
 
 	/**
 	 * We no longer need this statement at all so remove it. It still
@@ -13974,7 +13970,7 @@ static void inline_function_call(instruction_t* call_to_inline){
  * of the three address code and a lot of manipulation of the overall structure of
  * the function itself
  */
-static inline void inline_eligible_calls_in_function(symtab_function_record_t* function, dynamic_array_t* calls_to_inline){
+static inline void inline_eligible_calls_in_function(symtab_function_record_t* function, dynamic_array_t* calls_to_inline, variable_map_t* variable_map){
 	//VERY IMPORTANT - set the current function & blocks to be this function's
 	current_function_blocks = &(function->function_blocks);
 	current_function = function;
@@ -14020,7 +14016,7 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	 */
 	for(int32_t i = 0; i < calls_to_inline->current_index; i++){
 		instruction_t* call_to_inline = dynamic_array_get_at(calls_to_inline, i);
-		inline_function_call(call_to_inline);
+		inline_function_call(call_to_inline, variable_map);
 	}
 
 	/**
@@ -14028,20 +14024,6 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 	 */
 	current_function_blocks = NULL;
 	current_function = NULL;
-
-	/**
-	 * We know that we've performed inlining if we get here, and doing that will have
-	 * made the maximum variable ID used in this function go up due to all of the variable
-	 * cloning(cloning creates new variables with higher IDs). Because of that, we'll need to
-	 * adjust this for the next go around. Note that the minimum value should never go
-	 * down though, only the maximum one should go up. 
-	 *
-	 * This does mean that inlined functions will have particularly large and sparse
-	 * variable maps, with a large gap in the middle. This is considered to be an acceptable
-	 * tradeoff, and it's worth nothing that variable maps only exist during the inlining
-	 * process so this will not stay in memory for long
-	 */
-	function->max_variable_id = get_current_variable_id();
 }
 
 
@@ -14062,6 +14044,13 @@ static inline void perform_all_function_inlining(function_symtab_t* function_sym
 	if(function_symtab->inlined_function_count == 0){
 		return;
 	}
+
+	/**
+	 * Once we're here - we know that we are inlining so we're good
+	 * to create the variable map. We only want to do this if inlining
+	 * is a certainty, otherwise we're just wasting space
+	 */
+	variable_map_t variable_map = variable_map_alloc();
 
 	/**
 	 * We'll need a one dimensional array to hold the inlining order. We'll also
@@ -14094,12 +14083,13 @@ static inline void perform_all_function_inlining(function_symtab_t* function_sym
 		}
 
 		//Otherwise let the helper do all the inlining
-		inline_eligible_calls_in_function(current_function, &calls_to_inline);
+		inline_eligible_calls_in_function(current_function, &calls_to_inline, &variable_map);
 	}
 
 	//Don't need these anymore
 	dynamic_integer_array_dealloc(&inlining_order);
 	dynamic_array_dealloc(&calls_to_inline);
+	variable_map_dealloc(&variable_map);
 }
 
 
