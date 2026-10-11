@@ -184,6 +184,12 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
  *
  * NOTE: for symtab variables we always use the "variable_id" and we ignore the memory
  * address variable ID
+ *
+ * To get the indices we will do:
+ * 		page_number = source_id / PAGE_SIZE
+ * 		page_offset = source_id % PAGE_SIZE
+ *
+ * If the page is NULL then return NULL. Otherwise get page[offset]
  */
 static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
 	/**
@@ -198,18 +204,27 @@ static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t
 		source_var_id = source_variable->associated_three_addr_var_ids.memory_address_variable_id;
 	}
 
-	//Get the mapping using this source var ID with the adjustment
-	variable_mapping_t* mapping = &(variable_map->mappings[source_var_id - variable_map->index_adjustment]);
+	//Compute the page number and offset
+	int32_t page_number = source_var_id / VARIABLE_MAPPING_PAGE_SIZE;
+	int32_t page_offset = source_var_id % VARIABLE_MAPPING_PAGE_SIZE;
+
+	//Fail case 1 - we've exceeded the page count
+	if(page_number > variable_map->page_count){
+		return NULL;
+	}
+
+	//Fail case 2 - the page was never allocated
+	variable_mapping_page_t* page = variable_map->page_table[page_number];
+	if(page == NULL){
+		return NULL;
+	}
 
 	/**
 	 * If we get here and we see it's not unimplemented, then we get the mapping,
 	 * otherwise we return NULL
 	 */
-	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED){
-		return mapping;
-	} else {
-		return NULL;
-	}
+	variable_mapping_t* mapping = &(page->mappings[page_offset]);
+	return mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED ? mapping : NULL;
 }
 //====================================== Inlined Utility Functions ===========================================================
 #endif /* VARIABLE_MAPPING_H */
