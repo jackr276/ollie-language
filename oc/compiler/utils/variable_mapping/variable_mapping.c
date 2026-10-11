@@ -4,6 +4,7 @@
  */
 
 #include "variable_mapping.h"
+#include <string.h>
 
 
 /**
@@ -25,36 +26,48 @@ variable_map_t variable_map_alloc(){
 }
 
 
-
 /**
- * Allocate a variable map designed specifically for a given function. Remember that variable
- * maps are specific to a given function that we're inlining. They may not be reused and
- * must be rebuilt upon every single inline request
+ * Get or create the page for the given index. The index represents a source variable
+ * ID. In the event that the page table itself does not have enough space to hold the
+ * new proposed page, we'll also reallocate the page table
  */
-variable_map_t variable_map_alloc(symtab_function_record_t* mapped_function){
-	//Stack allocate the map
-	variable_map_t map;
+static inline variable_mapping_page_t* get_or_create_page_for_index(variable_map_t* variable_map, int32_t index){
+	//Get the page index that we are looking for
+	int32_t page_index = index / VARIABLE_MAPPING_PAGE_SIZE;
 
 	/**
-	 * IMPORTANT - we will maintain a so-called "index-adjustment"
-	 * so that the smallest variable ID inside of this function will
-	 * map to index 0 when we add/retrieve
+	 * First option: we do not currently have a sufficient number of pages
+	 * to hold this index. If this is the case we will need to first reallocate
+	 * the entire page table so that we have physical space to hold this
 	 */
-	map.index_adjustment = mapped_function->min_variable_id;
+	if(page_index >= variable_map->page_count){
+		//Hang onto this for when we 0 out
+		int32_t previous_page_count = variable_map->page_count;
+
+		/**
+		 * Double the page index and reallocate. Since we rely on unallocated
+		 * pages being NULL, we will need to go through and set all of the
+		 * new space to be 0
+		 */
+		variable_map->page_count = page_index * 2;
+		variable_map->page_table = realloc(variable_map->page_table, sizeof(variable_mapping_page_t*) * variable_map->page_count);
+
+		//Set everything after the prior page table that we've allocated to be 0
+		memset(variable_map->page_table + previous_page_count, 0, sizeof(variable_mapping_page_t*) * (variable_map->page_count - previous_page_count));
+	}
 
 	/**
-	 * Say our function has the lowest variable at ID 15 and the highest variable
-	 * ID at 57. We will need to store 43 values(we need to store 15 too), so 
-	 * we're storing 57 - 15 + 1
+	 * If we get here, we know that we have enough space to hold the page. However, it may not have been created
+	 * yet, so now is the time where we'll allocate it if we need to
 	 */
-	map.mapping_count = mapped_function->max_variable_id - mapped_function->min_variable_id + 1;
+	if(variable_map->page_table[page_index] == NULL){
+		variable_map->page_table[page_index] = calloc(1, sizeof(variable_mapping_page_t));
+	}
 
-	//Allcoate based on our size
-	map.mappings = calloc(sizeof(variable_mapping_t), map.mapping_count);
-
-	//Return a copy
-	return map;
+	//Give back the pointer to it
+	return variable_map->page_table[page_index];
 }
+
 
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
