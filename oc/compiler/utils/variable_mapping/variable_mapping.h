@@ -104,6 +104,11 @@ struct variable_mapping_page_t {
 struct variable_map_t {
 	variable_mapping_page_t** page_table;
 	int32_t page_count;
+	/**
+	 * The atomically increasing ID that tells us what inline call we're
+	 * on. This is also a proxy for the number of inlines that we've completed
+	 */
+	int32_t call_inline_id;
 };
 
 
@@ -121,7 +126,7 @@ variable_map_t variable_map_alloc();
  * way that we know how to avoid reusing "stale" mappings if we inline the same function
  * repeatedly
  */
-void begin_new_inline_call();
+void begin_new_inline_call(variable_map_t* variable_map);
 
 /**
  * Create a new mapping for a temporary variable that goes from the source to the destination
@@ -162,7 +167,7 @@ void variable_map_dealloc(variable_map_t* map);
  *
  * If the page is NULL then return NULL. Otherwise get page[offset]
  */
-static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id, int32_t call_inline_id){
+static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t source_temp_var_id){
 	//Compute the page number and offset
 	int32_t page_number = source_temp_var_id / VARIABLE_MAPPING_PAGE_SIZE;
 	int32_t page_offset = source_temp_var_id % VARIABLE_MAPPING_PAGE_SIZE;
@@ -186,7 +191,7 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
 	 * 		of times.
 	 */
 	variable_mapping_t* mapping = &(page->mappings[page_offset]);
-	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == call_inline_id){
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == variable_map->call_inline_id){
 		return mapping;
 	} else {
 		return NULL;
@@ -207,7 +212,7 @@ static inline variable_mapping_t* get_mapping_for_temporary_variable(variable_ma
  *
  * If the page is NULL then return NULL. Otherwise get page[offset]
  */
-static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable, int32_t call_inline_id){
+static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_variable_record_t* source_variable){
 	/**
 	 * For the source variable ID, we will default to use the regular "variable_id" if it's not unset.
 	 * However, if it does not exist, we will fallback to the memory address variable id. Some variables
@@ -243,7 +248,7 @@ static inline variable_mapping_t* get_mapping_for_symtab_variable(variable_map_t
 	 * 		of times.
 	 */
 	variable_mapping_t* mapping = &(page->mappings[page_offset]);
-	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == call_inline_id){
+	if(mapping->mapping_type != MAPPING_TYPE_NOT_IMPLEMENTED && mapping->call_inline_id == variable_map->call_inline_id){
 		return mapping;
 	} else {
 		return NULL;

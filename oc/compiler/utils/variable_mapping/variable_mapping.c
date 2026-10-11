@@ -6,12 +6,6 @@
 #include "variable_mapping.h"
 #include <string.h>
 
-/**
- * The atomically increasing ID that tells us what inline call we're
- * on. This is also a proxy for the number of inlines that we've completed
- */
-static int32_t call_inline_id = 0;
-
 
 /**
  * Allocate the variable map. Remember that our intention is to only have one variable map per compilation
@@ -27,6 +21,7 @@ variable_map_t variable_map_alloc(){
 	 */
 	map.page_count = DEFAULT_PAGE_COUNT;
 	map.page_table = calloc(sizeof(variable_mapping_page_t*), DEFAULT_PAGE_COUNT);
+	map.call_inline_id = 0;
 
 	return map;
 }
@@ -38,8 +33,8 @@ variable_map_t variable_map_alloc(){
  * way that we know how to avoid reusing "stale" mappings if we inline the same function
  * repeatedly
  */
-void begin_new_inline_call(){
-	call_inline_id++;
+void begin_new_inline_call(variable_map_t* variable_map){
+	(variable_map->call_inline_id)++;
 }
 
 
@@ -109,6 +104,14 @@ void create_mapping_for_temporary_variable(variable_map_t* variable_map, int32_t
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_TEMP;
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.temporary_id = dest_temp_var_id;
+
+	/**
+	 * IMPORTANT - save the call inline ID that tells us what inlined
+	 * call we're on currently. This is how we avoid accidentally 
+	 * reusing stale mappings if we inline the same function multiple
+	 * times. IF THIS IS NOT ADDED, BAD THINGS WILL HAPPEN
+	 */
+	mapping->call_inline_id = variable_map->call_inline_id;
 }
 
 
@@ -147,6 +150,14 @@ void create_mapping_for_symtab_variable(variable_map_t* variable_map, symtab_var
 	mapping->mapping_type = MAPPING_TYPE_SYMTAB_TO_SYMTAB;
 	mapping->source.symtab_variable = source_variable;
 	mapping->destination.symtab_variable = destination_variable;
+
+	/**
+	 * IMPORTANT - save the call inline ID that tells us what inlined
+	 * call we're on currently. This is how we avoid accidentally 
+	 * reusing stale mappings if we inline the same function multiple
+	 * times. IF THIS IS NOT ADDED, BAD THINGS WILL HAPPEN
+	 */
+	mapping->call_inline_id = variable_map->call_inline_id;
 }
 
 
@@ -173,6 +184,14 @@ void create_mapping_for_temp_to_symtab_variable(variable_map_t* variable_map, in
 	mapping->mapping_type = MAPPING_TYPE_TEMP_TO_SYMTAB;
 	mapping->source.temporary_id = source_temp_var_id;
 	mapping->destination.symtab_variable = destination_variable;
+
+	/**
+	 * IMPORTANT - save the call inline ID that tells us what inlined
+	 * call we're on currently. This is how we avoid accidentally 
+	 * reusing stale mappings if we inline the same function multiple
+	 * times. IF THIS IS NOT ADDED, BAD THINGS WILL HAPPEN
+	 */
+	mapping->call_inline_id = variable_map->call_inline_id;
 }
 
 
