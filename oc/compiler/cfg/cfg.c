@@ -7106,8 +7106,11 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 				 * any new memory regions
 				 */
 				case CFG_RESULT_TYPE_INITIALIZER: {
+					//Get the result initializer out
+					three_addr_initializer_t* result_initializer = handle_results.result_value.result_initializer;
+
 					//First initialize right into the function assignee
-					instruction_t* initialization = emit_initialization_instruction(function_assignee, handle_results.result_value.result_initializer, handle_node->line_number);
+					instruction_t* initialization = emit_initialization_instruction(emit_var_copy(function_assignee), result_initializer, handle_node->line_number);
 					insert_instruction_before_given(initialization, last_instruction);
 
 					//Now assign the pointer represented by %rax over to our function result var, as it now contains our initializer
@@ -12905,15 +12908,8 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			add_statement(cloning_into_block, simulated_raise_assignment);
 
 			/**
-<<<<<<< HEAD
-			 * If we have a return variable we'll need it to be assigned. We will use the specialized
-			 * clear function to make this happen
-			 *
-			 * TODO WE WILL BE HANDLING THIS INSIDE OF THE TRIAGE ITEM OPENED UP
-=======
 			 * If we have a return variable we'll need it to be assigned even in the scenario
 			 * where we have a raise
->>>>>>> main
 			 */
 			if(return_variable != NULL){
 				/**
