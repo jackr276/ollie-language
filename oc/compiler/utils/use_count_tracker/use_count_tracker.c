@@ -40,26 +40,6 @@ use_count_tracker_t use_count_tracker_alloc(int32_t initial_variable_count){
 
 
 /**
- * Allocate the underlying data structures in the use count tracker
- */
-use_count_tracker_t use_count_tracker_alloc(u_int32_t initial_variable_count){
-	//Stack allocate it
-	use_count_tracker_t tracker;
-
-	//Populate with our starting variable account
-	tracker.variable_count = initial_variable_count;
-
-	/**
-	 * Allocate our underlying array. This array is indexed
-	 * by the variable IDs and has the use counts as its values
-	 */
-	tracker.map = calloc(initial_variable_count, sizeof(u_int16_t));
-
-	return tracker;
-}
-
-
-/**
  * Perform a dynamic resize on the use count tracker based on the ID that was requested. To
  * be safe, we will always reallocate with double what was requested
  *
@@ -98,8 +78,19 @@ void use_count_tracker_dynamic_resize_for_id(use_count_tracker_t* tracker, u_int
  */
 void dump_use_counts(use_count_tracker_t* tracker){
 	printf("============ Use count by variable ID ============\n");
-	for(u_int32_t i = 0; i < tracker->variable_count; i++){
-		printf("ID %d: Use count %d\n", i, tracker->map[i]);
+	for(int32_t i = 0; i < tracker->page_count; i++){
+		use_count_tracker_page_t* page = tracker->page_table[i];
+
+		if(page != NULL){
+			printf("PAGE %d:\n", i);
+
+			for(int32_t j = 0; j < USE_COUNT_PAGE_SIZE; j++){
+				printf("ID %d: Use count %d\n", j, page->use_counts[j]);
+			}
+
+		} else {
+			printf("PAGE %d: NULL\n", i);
+		}
 	}
 
 	printf("============ Use count by variable ID ============\n");
@@ -107,12 +98,16 @@ void dump_use_counts(use_count_tracker_t* tracker){
 
 
 /**
- * Deallocate the underlying data structures in the use count tracker
+ * Deallocate all memory allocated by the provided use
+ * count tracker
  */
 void use_count_tracker_dealloc(use_count_tracker_t* tracker){
-	//Deallocate the underlying array
-	free(tracker->map);
+	//Free all of the pages in the page table
+	for(int32_t i = 0; i < tracker->page_count; i++){
+		free(tracker->page_table[i]);
+	}
 
-	//Set this to 0 as a warning
-	tracker->variable_count = 0;
+	//Now free the page table and 0 out the count
+	free(tracker->page_table);
+	tracker->page_count = 0;
 }

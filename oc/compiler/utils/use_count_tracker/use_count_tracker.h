@@ -85,7 +85,8 @@ void use_count_tracker_dynamic_resize_for_id(use_count_tracker_t* tracker, u_int
 void dump_use_counts(use_count_tracker_t* tracker);
 
 /**
- * Deallocate the underlying data structures in the use count tracker
+ * Deallocate all memory allocated by the provided use
+ * count tracker
  */
 void use_count_tracker_dealloc(use_count_tracker_t* tracker);
 //================================ Non-Inlined Functions ======================================
