@@ -2053,11 +2053,6 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 static inline void populate_use_counts_for_function(dynamic_array_t* function_blocks){
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
-
-		/**
-		 * We may as well do this now to resize if there are any changes in the number of variables.
-		 */
-		use_count_tracker_dynamic_resize_for_id(&use_count_tracker, get_current_variable_id());
 		
 		//Run through every signle instruction
 		instruction_t* instruction_cursor = block->leader_statement;
@@ -9900,6 +9895,19 @@ static inline u_int8_t convert_memory_copy_statements_into_loads_and_stores(dyna
 
 
 /**
+ * To run the instruction simplifier we will go in a do-while loop until the "simplifier_pass" returns
+ * FALSE. Returning FALSE means that nothing changed during that run of the simplifier. Between each
+ * run we will wipe out and reset all of the use counts for this function
+ */
+static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_t* function_entry){
+	do {
+		reset_all_use_counts(&use_count_tracker);
+		populate_use_counts_for_function(function_blocks);
+	} while(simplifier_pass(function_entry) == TRUE);
+}
+
+
+/**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
  */
@@ -9927,13 +9935,10 @@ static void simplify(cfg_t* cfg){
 		perform_call_lowering_in_function(function, &(function->function_blocks));
 
 		/**
-		 * Run the initial simplifier pass for the function, being sure that we 
-		 * reset all of our use counts every time
+		 * Run the simplifier for the first time after we do our call lowering. We will
+		 * see the most simplification action in this step
 		 */
-		do {
-			reset_all_use_counts(&use_count_tracker);
-			populate_use_counts_for_function(&(function->function_blocks));
-		} while(simplifier_pass(function_entry) == TRUE);
+		run_simplifier(&(function->function_blocks), function_entry);
 
 		/**
 		 * Once we're confident that we've done all of the simplifying that we can, we 
@@ -9963,10 +9968,7 @@ static void simplify(cfg_t* cfg){
 			 * Run the simplifier after we've done mark and sweep. Be sure
 			 * that we fix the use counts every time that we do this
 			 */
-			do {
-				reset_all_use_counts(&use_count_tracker);
-				populate_use_counts_for_function(&(function->function_blocks));
-			} while(simplifier_pass(function_entry) == TRUE);
+			run_simplifier(&(function->function_blocks), function_entry);
 
 		/**
 		 * Otherwise we were not able to value number anything, but we still may have redundant instructions
@@ -9999,10 +10001,7 @@ static void simplify(cfg_t* cfg){
 			 * After we do all of this, one run final simplifier pass to ensure everything
 			 * is in the simplest form that we can get it in
 			 */
-			do {
-				reset_all_use_counts(&use_count_tracker);
-				populate_use_counts_for_function(&(function->function_blocks));
-			} while(simplifier_pass(function_entry) == TRUE);
+			run_simplifier(&(function->function_blocks), function_entry);
 		}
 
 		/*
@@ -10017,10 +10016,7 @@ static void simplify(cfg_t* cfg){
 			 * Run the simplifier after we've done the conversion to make sure we are in
 			 * as simple a form as we can get
 			 */
-			do {
-				reset_all_use_counts(&use_count_tracker);
-				populate_use_counts_for_function(&(function->function_blocks));
-			} while(simplifier_pass(function_entry) == TRUE);
+			run_simplifier(&(function->function_blocks), function_entry);
 		}
 	}
 }
@@ -17783,6 +17779,8 @@ static void select_instructions(cfg_t* cfg){
 
 		/**
 		 * Before we select anything let's do one final use count revamp
+		 *
+		 * TODO CAN MOVE THIS OUT?
 		 */
 		reset_all_use_counts(&use_count_tracker);
 		populate_use_counts_for_function(&(function_record->function_blocks));

@@ -21,9 +21,9 @@
 
 /**
  * The use count page size will be quite large because each record is 
- * just an int16_t, so overall each page will be 8kb in size
+ * just an int16_t, so overall each page will be 4kb in size
  */
-#define USE_COUNT_PAGE_SIZE 4096
+#define USE_COUNT_PAGE_SIZE 2048 
 
 /**
  * The default number of pages in the event that the program
@@ -41,7 +41,7 @@ typedef struct use_count_tracker_t use_count_tracker_t;
 
 
 /**
- * Each page is simply a fixed size 4096 record
+ * Each page is simply a fixed size 2048 record
  * array. Use counts are keyed by variable ID so there
  * is no need to store that along with the count
  */
