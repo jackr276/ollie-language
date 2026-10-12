@@ -11939,12 +11939,21 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 
 	switch(type->type_class){
 		/**
-		 * Array, structures and unions are all stored on the stack. So, when
-		 * we see one, we need to make sure that we are actually allocating the stack space for it
+		 * Struct
 		 */
-		case TYPE_CLASS_ARRAY:
-		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_STRUCT: 
 		case TYPE_CLASS_UNION: {
+			//TODO WHAT IF WE PASSED THE REGION ALONG TO THE FUNCTION CALL I THINK THAT IS
+			//BETTER
+
+			//TODO
+		}
+
+		/**
+		 * There is no chance for any special treatment with arrays, we always need to place
+		 * them on
+		 */
+		case TYPE_CLASS_ARRAY: {
 			//Create a stack region for this variable and store it in the associated region
 			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), type);
 
@@ -11985,13 +11994,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	 * in the end. It is valid for us to see a variable, constant or a complx initializer here
 	 */
 	generic_ast_node_t* expression_node = node->first_child;
-
-	if((expression_node->ast_node_type == AST_NODE_TYPE_FUNCTION_CALL || expression_node->ast_node_type == AST_NODE_TYPE_INDIRECT_FUNCTION_CALL)
-			&& is_type_returned_by_copy(expression_node->optional_storage.callee_signature->return_type) == TRUE){
-		printf("ELIGIBLE LET STATEMENT\n\n\n");
-		}
-
 	cfg_result_package_t let_initializer_results = emit_expression(current_block, expression_node);
+
 
 	//Update the current block
 	current_block = let_initializer_results.final_block;

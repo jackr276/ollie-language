@@ -13420,10 +13420,15 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	if(is_initializer_node(initializer_node) == FALSE){
 		/**
 		 * Option 1: if this is *NOT* a global variable and we have a return by function call,
-		 * the ollie compiler enables something called "Return by copy region takeover".
+		 * the ollie compiler enables something called "Return Region Adoption(RRA)". This will
+		 * allow the let variable to adopt the return-by-copy memory region that is implicitly
+		 * allocated for the function. This will effectively eliminate an entire memory copy
+		 * that would normally happen. This will only ever happen for non-global global variables
+		 * and it will never happen for anything that is not a pure function call(i.e. - if you
+		 * had a postfix expression on the RHS this will not trigger)
 		 */
 		if(is_global == FALSE && is_node_return_by_copy_function_call(initializer_node) == TRUE){
-			let_stmt_node->optional_storage.is_let_eligible_for_ret_region_takeover = TRUE;
+			let_stmt_node->optional_storage.is_let_eligible_for_return_region_adoption = TRUE;
 
 		/**
 		 * Option 2: If these types require a copy assignment(think struct to struct, union to union), *and* we have
