@@ -138,13 +138,14 @@ struct generic_ast_node_t{
 			int32_t upper_bound;
 		} switch_bounds;
 		/**
-		 * In very specific circumstances, we will allow a let statement
-		 * who's RHS is a return-by-copy function call to assume control
-		 * of the function's return-by-copy region. This optimization
-		 * in Ollie is called return-region-adoption(RRA). This flag
-		 * will be set in the parser if we're eligible for that
+		 * Certain assignment and let statements are eligible for
+		 * what is called "return region forwarding". This relates
+		 * specifically to return by copy function calls where, if
+		 * we're going to be copying the returned value into the 
+		 * LHS anyways, we may as well pass the LHS's memory address
+		 * to the function as the return region to begin with
 		 */
-		u_int8_t is_let_eligible_for_return_region_adoption;
+		u_int8_t return_region_forwarding_eligible;
 	} optional_storage;
 	//Holds the token for what kind of constant it is
 	ollie_token_t constant_type;

@@ -13419,16 +13419,14 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	 */
 	if(is_initializer_node(initializer_node) == FALSE){
 		/**
-		 * Option 1: if this is *NOT* a global variable and we have a return by function call,
-		 * the ollie compiler enables something called "Return Region Adoption(RRA)". This will
-		 * allow the let variable to adopt the return-by-copy memory region that is implicitly
-		 * allocated for the function. This will effectively eliminate an entire memory copy
-		 * that would normally happen. This will only ever happen for non-global global variables
-		 * and it will never happen for anything that is not a pure function call(i.e. - if you
-		 * had a postfix expression on the RHS this will not trigger)
+		 * Option 1: return region forwarding(RRF) in OIR refers to the ability for OC to recognize
+		 * that the LHS is going to be copied from the return region of a return-by-copy function call
+		 * and, instead of allocating two memory regions and doing an unnecessary copy, pass the
+		 * memory region in the LHS as the return by copy address in the first place(the value in %rdi).
+		 * This concept, in its current form, applies to let statements and assignment expressions
 		 */
-		if(is_global == FALSE && is_node_return_by_copy_function_call(initializer_node) == TRUE){
-			let_stmt_node->optional_storage.is_let_eligible_for_return_region_adoption = TRUE;
+		if(is_node_return_by_copy_function_call(initializer_node) == TRUE){
+			let_stmt_node->optional_storage.return_region_forwarding_eligible = TRUE;
 
 		/**
 		 * Option 2: If these types require a copy assignment(think struct to struct, union to union), *and* we have
