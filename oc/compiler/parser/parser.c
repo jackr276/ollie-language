@@ -703,7 +703,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	 * The user is trying to initialize a non-array with an array type we hard fail
 	 */
 	if(array_type->type_class != TYPE_CLASS_ARRAY){
-		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", array_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", get_full_type_name_from_type(array_type));
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -769,7 +769,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 	 * What if the user is trying to use an array initializer on a non-array type? If so, this should fail
 	 */
 	if(struct_type->type_class != TYPE_CLASS_STRUCT){
-		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", struct_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", get_full_type_name_from_type(struct_type));
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -787,7 +787,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 	while(cursor != NULL){
 		//If we exceed the number of fields given, we error out
 		if(seen_fields_count > num_fields){
-			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", get_full_type_name_from_type(struct_type), num_fields, seen_fields_count);
 			return print_and_return_failure(info, parser_line_num);
 		}
 
@@ -808,7 +808,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 
 	//One final validation - we need to check if the field counts match
 	if(num_fields != seen_fields_count){
-		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+		sprintf(info, "Type %s expects %d fields, was given %d in initializer", get_full_type_name_from_type(struct_type), num_fields, seen_fields_count);
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -836,7 +836,7 @@ static generic_ast_node_t* validate_and_set_bounds_for_string_initializer(generi
 	 * If we do not have a char type as our underlying, then this is invalid
 	 */
 	if(member_type->type_class != TYPE_CLASS_BASIC || member_type->basic_type_token != CHAR){
-		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
+		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", get_full_type_name_from_type(array_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -922,7 +922,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			 * be initialized using the [] syntax
 			 */
 			if(target_type->type_class == TYPE_CLASS_ARRAY){
-				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
+				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", get_full_type_name_from_type(target_type));
 				return print_and_return_null(info, parser_line_num);
 			}
 
@@ -1027,7 +1027,7 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 						//First print out this error
 						sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
 										original_record->func_name.string,
-										destination_type->type_name.string);
+										get_full_type_name_from_type(destination_type));
 						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 						//Then the generic one we always have
@@ -1068,7 +1068,8 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 						if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
 							//First print out this failure
 							sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-										destination_type->type_name.string, source_node->constant_value.signed_int_value);
+										get_full_type_name_from_type(destination_type),
+										source_node->constant_value.signed_int_value);
 							print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 							//Then the types assignable failure
@@ -1276,7 +1277,7 @@ static inline u_int8_t do_duplicate_member_variables_exist(char* name, generic_t
 
 	//Means that we have a duplicate
 	if(found != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, current_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, get_full_type_name_from_type(current_type));
 		print_variable_name_to_buffer(info, found);
 		num_errors++;
 		return TRUE;
@@ -1626,7 +1627,9 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		case COMMA:
 			//If this is the case, the return type had better be void
 			if(current_function_signature->returns_void == FALSE){
-				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
+				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed",
+						current_function->func_name.string,
+						get_full_type_name_from_type(current_function_signature->return_type));
 				print_function_name_to_buffer(info, current_function);
 				return print_and_return_error(info, parser_line_num);
 			}
@@ -1676,7 +1679,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		sprintf(info,
 				"Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
 				current_function->func_name.string,
-				current_function_signature->return_type->type_name.string,
+				get_full_type_name_from_type(current_function_signature->return_type),
 				get_full_type_name_from_ast_node(expr_node));
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
@@ -1689,9 +1692,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	 * we never return by copy, so an initializer fundamentally will never work
 	 */
 	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
-		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
-						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
-						current_function_signature->return_type->type_name.string);
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+						get_full_type_name_from_type(current_function_signature->return_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1788,7 +1790,7 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 
 		//If this is not an error, we fail out
 		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", get_full_type_name_from_type(error_type)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1859,7 +1861,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 
 		//Also if this is not an error we go
 		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" is not defined as an error type", error_type->type_name.string);
+			sprintf(info, "Type \"%s\" is not defined as an error type", get_full_type_name_from_type(error_type));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1924,8 +1926,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			//If it's not void-returning it is invalid
 			if(IS_VOID_TYPE(called_function_signature->return_type) == FALSE){
 				sprintf(info, "Function signature \"%s\" returns a non-void type of %s. Ignore statements cannot be used here.",
-								function_signature->type_name.string,
-								called_function_signature->return_type->type_name.string);
+								get_full_type_name_from_type(function_signature),
+								get_full_type_name_from_type(called_function_signature->return_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1940,7 +1942,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * and this is invalid
 			 */
 			if(IS_VOID_TYPE(called_function_signature->return_type) == TRUE){	
-				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ignore\", \"ret\" or \"raise\"", function_signature->type_name.string);
+				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ignore\", \"ret\" or \"raise\"",
+						get_full_type_name_from_type(function_signature));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1966,8 +1969,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			if(final_type == NULL){
 				sprintf(info, 
 						"Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
-						function_signature->type_name.string,
-						called_function_signature->return_type->type_name.string,
+						get_full_type_name_from_type(function_signature),
+						get_full_type_name_from_type(called_function_signature->return_type),
 						get_full_type_name_from_ast_node(result_node));
 				return print_and_return_error(info, parser_line_num);
 			}
@@ -1978,9 +1981,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * have that we will get segfaults. For that reason Ollie disallows stuff like this
 			 */
 			if(is_initializer_node(result_node) == TRUE && is_type_returned_by_copy(called_function_signature->return_type) == FALSE){
-				sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
-								(called_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
-								called_function_signature->return_type->type_name.string);
+				sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+								get_full_type_name_from_type(called_function_signature->return_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2060,7 +2062,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 
 			//If these are the same then we fail
 			if(types_identical(error_type, error_handle_node->optional_storage.error_type) == TRUE){
-				sprintf(info, "Invalid attempt to handle error type \"%s\" more than once", error_type->type_name.string);
+				sprintf(info, "Invalid attempt to handle error type \"%s\" more than once", get_full_type_name_from_type(error_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
@@ -2150,7 +2152,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		//Now if we made it down here and we got what we need, we're good. If we didn't, we fail out
 		if(seen_error == FALSE){
 			sprintf(info, "Error \"%s\" is mandated to have a specific check due to being in the function's raises clause. Please add a case inside of the handle for this error",
-		   					mandatory_checked_error->type_name.string);
+							get_full_type_name_from_type(mandatory_checked_error));
 
 			//Send this error up the chain
 			return print_and_return_error(info, parser_line_num);
@@ -2244,9 +2246,8 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 			//If this is null, it means that our check failed
 			if(final_type == NULL){
 				//Following that we'll generate another error message to make it more clear
-				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s\".",
-						(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-						type_being_elaborated->type_name.string,
+				sprintf(info, "Function call expects an input of type \"%s\", but was given an incompatible input of type \"%s\".",
+						get_full_type_name_from_type(type_being_elaborated),
 						get_full_type_name_from_ast_node(elaborated_param));
 
 				return print_and_return_error(info, parser_line_num);
