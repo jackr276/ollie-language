@@ -402,6 +402,23 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
 
 
 /**
+ * Is a given node a return-by-copy function call? This is only true if it's a direct
+ * or indirect call *AND* the function it's calling is return-by-copy
+ */
+static inline u_int8_t is_node_return_by_copy_function_call(generic_ast_node_t* initializer_node){
+	//If it's not a function call get out
+	if(initializer_node->ast_node_type != AST_NODE_TYPE_FUNCTION_CALL 
+		&& initializer_node->ast_node_type != AST_NODE_TYPE_INDIRECT_FUNCTION_CALL){
+		return FALSE;
+	}
+
+	//Determination is now down to if this function returns by copy
+	function_type_t* called_function_signature = initializer_node->optional_storage.callee_signature;
+	return called_function_signature->returns_by_copy;
+}
+
+
+/**
  * Does an enum list contain a given value for a member?
  */
 static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_type, int32_t enum_member){
@@ -13397,27 +13414,39 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	let_stmt_node->inferred_type = return_type;
 
 	/**
-	 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
-	 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
-	 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
-	 * doing an address calculation.
+	 * There are some specific conditions that can happen when we have non-initializer nodes, specifically
+	 * around copying that we'll handle now
 	 */
-	if(is_initializer_node(initializer_node) == FALSE
-		&& is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+	if(is_initializer_node(initializer_node) == FALSE){
 		/**
-		 * Propogate the dereference needed flag down recursively until we hit a postfix
-		 * expression(our "root" in this case) or nothing. This is important because we cannot
-		 * be dereferencing if we need to perform a copy assignment
+		 * Option 1: if this is *NOT* a global variable and we have a return by function call,
+		 * the ollie compiler enables something called "Return by copy region takeover".
 		 */
-		propogate_no_dereference_required_flag(initializer_node);
+		if(is_global == FALSE && is_node_return_by_copy_function_call(initializer_node) == TRUE){
+			let_stmt_node->optional_storage.is_let_eligible_for_ret_region_takeover = TRUE;
 
 		/**
-		 * Since we are performing a memory copy instruction, this function
-		 * is required to perform an initial alignment when we enter it. If we did
-		 * not align this way, then we would get segmentation faults when trying to execute
-		 * SIMD instructions
+		 * Option 2: If these types require a copy assignment(think struct to struct, union to union), *and* we have
+		 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+		 * doing an address calculation.
 		 */
-		current_function->requires_initial_alignment = TRUE;
+		} else if(is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+			/**
+			 * Propogate the dereference needed flag down recursively until we hit a postfix
+			 * expression(our "root" in this case) or nothing. This is important because we cannot
+			 * be dereferencing if we need to perform a copy assignment
+			 */
+			propogate_no_dereference_required_flag(initializer_node);
+
+			/**
+			 * Since we are performing a memory copy instruction, this function
+			 * is required to perform an initial alignment when we enter it. If we did
+			 * not align this way, then we would get segmentation faults when trying to execute
+			 * SIMD instructions
+			 */
+			current_function->requires_initial_alignment = TRUE;
+		}
 	}
 
 	//Otherwise it worked, so we'll add it in as a child
