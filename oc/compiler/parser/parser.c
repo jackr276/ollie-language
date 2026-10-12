@@ -1669,7 +1669,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 				"Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
 				current_function->func_name.string,
 				current_function_signature->return_type->type_name.string,
-		  		expr_node->inferred_type->type_name.string);
+				get_full_type_name_from_ast_node(expr_node));
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -1960,7 +1960,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 						"Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
 						function_signature->type_name.string,
 						called_function_signature->return_type->type_name.string,
-						result_node->inferred_type->type_name.string); 
+						get_full_type_name_from_ast_node(result_node));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2236,11 +2236,10 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 			//If this is null, it means that our check failed
 			if(final_type == NULL){
 				//Following that we'll generate another error message to make it more clear
-				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s\".",
 						(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 						type_being_elaborated->type_name.string,
-						(elaborated_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						elaborated_param->inferred_type->type_name.string);
+						get_full_type_name_from_ast_node(elaborated_param));
 
 				return print_and_return_error(info, parser_line_num);
 			}
@@ -2735,15 +2734,14 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
 				sprintf(info, 
-						"Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						"Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
 						function_name->string,
 						function_signature->type_name.string,
 						(parameter_type->mutability == MUTABLE ? "mut ": ""),
 						parameter_type->type_name.string,
 						param_result_index + 1,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+						get_full_type_name_from_ast_node(current_param),
+						function_signature->type_name.string);
 
 				//Use the helper to return this
 				return print_and_return_error(info, parser_line_num);
@@ -2820,11 +2818,10 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
 						sprintf(info, 
-								"Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+								"Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s\".",
 								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 								type_being_elaborated->type_name.string,
-								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
-								param_expression->inferred_type->type_name.string);
+								get_full_type_name_from_ast_node(param_expression));
 
 						return print_and_return_error(info, parser_line_num);
 					}
@@ -3101,14 +3098,13 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
 				sprintf(info, 
-						"Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+						"Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
 						function_signature->type_name.string,
 						(parameter_type->mutability == MUTABLE ? "mut ": ""),
 						parameter_type->type_name.string,
 						param_result_index + 1,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+						get_full_type_name_from_ast_node(current_param),
+						function_signature->type_name.string);
 
 				//Use the helper to return this
 				return print_and_return_error(info, parser_line_num);
@@ -3184,11 +3180,10 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
+						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s\".",
 								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
 								type_being_elaborated->type_name.string,
-								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
-								param_expression->inferred_type->type_name.string);
+								get_full_type_name_from_ast_node(param_expression));
 
 						return print_and_return_error(info, parser_line_num);
 					}
@@ -3351,7 +3346,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	} else {
 		//Validate that what we're trying to call is actually a function
 		if(unary_expression_node->inferred_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
-			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", unary_expression_node->inferred_type->type_name.string);
+			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", get_full_type_name_from_ast_node(unary_expression_node));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -4031,7 +4026,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		//We have an array accessor to check
 		if(accessor->ast_node_type == AST_NODE_TYPE_ARRAY_ACCESSOR){
 			if(first_child->inferred_type->mutability == NOT_MUTABLE){
-				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", first_child->inferred_type->type_name.string);
+				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(first_child));
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
@@ -4056,7 +4051,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		 */
 		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR && first_child->unary_operator == STAR){
 			if(dereferenced->inferred_type->mutability == NOT_MUTABLE){
-				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", dereferenced->inferred_type->type_name.string);
+				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(dereferenced));
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
@@ -4314,7 +4309,7 @@ loop_end:
 		//Let's also see if the right hand type is valid
 		if(is_binary_operation_valid_for_type(expr->inferred_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
 			sprintf(info, "Type %s is invalid for operation %s",
-					expr->inferred_type->type_name.string,
+					get_full_type_name_from_ast_node(expr),
 					operator_token_to_string(assignment_operator));
 
 			return print_and_return_error(info, parser_line_num);
@@ -4353,9 +4348,9 @@ loop_end:
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s",
-					left_hand_duplicate->inferred_type->type_name.string,
-					expr->inferred_type->type_name.string,
+			sprintf(info, "Types \"%s\" and \"%s\" cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(left_hand_duplicate),
+					get_full_type_name_from_ast_node(expr),
 					operator_token_to_string(assignment_operator));
 
 			return print_and_return_error(info, parser_line_num);
