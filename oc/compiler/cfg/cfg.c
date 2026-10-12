@@ -11985,6 +11985,12 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	 * in the end. It is valid for us to see a variable, constant or a complx initializer here
 	 */
 	generic_ast_node_t* expression_node = node->first_child;
+
+	if((expression_node->ast_node_type == AST_NODE_TYPE_FUNCTION_CALL || expression_node->ast_node_type == AST_NODE_TYPE_INDIRECT_FUNCTION_CALL)
+			&& is_type_returned_by_copy(expression_node->optional_storage.callee_signature->return_type) == TRUE){
+		printf("ELIGIBLE LET STATEMENT\n\n\n");
+		}
+
 	cfg_result_package_t let_initializer_results = emit_expression(current_block, expression_node);
 
 	//Update the current block
