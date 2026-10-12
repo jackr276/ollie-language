@@ -244,12 +244,23 @@ static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
  * Get the full type name from the given type. This will account for
  * mutability printing as well
  *
+ * NOTE: we will use a dynamic string internally to allocate the space
+ * needed to print this, but we will just return the dynamic string's
+ * char* for convenience
+ *
  * WARNING: DO NOT USE THIS FOR AST NODES. AST NODES SHOULD USE 
  * get_full_type_name_from_ast_node ONLY!
  */
 static char* get_full_type_name_from_type(generic_type_t* type){
-	//TODO
-	return NULL;
+	dynamic_string_t full_name = dynamic_string_alloc();
+
+	//If this is mutable take the mut prefix on
+	if(type->mutability == MUTABLE){
+		dynamic_string_concatenate(&full_name, "mut ");
+	}
+
+	dynamic_string_concatenate(&full_name, type->type_name.string);
+	return full_name.string;
 }
 
 
