@@ -4301,7 +4301,7 @@ loop_end:
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
 			sprintf(info, "Type %s is invalid for operation %s",
-					left_hand_type->type_name.string,
+					get_full_type_name_from_type(left_hand_type),
 					operator_token_to_string(assignment_operator));
 
 			return print_and_return_error(info, parser_line_num);
@@ -4402,7 +4402,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 
 	//If this is not a pointer, then we can't use ::
 	if(current_type->type_class != TYPE_CLASS_POINTER){
-		sprintf(info, "Type \"%s\" is not a pointer to a union and cannot be accessed with the -> operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a pointer to a union and cannot be accessed with the -> operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4411,7 +4411,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 
 	//If this is not a union type, it immediately cannot be correct
 	if(points_to->type_class != TYPE_CLASS_UNION){
-		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the -> operator", points_to->type_name.string);
+		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the -> operator", get_full_type_name_from_type(points_to));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4431,7 +4431,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 
 	//If this ends up being NULL, then we have an incorrect access
 	if(union_member == NULL){
-		sprintf(info, "Type %s does not have a member %s", points_to->type_name.string, variable_name.string);
+		sprintf(info, "Type %s does not have a member %s", get_full_type_name_from_type(points_to), variable_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4468,7 +4468,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 
 	//If this is not a pointer, then we can't use ::
 	if(current_type->type_class != TYPE_CLASS_POINTER){
-		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the => operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the => operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4477,7 +4477,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 
 	//We need to specifically see a struct here. If we don't then we leave
 	if(current_type->type_class != TYPE_CLASS_STRUCT){
-		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4497,7 +4497,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4545,7 +4545,7 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
 
 	//We need to specifically see a struct here. If we don't then we leave
 	if(current_type->type_class != TYPE_CLASS_STRUCT){
-		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4565,7 +4565,7 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4604,7 +4604,7 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 	//If this is not a union type, it immediately cannot be correct
 	if(type->type_class != TYPE_CLASS_UNION){
-		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the . operator", type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the . operator", get_full_type_name_from_type(type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4621,7 +4621,7 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 	//If this is NULL, it means that the var is not present and therefore this is incorrect
 	if(union_variable == NULL){
-		sprintf(info, "Variable %s is not a member of type %s\n", lookahead.lexeme.string, type->type_name.string); 
+		sprintf(info, "Variable %s is not a member of type %s\n", lookahead.lexeme.string, get_full_type_name_from_type(type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4703,7 +4703,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Make sure the type itself can be subscripted
 	if(is_type_subscriptable(type) == FALSE){
-		sprintf(info, "Type \"%s\" is not subscriptable", type->type_name.string);
+		sprintf(info, "Type \"%s\" is not subscriptable", get_full_type_name_from_type(type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4773,7 +4773,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
 	//Let's first check and see if this is valid. If it's not we fail out
 	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, operator_token_to_string(operator));
+		sprintf(info, "Type %s is invalid for operator %s", get_full_type_name_from_type(current_type), operator_token_to_string(operator));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -5386,7 +5386,7 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 	 * You can never cast a "void" to anything
 	 */
 	if(IS_VOID_TYPE(being_casted_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
+		sprintf(info, "Type %s cannot be casted to any other type", get_full_type_name_from_type(being_casted_type));
 		return print_and_return_not_castable(info, parser_line_num);
 	}
 
@@ -5394,7 +5394,9 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 	 * Likewise, you can never cast anything to void
 	 */
 	if(IS_VOID_TYPE(casting_to_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
+		sprintf(info, "Type %s cannot be casted to type %s",
+					get_full_type_name_from_type(being_casted_type),
+					get_full_type_name_from_type(casting_to_type));
 		return print_and_return_not_castable(info, parser_line_num);
 	}
 
@@ -5429,8 +5431,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 			//If it's not basic we cannot go further
 			if(being_casted_type->type_class != TYPE_CLASS_BASIC){
 				sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
-								being_casted_type->type_name.string,
-								casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 				return print_and_return_not_castable(info, parser_line_num);
 			}
 
@@ -5446,8 +5448,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				case F64:
 				case VOID:
 					sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
-									being_casted_type->type_name.string,
-									casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					return print_and_return_not_castable(info, parser_line_num);
 
 				/**
@@ -5465,8 +5467,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				case I64:
 				case U64:
 					sprintf(info, "There is no guarantee that all possible values from type %s are expressed in enum %s",
-			 						being_casted_type->type_name.string,
-			 						casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 					/**
@@ -5475,8 +5477,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(consider_truncation == TRUE && underlying_enum_type->type_size < casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
-										being_casted_type->type_name.string,
-										casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 						//Flag that this does work, but we need to truncate it first
@@ -5515,8 +5517,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(consider_truncation == TRUE && underlying_enum_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
-										being_casted_type->type_name.string,
-										casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 						//Flag that this does work, but we need to truncate it first
@@ -5537,8 +5539,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(consider_truncation == TRUE && being_casted_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
-										being_casted_type->type_name.string,
-										casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 						//Flag that this does work, but we need to truncate it first
@@ -5570,8 +5572,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				 */
 				default:
 					sprintf(info, "Type %s may not be cast to type %s",
-									being_casted_type->type_name.string,
-									casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					return print_and_return_not_castable(info, parser_line_num);
 			}
 
@@ -5616,8 +5618,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
 						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_not_castable(info, parser_line_num);
 					}
 
@@ -5644,8 +5646,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
 						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_not_castable(info, parser_line_num);
 					}
 
@@ -5668,8 +5670,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
 						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_failure(info, parser_line_num);
 					}
 
@@ -5689,8 +5691,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
 						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_not_castable(info, parser_line_num);
 					}
 
@@ -5705,8 +5707,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				 */
 				default:
 					sprintf(info, "Type %s may not be cast to type %s",
-									being_casted_type->type_name.string,
-									casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					return print_and_return_not_castable(info, parser_line_num);
 			}
 
@@ -6566,8 +6568,8 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 				if(is_type_signed(left_hand_type) != is_type_signed(right_hand_type)){
 					sprintf(info, "Comparison(%s) between types %s and %s has a signedness mismatch and may produce unexpected behavior",
 			 						operator_token_to_string(op.tok),
-			 						left_hand_type->type_name.string,
-			 						right_hand_type->type_name.string);
+									get_full_type_name_from_type(left_hand_type),
+									get_full_type_name_from_type(right_hand_type));
 					num_warnings++;
 					print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 				}
@@ -6746,8 +6748,8 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 			if(is_type_signed(left_hand_type) != is_type_signed(right_hand_type)){
 				sprintf(info, "Comparison(%s) between types %s and %s has a signedness mismatch and may produce unexpected behavior",
 								operator_token_to_string(op.tok),
-								left_hand_type->type_name.string,
-								right_hand_type->type_name.string);
+								get_full_type_name_from_type(left_hand_type),
+								get_full_type_name_from_type(right_hand_type));
 				num_warnings++;
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 			}
@@ -7662,8 +7664,8 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 					return TRUE;
 				} else {
 					sprintf(info, "Attempt to use separate enum type %s in comparison with enum %s",
-			 						constant_node_type->type_name.string,
-			 						in_comparator_type->type_name.string);
+									get_full_type_name_from_type(constant_node_type),
+									get_full_type_name_from_type(in_comparator_type));
 					return print_and_return_failure(info, parser_line_num);
 				}
 			}
@@ -7682,8 +7684,8 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
-								constant_node_type->type_name.string,
-								in_comparator_type->type_name.string);
+								get_full_type_name_from_type(constant_node_type),
+								get_full_type_name_from_type(in_comparator_type));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -7696,7 +7698,9 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			 * type, then we will fail out because we have an impossible in statement in that case
 			 */
 			if(does_enum_contain_integer_member(in_comparator_type, constant_node->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Enum type %s contains no member that maps to integer value %d", in_comparator_type->type_name.string, constant_node->constant_value.signed_int_value);
+				sprintf(info, "Enum type %s contains no member that maps to integer value %d", 
+						get_full_type_name_from_type(in_comparator_type),
+						constant_node->constant_value.signed_int_value);
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -7724,8 +7728,8 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
-								constant_node_type->type_name.string,
-								in_comparator_type->type_name.string);
+								get_full_type_name_from_type(constant_node_type),
+								get_full_type_name_from_type(in_comparator_type));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -7859,7 +7863,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 * If the type is not valid for an in statement then we have an issue here
 	 */
 	if(is_type_valid_for_in_statement(comparing_to_type) == FALSE){
-		sprintf(info, "The type \"%s\" may not be used with an in statement", comparing_to_type->type_name.string);
+		sprintf(info, "The type \"%s\" may not be used with an in statement", get_full_type_name_from_type(comparing_to_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -8430,7 +8434,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, get_full_type_name_from_type(struct_type));
 		print_variable_name_to_buffer(info, duplicate);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
@@ -8485,7 +8489,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 		 * the user from adding a field the mut a:char[] that is unknown at compile time
 		 */
 		if(member_type->type_complete == FALSE){
-			sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", member_type->type_name.string);
+			sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", get_full_type_name_from_type(member_type));
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			return NULL;
 		}
@@ -8962,7 +8966,7 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 		 * the user from adding a field the mut a:char[] that is unknown at compile time
 		 */
 		if(type->type_complete == FALSE){
-			sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
+			sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", get_full_type_name_from_type(type));
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			return NULL;
 		}
@@ -9346,7 +9350,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			//The other case - if this is FALSE and we saw this,
 			//then we have an error
 			if(user_defined_enum_values == FALSE){
-				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", mutable_enum_type->type_name.string);
+				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", get_full_type_name_from_type(mutable_enum_type));
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -9438,7 +9442,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			//Are we using user-defined values? If so,
 			//then this is wrong
 			if(user_defined_enum_values == TRUE){
-				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", mutable_enum_type->type_name.string);
+				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", get_full_type_name_from_type(mutable_enum_type));
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -10207,7 +10211,7 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 	 * initially define them as blank if and only if we're using an initializer
 	 */
 	if(current_type->type->type_class != TYPE_CLASS_ARRAY && current_type->type->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type->type->type_name.string);
+		sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", get_full_type_name_from_type(current_type->type));
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		return NULL;
@@ -11286,7 +11290,9 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
 		if(current_function_signature->returns_void == FALSE){
-			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
+			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed",
+					current_function->func_name.string,
+					get_full_type_name_from_type(current_function_signature->return_type));
 			print_function_name_to_buffer(info, current_function);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -11326,10 +11332,9 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
 		//Following that we'll generate another error message to make it more clear
-		sprintf(info, "Function \"%s\" expects a return type of \"%s%s\", but was given an incompatible type \"%s\"",
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
 		  		current_function->func_name.string,
-				(current_function_signature->return_type->mutability == MUTABLE ? "mut " : ""),
-		  		current_function_signature->return_type->type_name.string,
+				get_full_type_name_from_type(current_function_signature->return_type),
 				get_full_type_name_from_ast_node(expr_node));
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
@@ -11342,9 +11347,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	 * we never return by copy, so an initializer fundamentally will never work
 	 */
 	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
-		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
-						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
-						current_function_signature->return_type->type_name.string);
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+						get_full_type_name_from_type(current_function_signature->return_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -11452,7 +11456,7 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 
 		//If this is not an error, we fail out
 		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", get_full_type_name_from_type(error_type));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -11714,7 +11718,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * that are eligible are integers of any kind and enumerated values
 	 */
 	if(is_type_eligible_for_switch_statement(switching_on_type) == FALSE){
-		sprintf(info, "Type \"%s\" is ineligible for use on a switch statement", switching_on_type->type_name.string);
+		sprintf(info, "Type \"%s\" is ineligible for use on a switch statement", get_full_type_name_from_type(switching_on_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -13152,7 +13156,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//If the type is incomplete, we do not allow it
 	if(type_spec->type_complete == FALSE){
-		sprintf(info, "Type %s is incomplete and may not be used as a declared variable's type", type_spec->type_name.string);
+		sprintf(info, "Type %s is incomplete and may not be used as a declared variable's type", get_full_type_name_from_type(type_spec));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -13198,7 +13202,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
 				//Throw up the warning here
 				sprintf(info, "Memory region type \"%s\" is immutable. If you declare variable \"%s\" with this type, you will never be able to write to it",
-								declared_var->type_defined_as->type_name.string,
+								get_full_type_name_from_type(declared_var->type_defined_as),
 								declared_var->var_name.string);
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 			}
@@ -14052,7 +14056,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//Must be an incomplete type, if it's not then we're out
 	if(type->type_complete == FALSE){
-		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
+		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", get_full_type_name_from_type(type));
 		return print_and_return_null(info, parser_line_num);
 	}
 
@@ -14309,7 +14313,7 @@ static inline u_int8_t error_list(ollie_token_stream_t* token_stream, generic_ty
 
 			//If they're equal at all, we fail out
 			if(types_identical(candidate, error_type) == TRUE){
-				sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
+				sprintf(info, "Function is already declared as raising an error of \"%s\"", get_full_type_name_from_type(error_type)); 
 				return print_and_return_failure(info, parser_line_num);
 			}
 		}
@@ -14440,7 +14444,7 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 			
 			//If it isn't a basic type and it isn't an i32, we fail
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
-				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", function_signature->type_name.string);
+				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", get_full_type_name_from_type(function_signature));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -14449,7 +14453,7 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 
 			//This must be a char** type. If it's not, we fail out
 			if(is_type_string_array(parameter_type) == FALSE){
-				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", function_signature->type_name.string);
+				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", get_full_type_name_from_type(function_signature));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -14457,14 +14461,14 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 		}
 
 		default: {
-			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", function_signature->type_name.string);
+			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", get_full_type_name_from_type(function_signature));
 			return print_and_return_failure(info, parser_line_num);
 		}
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
 	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
-		sprintf(info, "The main function must return a value of type i32, instead was given: %s", function_signature->type_name.string);
+		sprintf(info, "The main function must return a value of type i32, instead was given: %s", get_full_type_name_from_type(function_signature));
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -14535,7 +14539,8 @@ static inline u_int8_t validate_error_list_against_raised_errors(symtab_function
 		//Is it raised by the function? If not we've got an error
 		if(raised_by_function == FALSE){
 			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
-		   					function->func_name.string, mandatory_error->type_name.string);
+		   					function->func_name.string, 
+							get_full_type_name_from_type(mandatory_error));
 			return print_and_return_failure(info, parser_line_num);
 		}
 	}
