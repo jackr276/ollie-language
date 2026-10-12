@@ -179,14 +179,35 @@ static inline char* extract_file_name_from_fully_qualified_name(char* fully_qual
  * is specifically true for initializer nodes which *DO NOT* have a type
  * stamped on them until *AFTER* the validate_initializer_types() is invoked
  *
- *
+ * NOTE: this will return the char* from a freshly allocated dynamic string. We
+ * do not feel the need to return the dynamic string itself, we're just using
+ * it to allocate the space
  *
  * TODO if you see <ast_node>->inferred_type->type_name.string, REPLACE IT WITH
  * THIS
  */
 static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
+	dynamic_string_t type_name_string = dynamic_string_alloc();
 
-	//TODO
+	//Extract the inferred type from our node
+	generic_type_t* inferred_type = node->inferred_type;
+
+	/**
+	 * Two options - either the inferred type exists and we can
+	 * print normally *OR* there is no inferred type. We only
+	 * expected there to not be an inferred type in cases of initializers
+	 * that either have not been validated or have failed validation
+	 */
+	if(inferred_type != NULL){
+
+	} else {
+
+	}
+
+
+
+	//Give back the pointer to the freshly allocated string
+	return type_name_string.string;
 }
 
 
@@ -198,7 +219,8 @@ static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
  * get_full_type_name_from_ast_node ONLY!
  */
 static char* get_full_type_name_from_type(generic_type_t* type){
-
+	//TODO
+	return NULL;
 }
 
 
