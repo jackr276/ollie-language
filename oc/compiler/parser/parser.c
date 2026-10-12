@@ -2718,14 +2718,14 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				if(internal_function_type->contains_elaborative_stack_param == FALSE){
 					sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
 									function_name->string,
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index,
 									parameter_parsing_list.current_index);
 				} else {
 					//Account for the optional elaborative param
 					sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
 									function_name->string,
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index - 1,
 									parameter_parsing_list.current_index);
 				}
@@ -2743,14 +2743,13 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
 				sprintf(info, 
-						"Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
+						"Function \"%s\" of type \"%s\" expects an input of type \"%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
 						function_name->string,
-						function_signature->type_name.string,
-						(parameter_type->mutability == MUTABLE ? "mut ": ""),
-						parameter_type->type_name.string,
+						get_full_type_name_from_type(function_signature),
+						get_full_type_name_from_type(parameter_type),
 						param_result_index + 1,
 						get_full_type_name_from_ast_node(current_param),
-						function_signature->type_name.string);
+						get_full_type_name_from_type(function_signature));
 
 				//Use the helper to return this
 				return print_and_return_error(info, parser_line_num);
@@ -2763,9 +2762,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 * the ollie compiler bars this
 			 */
 			if(is_initializer_node(current_param) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
-				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-								(parameter_type->mutability == MUTABLE ? "mut" : ""),
-								parameter_type->type_name.string);
+				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+								get_full_type_name_from_type(parameter_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2827,9 +2825,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
 						sprintf(info, 
-								"Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s\".",
-								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-								type_being_elaborated->type_name.string,
+								"Function call expects an input of type \"%s\", but was given an incompatible input of type \"%s\".",
+								get_full_type_name_from_type(type_being_elaborated),
 								get_full_type_name_from_ast_node(param_expression));
 
 						return print_and_return_error(info, parser_line_num);
@@ -2842,9 +2839,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 					 * the ollie compiler bars this
 					 */
 					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(type_being_elaborated) == FALSE){
-						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
-										type_being_elaborated->type_name.string);
+						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+										get_full_type_name_from_type(type_being_elaborated));
 						return print_and_return_error(info, parser_line_num);
 					}
 
@@ -2892,14 +2888,14 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		if(internal_function_type->contains_elaborative_stack_param == FALSE){
 			sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
 							function_name->string,
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index,
 							parameter_parsing_list.current_index);
 		} else {
 			//Account for the optional elaborative param
 			sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
 							function_name->string,
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index - 1,
 							parameter_parsing_list.current_index);
 		}
@@ -2926,7 +2922,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		if(internal_function_type->raises_errors == FALSE){
 			sprintf(info, "Function \"%s\" of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
 						function_name->string,
-						function_signature->type_name.string);
+						get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2950,7 +2946,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		if(internal_function_type->raises_errors == TRUE){
 			sprintf(info, "Function \"%s\" of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
 							function_name->string,
-							function_signature->type_name.string);
+							get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3083,13 +3079,13 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			if(param_type_index >= parameter_parsing_list.current_index){
 				if(internal_function_type->contains_elaborative_stack_param == FALSE){
 					sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index,
 									parameter_parsing_list.current_index);
 				} else {
 					//Account for the optional elaborative param
 					sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index - 1,
 									parameter_parsing_list.current_index);
 				}
@@ -3107,13 +3103,12 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
 				sprintf(info, 
-						"Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
-						function_signature->type_name.string,
-						(parameter_type->mutability == MUTABLE ? "mut ": ""),
-						parameter_type->type_name.string,
+						"Type \"%s\" expects an input of type \"%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
+						get_full_type_name_from_type(function_signature),
+						get_full_type_name_from_type(parameter_type),
 						param_result_index + 1,
 						get_full_type_name_from_ast_node(current_param),
-						function_signature->type_name.string);
+						get_full_type_name_from_type(function_signature));
 
 				//Use the helper to return this
 				return print_and_return_error(info, parser_line_num);
@@ -3126,9 +3121,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 * the ollie compiler bars this
 			 */
 			if(is_initializer_node(current_param) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
-				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-								(parameter_type->mutability == MUTABLE ? "mut" : ""),
-								parameter_type->type_name.string);
+				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+								get_full_type_name_from_type(parameter_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -3189,9 +3183,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s\".",
-								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-								type_being_elaborated->type_name.string,
+						sprintf(info, "Function call expects an input of type \"%s\", but was given an incompatible input of type \"%s\".",
+								get_full_type_name_from_type(type_being_elaborated),
 								get_full_type_name_from_ast_node(param_expression));
 
 						return print_and_return_error(info, parser_line_num);
@@ -3204,9 +3197,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 					 * the ollie compiler bars this
 					 */
 					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(type_being_elaborated) == FALSE){
-						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
-										type_being_elaborated->type_name.string);
+						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+										get_full_type_name_from_type(type_being_elaborated));
 						return print_and_return_error(info, parser_line_num);
 					}
 
@@ -3253,13 +3245,13 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	if(param_result_index < parameter_parsing_list.current_index){
 		if(internal_function_type->contains_elaborative_stack_param == FALSE){
 			sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index,
 							parameter_parsing_list.current_index);
 		} else {
 			//Account for the optional elaborative param
 			sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index - 1,
 							parameter_parsing_list.current_index);
 		}
@@ -3285,7 +3277,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		 */
 		if(internal_function_type->raises_errors == FALSE){
 			sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
-						function_signature->type_name.string);
+						get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3308,7 +3300,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		 */
 		if(internal_function_type->raises_errors == TRUE){
 			sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
-							function_signature->type_name.string);
+							get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3424,7 +3416,7 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	 */
 	if(return_type->type_class == TYPE_CLASS_ELABORATIVE){
 		sprintf(info, "Elaborative type \"%s\" does not have a compile-time known size. Use \"paramcount(...)\" to get the number of parameters",
-		  				return_type->type_name.string);
+						get_full_type_name_from_type(return_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -3998,7 +3990,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 	 */
 	if(left_hand_type->type_class == TYPE_CLASS_ARRAY || left_hand_type->type_class == TYPE_CLASS_STRUCT){
 		if(left_hand_type->mutability == NOT_MUTABLE){
-			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", left_hand_type->type_name.string);
+			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", get_full_type_name_from_type(left_hand_type));
 			return print_and_return_error(info, parser_line_num);
 		}
 	}
@@ -13919,7 +13911,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			//Now check the overload type
 			if(internal_function_type->contains_elaborative_stack_param == TRUE){
 				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -13930,7 +13922,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
 				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s is invalid, signatures must have different parameter lists. First defined here:",
 						original_found_function->func_name.string,
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				print_function_name_to_buffer(info, original_found_function);
 
 				return print_and_return_error(info, parser_line_num);
@@ -13957,12 +13949,12 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 				if(function_symtab->current->is_default == TRUE){
 					sprintf(info, "Function \"%s\" has already been defined with type %s",
 							function_name.string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				} else {
 					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
 							function_name.string,
 							generate_fully_qualified_namespace_name(function_symtab->current).string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				}
 
 				print_function_name_to_buffer(info, overloaded_or_declared);
@@ -13973,12 +13965,12 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 				if(function_symtab->current->is_default == TRUE){
 					sprintf(info, "Function \"%s\" has already been predeclared with type %s",
 							function_name.string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				} else {
 					sprintf(info, "Function \"%s\" has already been predeclared in the namespace \"%s\" with type %s",
 							function_name.string,
 							generate_fully_qualified_namespace_name(function_symtab->current).string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				}
 
 				print_function_name_to_buffer(info, overloaded_or_declared);
@@ -14779,12 +14771,12 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 				if(function_symtab->current->is_default == TRUE){
 					sprintf(info, "Function \"%s\" has already been defined with type %s",
 							function_name.string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				} else {
 					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
 							function_name.string,
 							generate_fully_qualified_namespace_name(function_symtab->current).string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				}
 
 				print_function_name_to_buffer(info, overload_or_predeclared);
@@ -14878,7 +14870,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			//Now check the overload type
 			if(internal_function_type->contains_elaborative_stack_param == TRUE){
 				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -14889,7 +14881,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
 				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s is invalid, signatures must have different parameter lists. First defined here:",
 						original_found_function->func_name.string,
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				print_function_name_to_buffer(info, original_found_function);
 
 				return print_and_return_error(info, parser_line_num);
