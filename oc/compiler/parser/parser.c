@@ -155,6 +155,17 @@ static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* cur
 
 
 /**
+ * Trigger a fatal internal compiler error panic with the given message
+ * 
+ * NOTE: THIS WILL CRASH THE PROGRAM DELIBERATELY
+ */
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
+	exit(1);
+}
+
+
+/**
  * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
  */
 static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
@@ -199,12 +210,33 @@ static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
 	 * that either have not been validated or have failed validation
 	 */
 	if(inferred_type != NULL){
+		//We will attach the MUT keyword if we have a mutable type
+		if(inferred_type->mutability == MUTABLE){
+			dynamic_string_concatenate(&type_name_string, "mut ");
+		}
+
+		//Regardless of the mutability concatenate the actual type name
+		dynamic_string_concatenate(&type_name_string, inferred_type->type_name.string);
 
 	} else {
+		switch(node->ast_node_type){
+			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				dynamic_string_concatenate(&type_name_string, "array initializer");
+				break;
 
+			case AST_NODE_TYPE_STRING_INITIALIZER:
+				dynamic_string_concatenate(&type_name_string, "string initializer");
+				break;
+
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+				dynamic_string_concatenate(&type_name_string, "struct initializer");
+				break;
+
+			default:
+				trigger_ice_panic("Invalid ast node type found in type name helper\n");	
+				break;
+		}
 	}
-
-
 
 	//Give back the pointer to the freshly allocated string
 	return type_name_string.string;
