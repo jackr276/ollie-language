@@ -4720,7 +4720,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//Let's first check to see if this can be used in an array at all
 	//If we can't we'll fail out here
 	if(is_type_valid_for_memory_addressing(expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s cannot be used as an array index", expr->inferred_type->type_name.string);
+		sprintf(info, "Type %s cannot be used as an array index", get_full_type_name_from_ast_node(expr));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4729,9 +4729,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
-		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s%s\"",
-		  (expr->inferred_type->mutability == MUTABLE ? "mut ": ""),
-		  expr->inferred_type->type_name.string);
+		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", get_full_type_name_from_ast_node(expr));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -5058,7 +5056,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5159,7 +5159,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5193,7 +5195,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5212,7 +5216,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5231,7 +5237,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5262,7 +5270,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 			
@@ -5921,7 +5931,9 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -5943,7 +5955,9 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//Fail case here
 		if(right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+							get_full_type_name_from_ast_node(temp_holder),
+							operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -5952,7 +5966,10 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6145,7 +6162,9 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		
 		//Fail out here
 		if(left_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6167,7 +6186,9 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		
 		//Fail out here
 		if(right_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation",
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6184,7 +6205,10 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
