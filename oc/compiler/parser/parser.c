@@ -13454,7 +13454,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 			 * is_initializer_node_all_constant check above
 			 */
 			if(is_node_return_by_copy_function_call(initializer_node) == TRUE){
-				let_stmt_node->optional_storage.return_region_forwarding_eligible = TRUE;
+				initializer_node->return_region_forwarding_eligible = TRUE;
 			}
 		}
 	}

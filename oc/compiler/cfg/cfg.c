@@ -7290,6 +7290,9 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * Emit a direct or indirect function call statement and all of the parameters that come with it. We will
  * not handle the storage of these parameters at this point, OIR just has a generic "parameters" array that
  * will hold all of them until we handle them in the instruction selection step
+ *
+ *
+ * TODO MAY HAVE TO DO STUFF WITH RETURN REGION FORWARDING HERE
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Blank return package for now
@@ -11939,20 +11942,11 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 
 	switch(type->type_class){
 		/**
-		 * Struct
+		 * Struct, union and array types will always necessitate the creation of their own memory
+		 * regions, so we will take care of that now
 		 */
 		case TYPE_CLASS_STRUCT: 
-		case TYPE_CLASS_UNION: {
-			//TODO WHAT IF WE PASSED THE REGION ALONG TO THE FUNCTION CALL I THINK THAT IS
-			//BETTER
-
-			//TODO
-		}
-
-		/**
-		 * There is no chance for any special treatment with arrays, we always need to place
-		 * them on
-		 */
+		case TYPE_CLASS_UNION:
 		case TYPE_CLASS_ARRAY: {
 			//Create a stack region for this variable and store it in the associated region
 			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), type);
@@ -12009,6 +12003,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
+			 *
+			 * TODO RETURN REGION FORWARDING HERE MAYBE?? Maybe a special instruction type?
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
