@@ -155,6 +155,17 @@ static inline symtab_type_record_t* parse_pointer_type(symtab_type_record_t* cur
 
 
 /**
+ * Trigger a fatal internal compiler error panic with the given message
+ * 
+ * NOTE: THIS WILL CRASH THE PROGRAM DELIBERATELY
+ */
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
+	exit(1);
+}
+
+
+/**
  * Take a file that may look like: ./oc/test_files/sample.ol and return sample.ol
  */
 static inline char* extract_file_name_from_fully_qualified_name(char* fully_qualified_name){
@@ -170,6 +181,86 @@ static inline char* extract_file_name_from_fully_qualified_name(char* fully_qual
 
 	//Offset into this to get it(+ 1 to get past the /)
 	return fully_qualified_name + i + 1;
+}
+
+
+/**
+ * Generate the full type name from the given AST node. This is done for
+ * us to guard against trying to grab type names that are not there. This
+ * is specifically true for initializer nodes which *DO NOT* have a type
+ * stamped on them until *AFTER* the validate_initializer_types() is invoked
+ *
+ * NOTE: this will return the char* from a freshly allocated dynamic string. We
+ * do not feel the need to return the dynamic string itself, we're just using
+ * it to allocate the space
+ */
+static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
+	dynamic_string_t type_name_string = dynamic_string_alloc();
+
+	//Extract the inferred type from our node
+	generic_type_t* inferred_type = node->inferred_type;
+
+	/**
+	 * Two options - either the inferred type exists and we can
+	 * print normally *OR* there is no inferred type. We only
+	 * expected there to not be an inferred type in cases of initializers
+	 * that either have not been validated or have failed validation
+	 */
+	if(inferred_type != NULL){
+		//We will attach the MUT keyword if we have a mutable type
+		if(inferred_type->mutability == MUTABLE){
+			dynamic_string_concatenate(&type_name_string, "mut ");
+		}
+
+		//Regardless of the mutability concatenate the actual type name
+		dynamic_string_concatenate(&type_name_string, inferred_type->type_name.string);
+
+	} else {
+		switch(node->ast_node_type){
+			case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+				dynamic_string_concatenate(&type_name_string, "array initializer");
+				break;
+
+			case AST_NODE_TYPE_STRING_INITIALIZER:
+				dynamic_string_concatenate(&type_name_string, "string initializer");
+				break;
+
+			case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+				dynamic_string_concatenate(&type_name_string, "struct initializer");
+				break;
+
+			default:
+				trigger_ice_panic("Invalid ast node type found in type name helper\n");	
+				break;
+		}
+	}
+
+	//Give back the pointer to the freshly allocated string
+	return type_name_string.string;
+}
+
+
+/**
+ * Get the full type name from the given type. This will account for
+ * mutability printing as well
+ *
+ * NOTE: we will use a dynamic string internally to allocate the space
+ * needed to print this, but we will just return the dynamic string's
+ * char* for convenience
+ *
+ * WARNING: DO NOT USE THIS FOR AST NODES. AST NODES SHOULD USE 
+ * get_full_type_name_from_ast_node ONLY!
+ */
+static char* get_full_type_name_from_type(generic_type_t* type){
+	dynamic_string_t full_name = dynamic_string_alloc();
+
+	//If this is mutable take the mut prefix on
+	if(type->mutability == MUTABLE){
+		dynamic_string_concatenate(&full_name, "mut ");
+	}
+
+	dynamic_string_concatenate(&full_name, type->type_name.string);
+	return full_name.string;
 }
 
 
@@ -612,7 +703,7 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 	 * The user is trying to initialize a non-array with an array type we hard fail
 	 */
 	if(array_type->type_class != TYPE_CLASS_ARRAY){
-		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", array_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not an array and therefore may not be initialized with the [] syntax", get_full_type_name_from_type(array_type));
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -678,7 +769,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 	 * What if the user is trying to use an array initializer on a non-array type? If so, this should fail
 	 */
 	if(struct_type->type_class != TYPE_CLASS_STRUCT){
-		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", struct_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a struct and therefore may not be initialized with the {} syntax", get_full_type_name_from_type(struct_type));
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -696,7 +787,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 	while(cursor != NULL){
 		//If we exceed the number of fields given, we error out
 		if(seen_fields_count > num_fields){
-			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+			sprintf(info, "Type %s expects %d fields, was given at least %d in initializer", get_full_type_name_from_type(struct_type), num_fields, seen_fields_count);
 			return print_and_return_failure(info, parser_line_num);
 		}
 
@@ -717,7 +808,7 @@ static u_int8_t validate_types_for_struct_initializer_list(generic_type_t* struc
 
 	//One final validation - we need to check if the field counts match
 	if(num_fields != seen_fields_count){
-		sprintf(info, "Type %s expects %d fields, was given %d in initializer", struct_type->type_name.string, num_fields, seen_fields_count);
+		sprintf(info, "Type %s expects %d fields, was given %d in initializer", get_full_type_name_from_type(struct_type), num_fields, seen_fields_count);
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -745,7 +836,7 @@ static generic_ast_node_t* validate_and_set_bounds_for_string_initializer(generi
 	 * If we do not have a char type as our underlying, then this is invalid
 	 */
 	if(member_type->type_class != TYPE_CLASS_BASIC || member_type->basic_type_token != CHAR){
-		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", array_type->type_name.string);
+		sprintf(info, "Attempt to use a string initializer for an array of type: %s. String initializers are only valid for type: char[]", get_full_type_name_from_type(array_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -831,7 +922,7 @@ static generic_type_t* validate_initializer_types(generic_type_t* target_type, g
 			 * be initialized using the [] syntax
 			 */
 			if(target_type->type_class == TYPE_CLASS_ARRAY){
-				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", target_type->type_name.string);
+				sprintf(info, "Type \"%s\" may only be initialized using the appropriate initializer list syntax", get_full_type_name_from_type(target_type));
 				return print_and_return_null(info, parser_line_num);
 			}
 
@@ -936,7 +1027,7 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 						//First print out this error
 						sprintf(info, "No overload of function \"%s\" has a signature that matches %s",
 										original_record->func_name.string,
-										destination_type->type_name.string);
+										get_full_type_name_from_type(destination_type));
 						print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 						//Then the generic one we always have
@@ -977,7 +1068,8 @@ static inline generic_type_t* is_ast_node_assignable_to_destination_type(generic
 						if(does_enum_contain_integer_member(destination_type, source_node->constant_value.signed_int_value) == FALSE){
 							//First print out this failure
 							sprintf(info, "Type \"%s\" does not have a member that correlates to value %d",
-										destination_type->type_name.string, source_node->constant_value.signed_int_value);
+										get_full_type_name_from_type(destination_type),
+										source_node->constant_value.signed_int_value);
 							print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 
 							//Then the types assignable failure
@@ -1185,7 +1277,7 @@ static inline u_int8_t do_duplicate_member_variables_exist(char* name, generic_t
 
 	//Means that we have a duplicate
 	if(found != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, current_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name, get_full_type_name_from_type(current_type));
 		print_variable_name_to_buffer(info, found);
 		num_errors++;
 		return TRUE;
@@ -1535,7 +1627,9 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		case COMMA:
 			//If this is the case, the return type had better be void
 			if(current_function_signature->returns_void == FALSE){
-				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
+				sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed",
+						current_function->func_name.string,
+						get_full_type_name_from_type(current_function_signature->return_type));
 				print_function_name_to_buffer(info, current_function);
 				return print_and_return_error(info, parser_line_num);
 			}
@@ -1582,8 +1676,11 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
-		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"", current_function->func_name.string, current_function_signature->return_type->type_name.string,
-		  		expr_node->inferred_type->type_name.string);
+		sprintf(info,
+				"Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
+				current_function->func_name.string,
+				get_full_type_name_from_type(current_function_signature->return_type),
+				get_full_type_name_from_ast_node(expr_node));
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -1595,9 +1692,8 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	 * we never return by copy, so an initializer fundamentally will never work
 	 */
 	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
-		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
-						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
-						current_function_signature->return_type->type_name.string);
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+						get_full_type_name_from_type(current_function_signature->return_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -1694,7 +1790,7 @@ static generic_ast_node_t* raise_statement_in_handle_clause(ollie_token_stream_t
 
 		//If this is not an error, we fail out
 		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", get_full_type_name_from_type(error_type)); 
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1765,7 +1861,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 
 		//Also if this is not an error we go
 		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" is not defined as an error type", error_type->type_name.string);
+			sprintf(info, "Type \"%s\" is not defined as an error type", get_full_type_name_from_type(error_type));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -1830,8 +1926,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			//If it's not void-returning it is invalid
 			if(IS_VOID_TYPE(called_function_signature->return_type) == FALSE){
 				sprintf(info, "Function signature \"%s\" returns a non-void type of %s. Ignore statements cannot be used here.",
-								function_signature->type_name.string,
-								called_function_signature->return_type->type_name.string);
+								get_full_type_name_from_type(function_signature),
+								get_full_type_name_from_type(called_function_signature->return_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1846,7 +1942,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * and this is invalid
 			 */
 			if(IS_VOID_TYPE(called_function_signature->return_type) == TRUE){	
-				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ignore\", \"ret\" or \"raise\"", function_signature->type_name.string);
+				sprintf(info, "Function signature \"%s\" has a return type of void, all errors must be handled using \"ignore\", \"ret\" or \"raise\"",
+						get_full_type_name_from_type(function_signature));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1870,10 +1967,11 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 
 			//Fail out here
 			if(final_type == NULL){
-				sprintf(info, "Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
-							function_signature->type_name.string,
-							called_function_signature->return_type->type_name.string,
-							result_node->inferred_type->type_name.string); 
+				sprintf(info, 
+						"Function signature \"%s\" has a return type of %s, but error handling returned an incompatible type %s",
+						get_full_type_name_from_type(function_signature),
+						get_full_type_name_from_type(called_function_signature->return_type),
+						get_full_type_name_from_ast_node(result_node));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1883,9 +1981,8 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			 * have that we will get segfaults. For that reason Ollie disallows stuff like this
 			 */
 			if(is_initializer_node(result_node) == TRUE && is_type_returned_by_copy(called_function_signature->return_type) == FALSE){
-				sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
-								(called_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
-								called_function_signature->return_type->type_name.string);
+				sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+								get_full_type_name_from_type(called_function_signature->return_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -1965,7 +2062,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 
 			//If these are the same then we fail
 			if(types_identical(error_type, error_handle_node->optional_storage.error_type) == TRUE){
-				sprintf(info, "Invalid attempt to handle error type \"%s\" more than once", error_type->type_name.string);
+				sprintf(info, "Invalid attempt to handle error type \"%s\" more than once", get_full_type_name_from_type(error_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
@@ -2055,7 +2152,7 @@ static generic_ast_node_t* handle_statement(ollie_token_stream_t* token_stream, 
 		//Now if we made it down here and we got what we need, we're good. If we didn't, we fail out
 		if(seen_error == FALSE){
 			sprintf(info, "Error \"%s\" is mandated to have a specific check due to being in the function's raises clause. Please add a case inside of the handle for this error",
-		   					mandatory_checked_error->type_name.string);
+							get_full_type_name_from_type(mandatory_checked_error));
 
 			//Send this error up the chain
 			return print_and_return_error(info, parser_line_num);
@@ -2149,11 +2246,9 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 			//If this is null, it means that our check failed
 			if(final_type == NULL){
 				//Following that we'll generate another error message to make it more clear
-				sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
-						(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-						type_being_elaborated->type_name.string,
-						(elaborated_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						elaborated_param->inferred_type->type_name.string);
+				sprintf(info, "Function call expects an input of type \"%s\", but was given an incompatible input of type \"%s\".",
+						get_full_type_name_from_type(type_being_elaborated),
+						get_full_type_name_from_ast_node(elaborated_param));
 
 				return print_and_return_error(info, parser_line_num);
 			}
@@ -2623,14 +2718,14 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				if(internal_function_type->contains_elaborative_stack_param == FALSE){
 					sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
 									function_name->string,
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index,
 									parameter_parsing_list.current_index);
 				} else {
 					//Account for the optional elaborative param
 					sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
 									function_name->string,
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index - 1,
 									parameter_parsing_list.current_index);
 				}
@@ -2647,15 +2742,14 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				sprintf(info, "Function \"%s\" of type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
+				sprintf(info, 
+						"Function \"%s\" of type \"%s\" expects an input of type \"%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
 						function_name->string,
-						function_signature->type_name.string,
-						(parameter_type->mutability == MUTABLE ? "mut ": ""),
-						parameter_type->type_name.string,
+						get_full_type_name_from_type(function_signature),
+						get_full_type_name_from_type(parameter_type),
 						param_result_index + 1,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+						get_full_type_name_from_ast_node(current_param),
+						get_full_type_name_from_type(function_signature));
 
 				//Use the helper to return this
 				return print_and_return_error(info, parser_line_num);
@@ -2668,9 +2762,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 * the ollie compiler bars this
 			 */
 			if(is_initializer_node(current_param) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
-				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-								(parameter_type->mutability == MUTABLE ? "mut" : ""),
-								parameter_type->type_name.string);
+				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+								get_full_type_name_from_type(parameter_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -2731,11 +2824,10 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
-								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-								type_being_elaborated->type_name.string,
-								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
-								param_expression->inferred_type->type_name.string);
+						sprintf(info, 
+								"Function call expects an input of type \"%s\", but was given an incompatible input of type \"%s\".",
+								get_full_type_name_from_type(type_being_elaborated),
+								get_full_type_name_from_ast_node(param_expression));
 
 						return print_and_return_error(info, parser_line_num);
 					}
@@ -2747,9 +2839,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 					 * the ollie compiler bars this
 					 */
 					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(type_being_elaborated) == FALSE){
-						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
-										type_being_elaborated->type_name.string);
+						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+										get_full_type_name_from_type(type_being_elaborated));
 						return print_and_return_error(info, parser_line_num);
 					}
 
@@ -2797,14 +2888,14 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		if(internal_function_type->contains_elaborative_stack_param == FALSE){
 			sprintf(info, "Function \"%s\" of type \"%s\" expects %d parameters, but was given %d",
 							function_name->string,
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index,
 							parameter_parsing_list.current_index);
 		} else {
 			//Account for the optional elaborative param
 			sprintf(info, "Function \"%s\" of type \"%s\" expects at least %d parameters, but was given %d",
 							function_name->string,
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index - 1,
 							parameter_parsing_list.current_index);
 		}
@@ -2831,7 +2922,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		if(internal_function_type->raises_errors == FALSE){
 			sprintf(info, "Function \"%s\" of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
 						function_name->string,
-						function_signature->type_name.string);
+						get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2855,7 +2946,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 		if(internal_function_type->raises_errors == TRUE){
 			sprintf(info, "Function \"%s\" of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
 							function_name->string,
-							function_signature->type_name.string);
+							get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -2988,13 +3079,13 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			if(param_type_index >= parameter_parsing_list.current_index){
 				if(internal_function_type->contains_elaborative_stack_param == FALSE){
 					sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index,
 									parameter_parsing_list.current_index);
 				} else {
 					//Account for the optional elaborative param
 					sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
-									function_signature->type_name.string,
+									get_full_type_name_from_type(function_signature),
 									function_parameter_types->current_index - 1,
 									parameter_parsing_list.current_index);
 				}
@@ -3011,14 +3102,13 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 */
 			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(parameter_type, current_param);
 			if(final_type == NULL){
-				sprintf(info, "Type \"%s\" expects an input of type \"%s%s\" as parameter %d, but was given an incompatible input of type \"%s%s\". Defined as: %s",
-						function_signature->type_name.string,
-						(parameter_type->mutability == MUTABLE ? "mut ": ""),
-						parameter_type->type_name.string,
+				sprintf(info, 
+						"Type \"%s\" expects an input of type \"%s\" as parameter %d, but was given an incompatible input of type \"%s\". Defined as: %s",
+						get_full_type_name_from_type(function_signature),
+						get_full_type_name_from_type(parameter_type),
 						param_result_index + 1,
-						//Print the mut keyword if we need it
-						(current_param->inferred_type->mutability == MUTABLE ? "mut " : ""),
-						current_param->inferred_type->type_name.string, function_signature->type_name.string);
+						get_full_type_name_from_ast_node(current_param),
+						get_full_type_name_from_type(function_signature));
 
 				//Use the helper to return this
 				return print_and_return_error(info, parser_line_num);
@@ -3031,9 +3121,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 * the ollie compiler bars this
 			 */
 			if(is_initializer_node(current_param) == TRUE && is_type_stack_passed_by_copy(parameter_type) == FALSE){
-				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-								(parameter_type->mutability == MUTABLE ? "mut" : ""),
-								parameter_type->type_name.string);
+				sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+								get_full_type_name_from_type(parameter_type));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -3094,11 +3183,9 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 
 					//If this is null, it means that our check failed
 					if(final_type == NULL){
-						sprintf(info, "Function call expects an input of type \"%s%s\", but was given an incompatible input of type \"%s%s\".",
-								(type_being_elaborated->mutability == MUTABLE ? "mut ": ""),
-								type_being_elaborated->type_name.string,
-								(param_expression->inferred_type->mutability == MUTABLE ? "mut " : ""),
-								param_expression->inferred_type->type_name.string);
+						sprintf(info, "Function call expects an input of type \"%s\", but was given an incompatible input of type \"%s\".",
+								get_full_type_name_from_type(type_being_elaborated),
+								get_full_type_name_from_ast_node(param_expression));
 
 						return print_and_return_error(info, parser_line_num);
 					}
@@ -3110,9 +3197,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 					 * the ollie compiler bars this
 					 */
 					if(is_initializer_node(param_expression) == TRUE && is_type_stack_passed_by_copy(type_being_elaborated) == FALSE){
-						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s%s\". Only pass by copy types may be passed by initializer",
-										(type_being_elaborated->mutability == MUTABLE ? "mut" : ""),
-										type_being_elaborated->type_name.string);
+						sprintf(info, "Invalid attempt to initialize into non pass-by-copy type \"%s\". Only pass by copy types may be passed by initializer",
+										get_full_type_name_from_type(type_being_elaborated));
 						return print_and_return_error(info, parser_line_num);
 					}
 
@@ -3159,13 +3245,13 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 	if(param_result_index < parameter_parsing_list.current_index){
 		if(internal_function_type->contains_elaborative_stack_param == FALSE){
 			sprintf(info, "Function of type \"%s\" expects %d parameters, but was given %d",
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index,
 							parameter_parsing_list.current_index);
 		} else {
 			//Account for the optional elaborative param
 			sprintf(info, "Function of type \"%s\" expects at least %d parameters, but was given %d",
-							function_signature->type_name.string,
+							get_full_type_name_from_type(function_signature),
 							function_parameter_types->current_index - 1,
 							parameter_parsing_list.current_index);
 		}
@@ -3191,7 +3277,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		 */
 		if(internal_function_type->raises_errors == FALSE){
 			sprintf(info, "Function of type \"%s\" is defined as not raising errors. A \"handle\" statement is only allowed for functions that raise errors",
-						function_signature->type_name.string);
+						get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3214,7 +3300,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 		 */
 		if(internal_function_type->raises_errors == TRUE){
 			sprintf(info, "Function of type \"%s\" is defined as raising errors. A \"handle\" statement is required upon every call of this function",
-							function_signature->type_name.string);
+							get_full_type_name_from_type(function_signature));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3261,7 +3347,7 @@ static generic_ast_node_t* function_call(ollie_token_stream_t* token_stream, sid
 	} else {
 		//Validate that what we're trying to call is actually a function
 		if(unary_expression_node->inferred_type->type_class != TYPE_CLASS_FUNCTION_SIGNATURE){
-			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", unary_expression_node->inferred_type->type_name.string);
+			sprintf(info, "Type \"%s\" is not callable and therefore cannot be called as a function", get_full_type_name_from_ast_node(unary_expression_node));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -3330,7 +3416,7 @@ static generic_ast_node_t* sizeof_statement(ollie_token_stream_t* token_stream, 
 	 */
 	if(return_type->type_class == TYPE_CLASS_ELABORATIVE){
 		sprintf(info, "Elaborative type \"%s\" does not have a compile-time known size. Use \"paramcount(...)\" to get the number of parameters",
-		  				return_type->type_name.string);
+						get_full_type_name_from_type(return_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -3904,7 +3990,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 	 */
 	if(left_hand_type->type_class == TYPE_CLASS_ARRAY || left_hand_type->type_class == TYPE_CLASS_STRUCT){
 		if(left_hand_type->mutability == NOT_MUTABLE){
-			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", left_hand_type->type_name.string);
+			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", get_full_type_name_from_type(left_hand_type));
 			return print_and_return_error(info, parser_line_num);
 		}
 	}
@@ -3941,7 +4027,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		//We have an array accessor to check
 		if(accessor->ast_node_type == AST_NODE_TYPE_ARRAY_ACCESSOR){
 			if(first_child->inferred_type->mutability == NOT_MUTABLE){
-				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", first_child->inferred_type->type_name.string);
+				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(first_child));
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
@@ -3966,7 +4052,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		 */
 		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR && first_child->unary_operator == STAR){
 			if(dereferenced->inferred_type->mutability == NOT_MUTABLE){
-				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", dereferenced->inferred_type->type_name.string);
+				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(dereferenced));
 				return print_and_return_error(info, parser_line_num);
 			}
 		}
@@ -4215,7 +4301,7 @@ loop_end:
 		//Let's check if the left is valid
 		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
 			sprintf(info, "Type %s is invalid for operation %s",
-					left_hand_type->type_name.string,
+					get_full_type_name_from_type(left_hand_type),
 					operator_token_to_string(assignment_operator));
 
 			return print_and_return_error(info, parser_line_num);
@@ -4224,7 +4310,7 @@ loop_end:
 		//Let's also see if the right hand type is valid
 		if(is_binary_operation_valid_for_type(expr->inferred_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
 			sprintf(info, "Type %s is invalid for operation %s",
-					expr->inferred_type->type_name.string,
+					get_full_type_name_from_ast_node(expr),
 					operator_token_to_string(assignment_operator));
 
 			return print_and_return_error(info, parser_line_num);
@@ -4263,9 +4349,9 @@ loop_end:
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s",
-					left_hand_duplicate->inferred_type->type_name.string,
-					expr->inferred_type->type_name.string,
+			sprintf(info, "Types \"%s\" and \"%s\" cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(left_hand_duplicate),
+					get_full_type_name_from_ast_node(expr),
 					operator_token_to_string(assignment_operator));
 
 			return print_and_return_error(info, parser_line_num);
@@ -4316,7 +4402,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 
 	//If this is not a pointer, then we can't use ::
 	if(current_type->type_class != TYPE_CLASS_POINTER){
-		sprintf(info, "Type \"%s\" is not a pointer to a union and cannot be accessed with the -> operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a pointer to a union and cannot be accessed with the -> operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4325,7 +4411,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 
 	//If this is not a union type, it immediately cannot be correct
 	if(points_to->type_class != TYPE_CLASS_UNION){
-		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the -> operator", points_to->type_name.string);
+		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the -> operator", get_full_type_name_from_type(points_to));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4345,7 +4431,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 
 	//If this ends up being NULL, then we have an incorrect access
 	if(union_member == NULL){
-		sprintf(info, "Type %s does not have a member %s", points_to->type_name.string, variable_name.string);
+		sprintf(info, "Type %s does not have a member %s", get_full_type_name_from_type(points_to), variable_name.string);
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4382,7 +4468,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 
 	//If this is not a pointer, then we can't use ::
 	if(current_type->type_class != TYPE_CLASS_POINTER){
-		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the => operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a pointer to a struct and cannot be accessed with the => operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4391,7 +4477,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 
 	//We need to specifically see a struct here. If we don't then we leave
 	if(current_type->type_class != TYPE_CLASS_STRUCT){
-		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4411,7 +4497,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4459,7 +4545,7 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
 
 	//We need to specifically see a struct here. If we don't then we leave
 	if(current_type->type_class != TYPE_CLASS_STRUCT){
-		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", current_type->type_name.string);
+		sprintf(info, "Type \"%s\" cannot be accessed with the : operator.", get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4479,7 +4565,7 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
 
 	//If we can't find it we're out
 	if(var_record == NULL){
-		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, current_type->type_name.string);
+		sprintf(info, "Variable \"%s\" is not a known member of struct %s", member_name, get_full_type_name_from_type(current_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4518,7 +4604,7 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 	//If this is not a union type, it immediately cannot be correct
 	if(type->type_class != TYPE_CLASS_UNION){
-		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the . operator", type->type_name.string);
+		sprintf(info, "Type \"%s\" is not a union type and is incompatible with the . operator", get_full_type_name_from_type(type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4535,7 +4621,7 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 	//If this is NULL, it means that the var is not present and therefore this is incorrect
 	if(union_variable == NULL){
-		sprintf(info, "Variable %s is not a member of type %s\n", lookahead.lexeme.string, type->type_name.string); 
+		sprintf(info, "Variable %s is not a member of type %s\n", lookahead.lexeme.string, get_full_type_name_from_type(type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4617,7 +4703,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Make sure the type itself can be subscripted
 	if(is_type_subscriptable(type) == FALSE){
-		sprintf(info, "Type \"%s\" is not subscriptable", type->type_name.string);
+		sprintf(info, "Type \"%s\" is not subscriptable", get_full_type_name_from_type(type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4635,7 +4721,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	//Let's first check to see if this can be used in an array at all
 	//If we can't we'll fail out here
 	if(is_type_valid_for_memory_addressing(expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s cannot be used as an array index", expr->inferred_type->type_name.string);
+		sprintf(info, "Type %s cannot be used as an array index", get_full_type_name_from_ast_node(expr));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4644,9 +4730,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Let's make sure that this is an int
 	if(final_type == NULL){
-		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s%s\"",
-		  (expr->inferred_type->mutability == MUTABLE ? "mut ": ""),
-		  expr->inferred_type->type_name.string);
+		sprintf(info, "Array accessing requires types compatible with \"u64\", but instead got \"%s\"", get_full_type_name_from_ast_node(expr));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4689,7 +4773,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
 	//Let's first check and see if this is valid. If it's not we fail out
 	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", current_type->type_name.string, operator_token_to_string(operator));
+		sprintf(info, "Type %s is invalid for operator %s", get_full_type_name_from_type(current_type), operator_token_to_string(operator));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -4973,7 +5057,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5074,7 +5160,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5108,7 +5196,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5127,7 +5217,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5146,7 +5238,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -5177,7 +5271,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 			//If it it's invalid, we fail here
 			if(is_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", cast_expr->inferred_type->type_name.string, operator_token_to_string(unary_op_tok));
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(cast_expr),
+						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 			
@@ -5290,7 +5386,7 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 	 * You can never cast a "void" to anything
 	 */
 	if(IS_VOID_TYPE(being_casted_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to any other type", being_casted_type->type_name.string);
+		sprintf(info, "Type %s cannot be casted to any other type", get_full_type_name_from_type(being_casted_type));
 		return print_and_return_not_castable(info, parser_line_num);
 	}
 
@@ -5298,7 +5394,9 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 	 * Likewise, you can never cast anything to void
 	 */
 	if(IS_VOID_TYPE(casting_to_type) == TRUE){
-		sprintf(info, "Type %s cannot be casted to type %s", being_casted_type->type_name.string, casting_to_type->type_name.string);
+		sprintf(info, "Type %s cannot be casted to type %s",
+					get_full_type_name_from_type(being_casted_type),
+					get_full_type_name_from_type(casting_to_type));
 		return print_and_return_not_castable(info, parser_line_num);
 	}
 
@@ -5333,8 +5431,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 			//If it's not basic we cannot go further
 			if(being_casted_type->type_class != TYPE_CLASS_BASIC){
 				sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
-								being_casted_type->type_name.string,
-								casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 				return print_and_return_not_castable(info, parser_line_num);
 			}
 
@@ -5350,8 +5448,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				case F64:
 				case VOID:
 					sprintf(info, "Type %s may not be cast to enumerated type %s. Only integers may be cast to enum types",
-									being_casted_type->type_name.string,
-									casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					return print_and_return_not_castable(info, parser_line_num);
 
 				/**
@@ -5369,8 +5467,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				case I64:
 				case U64:
 					sprintf(info, "There is no guarantee that all possible values from type %s are expressed in enum %s",
-			 						being_casted_type->type_name.string,
-			 						casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 					/**
@@ -5379,8 +5477,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(consider_truncation == TRUE && underlying_enum_type->type_size < casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
-										being_casted_type->type_name.string,
-										casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 						//Flag that this does work, but we need to truncate it first
@@ -5419,8 +5517,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(consider_truncation == TRUE && underlying_enum_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
-										being_casted_type->type_name.string,
-										casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 						//Flag that this does work, but we need to truncate it first
@@ -5441,8 +5539,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(consider_truncation == TRUE && being_casted_type->type_size > casting_to_type->type_size){
 						sprintf(info, "Casting from type %s to type %s may result in data loss from truncation",
-										being_casted_type->type_name.string,
-										casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						print_parse_message(MESSAGE_TYPE_INFO, info, parser_line_num);
 
 						//Flag that this does work, but we need to truncate it first
@@ -5474,8 +5572,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				 */
 				default:
 					sprintf(info, "Type %s may not be cast to type %s",
-									being_casted_type->type_name.string,
-									casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					return print_and_return_not_castable(info, parser_line_num);
 			}
 
@@ -5520,8 +5618,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
 						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_not_castable(info, parser_line_num);
 					}
 
@@ -5548,8 +5646,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
 						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_not_castable(info, parser_line_num);
 					}
 
@@ -5572,8 +5670,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->mutability == NOT_MUTABLE && casting_to_type->mutability == MUTABLE){
 						sprintf(info, "Immutable type %s may not be cast to mutable type %s",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_failure(info, parser_line_num);
 					}
 
@@ -5593,8 +5691,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 					 */
 					if(being_casted_type->memory_layout_type != casting_to_type->memory_layout_type){
 						sprintf(info, "Types %s and %s have different memory layout types. Casting one to the other would cause undefined memory access behavior",
-			  							being_casted_type->type_name.string,
-			  							casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 						return print_and_return_not_castable(info, parser_line_num);
 					}
 
@@ -5609,8 +5707,8 @@ static castability_results_t are_types_castable(generic_type_t* casting_to_type,
 				 */
 				default:
 					sprintf(info, "Type %s may not be cast to type %s",
-									being_casted_type->type_name.string,
-									casting_to_type->type_name.string);
+								get_full_type_name_from_type(being_casted_type),
+								get_full_type_name_from_type(casting_to_type));
 					return print_and_return_not_castable(info, parser_line_num);
 			}
 
@@ -5836,7 +5934,9 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//Fail case here
 		if(temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -5858,7 +5958,9 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//Fail case here
 		if(right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+							get_full_type_name_from_ast_node(temp_holder),
+							operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -5867,7 +5969,10 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6060,7 +6165,9 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		
 		//Fail out here
 		if(left_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6082,7 +6189,9 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 		
 		//Fail out here
 		if(right_type_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s on the right side of a binary operation",
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6099,7 +6208,10 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6238,7 +6350,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 			
 			//Fail out here
 			if(is_left_type_shiftable == FALSE){
-				sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
+				sprintf(info, "Type %s is invalid for a bitwise shift operation", get_full_type_name_from_ast_node(temp_holder));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -6259,7 +6371,7 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 			
 			//Fail out here
 			if(is_right_type_shiftable == FALSE){
-				sprintf(info, "Type %s is invalid for a bitwise shift operation", temp_holder->inferred_type->type_name.string); 
+				sprintf(info, "Type %s is invalid for a bitwise shift operation", get_full_type_name_from_ast_node(temp_holder));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -6268,7 +6380,10 @@ static generic_ast_node_t* shift_expression(ollie_token_stream_t* token_stream, 
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s",
+						get_full_type_name_from_ast_node(temp_holder),
+						get_full_type_name_from_ast_node(right_child),
+						operator_token_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -6393,7 +6508,9 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 			//This is our fail case
 			if(is_temp_holder_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok)); 
+				sprintf(info, "Type %s is invalid for operator %s", 
+						get_full_type_name_from_ast_node(temp_holder),
+						operator_token_to_string(op.tok)); 
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -6414,7 +6531,9 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 			//This is our fail case
 			if(is_right_child_valid == FALSE){
-				sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok)); 
+				sprintf(info, "Type %s is invalid for operator %s",
+						get_full_type_name_from_ast_node(temp_holder),
+						operator_token_to_string(op.tok)); 
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -6427,7 +6546,10 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 
 			//If this fails, that means that we have an invalid operation
 			if(return_type == NULL){
-				sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+				sprintf(info, "Types %s and %s cannot be applied to operator %s",
+						get_full_type_name_from_ast_node(temp_holder),
+						get_full_type_name_from_ast_node(right_child),
+						operator_token_to_string(op.tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -6446,8 +6568,8 @@ static generic_ast_node_t* relational_expression(ollie_token_stream_t* token_str
 				if(is_type_signed(left_hand_type) != is_type_signed(right_hand_type)){
 					sprintf(info, "Comparison(%s) between types %s and %s has a signedness mismatch and may produce unexpected behavior",
 			 						operator_token_to_string(op.tok),
-			 						left_hand_type->type_name.string,
-			 						right_hand_type->type_name.string);
+									get_full_type_name_from_type(left_hand_type),
+									get_full_type_name_from_type(right_hand_type));
 					num_warnings++;
 					print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 				}
@@ -6566,7 +6688,9 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, there's no point in going forward
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", temp_holder->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6587,7 +6711,9 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, there's no point in going forward
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is invalid for operator %s", right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Type %s is invalid for operator %s",
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 		
@@ -6600,7 +6726,10 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 
 		//If this fails, that means that we have an invalid operation
 		if(sub_tree_root->inferred_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, operator_token_to_string(op.tok));
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child),
+					operator_token_to_string(op.tok));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6619,8 +6748,8 @@ static generic_ast_node_t* equality_expression(ollie_token_stream_t* token_strea
 			if(is_type_signed(left_hand_type) != is_type_signed(right_hand_type)){
 				sprintf(info, "Comparison(%s) between types %s and %s has a signedness mismatch and may produce unexpected behavior",
 								operator_token_to_string(op.tok),
-								left_hand_type->type_name.string,
-								right_hand_type->type_name.string);
+								get_full_type_name_from_type(left_hand_type),
+								get_full_type_name_from_type(right_hand_type));
 				num_warnings++;
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 			}
@@ -6737,7 +6866,7 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the & operator", temp_holder->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the & operator", get_full_type_name_from_ast_node(temp_holder));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6755,7 +6884,7 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the & operator", right_child->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the & operator", get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6767,7 +6896,10 @@ static generic_ast_node_t* and_expression(ollie_token_stream_t* token_stream, si
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child),
+					"&");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6872,7 +7004,7 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the ^ operator", temp_holder->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the ^ operator", get_full_type_name_from_ast_node(temp_holder));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6890,7 +7022,7 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the ^ operator", get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -6902,7 +7034,10 @@ static generic_ast_node_t* exclusive_or_expression(ollie_token_stream_t* token_s
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
+			sprintf(info, "Types %s and %s cannot be applied to operator %s",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child),
+					"^");
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7010,7 +7145,7 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", temp_holder->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the | operator", get_full_type_name_from_ast_node(temp_holder));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7028,7 +7163,7 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the | operator", right_child->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the | operator", get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7040,7 +7175,9 @@ static generic_ast_node_t* inclusive_or_expression(ollie_token_stream_t* token_s
 
 		//If this fails, that means that we have an invalid operation
 		if(final_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "^");
+			sprintf(info, "Types %s and %s cannot be applied to operator |", 
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7150,7 +7287,7 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", temp_holder->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the && operator", get_full_type_name_from_ast_node(temp_holder));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7168,7 +7305,7 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the && operator", get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7180,7 +7317,9 @@ static generic_ast_node_t* logical_and_expression(ollie_token_stream_t* token_st
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "&&");
+			sprintf(info, "Types %s and %s cannot be applied to operator &&",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7290,7 +7429,7 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 
 		//This is our fail case
 		if(is_temp_holder_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the || operator", temp_holder->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the || operator", get_full_type_name_from_ast_node(temp_holder));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7311,7 +7450,7 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 
 		//This is our fail case
 		if(is_right_child_valid == FALSE){
-			sprintf(info, "Type %s is not valid for the && operator", right_child->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for the && operator", get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7320,7 +7459,9 @@ static generic_ast_node_t* logical_or_expression(ollie_token_stream_t* token_str
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
-			sprintf(info, "Types %s and %s cannot be applied to operator %s", temp_holder->inferred_type->type_name.string, right_child->inferred_type->type_name.string, "||");
+			sprintf(info, "Types %s and %s cannot be applied to operator ||",
+					get_full_type_name_from_ast_node(temp_holder),
+					get_full_type_name_from_ast_node(right_child));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -7411,7 +7552,7 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid to be used in a conditional", conditional->inferred_type->type_name.string);
+		sprintf(info, "Type %s is invalid to be used in a conditional", get_full_type_name_from_ast_node(conditional));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -7458,8 +7599,8 @@ static generic_ast_node_t* ternary_expression(ollie_token_stream_t* token_stream
 	generic_type_t* final_type = determine_ternary_compatibility(type_symtab, &(if_branch->inferred_type), &(else_branch->inferred_type));
 	if(final_type == NULL){
 		sprintf(info, "Types \"%s\" and \"%s\" are not compatable for use in a ternary expression",
-						if_branch->inferred_type->type_name.string,
-						else_branch->inferred_type->type_name.string);
+						get_full_type_name_from_ast_node(if_branch),
+						get_full_type_name_from_ast_node(else_branch));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -7523,8 +7664,8 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 					return TRUE;
 				} else {
 					sprintf(info, "Attempt to use separate enum type %s in comparison with enum %s",
-			 						constant_node_type->type_name.string,
-			 						in_comparator_type->type_name.string);
+									get_full_type_name_from_type(constant_node_type),
+									get_full_type_name_from_type(in_comparator_type));
 					return print_and_return_failure(info, parser_line_num);
 				}
 			}
@@ -7543,8 +7684,8 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
-								constant_node_type->type_name.string,
-								in_comparator_type->type_name.string);
+								get_full_type_name_from_type(constant_node_type),
+								get_full_type_name_from_type(in_comparator_type));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -7557,7 +7698,9 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			 * type, then we will fail out because we have an impossible in statement in that case
 			 */
 			if(does_enum_contain_integer_member(in_comparator_type, constant_node->constant_value.signed_int_value) == FALSE){
-				sprintf(info, "Enum type %s contains no member that maps to integer value %d", in_comparator_type->type_name.string, constant_node->constant_value.signed_int_value);
+				sprintf(info, "Enum type %s contains no member that maps to integer value %d", 
+						get_full_type_name_from_type(in_comparator_type),
+						constant_node->constant_value.signed_int_value);
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -7585,8 +7728,8 @@ static inline u_int8_t is_constant_valid_for_in_statement_type(generic_type_t* i
 			generic_type_t* result_type = types_assignable_constant(in_comparator_type, constant_node_type);
 			if(result_type == NULL){
 				sprintf(info, "Attempt to use incompatible type %s in in statement with comparator of type %s",
-								constant_node_type->type_name.string,
-								in_comparator_type->type_name.string);
+								get_full_type_name_from_type(constant_node_type),
+								get_full_type_name_from_type(in_comparator_type));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -7720,7 +7863,7 @@ static generic_ast_node_t* in_expression(ollie_token_stream_t* token_stream, sid
 	 * If the type is not valid for an in statement then we have an issue here
 	 */
 	if(is_type_valid_for_in_statement(comparing_to_type) == FALSE){
-		sprintf(info, "The type \"%s\" may not be used with an in statement", comparing_to_type->type_name.string);
+		sprintf(info, "The type \"%s\" may not be used with an in statement", get_full_type_name_from_type(comparing_to_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -8291,7 +8434,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 
 	//Is this a duplicate? If so, we fail out
 	if(duplicate != NULL){
-		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, struct_type->type_name.string);
+		sprintf(info, "A member with name %s already exists in type %s. First defined here:", name.string, get_full_type_name_from_type(struct_type));
 		print_variable_name_to_buffer(info, duplicate);
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
@@ -8346,7 +8489,7 @@ static symtab_variable_record_t* struct_member(ollie_token_stream_t* token_strea
 		 * the user from adding a field the mut a:char[] that is unknown at compile time
 		 */
 		if(member_type->type_complete == FALSE){
-			sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", member_type->type_name.string);
+			sprintf(info, "Attempt to use incomplete type %s as a struct member. Struct members must have a size known at compile time", get_full_type_name_from_type(member_type));
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			return NULL;
 		}
@@ -8823,7 +8966,7 @@ static symtab_variable_record_t* union_member(ollie_token_stream_t* token_stream
 		 * the user from adding a field the mut a:char[] that is unknown at compile time
 		 */
 		if(type->type_complete == FALSE){
-			sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", type->type_name.string);
+			sprintf(info, "Attempt to use incomplete type %s as a union member. Union members must have a size known at compile time", get_full_type_name_from_type(type));
 			print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 			return NULL;
 		}
@@ -9207,7 +9350,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			//The other case - if this is FALSE and we saw this,
 			//then we have an error
 			if(user_defined_enum_values == FALSE){
-				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", mutable_enum_type->type_name.string);
+				sprintf(info, "%s has been set as an auto-defined enum. No enum values can be assigned with the = operator", get_full_type_name_from_type(mutable_enum_type));
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -9299,7 +9442,7 @@ static u_int8_t enum_definer(ollie_token_stream_t* token_stream){
 			//Are we using user-defined values? If so,
 			//then this is wrong
 			if(user_defined_enum_values == TRUE){
-				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", mutable_enum_type->type_name.string);
+				sprintf(info, "%s has been set as a user-defined enum. All enum values must be assigned with the = operator", get_full_type_name_from_type(mutable_enum_type));
 				print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 				num_errors++;
 				return FAILURE;
@@ -10068,7 +10211,7 @@ static inline symtab_type_record_t* parse_array_type(ollie_token_stream_t* token
 	 * initially define them as blank if and only if we're using an initializer
 	 */
 	if(current_type->type->type_class != TYPE_CLASS_ARRAY && current_type->type->type_complete == FALSE){
-		sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", current_type->type->type_name.string);
+		sprintf(info, "Attempt to use incomplete type %s as an array member. Array member types must be fully defined before use", get_full_type_name_from_type(current_type->type));
 		print_parse_message(MESSAGE_TYPE_ERROR, info, parser_line_num);
 		num_errors++;
 		return NULL;
@@ -10684,7 +10827,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name.string);
+		sprintf(info, "Type %s is invalid to be used in a conditional", get_full_type_name_from_ast_node(expression_node));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -10745,7 +10888,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 		if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
-			sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name.string);
+			sprintf(info, "Type %s is invalid to be used in a conditional", get_full_type_name_from_ast_node(expression_node));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -10889,7 +11032,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 
 		//This is a conditional so the type that we have here needs to be valid for it
 		if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
-			sprintf(info, "Type %s is not valid for a conditional", conditional->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for a conditional", get_full_type_name_from_ast_node(conditional));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -11147,7 +11290,9 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
 		if(current_function_signature->returns_void == FALSE){
-			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed", current_function->func_name.string, current_function_signature->return_type->type_name.string);
+			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed",
+					current_function->func_name.string,
+					get_full_type_name_from_type(current_function_signature->return_type));
 			print_function_name_to_buffer(info, current_function);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -11187,12 +11332,10 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
 		//Following that we'll generate another error message to make it more clear
-		sprintf(info, "Function \"%s\" expects a return type of \"%s%s\", but was given an incompatible type \"%s%s\"",
+		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
 		  		current_function->func_name.string,
-				(current_function_signature->return_type->mutability == MUTABLE ? "mut " : ""),
-		  		current_function_signature->return_type->type_name.string,
-		  		(expr_node->inferred_type->mutability == MUTABLE ? "mut " : ""),
-		  		expr_node->inferred_type->type_name.string);
+				get_full_type_name_from_type(current_function_signature->return_type),
+				get_full_type_name_from_ast_node(expr_node));
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -11204,9 +11347,8 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	 * we never return by copy, so an initializer fundamentally will never work
 	 */
 	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
-		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s%s\". Only return by copy types can be initialized into",
-						(current_function_signature->return_type->mutability == MUTABLE ? "mut" : ""),
-						current_function_signature->return_type->type_name.string);
+		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+						get_full_type_name_from_type(current_function_signature->return_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -11314,7 +11456,7 @@ static generic_ast_node_t* raise_statement(ollie_token_stream_t* token_stream){
 
 		//If this is not an error, we fail out
 		if(error_type->type_class != TYPE_CLASS_ERROR){
-			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", error_type->type_name.string); 
+			sprintf(info, "Type \"%s\" was not defined as an error type and therefore may not be raised", get_full_type_name_from_type(error_type));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -11576,7 +11718,7 @@ static generic_ast_node_t* switch_statement(ollie_token_stream_t* token_stream){
 	 * that are eligible are integers of any kind and enumerated values
 	 */
 	if(is_type_eligible_for_switch_statement(switching_on_type) == FALSE){
-		sprintf(info, "Type \"%s\" is ineligible for use on a switch statement", switching_on_type->type_name.string);
+		sprintf(info, "Type \"%s\" is ineligible for use on a switch statement", get_full_type_name_from_type(switching_on_type));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -11852,7 +11994,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(conditional_expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s is not valid for a conditional", conditional_expr->inferred_type->type_name.string);
+		sprintf(info, "Type %s is not valid for a conditional", get_full_type_name_from_ast_node(conditional_expr));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -11984,7 +12126,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(expr_node->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid for a conditional", expr_node->inferred_type->type_name.string);
+		sprintf(info, "Type %s is invalid for a conditional", get_full_type_name_from_ast_node(expr_node));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -12756,7 +12898,8 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//If this fails, they're incompatible
 	if(case_stmt->inferred_type == NULL){
 		sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-					  switch_stmt_node->inferred_type->type_name.string, constant_node->inferred_type->type_name.string);
+					get_full_type_name_from_ast_node(switch_stmt_node),
+					get_full_type_name_from_ast_node(constant_node));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -13013,7 +13156,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 
 	//If the type is incomplete, we do not allow it
 	if(type_spec->type_complete == FALSE){
-		sprintf(info, "Type %s is incomplete and may not be used as a declared variable's type", type_spec->type_name.string);
+		sprintf(info, "Type %s is incomplete and may not be used as a declared variable's type", get_full_type_name_from_type(type_spec));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -13059,7 +13202,7 @@ static generic_ast_node_t* declare_statement(ollie_token_stream_t* token_stream,
 			if(declared_var->type_defined_as->mutability == NOT_MUTABLE){
 				//Throw up the warning here
 				sprintf(info, "Memory region type \"%s\" is immutable. If you declare variable \"%s\" with this type, you will never be able to write to it",
-								declared_var->type_defined_as->type_name.string,
+								get_full_type_name_from_type(declared_var->type_defined_as),
 								declared_var->var_name.string);
 				print_parse_message(MESSAGE_TYPE_WARNING, info, parser_line_num);
 			}
@@ -13772,7 +13915,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			//Now check the overload type
 			if(internal_function_type->contains_elaborative_stack_param == TRUE){
 				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -13783,7 +13926,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
 				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s is invalid, signatures must have different parameter lists. First defined here:",
 						original_found_function->func_name.string,
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				print_function_name_to_buffer(info, original_found_function);
 
 				return print_and_return_error(info, parser_line_num);
@@ -13810,12 +13953,12 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 				if(function_symtab->current->is_default == TRUE){
 					sprintf(info, "Function \"%s\" has already been defined with type %s",
 							function_name.string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				} else {
 					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
 							function_name.string,
 							generate_fully_qualified_namespace_name(function_symtab->current).string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				}
 
 				print_function_name_to_buffer(info, overloaded_or_declared);
@@ -13826,12 +13969,12 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 				if(function_symtab->current->is_default == TRUE){
 					sprintf(info, "Function \"%s\" has already been predeclared with type %s",
 							function_name.string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				} else {
 					sprintf(info, "Function \"%s\" has already been predeclared in the namespace \"%s\" with type %s",
 							function_name.string,
 							generate_fully_qualified_namespace_name(function_symtab->current).string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				}
 
 				print_function_name_to_buffer(info, overloaded_or_declared);
@@ -13913,7 +14056,7 @@ static symtab_variable_record_t* parameter_declaration(ollie_token_stream_t* tok
 
 	//Must be an incomplete type, if it's not then we're out
 	if(type->type_complete == FALSE){
-		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", type->type_name.string);
+		sprintf(info, "Type %s is incomplete and therefore invalid for a function parameter", get_full_type_name_from_type(type));
 		return print_and_return_null(info, parser_line_num);
 	}
 
@@ -14170,7 +14313,7 @@ static inline u_int8_t error_list(ollie_token_stream_t* token_stream, generic_ty
 
 			//If they're equal at all, we fail out
 			if(types_identical(candidate, error_type) == TRUE){
-				sprintf(info, "Function is already declared as raising an error of \"%s\"" , error_type->type_name.string);
+				sprintf(info, "Function is already declared as raising an error of \"%s\"", get_full_type_name_from_type(error_type)); 
 				return print_and_return_failure(info, parser_line_num);
 			}
 		}
@@ -14301,7 +14444,7 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 			
 			//If it isn't a basic type and it isn't an i32, we fail
 			if(parameter_type->type_class != TYPE_CLASS_BASIC || parameter_type->basic_type_token != I32){
-				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", function_signature->type_name.string);
+				sprintf(info, "The first parameter of the main function must be an i32. Instead given: %s", get_full_type_name_from_type(function_signature));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -14310,7 +14453,7 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 
 			//This must be a char** type. If it's not, we fail out
 			if(is_type_string_array(parameter_type) == FALSE){
-				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", function_signature->type_name.string);
+				sprintf(info, "The second parameter of the main function must be of type char**. Instead given: %s", get_full_type_name_from_type(function_signature));
 				return print_and_return_failure(info, parser_line_num);
 			}
 
@@ -14318,14 +14461,14 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 		}
 
 		default: {
-			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", function_signature->type_name.string);
+			sprintf(info, "The main function can have 0 or 2 parameters, but instead was given: %s", get_full_type_name_from_type(function_signature));
 			return print_and_return_failure(info, parser_line_num);
 		}
 	}
 
 	//Finally, we'll validate the return type of the main function. It must also always be an i32
 	if(signature->return_type->type_class != TYPE_CLASS_BASIC || signature->return_type->basic_type_token != I32){
-		sprintf(info, "The main function must return a value of type i32, instead was given: %s", function_signature->type_name.string);
+		sprintf(info, "The main function must return a value of type i32, instead was given: %s", get_full_type_name_from_type(function_signature));
 		return print_and_return_failure(info, parser_line_num);
 	}
 
@@ -14396,7 +14539,8 @@ static inline u_int8_t validate_error_list_against_raised_errors(symtab_function
 		//Is it raised by the function? If not we've got an error
 		if(raised_by_function == FALSE){
 			sprintf(info, "Function \"%s\" raises error %s in its signature but the error itself is never raised. Remove the error from the signature if it won't ever be raised",
-		   					function->func_name.string, mandatory_error->type_name.string);
+		   					function->func_name.string, 
+							get_full_type_name_from_type(mandatory_error));
 			return print_and_return_failure(info, parser_line_num);
 		}
 	}
@@ -14632,12 +14776,12 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 				if(function_symtab->current->is_default == TRUE){
 					sprintf(info, "Function \"%s\" has already been defined with type %s",
 							function_name.string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				} else {
 					sprintf(info, "Function \"%s\" has already been defined in the namespace \"%s\" with type %s",
 							function_name.string,
 							generate_fully_qualified_namespace_name(function_symtab->current).string,
-							new_function_signature->type_name.string);
+							get_full_type_name_from_type(new_function_signature));
 				}
 
 				print_function_name_to_buffer(info, overload_or_predeclared);
@@ -14731,7 +14875,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			//Now check the overload type
 			if(internal_function_type->contains_elaborative_stack_param == TRUE){
 				sprintf(info, "Function signature %s contains an elaborative stack parameter and therefore may never be used as an overload",
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				return print_and_return_error(info, parser_line_num);
 			}
 
@@ -14742,7 +14886,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			if(do_function_signatures_differ_enough_to_overload(original_found_function->signature, new_function_signature) == FALSE){
 				sprintf(info, "Attempt to overload function \"%s\" with a function whose signature is %s is invalid, signatures must have different parameter lists. First defined here:",
 						original_found_function->func_name.string,
-						new_function_signature->type_name.string);
+						get_full_type_name_from_type(new_function_signature));
 				print_function_name_to_buffer(info, original_found_function);
 
 				return print_and_return_error(info, parser_line_num);

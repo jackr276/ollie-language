@@ -14,8 +14,6 @@
 
 #include "cfg.h"
 #include <assert.h>
-#include <iso646.h>
-#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
