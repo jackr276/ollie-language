@@ -193,9 +193,6 @@ static inline char* extract_file_name_from_fully_qualified_name(char* fully_qual
  * NOTE: this will return the char* from a freshly allocated dynamic string. We
  * do not feel the need to return the dynamic string itself, we're just using
  * it to allocate the space
- *
- * TODO if you see <ast_node>->inferred_type->type_name.string, REPLACE IT WITH
- * THIS
  */
 static char* get_full_type_name_from_ast_node(generic_ast_node_t* node){
 	dynamic_string_t type_name_string = dynamic_string_alloc();
@@ -10883,7 +10880,7 @@ static generic_ast_node_t* if_statement(ollie_token_stream_t* token_stream){
 
 		//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 		if(is_type_valid_for_conditional(expression_node->inferred_type) == FALSE){
-			sprintf(info, "Type %s is invalid to be used in a conditional", expression_node->inferred_type->type_name.string);
+			sprintf(info, "Type %s is invalid to be used in a conditional", get_full_type_name_from_ast_node(expression_node));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -11027,7 +11024,7 @@ static generic_ast_node_t* jump_statement(ollie_token_stream_t* token_stream){
 
 		//This is a conditional so the type that we have here needs to be valid for it
 		if(is_type_valid_for_conditional(conditional->inferred_type) == FALSE){
-			sprintf(info, "Type %s is not valid for a conditional", conditional->inferred_type->type_name.string);
+			sprintf(info, "Type %s is not valid for a conditional", get_full_type_name_from_ast_node(conditional));
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -11325,12 +11322,11 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	//If the current function's return type is not compatible with the return type here, we'll bail out
 	if(final_type == NULL){
 		//Following that we'll generate another error message to make it more clear
-		sprintf(info, "Function \"%s\" expects a return type of \"%s%s\", but was given an incompatible type \"%s%s\"",
+		sprintf(info, "Function \"%s\" expects a return type of \"%s%s\", but was given an incompatible type \"%s\"",
 		  		current_function->func_name.string,
 				(current_function_signature->return_type->mutability == MUTABLE ? "mut " : ""),
 		  		current_function_signature->return_type->type_name.string,
-		  		(expr_node->inferred_type->mutability == MUTABLE ? "mut " : ""),
-		  		expr_node->inferred_type->type_name.string);
+				get_full_type_name_from_ast_node(expr_node));
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -11990,7 +11986,7 @@ static generic_ast_node_t* while_statement(ollie_token_stream_t* token_stream){
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(conditional_expr->inferred_type) == FALSE){
-		sprintf(info, "Type %s is not valid for a conditional", conditional_expr->inferred_type->type_name.string);
+		sprintf(info, "Type %s is not valid for a conditional", get_full_type_name_from_ast_node(conditional_expr));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -12122,7 +12118,7 @@ static generic_ast_node_t* do_while_statement(ollie_token_stream_t* token_stream
 
 	//If it's not of this type or a compatible type(pointer, smaller int, etc, it is out)
 	if(is_type_valid_for_conditional(expr_node->inferred_type) == FALSE){
-		sprintf(info, "Type %s is invalid for a conditional", expr_node->inferred_type->type_name.string);
+		sprintf(info, "Type %s is invalid for a conditional", get_full_type_name_from_ast_node(expr_node));
 		return print_and_return_error(info, parser_line_num);
 	}
 
@@ -12894,7 +12890,8 @@ static generic_ast_node_t* case_statement(ollie_token_stream_t* token_stream, ge
 	//If this fails, they're incompatible
 	if(case_stmt->inferred_type == NULL){
 		sprintf(info, "Switch statement switches on type \"%s\", but case statement has incompatible type \"%s\"", 
-					  switch_stmt_node->inferred_type->type_name.string, constant_node->inferred_type->type_name.string);
+					get_full_type_name_from_ast_node(switch_stmt_node),
+					get_full_type_name_from_ast_node(constant_node));
 		return print_and_return_error(info, parser_line_num);
 	}
 
