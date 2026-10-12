@@ -6449,7 +6449,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
 				//Emit the copy from the left hand var to the final op1
-				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(left_hand_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(left_hand_var, result_var, parent_node->inferred_type->type_size, parent_node->line_number);
 
 				//Get it into the block
 				add_statement(current_block, copy_statement);		

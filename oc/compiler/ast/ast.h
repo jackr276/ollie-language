@@ -129,8 +129,6 @@ struct generic_ast_node_t{
 		generic_type_t* error_type;
 		//For any/all error types, we'll hold onto the actual value of the error here
 		u_int32_t error_id;
-		//Store the number of bytes to copy for a copy assignment
-		u_int64_t bytes_to_copy;
 		//The label record that we're storing
 		symtab_label_record_t* label_record;
 		//Hold the upper and lower bounds for switch statement values

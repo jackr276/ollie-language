@@ -4266,9 +4266,6 @@ loop_end:
 			 */
 			propogate_no_dereference_required_flag(expr);
 
-			//Store this for down the road - how many bytes do we need to copy
-			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
-
 			/**
 			 * Since we are performing a memory copy instruction, this function
 			 * is required to perform an initial alignment when we enter it. If we did
@@ -13413,9 +13410,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 		 * be dereferencing if we need to perform a copy assignment
 		 */
 		propogate_no_dereference_required_flag(initializer_node);
-
-		//Store the bytes that we need to copy here
-		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
 
 		/**
 		 * Since we are performing a memory copy instruction, this function
