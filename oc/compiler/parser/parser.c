@@ -4391,9 +4391,11 @@ loop_end:
  *
  * BNF RULE: <union-pointer-accessor> ::= -> <identifier>
  *
+ * NOTE: due to the nature of accessors, we will always stamp this with a SIDE_TYPE_RIGHT
+ *
  * NOTE: by the time we reach here, we'll have already seen the -> lexeme
  */
-static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type, side_type_t side){
+static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -4436,7 +4438,7 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
 	}
 
 	//Now we'll allocate and pack up everything that we need
-	generic_ast_node_t* union_accessor_node = ast_node_alloc(AST_NODE_TYPE_UNION_POINTER_ACCESSOR, side);
+	generic_ast_node_t* union_accessor_node = ast_node_alloc(AST_NODE_TYPE_UNION_POINTER_ACCESSOR, SIDE_TYPE_RIGHT);
 
 	union_accessor_node->line_number = parser_line_num;
 	union_accessor_node->variable = union_member;
@@ -4457,9 +4459,12 @@ static generic_ast_node_t* union_pointer_accessor(ollie_token_stream_t* token_st
  * A struct accessor node will be a subtree with the parent holding the actual operator
  * and its child holding the variable identifier
  *
+ * NOTE: due to the nature of accessors, we will always treat a struct accessor as being on the
+ * RHS of an expression
+ *
  * BNF Rule: <struct-pointer-accessor> ::= => <variable-identifier> 
  */
-static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type, side_type_t side){
+static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type){
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -4489,10 +4494,8 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 		return print_and_return_error("Struct accessor could not find valid identifier", parser_line_num);
 	}
 
-	//Grab this for nicety
-	char* member_name = lookahead.lexeme.string;
-
 	//Let's see if we can look this up inside of the type
+	char* member_name = lookahead.lexeme.string;
 	symtab_variable_record_t* var_record = get_struct_member(current_type, member_name);
 
 	//If we can't find it we're out
@@ -4502,8 +4505,7 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
 	}
 
 	//Otherwise we'll now make the node here
-	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, side);
-	//Add the line number
+	generic_ast_node_t* struct_pointer_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_POINTER_ACCESSOR, SIDE_TYPE_RIGHT);
 	struct_pointer_access_node->line_number = parser_line_num;
 	
 	//Add the variable record into the node
@@ -4530,13 +4532,11 @@ static generic_ast_node_t* struct_pointer_accessor(ollie_token_stream_t* token_s
  * A constructor accessor node will be a subtree with the parent holding the actual operator
  * and its child holding the variable identifier
  *
- * We will expect to see the => or : here
+ * NOTE: by nature of how accessors are handled, this will always be treated as a SIDE_TYPE_RIGHT
  *
  * BNF Rule: <struct-accessor> ::= : <variable-identifier> 
  */
-static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type, side_type_t side){
-	//Freeze the current line
-	u_int32_t current_line = parser_line_num;
+static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, generic_type_t* current_type){
 	//The lookahead token
 	lexitem_t lookahead;
 
@@ -4554,7 +4554,7 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
 
 	//For now we're just doing error checking
 	if(lookahead.tok != IDENT){
-		return print_and_return_error("Struct accessor could not find valid identifier", current_line);
+		return print_and_return_error("Struct accessor could not find valid identifier", parser_line_num);
 	}
 
 	//Grab this for nicety
@@ -4570,9 +4570,8 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
 	}
 
 	//Otherwise we'll now make the node here
-	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, side);
-	//Add the line number
-	struct_access_node->line_number = current_line;
+	generic_ast_node_t* struct_access_node = ast_node_alloc(AST_NODE_TYPE_STRUCT_ACCESSOR, SIDE_TYPE_RIGHT);
+	struct_access_node->line_number = parser_line_num;
 
 	//Add the variable record into the node
 	struct_access_node->is_assignable = TRUE;
@@ -4596,9 +4595,11 @@ static generic_ast_node_t* struct_accessor(ollie_token_stream_t* token_stream, g
  *
  * BNF RULE: <union-accessor> ::= .<identifier>
  *
+ * NOTE: by the nature of all accessors, we will always stamp this with a SIDE_TYPE_RIGHT
+ *
  * REMEMBER: BY the time we get here, we have already seen the "." token
  */
-static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, generic_type_t* type, side_type_t side){
+static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, generic_type_t* type){
 	//Lookahead token
 	lexitem_t lookahead;
 
@@ -4627,7 +4628,7 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 
 	//Otherwise if we get here, we know that we do indeed have the needed union type. We can now go 
 	//ahead with constructing the accessor
-	generic_ast_node_t* union_accessor = ast_node_alloc(AST_NODE_TYPE_UNION_ACCESSOR, side);
+	generic_ast_node_t* union_accessor = ast_node_alloc(AST_NODE_TYPE_UNION_ACCESSOR, SIDE_TYPE_RIGHT);
 
 	//Let's now populate with the appropriate variable and type
 	union_accessor->variable = union_variable;
@@ -4635,8 +4636,6 @@ static generic_ast_node_t* union_accessor(ollie_token_stream_t* token_stream, ge
 	union_accessor->optional_storage.field_variable = union_variable;
 	union_accessor->inferred_type = union_variable->type_defined_as;
 	union_accessor->is_assignable = TRUE;
-
-	//And give this back
 	return union_accessor;
 }
 
@@ -4693,9 +4692,12 @@ static inline generic_type_t* get_member_type_after_array_access(generic_type_t*
  *
  * We expect that the caller has given back the [ token for this rule
  *
+ * NOTE: array accessors by their nature are always treated as RHS expressions. That is why no side type
+ * is provided here
+ *
  * BNF Rule: <array-accessor> ::= [ <ternary-expression> ]
  */
-static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, generic_type_t* type, side_type_t side){
+static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, generic_type_t* type){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the current line
@@ -4709,9 +4711,10 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	/**
 	 * Now we are required to see a valid constant expression representing what
-	 * the actual index is.
+	 * the actual index is. We use the right hand side type for all expressions that
+	 * exist within array accessors to avoid generating stores
 	 */
-	generic_ast_node_t* expr = in_expression(token_stream, side);
+	generic_ast_node_t* expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we fail, automatic exit here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4719,7 +4722,6 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	}
 
 	//Let's first check to see if this can be used in an array at all
-	//If we can't we'll fail out here
 	if(is_type_valid_for_memory_addressing(expr->inferred_type) == FALSE){
 		sprintf(info, "Type %s cannot be used as an array index", get_full_type_name_from_ast_node(expr));
 		return print_and_return_error(info, parser_line_num);
@@ -4748,7 +4750,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	}
 
 	//Now that we've done all of our checks have been done, we can create the actual node
-	generic_ast_node_t* accessor_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, side);
+	generic_ast_node_t* accessor_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, SIDE_TYPE_RIGHT);
 
 	//Add the line number
 	accessor_node->line_number = current_line;
@@ -4870,35 +4872,28 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 		//Let's grab whatever type that we currently have
 		generic_type_t* current_type = parent->inferred_type;
 
-		//Go based on what the token is
 		switch(lookahead.tok){
-			//Array accessor
 			case L_BRACKET:
 				//We'll push this onto the grouping stack for later matching
 				push_token(&grouping_stack, lookahead);
 
-				operator_node = array_accessor(token_stream, current_type, side);
+				operator_node = array_accessor(token_stream, current_type);
 				break;
 
-			//Struct accessor
 			case COLON:
-				operator_node = struct_accessor(token_stream, current_type, side);
+				operator_node = struct_accessor(token_stream, current_type);
 				break;
 
-			//Struct pointer accessor
 			case FAT_ARROW:
-				operator_node = struct_pointer_accessor(token_stream, current_type, side);
+				operator_node = struct_pointer_accessor(token_stream, current_type);
 				break;
 
-			//Union accessor
 			case DOT:
-				//Let the rule handle it
-				operator_node = union_accessor(token_stream, current_type, side);
+				operator_node = union_accessor(token_stream, current_type);
 				break;
 
-			//Union pointer accessor
 			case ARROW:
-				operator_node = union_pointer_accessor(token_stream, current_type, side);
+				operator_node = union_pointer_accessor(token_stream, current_type);
 				break;
 
 			//Postincrement
@@ -4912,8 +4907,7 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				//We let this rule handle everything
 				return postoperation(current_type, parent, lookahead.tok, side);
 
-			//When we hit this, it means that we're done. We return the parent
-			//node in this case
+			//When we hit this, it means that we're done. We return the parent node in this case
 			default:
 				push_back_token(token_stream, &parser_line_num);
 				//Store the variable too
