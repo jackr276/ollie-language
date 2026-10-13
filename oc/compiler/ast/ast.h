@@ -170,6 +170,13 @@ struct generic_ast_node_t{
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
 	/**
+	 * Return Region Forwarding(RRF) in OIR refers to the ability for us to 
+	 * forward the region that we would copy a return-by-copy function's value
+	 * into to the return by copy function itself, and have that function use
+	 * it as return region. 
+	 */
+	u_int8_t is_return_region_forwarding_eligible;
+	/**
 	 * This union has two values:
 	 *
 	 * 1.) Is the given switch statement "exhaustive" - this is most usually false

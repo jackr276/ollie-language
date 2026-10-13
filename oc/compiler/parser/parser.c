@@ -386,6 +386,19 @@ static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 
 
 /**
+ * Is the given node a return region forwarding eligible function call?
+ */
+static inline u_int8_t is_node_rrf_eligible_function_call(generic_ast_node_t* node){
+	if(node->ast_node_type != AST_NODE_TYPE_INDIRECT_FUNCTION_CALL && node->ast_node_type != AST_NODE_TYPE_FUNCTION_CALL){
+		return FALSE;
+	}
+
+	function_type_t* called_function_signature = node->optional_storage.callee_signature;
+	return is_type_returned_by_copy(called_function_signature->return_type);
+}
+
+
+/**
  * Is a given node an initializer node or not? Initializer nodes get special
  * treatment by the CFG constructor so we may need to exclude them from certain checks
  */
@@ -2774,6 +2787,8 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 * doing an address calculation.
 			 */
 			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
+				//TODO RETURN REGION FORWARDING HERE
+				
 				/**
 				 * If the right hand expression is a postfix expression *and* we are looking
 				 * to perform a memory copy assignment here, we need to flag that 
@@ -3133,6 +3148,8 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 * doing an address calculation.
 			 */
 			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
+				//TODO RETURN REGION FORWARDING HERE
+				
 				/**
 				 * If the right hand expression is a postfix expression *and* we are looking
 				 * to perform a memory copy assignment here, we need to flag that 
@@ -4185,6 +4202,8 @@ loop_end:
 	//We'll let this rule handle it
 	generic_ast_node_t* left_hand_unary = unary_expression(token_stream, SIDE_TYPE_LEFT);
 
+	//TODO MEMORY INVESTIGATION HERE FOR LHS UNARY
+
 	//Fail out here
 	if(left_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid left hand side given to assignment expression", current_line);
@@ -4272,6 +4291,8 @@ loop_end:
 			 * SIMD instructions
 			 */
 			current_function->requires_initial_alignment = TRUE;
+
+			//TODO RETURN REGION FORWARDING FLAG IT HERE
 		}
 
 		//Otherwise the overall type is the final type

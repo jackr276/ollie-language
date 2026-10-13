@@ -523,47 +523,6 @@ static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 
 
 /**
- * Is the given node a return region forwarding eligible function call?
- */
-static inline u_int8_t is_node_rrf_eligible_function_call(generic_ast_node_t* node){
-	if(node->ast_node_type != AST_NODE_TYPE_INDIRECT_FUNCTION_CALL && node->ast_node_type != AST_NODE_TYPE_FUNCTION_CALL){
-		return FALSE;
-	}
-
-	function_type_t* called_function_signature = node->optional_storage.callee_signature;
-	return is_type_returned_by_copy(called_function_signature->return_type);
-}
-
-
-/**
- * Is the given statement a "return region forwarded" function call? Function calls
- * are eligible for return region forwarding if they have a return-by-copy type
- */
-static inline u_int8_t is_statement_rrf_eligible_function_call(instruction_t* stmt){
-	//Sanity check
-	if(stmt == NULL){
-		return FALSE;
-	}
-
-	switch(stmt->statement_type){
-		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
-			function_type_t* signature = stmt->operands.oir.operand1->type->internal_types.function_type;
-			return is_type_returned_by_copy(signature->return_type);
-		}
-			
-		case THREE_ADDR_CODE_FUNC_CALL: {
-			function_type_t* signature = stmt->called_function->signature->internal_types.function_type;
-			return is_type_returned_by_copy(signature->return_type);
-	   	}
-
-		default: {
-			return FALSE;
-		}
-	}
-} 
-
-
-/**
  * Is a given variable a data segment variable? These variables are not actually
  * stored in registers or in memory so we need to treat them a bit differently. In
  * ollie only static and global variables fit the bill for this
@@ -7390,17 +7349,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			break;
 		}
 	}
-
-	/**
-	 * Is the given function call eligible for what Ollie calls "return region forwarding"?
-	 * Return region forwarding eligible values are simply
-	 */
-	if(is_node_rrf_eligible_function_call(function_call_node) == TRUE){
-		//TODO
-
-	}
-
-
 
 	//If we have parameters allocate the array now
 	if(signature->function_parameters.current_index != 0){
