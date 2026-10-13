@@ -4693,9 +4693,12 @@ static inline generic_type_t* get_member_type_after_array_access(generic_type_t*
  *
  * We expect that the caller has given back the [ token for this rule
  *
+ * NOTE: array accessors by their nature are always treated as RHS expressions. That is why no side type
+ * is provided here
+ *
  * BNF Rule: <array-accessor> ::= [ <ternary-expression> ]
  */
-static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, generic_type_t* type, side_type_t side){
+static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, generic_type_t* type){
 	//The lookahead token
 	lexitem_t lookahead;
 	//Freeze the current line
@@ -4709,11 +4712,10 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 	/**
 	 * Now we are required to see a valid constant expression representing what
-	 * the actual index is.
-	 *
-	 * TODO THIS LOOKS WRONG!!! Shouldn't this be on the RHS always?
+	 * the actual index is. We use the right hand side type for all expressions that
+	 * exist within array accessors to avoid generating stores
 	 */
-	generic_ast_node_t* expr = in_expression(token_stream, side);
+	generic_ast_node_t* expr = in_expression(token_stream, SIDE_TYPE_RIGHT);
 
 	//If we fail, automatic exit here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
@@ -4721,7 +4723,6 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	}
 
 	//Let's first check to see if this can be used in an array at all
-	//If we can't we'll fail out here
 	if(is_type_valid_for_memory_addressing(expr->inferred_type) == FALSE){
 		sprintf(info, "Type %s cannot be used as an array index", get_full_type_name_from_ast_node(expr));
 		return print_and_return_error(info, parser_line_num);
@@ -4750,7 +4751,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	}
 
 	//Now that we've done all of our checks have been done, we can create the actual node
-	generic_ast_node_t* accessor_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, side);
+	generic_ast_node_t* accessor_node = ast_node_alloc(AST_NODE_TYPE_ARRAY_ACCESSOR, SIDE_TYPE_RIGHT);
 
 	//Add the line number
 	accessor_node->line_number = current_line;
@@ -4879,7 +4880,7 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				//We'll push this onto the grouping stack for later matching
 				push_token(&grouping_stack, lookahead);
 
-				operator_node = array_accessor(token_stream, current_type, side);
+				operator_node = array_accessor(token_stream, current_type);
 				break;
 
 			//Struct accessor
@@ -4914,8 +4915,7 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				//We let this rule handle everything
 				return postoperation(current_type, parent, lookahead.tok, side);
 
-			//When we hit this, it means that we're done. We return the parent
-			//node in this case
+			//When we hit this, it means that we're done. We return the parent node in this case
 			default:
 				push_back_token(token_stream, &parser_line_num);
 				//Store the variable too
