@@ -2787,14 +2787,24 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 			 * doing an address calculation.
 			 */
 			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
-				//TODO RETURN REGION FORWARDING HERE
-				
 				/**
 				 * If the right hand expression is a postfix expression *and* we are looking
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
 				propogate_no_dereference_required_flag(current_param);
+
+				/**
+				 * If we are calling a return-by-copy function and planning
+				 * on immediately memory copying the result into a different
+				 * memory region, we may be able to skip the copy altogether
+				 * by passing the eventual destination memory region in as the
+				 * return by copy region. This step just flags nodes as eligible
+				 * for this process
+				 */
+				if(is_node_rrf_eligible_function_call(current_param) == TRUE){
+					current_param->is_return_region_forwarding_eligible = TRUE;
+				}
 			}
 
 			/**
@@ -3148,14 +3158,24 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 			 * doing an address calculation.
 			 */
 			if(is_copy_assignment_required(parameter_type, current_param->inferred_type) == TRUE){
-				//TODO RETURN REGION FORWARDING HERE
-				
 				/**
 				 * If the right hand expression is a postfix expression *and* we are looking
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
 				propogate_no_dereference_required_flag(current_param);
+
+				/**
+				 * If we are calling a return-by-copy function and planning
+				 * on immediately memory copying the result into a different
+				 * memory region, we may be able to skip the copy altogether
+				 * by passing the eventual destination memory region in as the
+				 * return by copy region. This step just flags nodes as eligible
+				 * for this process
+				 */
+				if(is_node_rrf_eligible_function_call(current_param) == TRUE){
+					current_param->is_return_region_forwarding_eligible = TRUE;
+				}
 			}
 
 			/**
@@ -4202,8 +4222,6 @@ loop_end:
 	//We'll let this rule handle it
 	generic_ast_node_t* left_hand_unary = unary_expression(token_stream, SIDE_TYPE_LEFT);
 
-	//TODO MEMORY INVESTIGATION HERE FOR LHS UNARY
-
 	//Fail out here
 	if(left_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid left hand side given to assignment expression", current_line);
@@ -4292,7 +4310,7 @@ loop_end:
 			 */
 			current_function->requires_initial_alignment = TRUE;
 
-			//TODO RETURN REGION FORWARDING FLAG IT HERE
+			//TODO MEMORY INVESTIGATION HERE FOR LHS UNARY
 		}
 
 		//Otherwise the overall type is the final type
@@ -13436,6 +13454,18 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 			 * SIMD instructions
 			 */
 			current_function->requires_initial_alignment = TRUE;
+
+			/**
+			 * If we are calling a return-by-copy function and planning
+			 * on immediately memory copying the result into a different
+			 * memory region, we may be able to skip the copy altogether
+			 * by passing the eventual destination memory region in as the
+			 * return by copy region. This step just flags nodes as eligible
+			 * for this process
+			 */
+			if(is_node_rrf_eligible_function_call(initializer_node) == TRUE){
+				initializer_node->is_return_region_forwarding_eligible = TRUE;
+			}
 		}
 	}
 
