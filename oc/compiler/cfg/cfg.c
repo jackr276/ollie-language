@@ -6471,18 +6471,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * identified by the other checks down the road
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
-				if(is_statement_rrf_eligible_function_call(last)){
-
-				}
-
-
-				/**
-				 * TODO HERE
-				 * SPECIAL REACHBACK FOR FUNCTION CALL STATEMENTS
-				 */
-
-
-
+				//TODO HERE WHEN READY
 				//Emit the copy from the left hand var to the final op1
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(left_hand_var, result_var, parent_node->inferred_type->type_size, parent_node->line_number);
 
@@ -12017,9 +12006,12 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	generic_ast_node_t* expression_node = node->first_child;
 	cfg_result_package_t let_initializer_results = emit_expression(current_block, expression_node);
 
-
-	//Update the current block
+	/**
+	 * Update the current block and get a pointer to the last RHS statemenet - we'll use
+	 * this is determining several optimizations
+	 */
 	current_block = let_initializer_results.final_block;
+	instruction_t* last_rhs_statement = current_block->exit_statement;
 
 	switch(let_initializer_results.type){
 		case CFG_RESULT_TYPE_VAR:{
@@ -12027,26 +12019,31 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			three_addr_var_t* let_result_var = let_initializer_results.result_value.result_var;
 
 			/**
-			 * Certain direct and indirect function call statements are eligible for
-			 * what is called "return region forwarding". This relates
-			 * specifically to return by copy function calls where, if
-			 * we're going to be copying the returned value into the 
-			 * LHS anyways, we may as well pass the LHS's memory address
-			 * to the function as the return region to begin with
-			 */
-
-			/**
 			 * Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
-			 *
-			 * TODO RETURN REGION FORWARDING HERE
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
-				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
+				/**
+				 * Certain direct and indirect function call statements are eligible for
+				 * what is called "return region forwarding". This relates
+				 * specifically to return by copy function calls where, if
+				 * we're going to be copying the returned value into the 
+				 * LHS anyways, we may as well pass the LHS's memory address
+				 * to the function as the return region to begin with
+				 */
+				if(is_statement_rrf_eligible_function_call(last_rhs_statement) == TRUE){
+					printf("TODO NOT IMPLEMENTED\n\n\n\n\n");
+					exit(1);
 
-				//Get it into the block
-				add_statement(current_block, copy_statement);
+
+				/**
+				 * Otherwise it's nothing of the sort so just emit a regular memory copy expression here
+				 */
+				} else {
+					instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
+					add_statement(current_block, copy_statement);
+				}
 
 			/**
 			 * If we have a variable that requires a store assignment, we will
@@ -12073,18 +12070,18 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
 				 * be able to shrink our footprint here
 				 */
-				if(current_block->exit_statement != NULL
-					&& current_block->exit_statement->operands.oir.assignee != NULL
-					&& current_block->exit_statement->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& current_block->exit_statement->operands.oir.assignee == let_result_var){
+				if(last_rhs_statement != NULL
+					&& last_rhs_statement->operands.oir.assignee != NULL
+					&& last_rhs_statement->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& last_rhs_statement->operands.oir.assignee == let_result_var){
 
-					switch(current_block->exit_statement->statement_type){
+					switch(last_rhs_statement->statement_type){
 						/**
 						 * For binary operations we can hijack the statement itself
 						 */
 						case THREE_ADDR_CODE_BIN_OP_STMT:
 						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-							instruction_t* binary_operation = current_block->exit_statement;
+							instruction_t* binary_operation = last_rhs_statement;
 
 							//Just replace it with our variable
 							binary_operation->operands.oir.assignee = assignee;
