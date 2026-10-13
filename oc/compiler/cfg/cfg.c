@@ -11997,17 +11997,13 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			three_addr_var_t* let_result_var = let_initializer_results.result_value.result_var;
 
 			/**
-			 */	/**
-	 * Certain direct and indirect function call statements are eligible for
-	 * what is called "return region forwarding". This relates
-	 * specifically to return by copy function calls where, if
-	 * we're going to be copying the returned value into the 
-	 * LHS anyways, we may as well pass the LHS's memory address
-	 * to the function as the return region to begin with
-	 */
-			if(node->return_region_forwarding_eligible == TRUE){
-
-			}
+			 * Certain direct and indirect function call statements are eligible for
+			 * what is called "return region forwarding". This relates
+			 * specifically to return by copy function calls where, if
+			 * we're going to be copying the returned value into the 
+			 * LHS anyways, we may as well pass the LHS's memory address
+			 * to the function as the return region to begin with
+			 */
 
 			/**
 			 * Is a copy assignment required between the two variables? This will only

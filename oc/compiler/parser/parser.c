@@ -402,23 +402,6 @@ static inline u_int8_t is_initializer_node(generic_ast_node_t* initializer_node)
 
 
 /**
- * Is a given node a return-by-copy function call? This is only true if it's a direct
- * or indirect call *AND* the function it's calling is return-by-copy
- */
-static inline u_int8_t is_node_return_by_copy_function_call(generic_ast_node_t* initializer_node){
-	//If it's not a function call get out
-	if(initializer_node->ast_node_type != AST_NODE_TYPE_FUNCTION_CALL 
-		&& initializer_node->ast_node_type != AST_NODE_TYPE_INDIRECT_FUNCTION_CALL){
-		return FALSE;
-	}
-
-	//Determination is now down to if this function returns by copy
-	function_type_t* called_function_signature = initializer_node->optional_storage.callee_signature;
-	return called_function_signature->returns_by_copy;
-}
-
-
-/**
  * Does an enum list contain a given value for a member?
  */
 static inline u_int8_t does_enum_contain_integer_member(generic_type_t* enum_type, int32_t enum_member){
