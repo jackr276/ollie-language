@@ -4232,10 +4232,17 @@ loop_end:
 		return result;
 	}
 
+	/**
+	 *
+	 * TODO ARE WE EVEN GOING TO HAVE IT OR WILL SIDE_TYPE_LEFT IGNORE IT ALWAYS???
+	 */
+	propogate_no_dereference_required_flag(left_hand_unary);
+
+
+	//TODO DETERMINE IF A STORE IS REQUIRED FROM HERE!!!!!!!!
+
 	//Let's now see if we have compatible types
 	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
-
-	//What is our final type?
 	generic_type_t* final_type = NULL;
 
 	//If we have a generic assignment(=), we can just do the assignability check
@@ -4255,16 +4262,6 @@ loop_end:
 		 * doing an address calculation.
 		 */
 		if(is_copy_assignment_required(left_hand_type, expr->inferred_type) == TRUE){
-
-			//TODO I THINK WE NEED THIS FOR ALL PARTS OF THE LEFT HAND UNARY WE SHOULD NEVER
-			//BE DEREFERENCING
-			/**
-			 * If the left hand unary is a postfix expression *and* we are looking
-			 * to perform a memory copy assignment here, we need to flag that 
-			 * we do *not* require a dereference to make this work
-			 */
-			propogate_no_dereference_required_flag(left_hand_unary);
-
 			/**
 			 * If the right hand expression is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 

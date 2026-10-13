@@ -4346,6 +4346,8 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 
 	//TODO MAY WANT TO SPLIT BY SIDE TYPE INSTEAD OF DEREFERENCE NEEDED
+	//
+	//TODO ALL STORES HERE WILL BE LEAVING!!!!!!!!!
 
 	/**
 	 * If a dereference is required, we will need to do it based on what side of the expression
@@ -6396,7 +6398,37 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 }
 
 
+/**
+ * TODO DOC
+ */
 static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+
+	//Maintain a pointer to the current block
+	basic_block_t* current_block = basic_block;
+		
+	//Extract these both for convenience
+	generic_ast_node_t* left_child = parent_node->first_child;
+	generic_ast_node_t* right_child = left_child->next_sibling;
+
+	/**
+	 * Step 1: The LHS of the expression is *ALWAYS* emitted first. Ollie guarantees
+	 * that we always execute in order of left-to-right
+	 */
+	cfg_result_package_t left_hand_results = emit_unary_expression(current_block, left_child);
+	current_block = left_hand_results.final_block;
+
+	/**
+	 * Step 2: The RHS of the expression is *ALWAYS* emitted second. This means that everything
+	 * on the right only executes after the left has executed
+	 */
+	cfg_result_package_t right_hand_results = emit_expression(current_block, right_child);
+	current_block = right_hand_results.final_block;
+
+
+	//TODO WE NEED SOME WAY TO DETERMINE WHETHER OR NOT WE'RE DOING A STORE
+
+
 
 }
 
