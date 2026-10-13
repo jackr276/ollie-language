@@ -649,6 +649,9 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
  * be dereferencing if we need to perform a copy assignment
  *
  * NOTE: This method is recursive which is why we are not inlining it
+ *
+ *
+ * TODO TAKE ANOTHER LOOK
  */
 static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
 	//Base case - we have nothing so just leave
@@ -4252,6 +4255,9 @@ loop_end:
 		 * doing an address calculation.
 		 */
 		if(is_copy_assignment_required(left_hand_type, expr->inferred_type) == TRUE){
+
+			//TODO I THINK WE NEED THIS FOR ALL PARTS OF THE LEFT HAND UNARY WE SHOULD NEVER
+			//BE DEREFERENCING
 			/**
 			 * If the left hand unary is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 

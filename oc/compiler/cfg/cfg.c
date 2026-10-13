@@ -4344,6 +4344,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* parent_node_type = root->inferred_type;
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
+
+	//TODO MAY WANT TO SPLIT BY SIDE TYPE INSTEAD OF DEREFERENCE NEEDED
+
 	/**
 	 * If a dereference is required, we will need to do it based on what side of the expression
 	 * we're currently residing on. LHS means that we're doing a store, and RHS means that 
@@ -4357,6 +4360,9 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			 *
 			 * IMPORTANT - for all store addresses, it is an absolute must that the assignee
 			 * of the final result package be the base address
+			 *
+			 *
+			 * TODO THIS WILL NOW ALWAYS BE THE CASE FOR THE LHS!!!!!!!!! NO MORE STORE STATEMENTS
 			 */
 			case SIDE_TYPE_LEFT: {
 				switch(current_offset.type){
@@ -6390,9 +6396,24 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 }
 
 
+static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+
+}
+
+
+
+
+
 /**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
+ *
+ *
+ * Assignment expressions are guaranteed to evaluate from left-to-right. The LHS must
+ * always be evaluated first under the Ollie standard. Once both expressions have
+ * been emitted, a final determination will be made to see if a store, memory copy, or 
+ * initialization is required
+ *
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
@@ -6462,6 +6483,9 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * NOTE: We check for 100% *exact* equality between the exit statement's assignee
 			 * and the left hand var here. That is the only way that we can know for sure 
 			 * that we aren't having a false positive
+			 *
+			 *
+			 * TODO THIS WILL NO LONGER BE CORRECT
 			 */
 			} else if(current_block->exit_statement != NULL
 						&& is_store_operation(current_block->exit_statement) == TRUE
@@ -6474,6 +6498,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			/**
 			 * If we have a variable that is on the stack or is a global/static variable, then a regular assignment won't
 			 * work. We'll need to do a store here
+			 *
+			 * TODO REWORK THIS ALL
 			 */
 			} else if(left_hand_var->linked_var != NULL && is_store_assignment_required_for_variable(left_hand_var->linked_var) == TRUE){
 				//Emit the memory address var for this variable
