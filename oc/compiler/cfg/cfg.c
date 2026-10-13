@@ -6440,17 +6440,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 
 	//Now emit the right hand expression
 	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child);
+	current_block = right_hand_package.final_block;
 
 	//Hold onto this for later
-	instruction_t* last_instruction = current_block->exit_statement;
-
-	//Reassign current to be at the end
-	current_block = right_hand_package.final_block;
+	instruction_t* last_rhs_instruction = current_block->exit_statement;
 
 	//Emit the left hand unary expression
 	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child);
-
-	//Reassign current to be at the end
 	current_block = unary_package.final_block;
 
 	//This is always a var but we call the unpacker for safety
@@ -6475,6 +6471,11 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * identified by the other checks down the road
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
+				if(is_statement_rrf_eligible_function_call(last)){
+
+				}
+
+
 				/**
 				 * TODO HERE
 				 * SPECIAL REACHBACK FOR FUNCTION CALL STATEMENTS
@@ -6525,39 +6526,33 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 */
 			} else {
 				/**
-				 * If this is not a binary operation, then we will just copy it over. If it is, then we will
-				 * use that binary operation for our own purposes here with the left hand var
-				 */
-				instruction_t* binary_expression;
-				instruction_t* final_assignment;
-
-				/**
 				 * Reach back into the block to see if the last instruction that we emitted for our op1
 				 * here is a constant assignment or a binary expression. If it's either, we can avoid
 				 * the copy assignment for this assignment expression and go to emitting directly
 				 */
-				if(last_instruction != NULL
-					&& last_instruction->operands.oir.assignee != NULL
-					&& last_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->operands.oir.assignee, result_var) == TRUE){
+				if(last_rhs_instruction != NULL
+					&& last_rhs_instruction->operands.oir.assignee != NULL
+					&& last_rhs_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
+					&& variables_equal_no_ssa(last_rhs_instruction->operands.oir.assignee, result_var) == TRUE){
 
-					switch(last_instruction->statement_type){
+					switch(last_rhs_instruction->statement_type){
 						case THREE_ADDR_CODE_BIN_OP_STMT:
-						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-							binary_expression = last_instruction;
+						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
+							instruction_t* binary_expression = last_rhs_instruction;
 
 							//Make this one's assignee the left hand var
 							binary_expression->operands.oir.assignee = left_hand_var;
 							
 							break;
+						}
 
 						/**
 						 * If we have this then there's no clever optimization that we can do, we'll
 						 * just emti a copy assignment
 						 */
-						default:
+						default: {
 							//Finally we'll struct the whole thing
-							final_assignment = emit_assignment_instruction(left_hand_var, result_var, parent_node->line_number);
+							instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, result_var, parent_node->line_number);
 
 							//Copy this over if there is one
 							left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
@@ -6566,6 +6561,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 							add_statement(current_block, final_assignment);
 
 							break;
+						}
 					}
 
 				/**
@@ -6574,7 +6570,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				 */
 				} else {
 					//Finally we'll struct the whole thing
-					final_assignment = emit_assignment_instruction(left_hand_var, result_var, parent_node->line_number);
+					instruction_t* final_assignment = emit_assignment_instruction(left_hand_var, result_var, parent_node->line_number);
 
 					//Copy this over if there is one
 					left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
