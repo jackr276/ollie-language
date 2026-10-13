@@ -4710,6 +4710,8 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 	/**
 	 * Now we are required to see a valid constant expression representing what
 	 * the actual index is.
+	 *
+	 * TODO THIS LOOKS WRONG!!! Shouldn't this be on the RHS always?
 	 */
 	generic_ast_node_t* expr = in_expression(token_stream, side);
 
