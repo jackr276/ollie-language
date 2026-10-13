@@ -12044,6 +12044,26 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
+			 *
+			 * TODO HERE
+			 *
+			 * <expr>
+			 * <expr>
+			 * <expr>
+			 * call fn()
+			 * may have a bunch of handles junk
+			 *
+			 * final_result_var
+			 *
+			 * memory copy (<rrf address>) <- final_result_var
+			 *
+			 * We basically need to have this RRF address available before
+			 * the function call ever even takes place and that's the entire
+			 * challenge with this
+			 *
+			 * We may be able to think of some special exceptions as to how
+			 * this is working. Off the bat I'm thinking of a memory address
+			 * that relies on a variable that the function mutates(pass by reference)
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
