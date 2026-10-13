@@ -170,15 +170,6 @@ struct generic_ast_node_t{
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
 	/**
-	 * Certain direct and indirect function call statements are eligible for
-	 * what is called "return region forwarding". This relates
-	 * specifically to return by copy function calls where, if
-	 * we're going to be copying the returned value into the 
-	 * LHS anyways, we may as well pass the LHS's memory address
-	 * to the function as the return region to begin with
-	 */
-	u_int8_t return_region_forwarding_eligible;
-	/**
 	 * This union has two values:
 	 *
 	 * 1.) Is the given switch statement "exhaustive" - this is most usually false

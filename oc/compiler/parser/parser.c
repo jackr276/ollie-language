@@ -4100,10 +4100,6 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
  * 									   | <unary-expression> |= <ternary-expression>
  * 									   | <unary-expression> &= <ternary-expression>
  * 									   | <unary-expression> ^= <ternary-expression>
- *
- *
- *
- * TODO RETURN REGION FORWARDING IMPLEMENTATION FOR THIS AS WELL
  */
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
 	//Freeze the line number
@@ -13442,20 +13438,6 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 			 * SIMD instructions
 			 */
 			current_function->requires_initial_alignment = TRUE;
-
-			/**
-			 * Return region forwarding(RRF) in OIR refers to the ability for OC to recognize
-			 * that the LHS is going to be copied from the return region of a return-by-copy function call
-			 * and, instead of allocating two memory regions and doing an unnecessary copy, pass the
-			 * memory region in the LHS as the return by copy address in the first place(the value in %rdi).
-			 * This concept, in its current form, applies to let statements and assignment expressions
-			 *
-			 * NOTE: global/static variable let statements are already excluded from this implicitly via the 
-			 * is_initializer_node_all_constant check above
-			 */
-			if(is_node_return_by_copy_function_call(initializer_node) == TRUE){
-				initializer_node->return_region_forwarding_eligible = TRUE;
-			}
 		}
 	}
 

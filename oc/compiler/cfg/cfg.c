@@ -7290,9 +7290,6 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * Emit a direct or indirect function call statement and all of the parameters that come with it. We will
  * not handle the storage of these parameters at this point, OIR just has a generic "parameters" array that
  * will hold all of them until we handle them in the instruction selection step
- *
- *
- * TODO MAY HAVE TO DO STUFF WITH RETURN REGION FORWARDING HERE
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Blank return package for now
@@ -11998,6 +11995,19 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		case CFG_RESULT_TYPE_VAR:{
 			//Get this for convenience
 			three_addr_var_t* let_result_var = let_initializer_results.result_value.result_var;
+
+			/**
+			 */	/**
+	 * Certain direct and indirect function call statements are eligible for
+	 * what is called "return region forwarding". This relates
+	 * specifically to return by copy function calls where, if
+	 * we're going to be copying the returned value into the 
+	 * LHS anyways, we may as well pass the LHS's memory address
+	 * to the function as the return region to begin with
+	 */
+			if(node->return_region_forwarding_eligible == TRUE){
+
+			}
 
 			/**
 			 * Is a copy assignment required between the two variables? This will only
