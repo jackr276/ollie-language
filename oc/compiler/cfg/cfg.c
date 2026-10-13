@@ -523,6 +523,19 @@ static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 
 
 /**
+ * Is the given node a return region forwarding eligible function call?
+ */
+static inline u_int8_t is_node_rrf_eligible_function_call(generic_ast_node_t* node){
+	if(node->ast_node_type != AST_NODE_TYPE_INDIRECT_FUNCTION_CALL && node->ast_node_type != AST_NODE_TYPE_FUNCTION_CALL){
+		return FALSE;
+	}
+
+	function_type_t* called_function_signature = node->optional_storage.callee_signature;
+	return is_type_returned_by_copy(called_function_signature->return_type);
+}
+
+
+/**
  * Is the given statement a "return region forwarded" function call? Function calls
  * are eligible for return region forwarding if they have a return-by-copy type
  */
@@ -7373,10 +7386,21 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//This should be unreachable but just to be sure
 		default: {
-			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
-			exit(1);
+			trigger_ice_panic("Incompatible node type found in function call handler");
+			break;
 		}
 	}
+
+	/**
+	 * Is the given function call eligible for what Ollie calls "return region forwarding"?
+	 * Return region forwarding eligible values are simply
+	 */
+	if(is_node_rrf_eligible_function_call(function_call_node) == TRUE){
+		//TODO
+
+	}
+
+
 
 	//If we have parameters allocate the array now
 	if(signature->function_parameters.current_index != 0){
@@ -7453,12 +7477,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			 * allocation to avoid interference
 			 */
 			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
+			add_statement(current_block, assignment);
 
 			//Reassign this value
 			function_assignee = assignment->operands.oir.assignee;
-
-			//Add it in
-			add_statement(current_block, assignment);
 		}
 
 		/**
@@ -12024,26 +12046,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * we'll need some special handling for it
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
-				/**
-				 * Certain direct and indirect function call statements are eligible for
-				 * what is called "return region forwarding". This relates
-				 * specifically to return by copy function calls where, if
-				 * we're going to be copying the returned value into the 
-				 * LHS anyways, we may as well pass the LHS's memory address
-				 * to the function as the return region to begin with
-				 */
-				if(is_statement_rrf_eligible_function_call(last_rhs_statement) == TRUE){
-					printf("TODO NOT IMPLEMENTED\n\n\n\n\n");
-					exit(1);
-
-
-				/**
-				 * Otherwise it's nothing of the sort so just emit a regular memory copy expression here
-				 */
-				} else {
-					instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
-					add_statement(current_block, copy_statement);
-				}
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
+				add_statement(current_block, copy_statement);
 
 			/**
 			 * If we have a variable that requires a store assignment, we will
