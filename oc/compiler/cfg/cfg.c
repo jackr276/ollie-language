@@ -508,9 +508,8 @@ static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
 
 
 /**
- * Is a type returned via the stack using a copy? Structs and union 
- * types are always returned by copy whilst everything else is by reference
- * (unless it's a primitive type of course)
+ * Is the given type returned by copy from a function? Stack and union
+ * types are eligible for this
  */
 static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 	switch(type->type_class){
@@ -521,6 +520,34 @@ static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 			return FALSE;
 	}
 }
+
+
+/**
+ * Is the given statement a "return region forwarded" function call? Function calls
+ * are eligible for return region forwarding if they have a return-by-copy type
+ */
+static inline u_int8_t is_statement_rrf_eligible_function_call(instruction_t* stmt){
+	//Sanity check
+	if(stmt == NULL){
+		return FALSE;
+	}
+
+	switch(stmt->statement_type){
+		case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
+			function_type_t* signature = stmt->operands.oir.operand1->type->internal_types.function_type;
+			return is_type_returned_by_copy(signature->return_type);
+		}
+			
+		case THREE_ADDR_CODE_FUNC_CALL: {
+			function_type_t* signature = stmt->called_function->signature->internal_types.function_type;
+			return is_type_returned_by_copy(signature->return_type);
+	   	}
+
+		default: {
+			return FALSE;
+		}
+	}
+} 
 
 
 /**
@@ -6448,6 +6475,13 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * identified by the other checks down the road
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
+				/**
+				 * TODO HERE
+				 * SPECIAL REACHBACK FOR FUNCTION CALL STATEMENTS
+				 */
+
+
+
 				//Emit the copy from the left hand var to the final op1
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(left_hand_var, result_var, parent_node->inferred_type->type_size, parent_node->line_number);
 
@@ -12010,7 +12044,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
 			 *
-			 * TODO RETURN REGION FORWARDING HERE MAYBE?? Maybe a special instruction type?
+			 * TODO RETURN REGION FORWARDING HERE
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
@@ -13480,6 +13514,7 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 			add_statement(function_entry, initialization_statement);
 
 		} else {
+			//TODO MAYBE HERE RETURN REGION FORWARDING???
 			//This is as easy as memory copying and adding it in
 			instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(emit_memory_address_var(temp_var),
 																						result->param_result.variable_result,
@@ -13688,6 +13723,8 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			/**
 			 * Once we've initialized we can do the memory copy. Note that this is always
 			 * going to be a variable so we don't need to worry about constants
+			 *
+			 * TODO MAYBE HERE RETURN REGION FORWARDING?
 			 */
 			instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(emit_memory_address_var(cloned_parameter),
 															 							result->param_result.variable_result, 
