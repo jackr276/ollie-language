@@ -2982,10 +2982,33 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
  * find the rightmost "[]" pair and insert in there
  */
 void insert_bounds_for_array(generic_type_t* array_type){
-	//Extract this so we have it
+	//Buffer for the member count
+	char member_count_buffer[100];
+
+	//Extract this so we have it and put it into the buffer
 	int32_t member_count = array_type->internal_values.num_members;
+	sprintf(member_count_buffer, "%d", member_count);
 
+	printf("INSERTING BOUND %d\n", member_count);
 
+	//Get the name out
+	dynamic_string_t* type_name = &(array_type->type_name);
+
+	//Crawl backwards until we find what we're after
+	for(int32_t i = type_name->current_length - 1; i >= 0; i -= 2){
+		//We should be able to see [] from here
+		char first = dynamic_string_get_char_at(type_name, i - 1);
+		char second = dynamic_string_get_char_at(type_name, i);
+
+		//Not a [] pair so skip
+		if(first != '[' || second != ']'){
+			continue;
+		}
+
+		//Otherwise we've made it so we need to insert right after the first char and leave
+		dynamic_string_insert_string_at_index(type_name, member_count_buffer, i);
+		break;
+	}
 }
 
 
