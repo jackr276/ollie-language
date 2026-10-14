@@ -2856,7 +2856,6 @@ static inline void insert_bounds_into_type_name(generic_type_t* type, char* boun
 					 * If we're in brackets then this is something totally ordinary, but if
 					 * we're not, we've found what we need
 					 */
-					case '0':
 					case '1':
 					case '2':
 					case '3':
@@ -2965,6 +2964,30 @@ generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_numb
 
 	return type;
 }
+
+
+/**
+ * If we are inserting bounds into an array type, then we know that the
+ * array type previously had no bounds at all. This is really only came
+ * upon in the case of initializers. Here's an example
+ *
+ * let x:i32[][] = [[1, 2, 3], [1, 2, 3]]
+ *
+ * We'll first validate the innermost arrays and end up with [3]
+ * 	i32[][3]
+ *
+ * Then we'll validate the outermost and get i32[2][3]
+ *
+ * As such, to figure out where we should put this bound, we'll always
+ * find the rightmost "[]" pair and insert in there
+ */
+void insert_bounds_for_array(generic_type_t* array_type){
+	//Extract this so we have it
+	int32_t member_count = array_type->internal_values.num_members;
+
+
+}
+
 
 
 /**
