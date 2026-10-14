@@ -12,6 +12,31 @@
 #include "../symtab/symtab.h"
 #include "../utils/constants.h"
 
+
+/**
+ * Get the full type name from the given type. This will account for
+ * mutability printing as well
+ *
+ * NOTE: we will use a dynamic string internally to allocate the space
+ * needed to print this, but we will just return the dynamic string's
+ * char* for convenience
+ *
+ * WARNING: DO NOT USE THIS FOR AST NODES. AST NODES SHOULD USE 
+ * get_full_type_name_from_ast_node ONLY!
+ */
+static char* get_full_type_name_from_type(generic_type_t* type){
+	dynamic_string_t full_name = dynamic_string_alloc();
+
+	//If this is mutable take the mut prefix on
+	if(type->mutability == MUTABLE){
+		dynamic_string_concatenate(&full_name, "mut ");
+	}
+
+	dynamic_string_concatenate(&full_name, type->type_name.string);
+	return full_name.string;
+}
+
+
 /**
  * Is this a stack memory region variable or not? Stack memory
  * regions or memory chunks are: arrays, structs and unions
@@ -4006,24 +4031,22 @@ void generate_types_assignable_failure_message(char* info, generic_type_t* sourc
 		return;
 	}
 
-	//Grab the mutability levels as strings for our use
-	char* source_mutability = source_type->mutability == MUTABLE ? "mut " : "";
-	char* dest_mutability = destination_type->mutability == MUTABLE ? "mut " : "";
-
 	char* source_layout = source_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS ? "Contiguous" : "Non-contiguous";
 	char* dest_layout = destination_type->memory_layout_type == MEMORY_LAYOUT_TYPE_CONTIGUOUS ? "contiguous" : "non-contiguous";
 
 	//If this is the region why, then we'll print out a special message
 	if(destination_type->memory_layout_type != source_type->memory_layout_type){
 		//Print into the buffer
-		sprintf(info, "%s Type \"%s%s\" cannot be assigned to incompatible %s type \"%s%s\"",
-		  		source_layout, source_mutability, source_type->type_name.string,
-				dest_layout, dest_mutability, destination_type->type_name.string);
+		sprintf(info, "%s Type \"%s\" cannot be assigned to incompatible %s type \"%s\"",
+				source_layout,
+				get_full_type_name_from_type(source_type),
+				dest_layout,
+				get_full_type_name_from_type(destination_type));
 	} else {
 		//Print into the buffer
-		sprintf(info, "Type \"%s%s\" cannot be assigned to incompatible type \"%s%s\"",
-				source_mutability, source_type->type_name.string,
-				dest_mutability, destination_type->type_name.string);
+		sprintf(info, "Type \"%s\" cannot be assigned to incompatible type \"%s\"",
+				get_full_type_name_from_type(source_type),
+				get_full_type_name_from_type(destination_type));
 	}
 }
 
