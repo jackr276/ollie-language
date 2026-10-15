@@ -4889,6 +4889,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * Conditions here: If we are on the left hand side *and* our next sibling is on the right hand side,
 			 * that means that we need to be doing an assignment here. As such, we emit a store. In any other
 			 * area, we emit a load
+			 *
+			 * TODO I THINK THIS IS GOING TO CASE AN ISSUE
+			 *
+			 * TODO MAYBE USE MEMORY ACCESS REQUIRED???
 			 */
 			if(unary_expression_parent->side == SIDE_TYPE_LEFT &&
 				(unary_expression_parent->next_sibling != NULL && unary_expression_parent->next_sibling->side == SIDE_TYPE_RIGHT)){
@@ -6399,27 +6403,6 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 
 
 /**
- * Will the given LHS tree generate a store or a move? We determine this
- * by crawling the tree and determining if we have any nodes that perform
- * memory access. The AST nodes that are recognized as performing
- * memory access are:
- * 		Unary expressions with pointers => *x = ...
- * 		Array accessors => x[1] = ...
- * 		Struct accessors => x:a = ...
- * 		Union accessors => x.a = ...
- */
-static u_int8_t does_ast_tree_access_memory(generic_ast_node_t* root){
-	switch(root->ast_node_type){
-		case AST_NODE_TYPE_UNARY_EXPR:
-
-		case AST_NODE_TYPE_POSTFIX_EXPR:
-
-
-	}
-}
-
-
-/**
  *
  * TODO REWRITE
  *
@@ -6456,9 +6439,42 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 	 * a memory copy instruction, or an initialization instruction, though the last one is easy
 	 * to decide
 	 */
+	three_addr_var_t* lhs_result_var = left_hand_results.result_value.result_var;
 	switch(right_hand_results.type){
+		/**
+		 * Constant results can emit stores or regular assignments. This depends on 3 scenarios
+		 * that we'll have to check:
+		 * 		1.) Is the LHS flagged as "memory access required"? This means that we've returned
+		 * 			a memory address and need to store into it. Things like *x = 5 generate this
+		 * 		2.) Does the LHS have a variable that is a stack variable? If so then we need to
+		 * 			store into that as well. Things like: int x = &y, y = 2; flag this
+		 * 		3.) Failing all that, we emit a regular assignment 
+		 */
 		case CFG_RESULT_TYPE_CONST: {
 			three_addr_const_t* result_const = right_hand_results.result_value.result_const;
+
+			/**
+			 * Case 1: we are specifically flagged as requiring memory access so we need
+			 * to emit that now. The LHS variable is the memory address
+			 */
+			if(left_child->memory_access_required == TRUE){
+				instruction_t* store_instruction = emit_store_const_base_address_only(lhs_result_var, result_const, left_child->inferred_type, left_child->line_number);
+				add_statement(current_block, store_instruction);
+
+			/**
+			 * TODO DOC
+			 */
+			} else if(lhs_result_var->linked_var != NULL && is_store_assignment_required_for_variable(lhs_result_var->linked_var) == TRUE){
+				//Emit the memory address var for this variable
+				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
+
+				//Now for the final store code
+				instruction_t* final_assignment = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
+
+				//Now add thi statement in here
+				add_statement(current_block, final_assignment);
+
+			}
 
 			break;
 		}

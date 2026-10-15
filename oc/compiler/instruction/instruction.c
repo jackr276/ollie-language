@@ -6242,6 +6242,32 @@ instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, thre
 /**
  * Emit a store statement that only uses the base address
  */
+instruction_t* emit_store_const_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
+	instruction_t* stmt = calloc(1, sizeof(instruction_t));
+
+	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+
+	//This is the base address only mode
+	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+
+	//The first address op is the memory address
+	stmt->operands.oir.address_operand1 = base_address;
+
+	//Important - add the type that we expect to be writing to in memory
+	stmt->type_storage.memory_read_write_type = memory_write_type;
+
+	//The storee goes inside of the constant operand
+	stmt->operands.oir.constant_operand = storee;
+
+	//And that's it, we'll now just give it back
+	stmt->line_number = line_number;
+	return stmt;
+}
+
+
+/**
+ * Emit a store statement that only uses the base address
+ */
 instruction_t* emit_constant_store_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
