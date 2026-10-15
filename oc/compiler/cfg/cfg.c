@@ -4354,7 +4354,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	 * we're currently residing on. LHS means that we're doing a store, and RHS means that 
 	 * we're doing a load.
 	 */
-	if(root->dereference_needed == TRUE){
+	if(root->memory_access_required == TRUE){
 		switch(root->side){
 			/**
 			 * LHS means that we need to be emitting a store statement. For all store statements
@@ -5065,7 +5065,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				//The other case here
 				case AST_NODE_TYPE_POSTFIX_EXPR:
 					//Set the deref flag to false so we don't deref
-					unary_expression_child->dereference_needed = FALSE;
+					unary_expression_child->memory_access_required = FALSE;
 					//Emit the whole thing
 					generic_results = emit_postfix_expression(current_block, unary_expression_child);
 
