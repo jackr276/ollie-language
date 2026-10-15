@@ -752,9 +752,6 @@ static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_
 		/**
 		 * Now that we know the bounds size, we can go into the type name and insert the bounds
 		 * where they belong for better error printouts
-		 *
-		 *
-		 * TODO THIS WORKS FOR SINGULAR TYPES BUT NOT FOR THE OVERALL ARRAY TYPE
 		 */
 		insert_bounds_for_array(array_type);
 
