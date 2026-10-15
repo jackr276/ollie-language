@@ -6398,7 +6398,15 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 }
 
 
+
+static inline 
+
+
+
 /**
+ *
+ * TODO REWRITE
+ *
  * TODO DOC
  */
 static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_block, generic_ast_node_t* parent_node){
@@ -6424,6 +6432,32 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 	 */
 	cfg_result_package_t right_hand_results = emit_expression(current_block, right_child);
 	current_block = right_hand_results.final_block;
+
+	/**
+	 * Step 3: based on what kind of result we're dealing with from the RHS, we'll
+	 * emit the appropriate kind of instruction. We will also need to make the determination
+	 * now if this is a register-to-register assignment(movX instruction), a store instruction, 
+	 * a memory copy instruction, or an initialization instruction, though the last one is easy
+	 * to decide
+	 */
+	switch(right_hand_results.type){
+		case CFG_RESULT_TYPE_CONST: {
+			three_addr_const_t* result_const = right_hand_results.result_value.result_const;
+
+			break;
+		}
+
+		case CFG_RESULT_TYPE_VAR: {
+			three_addr_var_t* result_var = right_hand_results.result_value.result_var;
+
+		}
+
+		case CFG_RESULT_TYPE_INITIALIZER: {
+			three_addr_initializer_t* result_initializer = right_hand_results.result_value.result_initializer;
+
+			break;
+		}
+	}
 
 
 	//TODO WE NEED SOME WAY TO DETERMINE WHETHER OR NOT WE'RE DOING A STORE
