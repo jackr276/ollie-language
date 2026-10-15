@@ -169,7 +169,9 @@ struct generic_ast_node_t{
 	u_int8_t is_assignable;
 	/**
 	 * Does this AST subtree require memory access. This flag is *EXTREMELY* important
-	 * for the CFG to generate correct code
+	 * for the CFG to generate correct code. If this flag is true on the LHS(SIDE_TYPE_LEFT),
+	 * it will lead to us generating a "store" instruction in the CFG. If this is true on the
+	 * RHS(SIDE_TYPE_RIGHT), it will lead to us generating a "load" instruction in the CFG
 	 */
 	u_int8_t memory_access_required;
 	//Is the given statement(switch or in) eligible to internally be a true switch?

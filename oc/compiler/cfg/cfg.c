@@ -4412,12 +4412,47 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	 * anything of the sort
 	 */
 	switch(root->side){
+		/**
+		 * Values on the LHS *NEVER* generate anything besides an address calculation. LHS
+		 * postfix expressions will generate a variable that represents an address, which
+		 * will be used by the caller to emit a store
+		 */
 		case SIDE_TYPE_LEFT: {
+			three_addr_var_t* final_memory_address = convert_address_offset_into_address_calculation(current_block, base_address, &current_offset, root->line_number);
 
+			results.type = CFG_RESULT_TYPE_VAR;
+			results.result_value.result_var = final_memory_address;
+			break;
 	 	}
 
+		/**
+		 * For values on the RHS, we will use the "memory_access_required" flag to determine if
+		 * we're intending to just calculate the memory address or if we would like to emit a load
+		 * and get the value at that memory address
+		 */
 		case SIDE_TYPE_RIGHT: {
+			/**
+			 * Case 1: memory access is required, so the parser explicitly believes that
+			 * we need to load the value out of memory at this current address. We will
+			 * emit a load as needed
+			 */
+			if(root->memory_access_required == TRUE){
 
+				//TODO
+
+			/**
+			 * Case 2: memory access is not required, so the parser explicitly believes
+			 * that we do *NOT* need to load the value out of memory, and just need to
+			 * retrieve the memory address
+			 */
+			} else {
+				three_addr_var_t* final_memory_address = convert_address_offset_into_address_calculation(current_block, base_address, &current_offset, root->line_number);
+
+				results.type = CFG_RESULT_TYPE_VAR;
+				results.result_value.result_var = final_memory_address;
+			}
+
+			break;
 	  	}
 	}
 
@@ -4448,66 +4483,7 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			 */
 			case SIDE_TYPE_LEFT: {
 				switch(current_offset.type){
-					/**
-					 * No current offset - we just have a store with a base
-					 * address and that's it
-					 */
-					case OFFSET_TYPE_NONE:{
-						instruction_t* store_instruction = emit_store_base_address_only(base_address,
-																						NULL,
-																						original_memory_access_type,
-																						root->line_number);
-						add_statement(current_block, store_instruction);
-						break;
-					}
-
-					/**
-					 * Offset is a variable so we'll have an address calculation
-					 * with two operands, no constants
-					 */
-					case OFFSET_TYPE_VAR:{
-						instruction_t* store_instruction = emit_store_base_address_and_index(base_address,
-																								current_offset.value.variable_offset,
-																								NULL,
-																								original_memory_access_type,
-																								root->line_number);
-						add_statement(current_block, store_instruction);
-						break;
-					}
-
-					/**
-					 * Offset is a constant so we'll have an address calculation with the base
-					 * address and a constant offset
-					 *
-					 * If the constant value is nonzero then its worth it to emit the offset. If the
-					 * constant value is 0 then there is no point and we'll emit this as a store with
-					 * base address only
-					 */
-					case OFFSET_TYPE_CONST:{
-						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
-							instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address,
-																											current_offset.value.constant_offset,
-																											NULL,
-																											original_memory_access_type,
-																											root->line_number);
-							add_statement(current_block, store_instruction);
-
-						} else {
-							instruction_t* store_instruction = emit_store_base_address_only(base_address,
-																							NULL,
-																							original_memory_access_type,
-																							root->line_number);
-
-							add_statement(current_block, store_instruction);
-						}
-
-						break;
-					}
-				}
-
-				results.type = CFG_RESULT_TYPE_VAR;
-				results.result_value.result_var = base_address;
-				break;
+		
 			}
 
 			/**
