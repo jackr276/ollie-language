@@ -4353,6 +4353,62 @@ static inline three_addr_var_t* convert_address_offset_into_address_calculation(
 }
 
 
+/**
+ * Convert a base address and given address offset into a load instruction. The result of the load will
+ * be returned as a three address variable
+ */
+static inline three_addr_var_t* convert_address_offset_into_load_statement(basic_block_t* block, generic_type_t* result_type, generic_type_t* memory_access_type,
+																			three_addr_var_t* base_address, address_offset_t* address_offset, u_int32_t line_number){
+	//The result is a temp var of the specific type given
+	three_addr_var_t* load_result = emit_temp_var(result_type);
+
+	switch(address_offset->type){
+		/**
+		 * No offset so we can do a load with just a base address
+		 */
+		case OFFSET_TYPE_NONE: {
+			instruction_t* load_instruction = emit_load_base_address_only(load_result, base_address, memory_access_type, line_number);
+			add_statement(block, load_instruction);
+			break;
+		}
+
+		/**
+		 * Loading with a variable offset so we'll have a load instruction with two 
+		 * variables in it
+		 */
+		case OFFSET_TYPE_VAR: {
+			three_addr_var_t* variable_offset = address_offset->value.variable_offset;
+
+			instruction_t* load_instruction = emit_load_base_address_and_index(load_result, base_address, variable_offset, memory_access_type, line_number);
+			add_statement(block, load_instruction);
+			break;
+		}
+
+		/**
+		 * Loading with a constant offset so we'll do a load with offset only. If the offset
+		 * value happens to be 0 then we'll skip doing that entirely and just do a load
+		 * with the base address only
+		 */
+		case OFFSET_TYPE_CONST: {
+			three_addr_const_t* constant_offset = address_offset->value.constant_offset;
+
+			if(is_constant_value_zero(constant_offset) == FALSE){
+				instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result, base_address, constant_offset, memory_access_type, line_number);
+				add_statement(block, load_instruction);
+
+			} else {
+				instruction_t* load_instruction = emit_load_base_address_only(load_result, base_address, memory_access_type, line_number);
+				add_statement(block, load_instruction);
+			}
+
+			break;
+		}
+	}
+
+	//Give back the load result in the end
+	return load_result;
+}
+
 
 /**
  * Emit a postfix expression
@@ -4437,8 +4493,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			 * emit a load as needed
 			 */
 			if(root->memory_access_required == TRUE){
+				three_addr_var_t* load_result = convert_address_offset_into_load_statement(current_block, parent_node_type, original_memory_access_type, 
+																							base_address, &current_offset, root->line_number);
 
-				//TODO
+				results.type = CFG_RESULT_TYPE_VAR;
+				results.result_value.result_var = load_result;
 
 			/**
 			 * Case 2: memory access is not required, so the parser explicitly believes
@@ -4454,115 +4513,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 
 			break;
 	  	}
-	}
-
-
-
-	//TODO MAY WANT TO SPLIT BY SIDE TYPE INSTEAD OF DEREFERENCE NEEDED
-	//
-	//TODO ALL STORES HERE WILL BE LEAVING!!!!!!!!!
-
-	/**
-	 * If a dereference is required, we will need to do it based on what side of the expression
-	 * we're currently residing on. LHS means that we're doing a store, and RHS means that 
-	 * we're doing a load.
-	 */
-	if(root->memory_access_required == TRUE){
-		switch(root->side){
-			/**
-			 * LHS means that we need to be emitting a store statement. For all store statements
-			 * we intentionally leave their storees empty, that will be for caller to populate
-			 *
-			 * IMPORTANT - for all store addresses, it is an absolute must that the assignee
-			 * of the final result package be the base address
-			 *
-			 *
-			 * TODO THIS WILL NOW ALWAYS BE THE CASE FOR THE LHS!!!!!!!!! NO MORE STORE STATEMENTS
-			 *
-			 * ALL LHS EXPRESSIONS WILL ONLY EVER GENERATE MEMORY ADDRESSES STORES TO BE ADDED ONLY IN ASSIGNMENT
-			 */
-			case SIDE_TYPE_LEFT: {
-				switch(current_offset.type){
-		
-			}
-
-			/**
-			 * RHS means that we have to do a load instruction. Unlike with the stores, these instructions
-			 * will be emitted as fully complete. For these, it's important that we populate the result
-			 * package with the result of the load in the end
-			 */
-			case SIDE_TYPE_RIGHT: {
-				three_addr_var_t* load_result = emit_temp_var(parent_node_type);
-
-				switch(current_offset.type){
-					/**
-					 * No offset so we can do a load with just a base address
-					 */
-					case OFFSET_TYPE_NONE: {
-						instruction_t* load_instruction = emit_load_base_address_only(load_result,
-																						base_address,
-																						original_memory_access_type,
-																						root->line_number);
-						add_statement(current_block, load_instruction);
-						break;
-					}
-
-					/**
-					 * Loading with a variable offset so we'll have a load instruction with two 
-					 * variables in it
-					 */
-					case OFFSET_TYPE_VAR: {
-						instruction_t* load_instruction = emit_load_base_address_and_index(load_result,
-																							base_address,
-																							current_offset.value.variable_offset,
-																							original_memory_access_type,
-																							root->line_number);
-						add_statement(current_block, load_instruction);
-						break;
-					}
-
-					/**
-					 * Loading with a constant offset so we'll do a load with offset only. If the offset
-					 * value happens to be 0 then we'll skip doing that entirely and just do a load
-					 * with the base address only
-					 */
-					case OFFSET_TYPE_CONST: {
-						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
-							instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result,
-																											base_address,
-																											current_offset.value.constant_offset,
-																											original_memory_access_type,
-																											root->line_number);
-							add_statement(current_block, load_instruction);
-
-						} else {
-							instruction_t* load_instruction = emit_load_base_address_only(load_result,
-																							base_address,
-																							original_memory_access_type,
-																							root->line_number);
-							add_statement(current_block, load_instruction);
-						}
-
-						break;
-					}
-				}
-
-				results.type = CFG_RESULT_TYPE_VAR;
-				results.result_value.result_var = load_result;
-				break;
-			}
-		}
-
-	/**
-	 * If we don't need to dereference then we're just doing a memory address call. In this
-	 * case we'll calculate the memory address appropriately based on the base address and 
-	 * offset and return that in the result package
-	 */
-	} else {
-
-		//Regardless of the path the reuslt is in the final memory address
-		results.type = CFG_RESULT_TYPE_VAR;
-		results.result_value.result_var = final_memory_address;
 	}
 
 	//Package up and return the results package
