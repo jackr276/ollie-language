@@ -6492,8 +6492,29 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 			break;
 		}
 
+		/**
+		 * Variable results can emit memory copies, stores or regular assignments. This depends on 4 scenarios
+		 * that we'll have to check:
+		 * 		1.) Do the LHS type and RHS type require a memory copy? If so then we will always emit a 
+		 * 			memory copy instruction
+		 * 		2.) Is the LHS flagged as "memory access required"? This means that we've returned
+		 * 			a memory address and need to store into it. Things like *x = a generate this
+		 * 		3.) Does the LHS have a variable that is a stack variable? If so then we need to
+		 * 			store into that as well. Things like: int x = &y, y = a; flag this
+		 * 		4.) Failing all that, we emit a regular assignment 
+		 */
 		case CFG_RESULT_TYPE_VAR: {
 			three_addr_var_t* result_var = right_hand_results.result_value.result_var;
+
+			/**
+			 * Case 1: the LHS and RHS side are both types that necessitate a copy assignment. We will
+			 * always emit a copy assignment in this case
+			 */
+			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(lhs_result_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
+				add_statement(current_block, copy_statement);
+
+			} else if(TODO)
 
 		}
 
@@ -6593,7 +6614,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(left_hand_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
 
 				//Get it into the block
-				add_statement(current_block, copy_statement);		
+				add_statement(current_block, copy_statement);
 
 			/**
 			 * Do we have a pre-loaded up store statement ready for us to go? If so, then
