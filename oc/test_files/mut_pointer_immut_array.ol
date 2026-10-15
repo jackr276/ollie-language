@@ -14,5 +14,6 @@ pub fn main() -> i32 {
 	//Should fail, not mutable
 	@tester(&arr);
 
+	OUNIT: [fail_to_compile]
 	ret 0;
 }

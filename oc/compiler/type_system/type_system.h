@@ -481,6 +481,12 @@ generic_type_t* get_referenced_type(generic_type_t* starting_type, u_int16_t ind
 generic_type_t* create_array_type(generic_type_t* points_to, u_int32_t line_number, u_int32_t num_members, mutability_type_t mutability);
 
 /**
+ * If we are inserting bounds into an array type, then we know that the
+ * array type previously had no bounds at all 
+ */
+void insert_bounds_for_array(generic_type_t* array_type);
+
+/**
  * Take in an array type and convert it to an equivalent pointer. The mutability will
  * remain unchanged. This is meant to represent the array's decay into a pointer
  */
