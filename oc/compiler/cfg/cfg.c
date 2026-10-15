@@ -6567,6 +6567,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				instruction_t* assignment = emit_assignment_instruction(lhs_result_var, result_var, parent_node->line_number);
 				add_statement(current_block, assignment);
 			}
+
+			break;
 		}
 
 		/**
