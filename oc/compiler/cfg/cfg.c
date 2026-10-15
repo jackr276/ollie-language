@@ -4365,6 +4365,8 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 			 *
 			 *
 			 * TODO THIS WILL NOW ALWAYS BE THE CASE FOR THE LHS!!!!!!!!! NO MORE STORE STATEMENTS
+			 *
+			 * ALL LHS EXPRESSIONS WILL ONLY EVER GENERATE MEMORY ADDRESSES STORES TO BE ADDED ONLY IN ASSIGNMENT
 			 */
 			case SIDE_TYPE_LEFT: {
 				switch(current_offset.type){
@@ -4808,6 +4810,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			/**
 			 * Otherwise - it is possible that we have a stack variable or global/static variable here. In that case, we'll need to emit a
 			 * store to get the variable back to where it needs to be
+			 *
+			 * TODO THIS MAY BE AN EXCEPTION BUT TAKE A LOOK
 			 */
 			} else if (is_store_assignment_required_for_variable(unary_expression_child->variable) == TRUE){
 				//Type of the variable
@@ -6493,18 +6497,27 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 
 		}
 
+		/**
+		 * Initializers are easy. If we see an initializer then we know that we just need to initialize
+		 * into whatever the LHS result was
+		 */
 		case CFG_RESULT_TYPE_INITIALIZER: {
 			three_addr_initializer_t* result_initializer = right_hand_results.result_value.result_initializer;
 
+			instruction_t* initializer_statement = emit_initialization_instruction(lhs_result_var, result_initializer, parent_node->line_number);
+			add_statement(current_block, initializer_statement);
 			break;
 		}
 	}
 
-
-	//TODO WE NEED SOME WAY TO DETERMINE WHETHER OR NOT WE'RE DOING A STORE
-
-
-
+	/**
+	 * Package up and return all of our results
+	 */
+	result_package.type = CFG_RESULT_TYPE_VAR;
+	result_package.result_value.result_var = lhs_result_var;
+	result_package.starting_block = basic_block;
+	result_package.final_block = current_block;
+	return result_package;
 }
 
 
