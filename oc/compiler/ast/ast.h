@@ -167,8 +167,11 @@ struct generic_ast_node_t{
 	ollie_token_t unary_operator;
 	//Is this assignable
 	u_int8_t is_assignable;
-	//Is a dereference needed at the end of this value?
-	u_int8_t dereference_needed;
+	/**
+	 * Does this AST subtree require memory access. This flag is *EXTREMELY* important
+	 * for the CFG to generate correct code
+	 */
+	u_int8_t memory_access_required;
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
 	/**

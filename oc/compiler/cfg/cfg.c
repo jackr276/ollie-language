@@ -6398,9 +6398,25 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 }
 
 
+/**
+ * Will the given LHS tree generate a store or a move? We determine this
+ * by crawling the tree and determining if we have any nodes that perform
+ * memory access. The AST nodes that are recognized as performing
+ * memory access are:
+ * 		Unary expressions with pointers => *x = ...
+ * 		Array accessors => x[1] = ...
+ * 		Struct accessors => x:a = ...
+ * 		Union accessors => x.a = ...
+ */
+static u_int8_t does_ast_tree_access_memory(generic_ast_node_t* root){
+	switch(root->ast_node_type){
+		case AST_NODE_TYPE_UNARY_EXPR:
 
-static inline 
+		case AST_NODE_TYPE_POSTFIX_EXPR:
 
+
+	}
+}
 
 
 /**
