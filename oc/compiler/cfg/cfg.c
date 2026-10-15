@@ -6549,13 +6549,19 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
 
 				//Emit and add the store
-				instruction_t* store_instruction = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
+				instruction_t* store_instruction = emit_store_base_address_only(memory_address, result_var, lhs_result_var->type, parent_node->line_number);
 				add_statement(current_block, store_instruction);
 
-			//TODO DO THE LAST INSTRUCTION SUBSTITUTION AGAIN
+			/**
+			 * Case 4: if the last statement in our prior block is a binary expression or a lea statement, and our 
+			 * reported result variable matches the assignee, we can go ahead and combine these as-is. This will cut
+			 * down on the overall number of instructions in our IR which is a boon in a large program
+			 */
+			} else if(is_statement_eligible_for_assignee_replacement(current_block->exit_statement, result_var) == TRUE){
+				current_block->exit_statement->operands.oir.assignee = lhs_result_var;
 
 			/**
-			 * Case 4: nothing fancy at all here - we just emit a regular assignment
+			 * Case 5: nothing fancy at all here - we just emit a regular assignment
 			 */
 			} else {
 				instruction_t* assignment = emit_assignment_instruction(lhs_result_var, result_var, parent_node->line_number);
@@ -12199,7 +12205,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			three_addr_var_t* let_result_var = let_initializer_results.result_value.result_var;
 
 			/**
-			 * Is a copy assignment required between the two variables? This will only
+			 * Case 1: Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
 			 */
@@ -12210,7 +12216,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				add_statement(current_block, copy_statement);
 
 			/**
-			 * If we have a variable that requires a store assignment, we will
+			 * Case 2: If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
 			} else if(is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
@@ -12229,56 +12235,20 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				//Now add thi statement in here
 				add_statement(current_block, store_statement);
 
+			/**
+			 * Case 3: if we have a binary operation or lea statement as the last statement in our current block, we can
+			 * cut down on an extra assignment statement by just replacing the assignee without our let variabel
+			 */
+			} else if(is_statement_eligible_for_assignee_replacement(current_block->exit_statement, let_result_var) == TRUE){
+				current_block->exit_statement->operands.oir.assignee = assignee;
+
+			/**
+			 * Case 4: we don't need to store and we aren't eligible for any fancy optimizations, so just
+			 * emit a regular assignment
+			 */
 			} else {
-				//TODO MOVE THIS IN AS NEEDED
-
-				/**
-				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
-				 * be able to shrink our footprint here
-				 */
-				if(current_block->exit_statement != NULL
-					&& current_block->exit_statement->operands.oir.assignee != NULL
-					&& current_block->exit_statement->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& current_block->exit_statement->operands.oir.assignee == let_result_var){
-
-					switch(current_block->exit_statement->statement_type){
-						/**
-						 * For binary operations we can hijack the statement itself
-						 */
-						case THREE_ADDR_CODE_BIN_OP_STMT:
-						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-							instruction_t* binary_operation = current_block->exit_statement;
-
-							//Just replace it with our variable
-							binary_operation->operands.oir.assignee = assignee;
-
-							break;
-						}
-
-						/**
-						 * Something else here - don't know what it is but we play it safe
-						 * and assign things over
-						 */
-						default:{
-							//The actual statement is the assignment of right to left
-							instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
-
-							//Finally we'll add this into the overall block
-							add_statement(current_block, assignment_statement);
-						}
-					}
-
-				/**
-				 * No fancy optimizations here - just emit an assignment over and we'll be
-				 * fine here
-				 */
-				} else {
-					//The actual statement is the assignment of right to left
-					instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
-
-					//Finally we'll add this into the overall block
-					add_statement(current_block, assignment_statement);
-				}
+				instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
+				add_statement(current_block, assignment_statement);
 			}
 
 			break;
@@ -12294,7 +12264,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			if(assignee->linked_var != NULL && is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
+			if(is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
