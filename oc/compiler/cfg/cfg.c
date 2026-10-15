@@ -4602,6 +4602,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
 	 */
 	if(postfix_node->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
+		//TODO DEFINITELY NEED TO TEST THIS
+
 		//Duplicate the subtree here for us to use
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
 
@@ -4863,7 +4865,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * that means that we need to be doing an assignment here. As such, we emit a store. In any other
 			 * area, we emit a load
 			 *
-			 * TODO I THINK THIS IS GOING TO CASE AN ISSUE
+			 * TODO I THINK THIS IS GOING TO CAUSE AN ISSUE
 			 *
 			 * TODO MAYBE USE MEMORY ACCESS REQUIRED???
 			 */
