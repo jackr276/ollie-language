@@ -4063,6 +4063,46 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 			break;
 		}
 
+
+		/**
+		 * Combine:
+		 * 	t14 <- 20(stack_pointer_0)
+		 * 	store (t14, t8, 4) <- 27
+		 *
+		 *  Into:
+		 *  store 20(t14, t8, 4) <- 27
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+			//Only valid option is the offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
+
+			printf("HERE\n");
+			print_instruction_window_three_address_code(window);
+
+			TODO TEST WITH ARRAY_THAT_USES_ARRAY_AS_INDEX 
+
+			break;
+		}
+
+
+		//TODO DOCUMENT AND TEST 
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+			//Only valid option is the offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
+
+			printf("HERE\n");
+			print_instruction_window_three_address_code(window);
+
+			//TODO
+
+			break;
+		}
+
+
 		/**
 		 * Combine:
 		 * 	t5 <- 4(t4)
