@@ -4669,6 +4669,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	/**
 	 * Otherwise - it is possible that we have a stack variable or global/static variable here. In that case, we'll need to emit a
 	 * store to get the variable back to where it needs to be
+	 *
+	 * TODO LOOK INTO THIS
 	 */
 	} else if (is_store_assignment_required_for_variable(postfix_node->variable) == TRUE){
 		generic_type_t* type = postfix_node->variable->type_defined_as; 
@@ -6462,18 +6464,25 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 				add_statement(current_block, store_instruction);
 
 			/**
-			 * TODO DOC
+			 * Case 2: we have a variable that is either a global or static variable or it's a variable that lives on the stack(variables
+			 * that have had their memory address taken are part of this). Either way, a regular assingment won't do so we'll need a store
+			 * here
 			 */
 			} else if(lhs_result_var->linked_var != NULL && is_store_assignment_required_for_variable(lhs_result_var->linked_var) == TRUE){
-				//Emit the memory address var for this variable
+				//We'll need a memory address var for this
 				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
 
-				//Now for the final store code
-				instruction_t* final_assignment = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
+				//Emit and add the store
+				instruction_t* store_instruction = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
+				add_statement(current_block, store_instruction);
 
-				//Now add thi statement in here
-				add_statement(current_block, final_assignment);
-
+			/**
+			 * Case 3: failing all of those other cases, we will come here and emit a regular assignment
+			 * expression
+			 */
+			} else {
+				instruction_t* constant_assignment = emit_assignment_with_const_instruction(lhs_result_var, result_const, parent_node->line_number);
+				add_statement(current_block, constant_assignment);
 			}
 
 			break;

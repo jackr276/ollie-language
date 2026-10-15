@@ -4202,6 +4202,11 @@ loop_end:
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
+	//
+	// TODO MAYBE WE CAN PROPOGATE THAT MEMORY ACCESS IS REQUIRED HERE FOR THE LHS AND GO BASED ON THAT
+	//
+	//
+
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
