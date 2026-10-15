@@ -4564,6 +4564,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	//Initialize this off the bat
 	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->operands.oir.assignee}, CFG_RESULT_TYPE_VAR, BLANK};
 
+	//TODO WILL NEED A REWRITE
+
 	/**
 	 * Go first by the type that we're actually postincrementing
 	 */
@@ -4689,6 +4691,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * ++x is really temp = x + 1
 		 * 				 x = temp
 		 * 				 use temp going forward
+		 *
+		 *
+		 * TODO I THINK THIS NEEDS A REWRITE TOO
 		 */
 		case PLUSPLUS:
 		case MINUSMINUS:
@@ -4801,6 +4806,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			return unary_package;
 
 		//Handle a dereference
+		//TODO DEFINITELY NEEDS A REWRITE
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
@@ -6370,6 +6376,53 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 
 
 /**
+ * There are some assignment expression scenarios where we have some thing like the
+ * following:
+ * 	t1 <- t5 + t7
+ * 	x <- t1
+ *
+ * Instead of doing this in the IR, we could for the sake of efficiency just do
+ * the following instead:
+ * 	x <- t5 + t7
+ *
+ * This helper determines if we're eligible to do that or not
+ */
+static inline u_int8_t is_statement_eligible_for_assignee_replacement(instruction_t* statement, three_addr_var_t* reported_result_var){
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	/**
+	 * Currently we only support this for lea's and binary operation
+	 * statements, but this could be expanded in the future
+	 */
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_LEA_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			break;
+		default:
+			return FALSE;
+	}
+
+	three_addr_var_t* assignee = statement->operands.oir.assignee;
+
+	//Must be a temporary variable to work
+	if(assignee->variable_type != VARIABLE_TYPE_TEMP){
+		return FALSE;
+	}
+
+	/**
+	 * If this variable is the same as the result variable in our
+	 * cfg_result_package_t, then we are good to go here. If it is
+	 * not then we can't do the combination
+	 */
+	return variables_equal_no_ssa(assignee, reported_result_var);
+}
+
+
+
+/**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
  *
@@ -6498,6 +6551,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				//Emit and add the store
 				instruction_t* store_instruction = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
 				add_statement(current_block, store_instruction);
+
+			//TODO DO THE LAST INSTRUCTION SUBSTITUTION AGAIN
 
 			/**
 			 * Case 4: nothing fancy at all here - we just emit a regular assignment
@@ -12158,7 +12213,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			} else if(assignee->linked_var != NULL && is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
+			} else if(is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
@@ -12175,6 +12230,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				add_statement(current_block, store_statement);
 
 			} else {
+				//TODO MOVE THIS IN AS NEEDED
+
 				/**
 				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
 				 * be able to shrink our footprint here
