@@ -545,6 +545,11 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
  * segment do
  */
 static inline u_int8_t is_store_assignment_required_for_variable(symtab_variable_record_t* variable){
+	//It is expected for us to handle NULLS
+	if(variable == NULL){
+		return FALSE;
+	}
+
 	//First check - if it's a stack var we're done
 	if(variable->storage_class == STORAGE_CLASS_STACK){
 		return TRUE;
@@ -6472,7 +6477,7 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 			 * that have had their memory address taken are part of this). Either way, a regular assingment won't do so we'll need a store
 			 * here
 			 */
-			} else if(lhs_result_var->linked_var != NULL && is_store_assignment_required_for_variable(lhs_result_var->linked_var) == TRUE){
+			} else if(is_store_assignment_required_for_variable(lhs_result_var->linked_var) == TRUE){
 				//We'll need a memory address var for this
 				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
 
@@ -6514,8 +6519,31 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(lhs_result_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
 				add_statement(current_block, copy_statement);
 
-			} else if(TODO)
+			/**
+			 * Case 2: we have specifically flagged the LHS as requiring memory access. This means
+			 * that we're coming from a postfix expression or a pointer derefernce on the LHS. Either
+			 * way, this will necessitate a store instruction from us
+			 */
+			} else if(left_child->memory_access_required == TRUE){
+				instruction_t* store_instruction = emit_store_base_address_only(lhs_result_var, result_var, left_child->inferred_type, left_child->line_number);
+				add_statement(current_block, store_instruction);
 
+			/**
+			 * Case 3: we're not flagged as requiring memory access, but the symtab variable that we are linked
+			 * to is a variable that is either global, static, or specifically stored on the stack. In this special
+			 * case, all assignments to this variable must be emitted as stores
+			 */
+			} else if(is_store_assignment_required_for_variable(lhs_result_var->linked_var) == TRUE){
+				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
+
+				//Emit and add the store
+				instruction_t* store_instruction = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
+				add_statement(current_block, store_instruction);
+
+			} else {
+
+				//TODO
+			}
 		}
 
 		/**
@@ -6668,6 +6696,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				 * Reach back into the block to see if the last instruction that we emitted for our op1
 				 * here is a constant assignment or a binary expression. If it's either, we can avoid
 				 * the copy assignment for this assignment expression and go to emitting directly
+				 *
+				 * TODO INCOREPORT THIS
 				 */
 				if(last_instruction != NULL
 					&& last_instruction->operands.oir.assignee != NULL
