@@ -4299,6 +4299,62 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 
 /**
+ * Convert a base address and address offset struct into a fully fledged memory address calculation. This helper
+ * will return a variable representing the final memory address
+ */
+static inline three_addr_var_t* convert_address_offset_into_address_calculation(basic_block_t* block, three_addr_var_t* base_address, address_offset_t* address_offset, u_int32_t line_number){
+	three_addr_var_t* final_memory_address = NULL;
+
+	switch(address_offset->type){
+		/**
+		 * No offset at all - the final memory address is 
+		 * just our calculated base address
+		 */
+		case OFFSET_TYPE_NONE: {
+			final_memory_address = base_address;
+			break;
+		}
+
+		/**
+		 * Current offset is a variable so we'll convert this into a LEA
+		 * with two operands to represent the computation
+		 */
+		case OFFSET_TYPE_VAR: {
+			final_memory_address = emit_temp_var(base_address->type);
+			instruction_t* final_address_calc = emit_lea_operands_only(final_memory_address, base_address, address_offset->value.variable_offset, line_number);
+			add_statement(block, final_address_calc);
+			break;
+		}
+
+		/**
+		 * Current offset is a constant so we'll convert this to a lea
+		 * with an offset to represent the computation
+		 *
+		 * If we have a nonzero constant value then a lea is appropriate. If
+		 * however we have a constant value of 0 we can skip the lea and just
+		 * return the base address
+		 */
+		case OFFSET_TYPE_CONST: {
+			if(is_constant_value_zero(address_offset->value.constant_offset) == FALSE){
+				final_memory_address = emit_temp_var(base_address->type);
+				instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, address_offset->value.constant_offset, line_number);
+				add_statement(block, final_address_calc);
+
+			} else {
+				final_memory_address = base_address;
+			}
+
+			break;
+		}
+	}
+
+	//Give back what we've determined to be the address
+	return final_memory_address;
+}
+
+
+
+/**
  * Emit a postfix expression
  *
  * Postfix expressions have their left subtree most developed. The root of the subtree
@@ -4348,6 +4404,23 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_ast_node_t* right_child = left_child->next_sibling;
 	generic_type_t* parent_node_type = root->inferred_type;
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
+
+	/**
+	 * Based on the side we will process accordingly. Note that values on the right
+	 * hand side can and do generate load instructions if the root node is flagged
+	 * as "memory_access_required". Values on the left hand side can *NEVER* generate
+	 * anything of the sort
+	 */
+	switch(root->side){
+		case SIDE_TYPE_LEFT: {
+
+	 	}
+
+		case SIDE_TYPE_RIGHT: {
+
+	  	}
+	}
+
 
 
 	//TODO MAY WANT TO SPLIT BY SIDE TYPE INSTEAD OF DEREFERENCE NEEDED
@@ -4510,49 +4583,6 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	 * offset and return that in the result package
 	 */
 	} else {
-		three_addr_var_t* final_memory_address = NULL;
-
-		switch(current_offset.type){
-			/**
-			 * No offset at all - the final memory address is 
-			 * just our calculated base address
-			 */
-			case OFFSET_TYPE_NONE: {
-				final_memory_address = base_address;
-				break;
-			}
-
-			/**
-			 * Current offset is a variable so we'll convert this into a LEA
-			 * with two operands to represent the computation
-			 */
-			case OFFSET_TYPE_VAR: {
-				final_memory_address = emit_temp_var(base_address->type);
-				instruction_t* final_address_calc = emit_lea_operands_only(final_memory_address, base_address, current_offset.value.variable_offset, root->line_number);
-				add_statement(current_block, final_address_calc);
-				break;
-			}
-
-			/**
-			 * Current offset is a constant so we'll convert this to a lea
-			 * with an offset to represent the computation
-			 *
-			 * If we have a nonzero constant value then a lea is appropriate. If
-			 * however we have a constant value of 0 we can skip the lea and just
-			 * return the base address
-			 */
-			case OFFSET_TYPE_CONST: {
-				if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
-					final_memory_address = emit_temp_var(base_address->type);
-					instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, current_offset.value.constant_offset, root->line_number);
-					add_statement(current_block, final_address_calc);
-				} else {
-					final_memory_address = base_address;
-				}
-
-				break;
-			}
-		}
 
 		//Regardless of the path the reuslt is in the final memory address
 		results.type = CFG_RESULT_TYPE_VAR;
@@ -6414,12 +6444,15 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 
 
 /**
+ * Handle an assignment expression and all of the required bookkeeping that comes 
+ * with it
  *
- * TODO REWRITE
- *
- * TODO DOC
+ * Assignment expressions are guaranteed to evaluate from left-to-right. The LHS must
+ * always be evaluated first under the Ollie standard. Once both expressions have
+ * been emitted, a final determination will be made to see if a store, memory copy, or 
+ * initialization is required
  */
-static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	//Maintain a pointer to the current block
@@ -6540,9 +6573,12 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 				instruction_t* store_instruction = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
 				add_statement(current_block, store_instruction);
 
+			/**
+			 * Case 4: nothing fancy at all here - we just emit a regular assignment
+			 */
 			} else {
-
-				//TODO
+				instruction_t* assignment = emit_assignment_instruction(lhs_result_var, result_var, parent_node->line_number);
+				add_statement(current_block, assignment);
 			}
 		}
 
@@ -6573,18 +6609,7 @@ static cfg_result_package_t emit_assignment_expression2(basic_block_t* basic_blo
 
 
 
-/**
- * Handle an assignment expression and all of the required bookkeeping that comes 
- * with it
- *
- *
- * Assignment expressions are guaranteed to evaluate from left-to-right. The LHS must
- * always be evaluated first under the Ollie standard. Once both expressions have
- * been emitted, a final determination will be made to see if a store, memory copy, or 
- * initialization is required
- *
- */
-static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
+static cfg_result_package_t emit_assignment_expression__OLD(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
