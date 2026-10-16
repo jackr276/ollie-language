@@ -4647,7 +4647,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent){
 	//Initialize our generic results here
 	cfg_result_package_t generic_results = INITIALIZE_BLANK_CFG_RESULT;
-	cfg_result_package_t unary_package;
+	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	//Tracker for the current block
 	basic_block_t* current_block = basic_block;
@@ -4768,10 +4768,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//Package up and return our results
 			generic_results.starting_block = basic_block;
-			generic_results.final_block = basic_block;
-			generic_results.result_value.result_var = assignee;
+			generic_results.final_block = current_block;
+			generic_results.result_value.result_var = emit_var_copy(assignee);
 			generic_results.type = CFG_RESULT_TYPE_VAR;
-			return unary_package;
+			return generic_results;
 		}
 
 		/**

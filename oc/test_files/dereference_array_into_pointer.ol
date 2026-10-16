@@ -10,6 +10,6 @@ pub fn main() -> i32 {
 
 	let z:i32* = *y;
 
-	OUNIT: [fail_to_compile]
+	OUNIT: [exit_status = 4]
 	ret z[3];
 }
