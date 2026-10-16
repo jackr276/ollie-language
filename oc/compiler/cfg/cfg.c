@@ -4818,6 +4818,35 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			generic_type_t* dereferenced_type = dereference_type(pointer_type);
 
 			/**
+			 * If what we have is a memory region pointer, then we don't need to do anything besides assign the
+			 * value over. This is because when we take the address of an array/struct/etc, all that we do is load
+			 * the rsp offset in memory
+			 *
+			 * Example:
+			 * let x:i32[5] = [1, 2, 3, 4, 5]; //Suppose that this is at %rsp + 20
+			 * let y:i32[5]* = &x; //This just grabs that %rsp + 20 address
+			 * let z:i32* = *y; //We don't want to actually deref, just move the value over
+			 *
+			 * So when we go to "dereference" y, we just need to assign the value over in a simple
+			 * move instruction. This is the same kind of rule for structs & unions, which is why
+			 * we use the "is_memory_region" check to see what kind of pointer we have. Again, a pointer
+			 * to a struct is simply that struct's address that's been copied in memory, so there's no additional
+			 * indirection that we need to do
+			 */
+			if(is_memory_region(dereferenced_type) == TRUE){
+				//Emit and add the simple assignment
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), memory_address, line_number);
+				add_statement(current_block, assignment_instruction);
+
+				//Package up and return
+				generic_results.result_value.result_var = assignment_instruction->operands.oir.assignee;
+				generic_results.type = CFG_RESULT_TYPE_VAR;
+				generic_results.starting_block = basic_block;
+				generic_results.final_block = current_block;
+				return generic_results;
+			}
+
+			/**
 			 * Based on the side of the expression we will emit what is needed
 			 */
 			switch(unary_expression_parent->side){
@@ -4844,9 +4873,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					add_statement(current_block, load_instruction);
 
 					//This one's assignee is our overall assignee
-					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = load_instruction->operands.oir.assignee;
-
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = load_instruction->operands.oir.assignee;
 					break;
 				}
 			}
@@ -4854,49 +4882,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Package up and return
 			generic_results.starting_block = basic_block;
 			generic_results.final_block = basic_block;
-			return unary_package;
+			return generic_results;
 		}
 
-			/**
-			 * If we what we have is an array pointer, then we don't need to do anything besides assign the
-			 * value over. This is because when we take the address of an array, all that we do is load
-			 * the rsp offset in memory
-			 *
-			 * Example:
-			 * 	 declare x:i32[5]; //Suppose that this is at rsp + 20
-			 *
-			 * 	 let y:i32[5]* = &x;
-			 *
-			 * All that this really is in our assembly is:
-			 * 		y <- 20 + rsp
-			 *
-			 * So when we go to "dereference" y, we just need to assign the value over in a simple
-			 * move instruction. This is the same kind of rule for structs & unions, which is why
-			 * we use the "is_memory_region" check to see what kind of pointer we have. Again, a pointer
-			 * to a struct is simply that struct's address that's been copied in memory, so there's no additional
-			 * indirection that we need to do
-			 *
-			 *
-			 * TODO I DONT KNOW ABOUT THIS AT LEAST LOOK INTO IT
-			 *
-			 * let arr:i32[5] = 
-			 * let x:i32[5]* = arr;
-			 *
-			 * TODO TODO TODO FIGURE THIS OUT
-			 *
-			if(is_memory_region(dereferenced_type) == TRUE){
-				//Emit the assignment
-				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee, line_number);
-
-				//Get this into the block
-				add_statement(current_block, assignment_instruction);
-
-				//Package this up and get out
-				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = assignment_instruction->operands.oir.assignee;
-				return unary_package;
-			}
-			 */
 
 		/**
 		 * The ! results in a logical not. This expression is largely handled in the simplifier,
