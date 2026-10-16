@@ -8219,6 +8219,10 @@ u_int8_t constant_nodes_equal(generic_ast_node_t* constant_node1, generic_ast_no
  * We will completely duplicate a deferred statement here. Since all deferred statements
  * are logical expressions, we will perform a deep copy to create an entirely new
  * chain of deferred statements
+ *
+ * NOTE: we only ever take the new "side" into account for the first node. All subsequent calls
+ * will carry the side type from the clonee. This is done to avoid issues specifically with postfix
+ * and unary operations
  */
 generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side){
 	//Base case here -- although in theory we shouldn't make it here
@@ -8236,7 +8240,6 @@ generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_
 	generic_ast_node_t* duplicated_child = NULL;
 
 	//So long as we aren't null
-	//TODO LOOK INTO THIS
 	while(child_cursor != NULL){
 		duplicated_child = duplicate_subtree(child_cursor, duplicated_child->side);
 

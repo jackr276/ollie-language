@@ -4665,7 +4665,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 	switch(unary_operator_node->unary_operator){
 		/**
-		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
+		 * Preop/dec operations involve the actual increment/decrement and the saving operation. The value
 		 * that is returned to be used by the user is the incremented/decremented value unlike in a
 		 * postfix expression
 		 *
@@ -4673,9 +4673,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * ++x is really temp = x + 1
 		 * 				 x = temp
 		 * 				 use temp going forward
-		 *
-		 *
-		 * TODO I THINK THIS NEEDS A REWRITE TOO
 		 */
 		case PLUSPLUS:
 		case MINUSMINUS: {
@@ -4732,7 +4729,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
 			 */
 			if(unary_expression_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-				//TODO LOOK INTO HOW THIS WORKS
+				/**
+				 * Duplicate the subtree so that the top node has a side type of "left". This will only
+				 * change the topmost node, leaving the bottom unchanged
+				 */
 				generic_ast_node_t* copy = duplicate_subtree(unary_expression_child, SIDE_TYPE_LEFT);
 
 				//Now we emit the copied package
@@ -4895,20 +4895,23 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 			 */
 
-
-		//Logical not operator
-		case EXCLAMATION:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		/**
+		 * The ! results in a logical not. This expression is largely handled in the simplifier,
+		 * it's just represented as an OIR expression for us
+		 */
+		case EXCLAMATION: {
+			/**
+			 * First emit the unary expression that is represented in the child
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			//Get the assignee out from the result package
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
 
-			//This will always overwrite the other value
+			//Emit and add the logical not expression
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, unary_expression_child->line_number);
+			add_statement(current_block, logical_not_statement);
 
 			/**
 			 * If we came from a floating point operation, then we will just flag as such here
@@ -4917,18 +4920,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				logical_not_statement->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 			}
 
-			//Get it into the block right after the unary expression
-			add_statement(current_block, logical_not_statement);
-
-			//The package's assignee is now the result of this logical not instruction
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = logical_not_statement->operands.oir.assignee;
-
-			//The operator here is logical not
-			unary_package.operator = EXCLAMATION;
-
-			//Give the package back
-			return unary_package;
+			//Package up and return the result
+			generic_results.operator = EXCLAMATION;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			generic_results.type = CFG_RESULT_TYPE_VAR;
+			generic_results.result_value.result_var = logical_not_statement->operands.oir.assignee;
+			return generic_results;
+		}
 	
 		/**
 		 * Bitwise not operation
@@ -5079,14 +5078,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
 static inline cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression){
-	//Switch based on what class this node actually is
 	switch(unary_expression->ast_node_type){
-		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression);
+
 		case AST_NODE_TYPE_POSTOPERATION:
 			return emit_postoperation_code(basic_block, unary_expression);
-		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
+
 		default:
 			return emit_postfix_expression(basic_block, unary_expression);
 	}

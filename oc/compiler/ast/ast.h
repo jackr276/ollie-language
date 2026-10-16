@@ -201,6 +201,10 @@ generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t si
 
 /**
  * Perform a deep copy on a subtree
+ *
+ * NOTE: we only ever take the new "side" into account for the first node. All subsequent calls
+ * will carry the side type from the clonee. This is done to avoid issues specifically with postfix
+ * and unary operations
  */
 generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side);
 
