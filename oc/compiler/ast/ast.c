@@ -8241,9 +8241,8 @@ generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_
 
 	//So long as we aren't null
 	while(child_cursor != NULL){
-		duplicated_child = duplicate_subtree(child_cursor, duplicated_child->side);
-
-		//Add the duplicate child into the node
+		//Duplicate and add it
+		duplicated_child = duplicate_subtree(child_cursor, child_cursor->side);
 		add_child_node(duplicated_root, duplicated_child);
 
 		//Advance the cursor
