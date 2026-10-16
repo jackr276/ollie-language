@@ -4649,26 +4649,20 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 
 /**
- * Handle a unary operator, in whatever form it may be
- *
- * TODO REWRITE THIS WHOLE THING
+ * Translate all unary expression operations into valid OIR for the CFG
  */
 static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent){
-	//Top level declarations to avoid using them in the switch statement
-	instruction_t* assignment;
-	three_addr_var_t* assignee;
-	//The unary expression package
-	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
+	//Initialize our generic results here
 	cfg_result_package_t generic_results = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t unary_package;
 
-	//We'll keep track of what the current block here is
+	//Tracker for the current block
 	basic_block_t* current_block = basic_block;
 
 	//Extract the two nodes that we'll be focusing on
 	generic_ast_node_t* unary_operator_node = unary_expression_parent->first_child;
 	generic_ast_node_t* unary_expression_child = unary_operator_node->next_sibling;
 
-	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(unary_operator_node->unary_operator){
 		/**
 		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
@@ -4684,15 +4678,15 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * TODO I THINK THIS NEEDS A REWRITE TOO
 		 */
 		case PLUSPLUS:
-		case MINUSMINUS:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		case MINUSMINUS: {
+			/**
+			 * First emit the unary expression from the child
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
 
 			/**
 			 * Split this down by what kind of types we have. We are only able to see basic types
@@ -4725,9 +4719,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
  			} else if(assignee->type->type_class == TYPE_CLASS_POINTER){
 				assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee, unary_expression_child->line_number);
+
+			/**
+			 * This is invalid so we will panic if we ever hit it
+			 */
 			} else {
-				printf("Fatal internal compiler error: unreachable type for postincrement found\n");
-				exit(1);
+				trigger_ice_panic("Unreachable assignee type for postincrement found");
 			}
 
 			/**
@@ -4735,64 +4732,51 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
 			 */
 			if(unary_expression_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-				//Duplicate the subtree here for us to use
+				//TODO LOOK INTO HOW THIS WORKS
 				generic_ast_node_t* copy = duplicate_subtree(unary_expression_child, SIDE_TYPE_LEFT);
 
 				//Now we emit the copied package
 				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy);
-
-				//This is now the final block
 				current_block = unary_package.final_block;
 
-				//Is this a store operation? If so, we just need to fill in the op1 here
-				//TODO THIS WILL NEVER BE A THING ANYMORE
-				if(is_store_operation(current_block->exit_statement) == TRUE){
-					//This is our store statement
-					instruction_t* store_statement = current_block->exit_statement;
+				/**
+				 * If this is flagged as requiring a memory access, that means that we're dereferencing, so
+				 * go ahead and emit the store here
+				 */
+				if(copy->memory_access_required == TRUE){
+					instruction_t* store_instruction = emit_store_base_address_only(copied_package.result_value.result_var, assignee, unary_expression_child->inferred_type, unary_expression_child->line_number);
+					add_statement(current_block, store_instruction);
 
-					//Throw this into the store statement's operand1
-					store_statement->operands.oir.operand1 = assignee;
-
-				//Otherwise we just have a regular assignment
+				/**
+				 * Otherwise this is just a regular expression with no memory access, so we'll be able to
+				 * emit a regular assignment for this
+				 */
 				} else {
-					//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
 					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee, unary_expression_child->line_number);
-
-					//Add this into the block
 					add_statement(current_block, assignment_instruction);
 				}
 
 			/**
 			 * Otherwise - it is possible that we have a stack variable or global/static variable here. In that case, we'll need to emit a
 			 * store to get the variable back to where it needs to be
-			 *
-			 * TODO THIS MAY BE AN EXCEPTION BUT TAKE A LOOK
 			 */
 			} else if (is_store_assignment_required_for_variable(unary_expression_child->variable) == TRUE){
-				//Type of the variable
+				//Get the variable type and emit a memory address variable for it
 				generic_type_t* type = unary_expression_child->variable->type_defined_as; 
-
-				//Get the version that represents our memory indirection
 				three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
-				//Now we need to add the final store
+				//Emit and add the store instruction
 				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, unary_expression_child->line_number);
-
-				//Get this in there
 				add_statement(current_block, store_instruction);
-				
-				//This is always the new final block
-				unary_package.final_block = current_block;
 			}
 
-			//Store the assignee as this
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = assignee;
-			//Update the final block if it has change
-			unary_package.final_block = current_block;
-		
-			//Give back the final unary package
+			//Package up and return our results
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = basic_block;
+			generic_results.result_value.result_var = assignee;
+			generic_results.type = CFG_RESULT_TYPE_VAR;
 			return unary_package;
+		}
 
 		//Handle a dereference
 		//TODO DEFINITELY NEEDS A REWRITE
