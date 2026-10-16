@@ -6489,7 +6489,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
 
 				//Emit and add the store
-				instruction_t* store_instruction = emit_store_base_address_only(memory_address, lhs_result_var, lhs_result_var->type, parent_node->line_number);
+				instruction_t* store_instruction = emit_store_const_base_address_only(memory_address, result_const, lhs_result_var->type, parent_node->line_number);
 				add_statement(current_block, store_instruction);
 
 			/**
