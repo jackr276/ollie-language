@@ -4809,7 +4809,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		/**
 		 * TODO DOC
 		 */
-		case STAR:
+		case STAR: {
 			/**
 			 * First emit the expression that represents our memory address that we'll
 			 * be dereferencing from
@@ -4817,8 +4817,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			/**
+			 * The value that we're unpacking here will represent a memory address that will
+			 * either be loaded to or store from
+			 */
+			three_addr_var_t* memory_address = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
 
 			/**
 			 * Extract the pointer type which comes from the child and the 
@@ -4838,19 +4841,34 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 * it for a store
 				 */
 				case SIDE_TYPE_LEFT: {
-
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = memory_address;
+					break;
 				}
 
+				/**
+				 * Case 2: we are on the right hand side, so we are doing something
+				 * like y = *x + 2. In this case, we will need to load the value out
+				 * of said memory address and return that
+				 */
 				case SIDE_TYPE_RIGHT: {
+					//Emit and add this
+					instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), memory_address, dereferenced_type, unary_expression_parent->line_number);
+					add_statement(current_block, load_instruction);
 
+					//This one's assignee is our overall assignee
+					unary_package.type = CFG_RESULT_TYPE_VAR;
+					unary_package.result_value.result_var = load_instruction->operands.oir.assignee;
+
+					break;
 				}
 			}
 
-
-
-
-
-
+			//Package up and return
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = basic_block;
+			return unary_package;
+		}
 
 			/**
 			 * If we what we have is an array pointer, then we don't need to do anything besides assign the
@@ -4877,7 +4895,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * let arr:i32[5] = 
 			 * let x:i32[5]* = arr;
 			 *
-			 */
+			 * TODO TODO TODO FIGURE THIS OUT
+			 *
 			if(is_memory_region(dereferenced_type) == TRUE){
 				//Emit the assignment
 				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee, unary_expression_child->line_number);
@@ -4890,53 +4909,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				unary_package.result_value.result_var = assignment_instruction->operands.oir.assignee;
 				return unary_package;
 			}
-
-			/**
-			 * If we make it here, we will return an *incomplete* store
-			 * instruction with the knowledge that whomever called use
-			 * will fill it in
-			 *
-			 * Conditions here: If we are on the left hand side *and* our next sibling is on the right hand side,
-			 * that means that we need to be doing an assignment here. As such, we emit a store. In any other
-			 * area, we emit a load
-			 *
-			 * TODO I THINK THIS IS GOING TO CAUSE AN ISSUE
-			 *
-			 * TODO MAYBE USE MEMORY ACCESS REQUIRED???
-			 *
-			 *
-			 * TODO IS THIS EVEN NECESSARY?? IT LOOKS LIKE THE ORIGINAL ONE DOES THIS RIGHT
 			 */
-			if(unary_expression_parent->side == SIDE_TYPE_LEFT &&
-				(unary_expression_parent->next_sibling != NULL && unary_expression_parent->next_sibling->side == SIDE_TYPE_RIGHT)){
-				//We will intentionally leave op1 blank so that it can be filled in down the line
-				instruction_t* store_instruction = emit_store_base_address_only(assignee, NULL, dereferenced_type, unary_expression_parent->line_number);
 
-				//Now let's get this into the block
-				add_statement(current_block, store_instruction);
-
-				//Add the assignee in here
-				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = assignee;
-
-			/**
-			 * If we get here, we know that we either have a right hand operation or we're on the left hand
-			 * side but we're not entirely done with the unary operations yet. Either way, we'll need a load
-			 */
-			} else {
-				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), assignee, dereferenced_type, unary_expression_parent->line_number);
-
-				//Add it in
-				add_statement(current_block, load_instruction);
-
-				//This one's assignee is our overall assignee
-				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = load_instruction->operands.oir.assignee;
-			}
-
-			//Give back the final unary package
-			return unary_package;
 
 		//Logical not operator
 		case EXCLAMATION:
