@@ -4809,6 +4809,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 		//Handle a dereference
 		//TODO DEFINITELY NEEDS A REWRITE
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//
+		//BIG REWORK NEEDED
 		case STAR:
 			//The very first thing that we'll do is emit the assignee that comes after the unary expression
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
@@ -4842,6 +4852,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * we use the "is_memory_region" check to see what kind of pointer we have. Again, a pointer
 			 * to a struct is simply that struct's address that's been copied in memory, so there's no additional
 			 * indirection that we need to do
+			 *
+			 *
+			 * TODO I DONT KNOW ABOUT THIS AT LEAST LOOK INTO IT
+			 *
+			 * let arr:i32[5] = 
+			 * let x:i32[5]* = arr;
+			 *
 			 */
 			if(is_memory_region(dereferenced_type) == TRUE){
 				//Emit the assignment
@@ -4868,6 +4885,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * TODO I THINK THIS IS GOING TO CAUSE AN ISSUE
 			 *
 			 * TODO MAYBE USE MEMORY ACCESS REQUIRED???
+			 *
+			 *
+			 * TODO IS THIS EVEN NECESSARY?? IT LOOKS LIKE THE ORIGINAL ONE DOES THIS RIGHT
 			 */
 			if(unary_expression_parent->side == SIDE_TYPE_LEFT &&
 				(unary_expression_parent->next_sibling != NULL && unary_expression_parent->next_sibling->side == SIDE_TYPE_RIGHT)){

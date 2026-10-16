@@ -4078,11 +4078,19 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 				break;
 			}
 
-			printf("HERE\n");
-			print_instruction_window_three_address_code(window);
+			//Copy over the address operand and the offset
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
 
-			TODO TEST WITH ARRAY_THAT_USES_ARRAY_AS_INDEX 
+			//Update the mode to reflect this
+			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
 			break;
 		}
 
