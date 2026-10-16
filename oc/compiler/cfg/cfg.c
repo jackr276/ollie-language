@@ -4774,20 +4774,12 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			return unary_package;
 		}
 
-		//Handle a dereference
-		//TODO DEFINITELY NEEDS A REWRITE
-		//
-		//
-		//
-		//
-		//
-		//
-		//
-		//
-		//
-		//BIG REWORK NEEDED
 		/**
-		 * TODO DOC
+		 * A star is a memory dereference of any kind. If we dereference a value on the
+		 * RHS, and we are flagged as "memory access required", we will automatically emit
+		 * a load to get that value out of memory. If we dereference on the LHS, we will
+		 * always compute the memory address and return that as a variable, so that
+		 * the caller can emit a store
 		 */
 		case STAR: {
 			/**
