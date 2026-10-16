@@ -4549,7 +4549,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	 * used. To facilitate this, we will perform a temp assignment here. The result of
 	 * this temp assignment is actually what the user will be using
 	 */
-	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(postfix_assignee->type), postfix_assignee, line_number);
+	three_addr_var_t* returned_variable = emit_temp_var(postfix_assignee->type);
+	instruction_t* temp_assignment = emit_assignment_instruction(returned_variable, postfix_assignee, line_number);
 	add_statement(current_block, temp_assignment);
 
 	/**
@@ -4610,29 +4611,11 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		 * use a regular assignment
 		 */
 		if(copy->memory_access_required == TRUE){
-
+			instruction_t* store_statement = emit_store_base_address_only(lhs_var, postfix_assignee, postfix_assignee->type, line_number);
+			add_statement(current_block, store_statement);
 		} else {
-
-		}
-
-
-
-		//Is this a store operation? If so, we just need to fill in the op1 here
-		//TODO THIS WILL NEVER BE A THING ANYMORE
-		if(is_store_operation(current_block->exit_statement) == TRUE){
-			//This is our store statement
-			instruction_t* store_statement = current_block->exit_statement;
-
-			//Throw this inside of the operand1 
-			store_statement->operands.oir.operand1 = assignee;
-
-		//Otherwise we just have a regular assignment
-		} else {
-			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-			instruction_t* assignment_instruction = emit_assignment_instruction(unpack_result_package(&copied_package, current_block, node->line_number), assignee, node->line_number);
-
-			//Add this into the block
-			add_statement(current_block, assignment_instruction);
+			instruction_t* assignment = emit_assignment_instruction(lhs_var, postfix_assignee, line_number);
+			add_statement(current_block, assignment);
 		}
 
 	/**
@@ -4645,13 +4628,15 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
 
 		//We're able to emit a fully-fledged store right now
-		instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, node->line_number);
+		instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, postfix_assignee, type, node->line_number);
 		add_statement(current_block, store_instruction);
 	}
 
-	//Give back the final unary package
-	postoperation_package.starting_block = current_block;
+	//Package up our final result - we return the unmodified value
+	postoperation_package.starting_block = basic_block;
 	postoperation_package.final_block = current_block;
+	postoperation_package.type = CFG_RESULT_TYPE_VAR;
+	postoperation_package.result_value.result_var = returned_variable;
 	return postoperation_package;
 }
 
