@@ -4541,8 +4541,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 	//We will first emit the postfix expression code that comes from this
 	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node);
-
-	//Update the end block
 	current_block = postfix_expression_results.final_block;
 
 	//This is the value that we will be modifying. It will always be a variable
@@ -4555,16 +4553,12 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	 * this temp assignment is actually what the user will be using
 	 */
 
-	//Emit the assignment
+	//Emit and add the assignment
 	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, node->line_number);
-
-	//Add this statement in
 	add_statement(current_block, temp_assignment);
 
 	//Initialize this off the bat
 	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->operands.oir.assignee}, CFG_RESULT_TYPE_VAR, BLANK};
-
-	//TODO WILL NEED A REWRITE
 
 	/**
 	 * Go first by the type that we're actually postincrementing
@@ -4614,6 +4608,7 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 		current_block = copied_package.final_block;
 
 		//Is this a store operation? If so, we just need to fill in the op1 here
+		//TODO THIS WILL NEVER BE A THING ANYMORE
 		if(is_store_operation(current_block->exit_statement) == TRUE){
 			//This is our store statement
 			instruction_t* store_statement = current_block->exit_statement;
@@ -4630,35 +4625,23 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 			add_statement(current_block, assignment_instruction);
 		}
 
-		//This is always the new final block
-		postoperation_package.final_block = current_block;
-
 	/**
 	 * Otherwise - it is possible that we have a stack variable or global/static variable here. In that case, we'll need to emit a
 	 * store to get the variable back to where it needs to be
-	 *
-	 * TODO LOOK INTO THIS
 	 */
 	} else if (is_store_assignment_required_for_variable(postfix_node->variable) == TRUE){
+		//We'll need a type and a memory address variable
 		generic_type_t* type = postfix_node->variable->type_defined_as; 
-
-		/**
-		 * Get the version that represents our memory indirection. Be sure to use the "true type" here
-		 * just in case we were dealing with a reference
-		 */
 		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
 
-		//Now we need to add the final store
+		//We're able to emit a fully-fledged store right now
 		instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, node->line_number);
-
-		//Get this in there
 		add_statement(current_block, store_instruction);
-		
-		//This is always the new final block
-		postoperation_package.final_block = current_block;
 	}
 
 	//Give back the final unary package
+	postoperation_package.starting_block = current_block;
+	postoperation_package.final_block = current_block;
 	return postoperation_package;
 }
 
@@ -4759,6 +4742,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				current_block = unary_package.final_block;
 
 				//Is this a store operation? If so, we just need to fill in the op1 here
+				//TODO THIS WILL NEVER BE A THING ANYMORE
 				if(is_store_operation(current_block->exit_statement) == TRUE){
 					//This is our store statement
 					instruction_t* store_statement = current_block->exit_statement;
