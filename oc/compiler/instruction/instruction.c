@@ -3018,13 +3018,17 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		case THREE_ADDR_CODE_INC_STMT:
 			fprintf(fl, "inc ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
+			fprintf(fl, " /* source ");
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			fprintf(fl, " */\n");
 			break;
 
 		case THREE_ADDR_CODE_DEC_STMT:
 			fprintf(fl, "dec ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
-			fprintf(fl, "\n");
+			fprintf(fl, " /* source ");
+			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			fprintf(fl, " */\n");
 			break;
 
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
