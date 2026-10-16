@@ -4895,6 +4895,8 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
  *
  * <factored_postfix_expression> ::= <primary-expression> <postfix-tail>
  * 			<postfix-tail> ::= {=> <identifier> | : <identifier> | . <identifier> | -> <identifier> | [ <expression> ] | ++ | --}
+ *
+ * TODO REWRITE THIS
  */ 
 static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//Lookahead token
@@ -4923,6 +4925,14 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 	//Hold onto the operator node here
 	generic_ast_node_t* operator_node = NULL;
 
+	//TODO FLAG IF WEVE SEEN AN ACCESSOR
+	//
+	//
+	//
+	//
+	//TODO YOU NEED TO DOC THIS
+	u_int8_t seen_accessor = FALSE;
+
 	//So long as we keep seeing operators here, we keep chaining them
 	while(TRUE){
 		//Refresh the token
@@ -4937,22 +4947,27 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				push_token(&grouping_stack, lookahead);
 
 				operator_node = array_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
 
 			case COLON:
 				operator_node = struct_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
 
 			case FAT_ARROW:
 				operator_node = struct_pointer_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
 
 			case DOT:
 				operator_node = union_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
 
 			case ARROW:
 				operator_node = union_pointer_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
 
 			//Postincrement
@@ -4961,8 +4976,11 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				//TODO WTF IS THIS FOR???
 				//Copy this over
 				parent->variable = primary_expression_node->variable;
-				//Flag the parent as final - you can't go on past this
-				parent->memory_access_required = TRUE;
+				if(seen_accessor == TRUE){
+					//Flag the parent as final - you can't go on past this
+					parent->memory_access_required = TRUE;
+				}
+
 
 				//We let this rule handle everything
 				return postoperation(current_type, parent, lookahead.tok, side);
@@ -4973,9 +4991,11 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				//Store the variable too
 				parent->variable = primary_expression_node->variable;
 
-				//TODO WTF IS THIS FOR???
-				//Mark as final
-				parent->memory_access_required = TRUE;
+				if(seen_accessor == TRUE){
+					//Flag the parent as final - you can't go on past this
+					parent->memory_access_required = TRUE;
+				}
+
 				//And give it back
 				return parent;
 		}
