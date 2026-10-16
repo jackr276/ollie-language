@@ -5085,6 +5085,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 
 	//Otherwise, if we get down here we know that we have a unary operator
 	
+	//One we get here, we have both nodes that we need
+	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
+	
 	//We'll first create the unary operator node for ourselves here
 	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
 	//Assign the operator to this
@@ -5136,6 +5139,9 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			} else {
 				return_type = cast_expr->inferred_type->internal_types.member_type;
 			}
+
+			//TODO THIS IS WHAT DOES IT
+			unary_node->memory_access_required = TRUE;
 
 			//This is assignable
 			is_assignable = TRUE;
@@ -5390,8 +5396,6 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 		}
 	}
 
-	//One we get here, we have both nodes that we need
-	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
 	
 	//The unary operator always comes first
 	add_child_node(unary_node, unary_op);
