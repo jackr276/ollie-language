@@ -390,15 +390,6 @@ static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
 
 
 /**
- * Simple helper to tell whether something is or is not a store operation. This also has a NULL
- * guard. It's only real purpose is for code cleanliness
- */
-static inline u_int8_t is_store_operation(instruction_t* statement){
-	return (statement != NULL && statement->statement_type == THREE_ADDR_CODE_STORE_STATEMENT) ? TRUE : FALSE;
-}
-
-
-/**
  * Is the given raw constant a lea compatible power of 2?
  * In order to work for lea, the constant must be one of: 1, 2, 4, 8. Anything else is incompatible
  */
@@ -4531,10 +4522,11 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
  * 		  <primary-expression>
  *
  * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
- *
- * TODO REWRITE THIS WHOLE THING
  */
 static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node){
+	//We'll need a blank result
+	cfg_result_package_t postoperation_package = INITIALIZE_BLANK_CFG_RESULT;
+
 	//Store the current block
 	basic_block_t* current_block = basic_block;
 
@@ -4560,7 +4552,6 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	add_statement(current_block, temp_assignment);
 
 	//Initialize this off the bat
-	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->operands.oir.assignee}, CFG_RESULT_TYPE_VAR, BLANK};
 
 	/**
 	 * Go first by the type that we're actually postincrementing
