@@ -4659,6 +4659,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 	//Tracker for the current block
 	basic_block_t* current_block = basic_block;
 
+	//Hang onto this for our use
+	u_int32_t line_number = unary_expression_parent->line_number;
+
 	//Extract the two nodes that we'll be focusing on
 	generic_ast_node_t* unary_operator_node = unary_expression_parent->first_child;
 	generic_ast_node_t* unary_expression_child = unary_operator_node->next_sibling;
@@ -4683,7 +4686,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
-			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
 			/**
 			 * Split this down by what kind of types we have. We are only able to see basic types
@@ -4697,16 +4700,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 */
 				if(unary_operator_node->unary_operator == PLUSPLUS){
 					if(IS_FLOATING_POINT(assignee->type) == FALSE){
-						assignee = emit_general_purpose_inc_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_general_purpose_inc_code(current_block, assignee, line_number);
 					} else {
-						assignee = emit_sse_inc_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_sse_inc_code(current_block, assignee, line_number);
 					}
 
 				} else {
 					if(IS_FLOATING_POINT(assignee->type) == FALSE){
-						assignee = emit_general_purpose_dec_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_general_purpose_dec_code(current_block, assignee, line_number);
 					} else {
-						assignee = emit_sse_dec_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_sse_dec_code(current_block, assignee, line_number);
 					}
 				}
 
@@ -4715,7 +4718,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * size so we'll have the helper generate all of this for us
 			 */
  			} else if(assignee->type->type_class == TYPE_CLASS_POINTER){
-				assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee, unary_expression_child->line_number);
+				assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee, line_number);
 
 			/**
 			 * This is invalid so we will panic if we ever hit it
@@ -4744,7 +4747,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 * go ahead and emit the store here
 				 */
 				if(copy->memory_access_required == TRUE){
-					instruction_t* store_instruction = emit_store_base_address_only(copied_package.result_value.result_var, assignee, unary_expression_child->inferred_type, unary_expression_child->line_number);
+					instruction_t* store_instruction = emit_store_base_address_only(copied_package.result_value.result_var, assignee, unary_expression_child->inferred_type, line_number);
 					add_statement(current_block, store_instruction);
 
 				/**
@@ -4752,7 +4755,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 * emit a regular assignment for this
 				 */
 				} else {
-					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee, unary_expression_child->line_number);
+					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee, line_number);
 					add_statement(current_block, assignment_instruction);
 				}
 
@@ -4766,7 +4769,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
 				//Emit and add the store instruction
-				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, unary_expression_child->line_number);
+				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, line_number);
 				add_statement(current_block, store_instruction);
 			}
 
@@ -4805,7 +4808,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * The value that we're unpacking here will represent a memory address that will
 			 * either be loaded to or store from
 			 */
-			three_addr_var_t* memory_address = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			three_addr_var_t* memory_address = unpack_result_package(&unary_package, current_block, line_number);
 
 			/**
 			 * Extract the pointer type which comes from the child and the 
@@ -4837,7 +4840,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 */
 				case SIDE_TYPE_RIGHT: {
 					//Emit and add this
-					instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), memory_address, dereferenced_type, unary_expression_parent->line_number);
+					instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), memory_address, dereferenced_type, line_number);
 					add_statement(current_block, load_instruction);
 
 					//This one's assignee is our overall assignee
@@ -4883,7 +4886,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 *
 			if(is_memory_region(dereferenced_type) == TRUE){
 				//Emit the assignment
-				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee, unary_expression_child->line_number);
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee, line_number);
 
 				//Get this into the block
 				add_statement(current_block, assignment_instruction);
@@ -4907,10 +4910,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			//Get the assignee out from the result package
-			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
 			//Emit and add the logical not expression
-			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, unary_expression_child->line_number);
+			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
 			add_statement(current_block, logical_not_statement);
 
 			/**
@@ -4935,33 +4938,39 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 *
 		 * Becomes:
 		 * t <- a
-		 * negl t
+		 * bitwise not t
 		 * x <- t
 		 */
-		case B_NOT:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		case B_NOT: {
+			/**
+			 * First emit the given unary expression into the given block
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_parent->line_number);
+			//The assignee will always be a variable
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
-			//Assign over to a temp var that we will be notting
-			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_parent->line_number);
-			add_statement(current_block, assignment);
+			/**
+			 * First assign over to a temporary variable so we don't modify the original one
+			 */
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, line_number);
+			add_statement(current_block, temp_assignment);
 
-			//Now emit annd add the bitwise not on the temp var
-			instruction_t* bitwise_not = emit_not_instruction(assignment->operands.oir.assignee, unary_expression_parent->line_number);
+			/**
+			 * Now emit and add the actual bitwise not logic
+			 */
+			instruction_t* bitwise_not = emit_not_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, bitwise_not);
 
-			//The new assignee will come from this helper
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = bitwise_not->operands.oir.assignee;
-
-			//Give the package back
-			return unary_package;
+			//Package up and return the results
+			generic_results.operator = B_NOT;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			generic_results.type = CFG_RESULT_TYPE_VAR;
+			generic_results.result_value.result_var = bitwise_not->operands.oir.assignee;
+			return generic_results;
+		}
 
 		/**
 		 * Arithmetic negation operator
@@ -4969,52 +4978,58 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 *
 		 * Becomes:
 		 * t <- a
-		 * negl t
+		 * negate t
 		 * x <- t
-		 *
-		 * Uses strategy of: negl rdx
 		 */
-		case MINUS:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		case MINUS: {
+			/**
+			 * First emit the given unary expression so that we have the thing to negate
+			 * on hand
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			//The result will always be a variable that we can unpack
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
-			//We'll need to assign to a temp here, these are only ever on the RHS
-			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_child->line_number);
-			add_statement(current_block, assignment);
+			/**
+			 * Now assign to a temporary variable so that the actual value isn't affected by the negation
+			 */
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, line_number);
+			add_statement(current_block, temp_assignment);
 
-			//Now emit the instruction itself
-			instruction_t* negation_instruction = emit_neg_instruction(assignment->operands.oir.assignee, unary_expression_child->line_number);
+			/**
+			 * Once we have the temp to use emit the negation using it
+			 */
+			instruction_t* negation_instruction = emit_neg_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, negation_instruction);
 
-			//Rewrite the assignee to be this now
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = negation_instruction->operands.oir.assignee;
-			
-			//And give back the final value
-			return unary_package;
+			//Package up and return the results
+			generic_results.operator = MINUS;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			generic_results.type = CFG_RESULT_TYPE_VAR;
+			generic_results.result_value.result_var = negation_instruction->operands.oir.assignee;
+			return generic_results;
+		}
 
 		/**
 		 * Handle the case of the address operator - this is a very unique case, we will not call the unary expression
 		 * helper here, because we know that this must always be an identifier node
 		 */
-		case SINGLE_AND:
+		case SINGLE_AND: {
 			//Go based on the type here
 			switch(unary_expression_child->ast_node_type){
-				case AST_NODE_TYPE_IDENTIFIER:
+				case AST_NODE_TYPE_IDENTIFIER: {
 					/**
 					 * This variable is already on the stack. As such, to get it's memory address,
 					 * all we need to do is take emit a specialized "memory address var" from the existing
 					 * stack region and slap it into a variable
 					 */
-					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = emit_memory_address_var(unary_expression_child->variable);
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = emit_memory_address_var(unary_expression_child->variable);
 					break;
+				}
 
 				/**
 				 * For function calls, there are some scenarios where we are able to take the memory address
@@ -5023,50 +5038,60 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 * work is needed to actually use the memory address, we just need to assign it over
 				 */
 				case AST_NODE_TYPE_FUNCTION_CALL:
-				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
 					//Let the dedicated translator handle the call
-					generic_results = emit_function_call(current_block, unary_expression_child);
+					cfg_result_package_t func_call_results = emit_function_call(current_block, unary_expression_child);
+					current_block = func_call_results.final_block;
 
-					//Bump the block up if need be
-					current_block = generic_results.final_block;
-
-					//All that we need to do now is package up the results here and move along our way
-					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = generic_results.result_value.result_var;
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = func_call_results.result_value.result_var;
 					
 					break;
+				}
 
-				//The other case here
-				case AST_NODE_TYPE_POSTFIX_EXPR:
-					//Set the deref flag to false so we don't deref
+				/**
+				 * Postfix expressions require no special help with the excpetion of setting the memory
+				 * access required flag to false
+				 */
+				case AST_NODE_TYPE_POSTFIX_EXPR: {
+					/**
+					 * We are taking the memory address, so we do *NOT* want to perform
+					 * any loading here. Set this flag to stop that
+					 */
 					unary_expression_child->memory_access_required = FALSE;
-					//Emit the whole thing
-					generic_results = emit_postfix_expression(current_block, unary_expression_child);
 
-					//Update the current block
-					current_block = generic_results.final_block;
+					//Let the dedicated translator handle this
+					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, unary_expression_child);
+					current_block = postfix_results.final_block;
 
-					//And package the value up as what we want here
-					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = unpack_result_package(&generic_results, current_block, unary_expression_child->line_number);
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = unpack_result_package(&postfix_results, current_block, line_number);
 					break;
+				}
 
-				//This should never occur
-				default:
-					fprintf(stderr, "Fatal internal compiler error. Unrecognized node type for address operation");
-					exit(0);
+				/**
+				 * Some unrecognized type - this should never happen in normal operation
+				 */
+				default: {
+					trigger_ice_panic("Invalid node type given for memory address operation in CFG");
+					break;
+				}
 			}
 
-			//Set the final block here
-			unary_package.final_block = current_block;
+			//Package up and return the geneirc results
+			generic_results.operator = SINGLE_AND;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			return generic_results;
+		}
 
-			//Give back the unary package
-			return unary_package;
-
-		//In reality we should never actually hit this, it's just there for the C compiler to be happy
-		//SHOULD PANIC
-		default:
-			return unary_package;
+		/**
+		 * If we ever hit this it means that something is wrong
+		 */
+		default: {
+			trigger_ice_panic("Invalid/current unrecognized unary expression type detected");
+			return generic_results;
+	 	}
 	}
 }
 
