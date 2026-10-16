@@ -4094,19 +4094,32 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 			break;
 		}
 
-
-		//TODO DOCUMENT AND TEST 
+		/**
+		 * Combine:
+		 * 	t14 <- 20(stack_pointer_0)
+		 * 	store 25(t14, t8, 4) <- 27
+		 *
+		 *  Into:
+		 *  store 45(t14, t8, 4) <- 27
+		 */
 		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 			//Only valid option is the offset only addressing mode
 			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
 				break;
 			}
 
-			printf("HERE\n");
-			print_instruction_window_three_address_code(window);
+			//Add the two constants - result is in the lea
+			add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
 
-			//TODO
+			//Copy over the first address operand
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
 
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
 			break;
 		}
 
