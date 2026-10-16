@@ -4250,10 +4250,18 @@ loop_end:
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
+
+	/**
+	 * The left hand unary expression will always be being assigned to. As such, if our
+	 *
+	 *
+	 */
+
+
 	//
 	// TODO MAYBE WE CAN PROPOGATE THAT MEMORY ACCESS IS REQUIRED HERE FOR THE LHS AND GO BASED ON THAT
 	// 
-	// TODO LOOK AT THE PROPOGATOR FOR THIS
+	// TODO LOOK AT THE PROPOGATOR FOR THIS - WE MAY NOT EVEN NEED IT
 	//
 
 	//Otherwise it worked, so we'll add it in as the left child
@@ -5050,6 +5058,8 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
  * 								| ! 
  * 								| ++ 
  * 								| --
+ *
+ * 	TODO I WANT TO FIX AS WELL
  */
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	//For function call validation
@@ -5109,6 +5119,8 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
+
+			//TODO DEREFERENCE REQUIRED HERE?
 
 		
 			//Otherwise if we made it here, we only have one final tripping point

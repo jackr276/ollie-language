@@ -4531,6 +4531,8 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
  * 		  <primary-expression>
  *
  * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
+ *
+ * TODO REWRITE THIS WHOLE THING
  */
 static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node){
 	//Store the current block
@@ -4648,6 +4650,8 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 
 /**
  * Handle a unary operator, in whatever form it may be
+ *
+ * TODO REWRITE THIS WHOLE THING
  */
 static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent){
 	//Top level declarations to avoid using them in the switch statement
@@ -4660,9 +4664,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 	//We'll keep track of what the current block here is
 	basic_block_t* current_block = basic_block;
 
-	//Extract the first child from the unary expression parent node
+	//Extract the two nodes that we'll be focusing on
 	generic_ast_node_t* unary_operator_node = unary_expression_parent->first_child;
-	// For use later on
 	generic_ast_node_t* unary_expression_child = unary_operator_node->next_sibling;
 
 	//Now that we've emitted the assignee, we can handle the specific unary operators
@@ -4803,20 +4806,51 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		//
 		//
 		//BIG REWORK NEEDED
+		/**
+		 * TODO DOC
+		 */
 		case STAR:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+			/**
+			 * First emit the expression that represents our memory address that we'll
+			 * be dereferencing from
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the block
 			current_block = unary_package.final_block;
 
 			//The assignee comes from the package
 			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
 
-			//The pointer will be on the unary expression child
+			/**
+			 * Extract the pointer type which comes from the child and the 
+			 * dereferenced type
+			 */
 			generic_type_t* pointer_type = unary_expression_child->inferred_type;
-			//And the final type comes from when we dereference it
 			generic_type_t* dereferenced_type = dereference_type(pointer_type);
+
+			/**
+			 * Based on the side of the expression we will emit what is needed
+			 */
+			switch(unary_expression_parent->side){
+				/**
+				 * Case 1: we are on the left hand side, so we are doing something like 
+				 * *x = <something>. In this case, we will emit the *MEMORY ADDRESS ONLY*
+				 * in anticipation that the caller will take that memory address and use
+				 * it for a store
+				 */
+				case SIDE_TYPE_LEFT: {
+
+				}
+
+				case SIDE_TYPE_RIGHT: {
+
+				}
+			}
+
+
+
+
+
+
 
 			/**
 			 * If we what we have is an array pointer, then we don't need to do anything besides assign the
@@ -5073,6 +5107,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			return unary_package;
 
 		//In reality we should never actually hit this, it's just there for the C compiler to be happy
+		//SHOULD PANIC
 		default:
 			return unary_package;
 	}
