@@ -4524,21 +4524,24 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
  * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
  */
 static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node){
-	//We'll need a blank result
 	cfg_result_package_t postoperation_package = INITIALIZE_BLANK_CFG_RESULT;
+	u_int32_t line_number = node->line_number;
 
-	//Store the current block
+	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
 
-	//The postfix node is always the first child
+	/**
+	 * The postfix node always comes from the first child of the the given
+	 * postoperation node
+	 */
 	generic_ast_node_t* postfix_node = node->first_child;
 
-	//We will first emit the postfix expression code that comes from this
+	//Emit the postfix expression using the regular rule
 	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node);
 	current_block = postfix_expression_results.final_block;
 
 	//This is the value that we will be modifying. It will always be a variable
-	three_addr_var_t* assignee = unpack_result_package(&postfix_expression_results, current_block, node->line_number);
+	three_addr_var_t* postfix_assignee = unpack_result_package(&postfix_expression_results, current_block, line_number);
 
 	/**
 	 * Remember that for a postoperation, we save the value that we get before
@@ -4546,59 +4549,73 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	 * used. To facilitate this, we will perform a temp assignment here. The result of
 	 * this temp assignment is actually what the user will be using
 	 */
-
-	//Emit and add the assignment
-	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, node->line_number);
+	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(postfix_assignee->type), postfix_assignee, line_number);
 	add_statement(current_block, temp_assignment);
 
-	//Initialize this off the bat
-
 	/**
-	 * Go first by the type that we're actually postincrementing
+	 * We will handle our actual increment/decrement accordingly based on the
+	 * type class of what we're operating on
 	 */
-	if(assignee->type->type_class == TYPE_CLASS_BASIC){
+	if(postfix_assignee->type->type_class == TYPE_CLASS_BASIC){
 		/**
 		 * Breakdown by operator and then by whether or not we're an SSE
 		 * (floating point) operation or not
 		 */
 		if(node->unary_operator == PLUSPLUS){
-			if(IS_FLOATING_POINT(assignee->type) == FALSE){
-				assignee = emit_general_purpose_inc_code(current_block, assignee, node->line_number);
+			if(IS_FLOATING_POINT(postfix_assignee->type) == FALSE){
+				postfix_assignee = emit_general_purpose_inc_code(current_block, postfix_assignee, line_number);
 			} else {
-				assignee = emit_sse_inc_code(current_block, assignee, node->line_number);
+				postfix_assignee = emit_sse_inc_code(current_block, postfix_assignee, line_number);
 			}
 
 		} else {
-			if(IS_FLOATING_POINT(assignee->type) == FALSE){
-				assignee = emit_general_purpose_dec_code(current_block, assignee, node->line_number);
+			if(IS_FLOATING_POINT(postfix_assignee->type) == FALSE){
+				postfix_assignee = emit_general_purpose_dec_code(current_block, postfix_assignee, line_number);
 			} else {
-				assignee = emit_sse_dec_code(current_block, assignee, node->line_number);
+				postfix_assignee = emit_sse_dec_code(current_block, postfix_assignee, line_number);
 			}
 		}
- 
-	} else if(assignee->type->type_class == TYPE_CLASS_POINTER){
-		assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, assignee, node->line_number);
 
+	} else if(postfix_assignee->type->type_class == TYPE_CLASS_POINTER){
+		postfix_assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, postfix_assignee, line_number);
+
+	/**
+	 * This should be impossible - trigger a panic if we hit this
+	 */
 	} else {
-		printf("Fatal internal compiler error: Unreachable path hit for postinc in the CFG with type %s\n", assignee->type->type_name.string);
-		exit(1);
+		trigger_ice_panic("Invalid type class detected for postoperation code in the CFG");
 	}
 
 	/**
-	 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
-	 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
+	 * If what we're postoperating over is some complex expresssion, then we'll need to
+	 * duplicate it on the left hand side. This is mainly used when we are postoperating
+	 * on values from memory
 	 */
 	if(postfix_node->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-		//TODO DEFINITELY NEED TO TEST THIS
-
-		//Duplicate the subtree here for us to use
+		/**
+		 * Duplicate the subtree, but flag it so that the very top node
+		 * has a side type of SIDE_TYPE_LEFT. This will tell the postfix
+		 * expression helper that we intend to emit a store
+		 */
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
-
-		//Now we emit the copied package
 		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy);
-
-		//This is now the final block
 		current_block = copied_package.final_block;
+
+		//Get the value out of the copied pacakge
+		three_addr_var_t* lhs_var = unpack_result_package(&copied_package, current_block, line_number);
+
+		/**
+		 * If we are flagged as requiring memory access, then we will emit a store 
+		 * using the value given to us in the copied package. Otherwise, we'll just
+		 * use a regular assignment
+		 */
+		if(copy->memory_access_required == TRUE){
+
+		} else {
+
+		}
+
+
 
 		//Is this a store operation? If so, we just need to fill in the op1 here
 		//TODO THIS WILL NEVER BE A THING ANYMORE
