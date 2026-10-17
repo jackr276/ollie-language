@@ -34,8 +34,11 @@
 //Keyspace for all of our modules
 #define MODULE_KEYSPACE 1024
 
-//There's only one function keyspace per program, so it can be a bit larger
+//THere is one function keyspace per namespace
 #define FUNCTION_KEYSPACE 1024 
+
+//There is one namespace keyspace per program
+#define NAMESPACE_KEYSPACE 2048
 
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
@@ -445,7 +448,11 @@ struct symtab_type_sheaf_t{
  * This structure represents a specific namespace level
  * of the function symtab
  */
-struct function_namespace_t{
+struct function_namespace_t {
+	//Maintain a hash of each namespace
+	int64_t hash;
+	//Linked list functionality for collisions
+	function_namespace_t* next;
 	//The actual name of this namesapce
 	dynamic_string_t namespace_name;
 	//Link to the prior level
@@ -509,8 +516,6 @@ struct module_symtab_t {
  * As such, there are no "sheafs" like we have for types or variables
  */
 struct function_symtab_t{
-	//All of our namespaces
-	dynamic_array_t namespaces;
 	//Mapping of IDs to functions
 	dynamic_array_t id_to_function_mapping;
 	//The current sheaf
@@ -521,6 +526,8 @@ struct function_symtab_t{
 	u_int8_t* call_graph_transitive_closure;
 	//The call graph matrix specifically for inline functions
 	u_int8_t* inline_call_graph_matrix;
+	//All of our namespaces
+	function_namespace_t* namespaces[NAMESPACE_KEYSPACE];
 	//The current function id
 	u_int32_t current_function_id;
 	/**
