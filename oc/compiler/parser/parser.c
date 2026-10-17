@@ -15309,7 +15309,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 	 * Once we're done, we will escape back up to the old parent namespace. We do this
 	 * becuase we don't know how many levels down we are, so just exiting will not work
 	 */
-	set_current_namespace(function_symtab, old_parent);
+	enter_namespace(function_symtab, old_parent);
 	set_current_lexical_scope(variable_symtab, old_lexical_scope);
 	set_current_type_scope(type_symtab, old_type_scope);
 

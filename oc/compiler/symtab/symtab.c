@@ -1507,46 +1507,6 @@ function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* n
 
 
 /**
- * Enter into a namespace. This namespace is now the current namespace until exit_namespace()
- * is called, in which case it goes back to its parent namespace
- */
-void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace){
-	symtab->current = new_namespace;
-}
-
-
-/**
- * Exit out of the current namespace by going to its parent
- */
-void exit_namespace(function_symtab_t* symtab){
-	//This is bad if we're trying to do it
-	if(symtab->current->parent_namespace == NULL){
-		fprintf(stderr, "Fatal internal compiler error: attempt to exit the parent namespace\n");
-		exit(1);
-	}
-
-	//Go back up the chain into this one's parent namespace
-	symtab->current = symtab->current->parent_namespace;
-}
-
-
-/**
- * Set the current namespace to be a given record. This should be used when we need to jump
- * multiple namespaces at a time
- */
-void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_current_namespace){
-	//Just to be safe here
-	if(new_current_namespace == NULL){
-		fprintf(stderr, "Fatal internal compiler error: attempt to enter a null namespace\n");
-		exit(1);
-	}
-
-	//Just set current to this
-	symtab->current = new_current_namespace;
-}
-
-
-/**
  * Set the current lexical scope be a given record. This should be used when we need to jump
  * multiple scopes at a time
  */
