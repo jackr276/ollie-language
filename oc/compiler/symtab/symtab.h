@@ -46,9 +46,9 @@
 /**
  * For namespaces that themselves are nested inside of namespaces, we will
  * expect that the amount is smaller. It is for this reason that we only 
- * have room for 128 child namespaces
+ * have room for 128 secondary namespaces
  */
-#define CHILD_NAMESPACE_KEYSPACE 128
+#define SECONDARY_NAMESPACE_KEYSPACE 128
 
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
@@ -157,6 +157,18 @@ typedef enum {
 	FUNCTION_CLASSIFICATION_NORMAL,
 	FUNCTION_CLASSIFICATION_OVERLOAD
 } function_classification_t;
+
+
+/**
+ * What kind of namespace are we? We could be a primary namespace(existing
+ * just one level beneath the uppermost(default) namespace), or we could be 
+ * a secondary namespace that exists beneath a primary namespace. The difference
+ * is important because it determines how we hash
+ */
+typedef enum {
+	NAMESPACE_CLASSIFICATION_PRIMARY,
+	NAMESPACE_CLASSIFICATION_SECONDARY,
+} namespace_classification_t;
 
 
 /**
@@ -469,13 +481,13 @@ struct function_namespace_t {
 	function_namespace_t* parent_namespace;
 	//What is the related variable sheaf for this?
 	symtab_variable_sheaf_t* related_variable_sheaf;
-	/**
-	 * We maintain a hash table of all the child namespaces
-	 * that exist underneath this given namespace
-	 */
-	function_namespace_t* child_namespaces[CHILD_NAMESPACE_KEYSPACE];
 	//Hash table for the records
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
+	/**
+	 * We maintain a hash table of all the secondary namespaces
+	 * that exist underneath this given namespace
+	 */
+	function_namespace_t* secondary_namespaces[SECONDARY_NAMESPACE_KEYSPACE];
 	//Is this the default sheaf?
 	u_int8_t is_default;
 };
