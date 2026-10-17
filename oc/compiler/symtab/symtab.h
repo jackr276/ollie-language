@@ -37,8 +37,18 @@
 //THere is one function keyspace per namespace
 #define FUNCTION_KEYSPACE 1024 
 
-//There is one namespace keyspace per program
-#define NAMESPACE_KEYSPACE 2048
+/**
+ * Primary namespaces exist one level below the current namespace. This keyspace
+ * is larger to accomodate the fact that there may be more of them
+ */
+#define PRIMARY_NAMESPACE_KEYSPACE 2048
+
+/**
+ * For namespaces that themselves are nested inside of namespaces, we will
+ * expect that the amount is smaller. It is for this reason that we only 
+ * have room for 128 child namespaces
+ */
+#define CHILD_NAMESPACE_KEYSPACE 128
 
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
@@ -459,8 +469,11 @@ struct function_namespace_t {
 	function_namespace_t* parent_namespace;
 	//What is the related variable sheaf for this?
 	symtab_variable_sheaf_t* related_variable_sheaf;
-	//All of the child namespaces that we have
-	dynamic_array_t child_namespaces;
+	/**
+	 * We maintain a hash table of all the child namespaces
+	 * that exist underneath this given namespace
+	 */
+	function_namespace_t* child_namespaces[CHILD_NAMESPACE_KEYSPACE];
 	//Hash table for the records
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 	//Is this the default sheaf?
@@ -526,8 +539,11 @@ struct function_symtab_t{
 	u_int8_t* call_graph_transitive_closure;
 	//The call graph matrix specifically for inline functions
 	u_int8_t* inline_call_graph_matrix;
-	//All of our namespaces
-	function_namespace_t* namespaces[NAMESPACE_KEYSPACE];
+	/**
+	 * All of our primary(top level) namespaces are stored in a hashtable
+	 * beneath the function symtab itself
+	 */
+	function_namespace_t* primary_namespaces[PRIMARY_NAMESPACE_KEYSPACE];
 	//The current function id
 	u_int32_t current_function_id;
 	/**

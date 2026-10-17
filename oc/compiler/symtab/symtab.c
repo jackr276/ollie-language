@@ -510,8 +510,11 @@ static inline u_int64_t hash_function(char* name){
  * 	key % keyspace
  *
  * 	return key
-*/
-static inline u_int64_t hash_namespace(char* name){
+ *
+ * NOTE: a "primary" namespace is a namespace that exists just underneath
+ * the top level default namespace
+ */
+static inline u_int64_t hash_primary_namespace(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
@@ -533,7 +536,50 @@ static inline u_int64_t hash_namespace(char* name){
 	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
-	return hash & (NAMESPACE_KEYSPACE - 1);
+	return hash & (PRIMARY_NAMESPACE_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+ *
+ * NOTE: a "child" namespace is a namespace that exists beneath
+ * a namespace that is *NOT* the default namespace
+ */
+static inline u_int64_t hash_child_namespace(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
+	return hash & (CHILD_NAMESPACE_KEYSPACE - 1);
 }
 
 

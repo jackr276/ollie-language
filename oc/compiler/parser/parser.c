@@ -2323,6 +2323,8 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
  * Is the predecessor candidate a predecessor of the given namespace? We will use a BFS on the namespace tree
  * *starting* with the predecessor candidate to find out. If we are able to find the given namespace during our
  * search, then we have a success. Otherwise we have a failure
+ *
+ * TODO CAN'T WE JUST REWRITE THIS USING THE PARENT NAMESPACE POINTER TO CHAIN THEM TOGETHER???
  */
 static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* predecessor_candidate, function_namespace_t* given){
 	/**
