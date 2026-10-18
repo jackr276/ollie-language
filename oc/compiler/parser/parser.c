@@ -5272,68 +5272,62 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			break;
 		}
 
-		//Logical not case
-		case EXCLAMATION:
-			//Check to see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case EXCLAMATION: {
+			/**
+			 * Validate that we are able to do logical notting for this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//The return type of a logical not is a boolean
+			/**
+			 * These are always of type boolean and they are never assignable
+			 */
 			return_type = lookup_type_name_only(type_symtab, "bool", NOT_MUTABLE)->type;
-			
-			//This is not assignable
 			is_assignable = FALSE;
-			
 			break;
+		}
 	
-		//Bitwise not case
-		case B_NOT:
-			//Check to see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case B_NOT: {
+			/**
+			 * Validate that we are able to do bitwise notting for this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Save the return type as whatever the cast expression got
-			return_type = cast_expr->inferred_type;
-
-			//This is not assignable
+			/**
+			 * The return type is the same as the cast expression. This is never assignable
+			 */
+			return_type = cast_expression_node->inferred_type;
 			is_assignable = FALSE;
-			
 			break;
+		}
 	
-		//Arithmetic negation case
-		case MINUS:
-			//Let's see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case MINUS: {
+			/**
+			 * Validate that we are able to do an arithmetic negation on this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Save the return type as whatever the cast expression got
-			return_type = cast_expr->inferred_type;
-
-			//This is not assignable
+			/**
+			 * The return type is always the same as the cast expression. This is never assignable
+			 */
+			return_type = cast_expression_node->inferred_type;
 			is_assignable = FALSE;
-
 			break;
+		}
 
 		/**
 		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
@@ -5349,35 +5343,21 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 		 */
 		case PLUSPLUS:
 		case MINUSMINUS: {
-			//Check to see if it is valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+			/**
+			 * Validate that we are able to preincrement/predecrement the given type
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 			
-			//Save the return type as whatever the cast expression got
-			return_type = cast_expr->inferred_type;
-
-			//This counts as mutation -- unless it's a constant
-			if(cast_expr->variable != NULL){
-				//If this is not mutable, then we cannot change it in this way
-				if(cast_expr->variable->type_defined_as->mutability == NOT_MUTABLE){
-					sprintf(info, "Attempt to mutate immutable variable \"%s\"", cast_expr->variable->var_name.string);
-					return print_and_return_error(info, parser_line_num);
-				}
-			}
-
-			//Force this to be an rvalue for the cfg constructor
-			cast_expr->side = SIDE_TYPE_RIGHT;
-
-			//These expressions are never assignable
+			/**
+			 * The return type is always shared. This is never assignable
+			 */
+			return_type = cast_expression_node->inferred_type;
 			is_assignable = FALSE;
-
 			break;
 		}
 
