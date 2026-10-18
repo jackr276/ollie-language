@@ -34,8 +34,11 @@
 //Keyspace for all of our modules
 #define MODULE_KEYSPACE 1024
 
-//There's only one function keyspace per program, so it can be a bit larger
+//THere is one function keyspace per namespace
 #define FUNCTION_KEYSPACE 1024 
+
+//THere is one namespace keyspace per namespace as well
+#define NAMESPACE_KEYSPACE 1024
 
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
@@ -144,6 +147,16 @@ typedef enum {
 	FUNCTION_CLASSIFICATION_NORMAL,
 	FUNCTION_CLASSIFICATION_OVERLOAD
 } function_classification_t;
+
+
+/**
+ * A namespace may be the default namespace, or it may be
+ * a child namespace underneath that
+ */
+typedef enum {
+	NAMESPACE_CLASSIFICATION_DEFAULT,
+	NAMESPACE_CLASSIFICATION_CHILD,
+} namespace_classification_t;
 
 
 /**
@@ -445,19 +458,26 @@ struct symtab_type_sheaf_t{
  * This structure represents a specific namespace level
  * of the function symtab
  */
-struct function_namespace_t{
+struct function_namespace_t {
+	//Maintain a hash of each namespace
+	int64_t hash;
+	//Linked list functionality for collisions
+	function_namespace_t* next;
 	//The actual name of this namesapce
 	dynamic_string_t namespace_name;
 	//Link to the prior level
 	function_namespace_t* parent_namespace;
 	//What is the related variable sheaf for this?
 	symtab_variable_sheaf_t* related_variable_sheaf;
-	//All of the child namespaces that we have
-	dynamic_array_t child_namespaces;
 	//Hash table for the records
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
-	//Is this the default sheaf?
-	u_int8_t is_default;
+	/**
+	 * We maintain a hash table of all secondary namespaces
+	 * underneath this given one
+	 */
+	function_namespace_t* child_namespaces[NAMESPACE_KEYSPACE];
+	//Currently is just default or not but that may change
+	namespace_classification_t classification;
 };
 
 
@@ -509,8 +529,6 @@ struct module_symtab_t {
  * As such, there are no "sheafs" like we have for types or variables
  */
 struct function_symtab_t{
-	//All of our namespaces
-	dynamic_array_t namespaces;
 	//Mapping of IDs to functions
 	dynamic_array_t id_to_function_mapping;
 	//The current sheaf
@@ -521,6 +539,11 @@ struct function_symtab_t{
 	u_int8_t* call_graph_transitive_closure;
 	//The call graph matrix specifically for inline functions
 	u_int8_t* inline_call_graph_matrix;
+	/**
+	 * The default namespace is our top level namespace. This is our
+	 * gateway to all other namespaces
+	 */
+	function_namespace_t* default_namespace;
 	//The current function id
 	u_int32_t current_function_id;
 	/**
@@ -563,7 +586,6 @@ struct label_symtab_t {
  * Convert the visibility type to a string for errors
  */
 char* visibility_to_string(visibilty_type_t visibility);
-
 
 /**
  * Create a label table for us to use. These, unlike the other types of 
@@ -705,27 +727,45 @@ symtab_function_record_t* create_function_record(dynamic_string_t* name, depende
 symtab_function_record_t* create_overload_function_record(dynamic_string_t* name, dependency_graph_node_t* dependency_contained_in, visibilty_type_t visibility, u_int32_t line_number, u_int32_t token_index);
 
 /**
- * Create a namespace record and add it into the symtab. This will create the new namespace as a
- * child of the current one
+ * We always have one default namepsace. This is the uppermost namespace in the
+ * entire program. It will also be where the main function resides. This helper
+ * should always be called by the parser, whether or not we see the namespace
+ * keyword
  */
-function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name);
+function_namespace_t* create_default_namespace();
+
+/**
+ * Create a namespace record. This helper will perform *NO* insertion
+ */
+function_namespace_t* create_namespace_record(char* name);
+
+/**
+ * Insert the given, fully allocated child namespace beneat the given parent inside of the
+ * parent's hashtable
+ */
+void insert_namespace_record_under_parent(function_namespace_t* parent, function_namespace_t* child);
 
 /**
  * Enter into a namespace. This namespace is now the current namespace until exit_namespace()
  * is called, in which case it goes back to its parent namespace
  */
-void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace);
+static inline void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace){
+	symtab->current = new_namespace;
+}
 
 /**
  * Exit out of the current namespace by going to its parent
  */
-void exit_namespace(function_symtab_t* symtab);
+static inline void exit_namespace(function_symtab_t* symtab){
+	//This is bad if we're trying to do it
+	if(symtab->current->parent_namespace == NULL){
+		fprintf(stderr, "Fatal internal compiler error: attempt to exit the parent namespace\n");
+		exit(1);
+	}
 
-/**
- * Set the current namespace to be a given record. This should be used when we need to jump
- * multiple namespaces at a time
- */
-void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_current_namespace);
+	//Go back up the chain into this one's parent namespace
+	symtab->current = symtab->current->parent_namespace;
+}
 
 /**
  * Set the current lexical scope be a given record. This should be used when we need to jump
@@ -840,19 +880,14 @@ symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* nam
 symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* namespace_to_search, char* name);
 
 /**
- * Lookup a namespace inside of the symtab.
+ * Lookup a namespace underneath the default namespace. Whenever we do fully qualified lookups we will
+ * do this as a secondary lookup to see if the user is starting globally
  */
-function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);
+function_namespace_t* lookup_namespace_under_default(function_symtab_t* symtab, char* name);
 
 /**
- * Does a namespace exist one level underneath the current parent? This is done if we're looking
- * to add a new namespace
- */
-function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name);
-
-/**
- * Does a namespace exist one level underneath the given parent? This is usually used for searching
- * up namespaces that were given in qualified names
+ * Lookup a namespace under the given parent namespace. This is the only way to lookup
+ * a namespace, because all namespace lookups are nested
  */
 function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name);
 

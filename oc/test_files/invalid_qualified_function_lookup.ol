@@ -20,7 +20,7 @@ namespace tester
 	{
 		//This should fail, we can't see the not_visible function
 		fn invalid_test() -> i32 {
-			ret @inner_tester1::not_visible();
+			ret @tester::inner_tester1::not_visible();
 		}
 	}
 }
