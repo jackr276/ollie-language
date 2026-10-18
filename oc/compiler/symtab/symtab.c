@@ -6,7 +6,6 @@
 
 #include "symtab.h"
 #include <limits.h>
-#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>

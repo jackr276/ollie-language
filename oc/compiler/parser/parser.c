@@ -3699,7 +3699,9 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 * under default or under our current namespace, so we fail out
 		 */
 		if(namespace_cursor == NULL){
-			sprintf(info, "No namespace named \"%s\" has yet been declared", namespace_name);
+			sprintf(info, "No namespace named \"%s\" exists below the namespace \"%s\" or in the global namespace",
+							namespace_name,
+							generate_fully_qualified_namespace_name(function_symtab->current).string);
 			return print_and_return_error(info, parser_line_num);
 		}
 
