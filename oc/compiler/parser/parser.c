@@ -22,7 +22,6 @@
 #include "../utils/dynamic_integer_array/dynamic_integer_array.h"
 #include "../utils/stack/lexstack.h"
 #include "../utils/stack/nesting_stack.h"
-#include "../utils/queue/heap_queue.h"
 #include "../utils/stack/lightstack.h"
 #include "../utils/constants.h"
 
@@ -67,9 +66,6 @@ static function_type_t* current_function_signature = NULL;
 //Maintain a list of the errors/jump statements in the current function
 static dynamic_array_t errors_raised_by_current_function;
 static dynamic_array_t current_function_jump_statements;
-
-//The BFS queue for namespaces
-static heap_queue_t namespace_bfs_queue;
 
 //Keep hold of the current dependency node that we are on
 static dependency_graph_node_t* current_dependency_node = NULL;
@@ -2320,56 +2316,29 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 
 
 /**
- * Is the predecessor candidate a predecessor of the given namespace? We will use a BFS on the namespace tree
- * *starting* with the predecessor candidate to find out. If we are able to find the given namespace during our
- * search, then we have a success. Otherwise we have a failure
- *
- * TODO CAN'T WE JUST REWRITE THIS USING THE PARENT NAMESPACE POINTER TO CHAIN THEM TOGETHER???
+ * Is the given namespace a descendant of the predecessor? We maintain a "parent" pointer in all namespaces,
+ * so we'll just use that to crawl up the tree and see if we can find the predecessor
  */
 static inline u_int8_t is_namespace_predecessor_of_given(function_namespace_t* predecessor_candidate, function_namespace_t* given){
-	/**
-	 * Key question - is the function's namespace a predecessor
-	 * of the current namespace that we're in? If it is, then
-	 * this access is valid regardless of the visibility of
-	 * the function. If it is *not*, then since we know this
-	 * function is private, we can't do this
-	 *
-	 * This is a classic BFS problem. We'll start off by seeding with
-	 * the function namespace. If we can BFS our way down the tree
-	 * and eventually find the current namespace, then the function is
-	 * inside of a predecessor namespace and this access is valid
-	 */
-	heap_queue_clear(&namespace_bfs_queue);
-
-	//Add the function namespace as our seed
-	enqueue(&namespace_bfs_queue, predecessor_candidate);
-
-	//So long as we have items in the queue
-	while(queue_is_empty(&namespace_bfs_queue) == FALSE){
-		//Pop the first one off of the queue
-		function_namespace_t* cursor = dequeue(&namespace_bfs_queue);
-
-		//Condition - if it's equal to our current one get out
-		if(cursor == given){
-			return SUCCESS;
-		}
-
-		for(int32_t i = 0; i < cursor->child_namespaces.current_index; i++){
-			//Extract it
-			function_namespace_t* candidate = dynamic_array_get_at(&(cursor->child_namespaces), i);
-
-			//If this matches the  current namespace - we're done 
-			if(candidate == given){
-				return SUCCESS;
-			}
-
-			//Otherwise enqueue it
-			enqueue(&namespace_bfs_queue, candidate);
-		}
+	//This should never happen but just to be safe
+	if(given == predecessor_candidate){
+		trigger_ice_panic("Invalid attempt to see if a namespace is a predecessor of itself");
 	}
 
-	//If we made it all the way down here, we have a failure
-	return FAILURE;
+	//Crawl the tree created by that parent_namespace pointer
+	function_namespace_t* cursor = given;
+	while(cursor != NULL){
+		//They match so we're set
+		if(cursor == predecessor_candidate){
+			return TRUE;
+		}
+
+		//Go up the chain using the parent pointer
+		cursor = cursor->parent_namespace;
+	}
+
+	//If we get all the way down here then we've got nothing so get out
+	return FALSE;
 }
 
 
@@ -2415,7 +2384,7 @@ static inline u_int8_t validate_function_access(symtab_function_record_t* functi
 		return SUCCESS;
 
 	} else {
-		if(current_namespace->is_default == TRUE){
+		if(current_namespace->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 			sprintf(info, "Private function \"%s\" is not accessible in the current namespace",
 							generate_fully_qualified_function_name(function_record).string);
 
@@ -2473,7 +2442,7 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 		return SUCCESS;
 
 	} else {
-		if(current_namespace->is_default == TRUE){
+		if(current_namespace->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 			sprintf(info, "Private variable \"%s\" is not accessible in the current namespace",
 							generate_fully_qualified_variable_name(variable_record, namespace_contained_in).string);
 
@@ -13971,7 +13940,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 		} else {
 			//We are trying to predeclare an already defined function - BAD
 			if(overloaded_or_declared->defined == TRUE){
-				if(function_symtab->current->is_default == TRUE){
+				if(function_symtab->current->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 					sprintf(info, "Function \"%s\" has already been defined with type %s",
 							function_name.string,
 							get_full_type_name_from_type(new_function_signature));
@@ -13987,7 +13956,7 @@ static generic_ast_node_t* function_predeclaration(ollie_token_stream_t* token_s
 
 			//We have already predeclared this but did not yet define it
 			} else {
-				if(function_symtab->current->is_default == TRUE){
+				if(function_symtab->current->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 					sprintf(info, "Function \"%s\" has already been predeclared with type %s",
 							function_name.string,
 							get_full_type_name_from_type(new_function_signature));
@@ -14443,7 +14412,7 @@ static inline u_int8_t validate_main_function(generic_type_t* function_signature
 	 * is not the default namespace. So if we see that
 	 * the current namespace is not default, we fail out
 	 */
-	if(function_symtab->current->is_default == FALSE){
+	if(function_symtab->current->classification == NAMESPACE_CLASSIFICATION_CHILD){
 		sprintf(info, "The main function was found declared inside the namespace \"%s\". The main function may only be declared inside of the top level namespace.",
 		  				function_symtab->current->namespace_name.string);
 		return print_and_return_failure(info, parser_line_num);
@@ -14794,7 +14763,7 @@ static generic_ast_node_t* function_definition(ollie_token_stream_t* token_strea
 			 * error out in this case
 			 */
 			if(overload_or_predeclared->defined == TRUE){
-				if(function_symtab->current->is_default == TRUE){
+				if(function_symtab->current->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 					sprintf(info, "Function \"%s\" has already been defined with type %s",
 							function_name.string,
 							get_full_type_name_from_type(new_function_signature));
@@ -15663,9 +15632,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	variable_symtab = variable_symtab_alloc();
 	type_symtab = type_symtab_alloc();
 
-	//Allocate the reusable namespace queue
-	namespace_bfs_queue = heap_queue_alloc();
-
 	/**
 	 * For the type and variable symtabs, their original scope needs to be initialized before
 	 * anything else happens
@@ -15769,7 +15735,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 	lex_stack_dealloc(&grouping_stack);
 	lex_stack_dealloc(&assignment_grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
-	heap_queue_dealloc(&namespace_bfs_queue);
 
 	//Destroy these temporary arrays
 	dynamic_array_dealloc(&current_function_jump_statements);
