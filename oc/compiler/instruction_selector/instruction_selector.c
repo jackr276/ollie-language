@@ -9956,8 +9956,29 @@ static inline u_int8_t convert_memory_copy_statements_into_loads_and_stores(dyna
 }
 
 
+
+
+
+//TODO I THINK GCM WOULD BE BEST HERE
+
 static inline u_int8_t fold_addressing_operations_into_loads_and_stores(dynamic_array_t* function_blocks){
 	u_int8_t experienced_fold = TRUE;
+
+
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+
+		basic_block_t* function_block = dynamic_array_get_at(function_blocks, i);
+
+		instruction_t* cursor = function_block->leader_statement;
+		while(cursor != NULL){
+			if(cursor->addressing_mode != ADDRESSING_MODE_NONE){
+				//TODO EXPERIMENTAL
+				if(cursor->addressing_mode == ADDRESSING_MODE_BASE_ADDRESS_ONLY){
+
+				}
+			}
+		}
+	}
 
 
 	return experienced_fold;
