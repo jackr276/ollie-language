@@ -4839,18 +4839,6 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 
 /**
- * Operates on a value before usage. This could be postincrement or postdecrement
- *
- * TODO REWRITE THIS
- */
-static inline generic_ast_node_t* emit_postoperation_code(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
-
-	//And give it back
-	return postoperation_node;
-}
-
-
-/**
  * A postfix expression decays into a primary expression, and there are certain
  * operators that can be chained if context allows. Like all other rules, this rule
  * returns a reference to the root node that it creates
@@ -4874,8 +4862,6 @@ static inline generic_ast_node_t* emit_postoperation_code(generic_type_t* curren
  *
  * <factored_postfix_expression> ::= <primary-expression> <postfix-tail>
  * 			<postfix-tail> ::= {=> <identifier> | : <identifier> | . <identifier> | -> <identifier> | [ <expression> ] | ++ | --}
- *
- * TODO REWRITE THIS
  */ 
 static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	/**
@@ -4909,7 +4895,6 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 	 * 	  
 	 */
 	generic_ast_node_t* parent = primary_expression_node;
-	generic_ast_node_t* temp_holder = NULL;
 	generic_ast_node_t* operator_node = NULL;
 
 	/**
@@ -5015,49 +5000,65 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				return postoperation_node;
 			}
 
-			//When we hit this, it means that we're done. We return the parent node in this case
-			default:
+			/**
+			 * Once we hit this we no longer have a postfix operator, so we'll package up
+			 * what we need to and get out
+			 */
+			default: {
+				//Let the next rule handle whatever this is
 				push_back_token(token_stream, &parser_line_num);
-				//Store the variable too
-				parent->variable = primary_expression_node->variable;
 
+				/**
+				 * Propogate the variable pointer up to the parent as well so that we don't
+				 * need to drill down to access it. Also, if we've seen at least one accessor,
+				 * flag that we do require memory access in this postfix expression
+				 */
+				parent->variable = primary_expression_node->variable;
 				if(seen_accessor == TRUE){
-					//Flag the parent as final - you can't go on past this
 					parent->memory_access_required = TRUE;
 				}
 
-				//And give it back
 				return parent;
+			}
 		}
 
-		//If this is invalid, then we'll just leave
+		/**
+		 * Make sure that we don't have some error in the accessor
+		 */
 		if(operator_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid postfix operation", parser_line_num);
 		}
 
-		//Hang onto the old parent
-		temp_holder = parent;
-
-		//The new parent now becomes a postfix expression
+		/**
+		 * If we get down here, it means that we've seen a valid postfix operation. Remember
+		 * that the terminal sequences will never hit here. We need to create a new parent node
+		 * and make the old parent node the LHS of a postfix expression
+		 *
+		 * 		arr[3][2] will become:
+		 *				postfix
+		 *			 / 		  \
+		 * 		postfix		array acessor 2
+		 * 		/ 	\
+		 *   arr	array accessor 3
+		 * 	  
+		 *
+		 * To do this we allocate a fresh parent node and add the old parent as its first
+		 * child, with the operator as its second child
+		 */
+		generic_ast_node_t* old_parent = parent;
 		parent = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
-
-		//The old parent now becomes a child to the new postfix expression node
-		add_child_node(parent, temp_holder);
-		
-		//And the operator is the other child
+		add_child_node(parent, old_parent);
 		add_child_node(parent, operator_node);
 
-		//The type of this parent is always the type of the operator node
+		/**
+		 * The parent inherits its inferred type, optional field variable
+		 * and assignability from the operator node
+		 */
 		parent->inferred_type = operator_node->inferred_type;
-
-		//Transfer this around
 		parent->optional_storage.field_variable = operator_node->optional_storage.field_variable;
-
-		//The parent's assignability inherits from the operator
 		parent->is_assignable = operator_node->is_assignable;
 	}
 
-	//We should never get here - just to make the static analyzer happy
 	return parent;
 }
 
