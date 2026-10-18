@@ -868,19 +868,14 @@ symtab_function_record_t* lookup_function_in_namespace(function_namespace_t* nam
 symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* namespace_to_search, char* name);
 
 /**
- * Lookup a namespace inside of the symtab.
+ * Lookup a namespace underneath the default namespace. Whenever we do fully qualified lookups we will
+ * do this as a secondary lookup to see if the user is starting globally
  */
-function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name);
+function_namespace_t* lookup_namespace_globally(function_symtab_t* symtab, char* name);
 
 /**
- * Does a namespace exist one level underneath the current parent? This is done if we're looking
- * to add a new namespace
- */
-function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name);
-
-/**
- * Does a namespace exist one level underneath the given parent? This is usually used for searching
- * up namespaces that were given in qualified names
+ * Lookup a namespace under the given parent namespace. This is the only way to lookup
+ * a namespace, because all namespace lookups are nested
  */
 function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name);
 

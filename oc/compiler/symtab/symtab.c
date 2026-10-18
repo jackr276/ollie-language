@@ -2219,59 +2219,39 @@ symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* nam
 
 
 /**
- * Lookup a namespace inside of the symtab. Unlike searching for a function there
- * is no hashing to do here, just string comparison
- *
- * Yes this is an expensive lookup, but we don't expect to be doing it that
- * frequently. If it does become too expensive to do, then we will begin to use
- * hashing
+ * Lookup a namespace underneath the default namespace. Whenever we do fully qualified lookups we will
+ * do this as a secondary lookup to see if the user is starting globally
  */
-function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
-	//Run through every namespace 
-	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
-		//Extract it
-		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->namespaces), i);
+function_namespace_t* lookup_namespace_globally(function_symtab_t* symtab, char* name){
+	//Extract for convenience
+	function_namespace_t* default_namespace = symtab->default_namespace;
 
-		//Not possible to lookup the default sheaf
-		if(namespace->is_default == TRUE){
-			continue;
+	//Compute the hash of our namespace
+	int64_t hash = hash_namespace(name);
+
+	//Get the cursor
+	function_namespace_t* cursor = default_namespace->child_namespaces[hash];
+
+	/**
+	 * Remember that we could have had collisions, so we'll now need to go through
+	 * and compare the namepsace name on the cursor with our name until we find a match
+	 */
+	while(cursor != NULL){
+		if(strncmp(cursor->namespace_name.string, name, cursor->namespace_name.current_length) == 0){
+			return cursor;
 		}
 
-		//Names match then we're a go
-		if(strcmp(namespace->namespace_name.string, name) == 0){
-			return namespace;
-		}
+		cursor = cursor->next;
 	}
 
-	//If we make it all of the way down here, that means that we've found nothing
+	//If we made it here then we have nothing
 	return NULL;
 }
 
 
 /**
- * Does a namespace exist one level underneath the parent? This is done if we're looking
- * to add a new namespace
- */
-function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name){
-	//Run through the children of the current parent
-	for(int32_t i = 0; i < symtab->current->child_namespaces.current_index; i++){
-		//Extract the namespace
-		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->current->child_namespaces), i);
-
-		//If they're a match then we're out
-		if(strcmp(namespace->namespace_name.string, name) == 0){
-			return namespace;
-		}
-	}
-
-	//If we got to here then we found nothing
-	return NULL;
-}
-
-
-/**
- * Does a namespace exist one level underneath the given parent? This is usually used for searching
- * up namespaces that were given in qualified names
+ * Lookup a namespace under the given parent namespace. This is the only way to lookup
+ * a namespace, because all namespace lookups are nested
  */
 function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name){
 	//Run through the children of the current parent
