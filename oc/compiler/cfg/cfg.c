@@ -5024,7 +5024,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 				/**
 				 * Postfix expressions require no special help with the excpetion of setting the memory
-				 * access required flag to false
+				 * access required flag to false. The parser should have done this but we do it just
+				 * to be safe
 				 */
 				case AST_NODE_TYPE_POSTFIX_EXPR: {
 					/**

@@ -5211,51 +5211,64 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 					break;
 				}
 
-				//And we can handle a postfix expression
-				case AST_NODE_TYPE_POSTFIX_EXPR:
-					//If this fails then we leave
-					if(is_postfix_expression_tree_address_eligible(cast_expr) == FALSE){
+				/**
+				 * For postfix expressions, we are able to prevent dereferencing and take the address of a given
+				 * result under valid circumstances
+				 */
+				case AST_NODE_TYPE_POSTFIX_EXPR: {
+					if(is_postfix_expression_tree_address_eligible(cast_expression_node) == FALSE){
 						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
+
+					/**
+					 * IMPORTANT - propogate down the chain that we will not require any memory access, just
+					 * memory address computation
+					 */
+					propogate_no_memory_access_required_flag(cast_expression_node);
 					break;
+				}
 				
-				//Otherwise it doesn't work
-				default:
+				/**
+				 * Invalid here so we can fail out
+				 */
+				default: {
 					return print_and_return_error("Invalid return value for address operator &", parser_line_num);
+			 	}
 			}
 
-			//Check to see if it's valid
-			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+			/**
+			 * Final validation - make sure that they type system approves of us taking the address of this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
-						operator_token_to_string(unary_op_tok));
+							get_full_type_name_from_ast_node(cast_expression_node),
+							operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was. The mutability here is *always*
-			//the child's mutability by default. If the user wants that to change, they need to cast
-			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num, cast_expr->inferred_type->mutability);
+			/**
+			 * Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was. The mutability here is *always*
+			 * the child's mutability by default. If the user wants that to change, they need to cast
+			 */
+			generic_type_t* pointer = create_pointer_type(cast_expression_node->inferred_type, parser_line_num, cast_expression_node->inferred_type->mutability);
 
-			//We'll check to see if this type is already in existence
+			/**
+			 * We want to reuse where we can, so let's see if there's already a pointer type like
+			 * this in the symtab. If there's not, we'll make it ourselves
+			 */
 			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer);
-			
-			//It didn't exist, so we'll add it
 			if(type_record == NULL){
 				insert_type(type_symtab, create_type_record(pointer));
-				//Set the return type to be a pointer
 				return_type = pointer;
 
-			//Otherwise it does exist so we'll just grab whatever we got
 			} else {
 				return_type = type_record->type;
 			}
 
-			//This is not assignable
+			/**
+			 * The memory address operator will never generate an assignable result
+			 */
 			is_assignable = FALSE;
-
 			break;
 		}
 
