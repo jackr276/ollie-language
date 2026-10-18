@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include "../ast/ast.h"
 #include "../utils/stack/heapstack.h"
 #include "../utils/constants.h"
 
@@ -144,29 +143,14 @@ function_symtab_t* function_symtab_alloc(){
 	//First create the symtab
 	function_symtab_t* symtab = (function_symtab_t*)calloc(1, sizeof(function_symtab_t));
 
-	//Now the namespaces array
-	symtab->namespaces = dynamic_array_alloc();
-
 	//Allocate our id to function map
 	symtab->id_to_function_mapping = dynamic_array_alloc();
 
-	//Now let's create the very first sheaf
-	function_namespace_t* default_namespace = calloc(1, sizeof(function_namespace_t));
+	//Create and add the default namespace
+	symtab->default_namespace = create_default_namespace();
 
-	//This is the default sheaf
-	default_namespace->is_default = TRUE;
-
-	//Allcoate the namespace name
-	default_namespace->namespace_name = dynamic_string_alloc();
-
-	//We'll make the name "$default", something the user couldn't enter
-	dynamic_string_set(&(default_namespace->namespace_name), "$default");
-
-	//Add this into our namespaces 
-	dynamic_array_add(&(symtab->namespaces), default_namespace);
-
-	//The current value is this
-	symtab->current = default_namespace;
+	//This is the current namespace
+	symtab->current = symtab->default_namespace;
 
 	return symtab;
 }
@@ -494,6 +478,46 @@ static inline u_int64_t hash_function(char* name){
 
 	//Cut it down to our keyspace
 	return hash & (FUNCTION_KEYSPACE - 1);
+}
+
+
+/**
+ * Hash a name before entry/search into the hash table
+ *
+ * FNV-1a 64 bit hash:
+ * 	hash <- FNV_prime
+ *
+ * 	for each hashable value:
+ * 		hash ^= value
+ * 		hash *= FNV_PRIME
+ * 		
+ * 	key % keyspace
+ *
+ * 	return key
+ */
+static inline u_int64_t hash_namespace(char* name){
+	//Char pointer for the name
+	char* cursor = name;
+
+	//The hash we have
+	u_int64_t hash = OFFSET_BASIS;
+
+	//Iterate through the cursor here
+	for(; *cursor != '\0'; cursor++){
+		hash ^= *cursor;
+		hash *= FNV_PRIME;
+	}
+
+	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
+	//itself ensures that the higher order bits effect all of the lower order ones
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_1;
+	hash ^= hash >> 33;
+	hash *= FINALIZER_CONSTANT_2;
+	hash ^= hash >> 33;
+
+	//Cut it down to our keyspace
+	return hash & (NAMESPACE_KEYSPACE - 1);
 }
 
 
@@ -1385,78 +1409,83 @@ symtab_function_record_t* create_overload_function_record(dynamic_string_t* name
 
 
 /**
- * Create a namespace record and add it into the symtab. This will create the new namespace as a
- * child of the current one
+ * We always have one default namepsace. This is the uppermost namespace in the
+ * entire program. It will also be where the main function resides. This helper
+ * should always be called by the parser, whether or not we see the namespace
+ * keyword
+ *
+ * NOTE: the default namespace does not need a hash because it should never
+ * be found in any hashtable
  */
-function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name){
-	//Allocate it
+function_namespace_t* create_default_namespace(){
 	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
 
-	//It's not the default
-	namespace->is_default = FALSE;
-
-	//Allocate the name
+	//Put in a name that would be impossible for anyone else to produce
 	namespace->namespace_name = dynamic_string_alloc();
+	dynamic_string_set(&(namespace->namespace_name), "^^default^^");
 
-	//Set the name in
-	dynamic_string_set(&(namespace->namespace_name), name);
+	//This is the default record
+	namespace->classification = NAMESPACE_CLASSIFICATION_DEFAULT;
 
-	//If this needs to be allocated then we will do so
-	if(symtab->current->child_namespaces.internal_array == NULL){
-		symtab->current->child_namespaces = dynamic_array_alloc();
-	}
-
-	//This namespace is going to be added as the child of the current one
-	dynamic_array_add(&(symtab->current->child_namespaces), namespace);
-
-	//Flag the current namespace as this one's parent
-	namespace->parent_namespace = symtab->current;
-
-	//Also add this to our overall array of all namespaces
-	dynamic_array_add(&(symtab->namespaces), namespace);
-	
-	//Now give it back
+	//Now return it
 	return namespace;
 }
 
 
 /**
- * Enter into a namespace. This namespace is now the current namespace until exit_namespace()
- * is called, in which case it goes back to its parent namespace
+ * Create a namespace record. This helper will perform *NO* insertion
  */
-void enter_namespace(function_symtab_t* symtab, function_namespace_t* new_namespace){
-	symtab->current = new_namespace;
+function_namespace_t* create_namespace_record(char* name){
+	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
+
+	/**
+	 * Add in the name. Note that we cannot create the hash right now because
+	 * we don't know if this is a primary or secondary namespace. That will
+	 * only be determined once add this underneath its parent namespace
+	 */
+	namespace->namespace_name = dynamic_string_alloc();
+	dynamic_string_set(&(namespace->namespace_name), name);
+
+	//Compute the hash for this namespace
+	namespace->hash = hash_namespace(name);
+
+	//This is not the default so mark as child
+	namespace->classification = NAMESPACE_CLASSIFICATION_CHILD;
+
+	return namespace;
 }
 
 
 /**
- * Exit out of the current namespace by going to its parent
+ * Insert the given, fully allocated child namespace beneat the given parent inside of the
+ * parent's hashtable
  */
-void exit_namespace(function_symtab_t* symtab){
-	//This is bad if we're trying to do it
-	if(symtab->current->parent_namespace == NULL){
-		fprintf(stderr, "Fatal internal compiler error: attempt to exit the parent namespace\n");
-		exit(1);
+void insert_namespace_record_under_parent(function_namespace_t* parent, function_namespace_t* child){
+	//First get a pointer to the area where we want to insert this
+	function_namespace_t* cursor = parent->child_namespaces[child->hash];
+
+	/**
+	 * Case 1: no collision - we'll insert as the top level record
+	 */
+	if(cursor == NULL){
+		parent->child_namespaces[child->hash] = child;
+
+	/**
+	 * Case 2: collision, we'll need to work our way down
+	 * until the last record in the chain and add this
+	 * onto there
+	 */
+	} else {
+		while(cursor->next != NULL){
+			cursor = cursor->next;
+		}
+
+		//Add this onto the chain
+		cursor->next = child;
 	}
 
-	//Go back up the chain into this one's parent namespace
-	symtab->current = symtab->current->parent_namespace;
-}
-
-
-/**
- * Set the current namespace to be a given record. This should be used when we need to jump
- * multiple namespaces at a time
- */
-void set_current_namespace(function_symtab_t* symtab, function_namespace_t* new_current_namespace){
-	//Just to be safe here
-	if(new_current_namespace == NULL){
-		fprintf(stderr, "Fatal internal compiler error: attempt to enter a null namespace\n");
-		exit(1);
-	}
-
-	//Just set current to this
-	symtab->current = new_current_namespace;
+	//Finally update this pointer value
+	child->parent_namespace = parent;
 }
 
 
@@ -2194,73 +2223,60 @@ symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* nam
 
 
 /**
- * Lookup a namespace inside of the symtab. Unlike searching for a function there
- * is no hashing to do here, just string comparison
- *
- * Yes this is an expensive lookup, but we don't expect to be doing it that
- * frequently. If it does become too expensive to do, then we will begin to use
- * hashing
+ * Lookup a namespace underneath the default namespace. Whenever we do fully qualified lookups we will
+ * do this as a secondary lookup to see if the user is starting globally
  */
-function_namespace_t* lookup_namespace(function_symtab_t* symtab, char* name){
-	//Run through every namespace 
-	for(int32_t i = 0; i < symtab->namespaces.current_index; i++){
-		//Extract it
-		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->namespaces), i);
+function_namespace_t* lookup_namespace_under_default(function_symtab_t* symtab, char* name){
+	//Extract for convenience
+	function_namespace_t* default_namespace = symtab->default_namespace;
 
-		//Not possible to lookup the default sheaf
-		if(namespace->is_default == TRUE){
-			continue;
+	//Compute the hash of our namespace
+	int64_t hash = hash_namespace(name);
+
+	//Get the cursor
+	function_namespace_t* cursor = default_namespace->child_namespaces[hash];
+
+	/**
+	 * Remember that we could have had collisions, so we'll now need to go through
+	 * and compare the namepsace name on the cursor with our name until we find a match
+	 */
+	while(cursor != NULL){
+		if(strncmp(cursor->namespace_name.string, name, cursor->namespace_name.current_length) == 0){
+			return cursor;
 		}
 
-		//Names match then we're a go
-		if(strcmp(namespace->namespace_name.string, name) == 0){
-			return namespace;
-		}
+		cursor = cursor->next;
 	}
 
-	//If we make it all of the way down here, that means that we've found nothing
+	//If we made it here then we have nothing
 	return NULL;
 }
 
 
 /**
- * Does a namespace exist one level underneath the parent? This is done if we're looking
- * to add a new namespace
- */
-function_namespace_t* lookup_namespace_under_current(function_symtab_t* symtab, char* name){
-	//Run through the children of the current parent
-	for(int32_t i = 0; i < symtab->current->child_namespaces.current_index; i++){
-		//Extract the namespace
-		function_namespace_t* namespace = dynamic_array_get_at(&(symtab->current->child_namespaces), i);
-
-		//If they're a match then we're out
-		if(strcmp(namespace->namespace_name.string, name) == 0){
-			return namespace;
-		}
-	}
-
-	//If we got to here then we found nothing
-	return NULL;
-}
-
-
-/**
- * Does a namespace exist one level underneath the given parent? This is usually used for searching
- * up namespaces that were given in qualified names
+ * Lookup a namespace under the given parent namespace. This is the only way to lookup
+ * a namespace, because all namespace lookups are nested
  */
 function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name){
-	//Run through the children of the current parent
-	for(int32_t i = 0; i < parent_namespace->child_namespaces.current_index; i++){
-		//Extract the namespace
-		function_namespace_t* namespace = dynamic_array_get_at(&(parent_namespace->child_namespaces), i);
+	//Compute the hash of our namespace
+	int64_t hash = hash_namespace(name);
 
-		//If they're a match then we're out
-		if(strcmp(namespace->namespace_name.string, name) == 0){
-			return namespace;
+	//Get the cursor
+	function_namespace_t* cursor = parent_namespace->child_namespaces[hash];
+
+	/**
+	 * Remember that we could have had collisions, so we'll now need to go through
+	 * and compare the namepsace name on the cursor with our name until we find a match
+	 */
+	while(cursor != NULL){
+		if(strncmp(cursor->namespace_name.string, name, cursor->namespace_name.current_length) == 0){
+			return cursor;
 		}
+
+		cursor = cursor->next;
 	}
 
-	//If we got to here then we found nothing
+	//If we made it here then we have nothing
 	return NULL;
 }
 
@@ -2940,8 +2956,11 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
 	//Initially it's null
 	dynamic_string_t namespace_name = INITIALIZE_DYNAMIC_STRING;
 
-	//If this is the default then get out
-	if(namespace_record->is_default == TRUE){
+	/**
+	 * The default namespace has no name at all, so just leave out of here
+	 * in this case
+	 */
+	if(namespace_record->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return namespace_name;
 	}
 
@@ -2955,7 +2974,7 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
 	function_namespace_t* cursor = namespace_record;
 
 	//So long as we haven't hit the default
-	while(cursor->is_default == FALSE){
+	while(cursor->classification == NAMESPACE_CLASSIFICATION_CHILD){
 		//Hold onto this pointer
 		function_namespace_t* temp = cursor;
 
@@ -2995,8 +3014,10 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 	//What namespace are we in
 	function_namespace_t* namespace_contained_in = function->namespace_contained_in;
 
-	//If the function is in the default namespace there's nothing for us to do
-	if(namespace_contained_in->is_default == TRUE){
+	/**
+	 * f the function is in the default namespace there's nothing for us to do
+	 */
+	if(namespace_contained_in->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return clone_dynamic_string(&(function->func_name));
 	}
 
@@ -3010,7 +3031,7 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 	function_namespace_t* cursor = namespace_contained_in;
 
 	//So long as we haven't hit the default
-	while(cursor->is_default == FALSE){
+	while(cursor->classification == NAMESPACE_CLASSIFICATION_CHILD){
 		//Hold onto this pointer
 		function_namespace_t* temp = cursor;
 
@@ -3048,8 +3069,10 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
  * a freshly allocated dynamic string
  */
 dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t* variable, function_namespace_t* var_namespace){
-	//If the function is in the default namespace there's nothing for us to do
-	if(var_namespace->is_default == TRUE){
+	/**
+	 * If the variable is in the default namespace there's nothing for us to do
+	 */
+	if(var_namespace->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return clone_dynamic_string(&(variable->var_name));
 	}
 
@@ -3063,7 +3086,7 @@ dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t
 	function_namespace_t* cursor = var_namespace;
 
 	//So long as we haven't hit the default
-	while(cursor->is_default == FALSE){
+	while(cursor->classification == NAMESPACE_CLASSIFICATION_CHILD){
 		//Hold onto this pointer
 		function_namespace_t* temp = cursor;
 
@@ -3296,66 +3319,75 @@ void finalize_function_symtab(function_symtab_t* symtab){
 
 
 /**
+ * Do everything needed to deallocate a function record
+ */
+static inline void deallocate_function_record(symtab_function_record_t* record){
+	//Destroy the call graph infrastructure
+	dynamic_set_dealloc(&(record->called_functions));
+
+	//Destroy the block storage
+	dynamic_array_dealloc(&(record->function_blocks));
+
+	//Destroy the parameters
+	dynamic_array_dealloc(&(record->function_parameters));
+
+	//Destroy the overload table
+	dynamic_array_dealloc(&(record->overload_table));
+
+	//Dealloate the function type
+	type_dealloc(record->signature);
+
+	//Deallocate the data area itself
+	stack_data_area_dealloc(&(record->local_stack));
+
+	//Destroy the label symtab if it exists
+	label_symtab_dealloc(record->user_defined_labels);
+
+	//Finally free the function
+	free(record);
+}
+
+
+static void deallocate_namespace_rec(function_namespace_t* namespace){
+	//First run through and deallocate all of the functions
+	for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		symtab_function_record_t* record = namespace->records[i];
+
+		//They can be chained so this is necessary
+		while(record != NULL){
+			symtab_function_record_t* temp = record;
+			record = record->next;
+
+			deallocate_function_record(temp);
+		}
+	}
+
+	//Now go through and deallocate all child namepsaces
+	for(int32_t i = 0; i < NAMESPACE_KEYSPACE; i++){
+		//Get the child namespace out
+		function_namespace_t* record = namespace->child_namespaces[i];
+
+		//These can be chained so this is necessary
+		while(record != NULL){
+			function_namespace_t* temp = record;
+			record = record->next;
+
+			deallocate_namespace_rec(temp);
+		}
+	}
+
+	//Finally free this record itself
+	free(namespace);
+}
+
+
+
+/**
  * Provide a function that will destroy the function symtab completely
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
-	//For temporary holding
-	function_namespace_t* sheaf;
-	symtab_function_record_t* record;
-	symtab_function_record_t* temp;
-
-	//Run through all of the namespaces 
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		//Get the sheaf out
-		sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
-
-		//Now go through all records
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			record = sheaf->records[i];
-
-			//We could have chaining here, so run through just in case
-			while(record != NULL){
-				temp = record;
-				record = record->next;
-
-				//Destroy the call graph infrastructure
-				dynamic_set_dealloc(&(temp->called_functions));
-
-				//Destroy the block storage
-				dynamic_array_dealloc(&(temp->function_blocks));
-
-				//Destroy the parameters
-				dynamic_array_dealloc(&(temp->function_parameters));
-
-				//Destroy the overload table
-				dynamic_array_dealloc(&(temp->overload_table));
-
-				//Dealloate the function type
-				type_dealloc(temp->signature);
-
-				//Deallocate the data area itself
-				stack_data_area_dealloc(&(temp->local_stack));
-
-				//Destroy the label symtab if it exists
-				label_symtab_dealloc(temp->user_defined_labels);
-
-				//Finally free the function
-				free(temp);
-			}
-		}
-
-		//Destroy the name
-		dynamic_string_dealloc(&(sheaf->namespace_name));
-
-		//Destroy the array of children
-		dynamic_array_dealloc(&(sheaf->child_namespaces));
-
-		//Free the sheaf itself
-		free(sheaf);
-	}
-
-	//Deallocate the namespace array
-	dynamic_array_dealloc(&(symtab->namespaces));
+	//Recursively deallocate all namespaces and functions
+	deallocate_namespace_rec(symtab->default_namespace);
 
 	//Deallocate the id to function map
 	dynamic_array_dealloc(&(symtab->id_to_function_mapping));
