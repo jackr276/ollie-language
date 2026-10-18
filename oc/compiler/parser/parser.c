@@ -5363,6 +5363,14 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
+
+			/**
+			 * If we are trying to mutate values that are immutable, this is another failure. We will exit
+			 * out if this is the case
+			 */
+			if(perform_mutability_checking(cast_expression_node)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+			}
 			
 			/**
 			 * The return type is always shared. This is never assignable

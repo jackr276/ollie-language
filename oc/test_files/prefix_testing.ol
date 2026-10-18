@@ -8,7 +8,7 @@
 * Size should be: 4 + 4 pad + 8 + 1 + 7 pad = 24 (end must be a multiple of 8)
 */
 define struct custom {
-		x:i32;
+		x:mut i32;
 		a:i64;
 		y:char;
 } as my_struct;
