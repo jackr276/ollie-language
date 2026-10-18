@@ -37,12 +37,8 @@
 //THere is one function keyspace per namespace
 #define FUNCTION_KEYSPACE 1024 
 
-/**
- * For namespaces that themselves are nested inside of namespaces, we will
- * expect that the amount is smaller. It is for this reason that we only 
- * have room for 128 secondary namespaces
- */
-#define NAMESPACE_KEYSPACE 256
+//THere is one namespace keyspace per namespace as well
+#define NAMESPACE_KEYSPACE 1024
 
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
@@ -151,19 +147,6 @@ typedef enum {
 	FUNCTION_CLASSIFICATION_NORMAL,
 	FUNCTION_CLASSIFICATION_OVERLOAD
 } function_classification_t;
-
-
-/**
- * What kind of namespace are we? We could be a primary namespace(existing
- * just one level beneath the uppermost(default) namespace), or we could be 
- * a secondary namespace that exists beneath a primary namespace. The difference
- * is important because it determines how we hash
- */
-typedef enum {
-	NAMESPACE_CLASSIFICATION_DEFAULT,
-	NAMESPACE_CLASSIFICATION_PRIMARY,
-	NAMESPACE_CLASSIFICATION_SECONDARY,
-} namespace_classification_t;
 
 
 /**
@@ -479,15 +462,10 @@ struct function_namespace_t {
 	//Hash table for the records
 	symtab_function_record_t* records[FUNCTION_KEYSPACE];
 	/**
-	 * We maintain a hash table of all the secondary namespaces
-	 * that exist underneath this given namespace
+	 * We maintain a hash table of all secondary namespaces
+	 * underneath this given one
 	 */
-	function_namespace_t* child_namespaces[SECONDARY_NAMESPACE_KEYSPACE];
-	/**
-	 * What is the classification of this given namespace? It could
-	 * be default, primary or secondary
-	 */
-	namespace_classification_t classification;
+	function_namespace_t* child_namespaces[NAMESPACE_KEYSPACE];
 };
 
 
@@ -550,10 +528,10 @@ struct function_symtab_t{
 	//The call graph matrix specifically for inline functions
 	u_int8_t* inline_call_graph_matrix;
 	/**
-	 * All of our primary(top level) namespaces are stored in a hashtable
-	 * beneath the function symtab itself
+	 * The default namespace is our top level namespace. This is our
+	 * gateway to all other namespaces
 	 */
-	function_namespace_t* primary_namespaces[PRIMARY_NAMESPACE_KEYSPACE];
+	function_namespace_t* default_namespace;
 	//The current function id
 	u_int32_t current_function_id;
 	/**
@@ -745,11 +723,7 @@ symtab_function_record_t* create_overload_function_record(dynamic_string_t* name
 function_namespace_t* create_default_namespace();
 
 /**
- * Create a namespace record and add it into the symtab. This will create the new namespace as a
- * child of the current one
- *
- * NOTE: this will *NOT* add the classification or the hash. That will only be added once we insert
- * this namespace underneath whatever its parent namespace is
+ * Create a namespace record. This helper will perform *NO* insertion
  */
 function_namespace_t* create_namespace_record(char* name);
 

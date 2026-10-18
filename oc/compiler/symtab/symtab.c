@@ -145,29 +145,14 @@ function_symtab_t* function_symtab_alloc(){
 	//First create the symtab
 	function_symtab_t* symtab = (function_symtab_t*)calloc(1, sizeof(function_symtab_t));
 
-	//Now the namespaces array
-	symtab->namespaces = dynamic_array_alloc();
-
 	//Allocate our id to function map
 	symtab->id_to_function_mapping = dynamic_array_alloc();
 
-	//Now let's create the very first sheaf
-	function_namespace_t* default_namespace = calloc(1, sizeof(function_namespace_t));
+	//Create and add the default namespace
+	symtab->default_namespace = create_default_namespace();
 
-	//This is the default sheaf
-	default_namespace->is_default = TRUE;
-
-	//Allcoate the namespace name
-	default_namespace->namespace_name = dynamic_string_alloc();
-
-	//We'll make the name "$default", something the user couldn't enter
-	dynamic_string_set(&(default_namespace->namespace_name), "$default");
-
-	//Add this into our namespaces 
-	dynamic_array_add(&(symtab->namespaces), default_namespace);
-
-	//The current value is this
-	symtab->current = default_namespace;
+	//This is the current namespace
+	symtab->current = symtab->default_namespace;
 
 	return symtab;
 }
@@ -511,11 +496,8 @@ static inline u_int64_t hash_function(char* name){
  * 	key % keyspace
  *
  * 	return key
- *
- * NOTE: a "primary" namespace is a namespace that exists just underneath
- * the top level default namespace
  */
-static inline u_int64_t hash_primary_namespace(char* name){
+static inline u_int64_t hash_namespace(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
@@ -537,50 +519,7 @@ static inline u_int64_t hash_primary_namespace(char* name){
 	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
-	return hash & (PRIMARY_NAMESPACE_KEYSPACE - 1);
-}
-
-
-/**
- * Hash a name before entry/search into the hash table
- *
- * FNV-1a 64 bit hash:
- * 	hash <- FNV_prime
- *
- * 	for each hashable value:
- * 		hash ^= value
- * 		hash *= FNV_PRIME
- * 		
- * 	key % keyspace
- *
- * 	return key
- *
- * NOTE: a "child" namespace is a namespace that exists beneath
- * a namespace that is *NOT* the default namespace
- */
-static inline u_int64_t hash_secondary_namespace(char* name){
-	//Char pointer for the name
-	char* cursor = name;
-
-	//The hash we have
-	u_int64_t hash = OFFSET_BASIS;
-
-	//Iterate through the cursor here
-	for(; *cursor != '\0'; cursor++){
-		hash ^= *cursor;
-		hash *= FNV_PRIME;
-	}
-
-	//We will perform avalanching here by shifting, multiplying and shifting. The shifting
-	//itself ensures that the higher order bits effect all of the lower order ones
-	hash ^= hash >> 33;
-	hash *= FINALIZER_CONSTANT_1;
-	hash ^= hash >> 33;
-	hash *= FINALIZER_CONSTANT_2;
-	hash ^= hash >> 33;
-
-	//Cut it down to our keyspace
-	return hash & (SECONDARY_NAMESPACE_KEYSPACE - 1);
+	return hash & (NAMESPACE_KEYSPACE - 1);
 }
 
 
@@ -1476,12 +1415,12 @@ symtab_function_record_t* create_overload_function_record(dynamic_string_t* name
  * entire program. It will also be where the main function resides. This helper
  * should always be called by the parser, whether or not we see the namespace
  * keyword
+ *
+ * NOTE: the default namespace does not need a hash because it should never
+ * be found in any hashtable
  */
 function_namespace_t* create_default_namespace(){
 	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
-
-	//Flag as default
-	namespace->classification = NAMESPACE_CLASSIFICATION_DEFAULT;
 
 	//Put in a name that would be impossible for anyone else to produce
 	namespace->namespace_name = dynamic_string_alloc();
@@ -1493,11 +1432,7 @@ function_namespace_t* create_default_namespace(){
 
 
 /**
- * Create a namespace record and add it into the symtab. This will create the new namespace as a
- * child of the current one
- *
- * NOTE: this will *NOT* add the classification or the hash. That will only be added once we insert
- * this namespace underneath whatever its parent namespace is
+ * Create a namespace record. This helper will perform *NO* insertion
  */
 function_namespace_t* create_namespace_record(char* name){
 	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
@@ -1509,6 +1444,9 @@ function_namespace_t* create_namespace_record(char* name){
 	 */
 	namespace->namespace_name = dynamic_string_alloc();
 	dynamic_string_set(&(namespace->namespace_name), name);
+
+	//Compute the hash for this namespace
+	namespace->hash = hash_namespace(name);
 
 	return namespace;
 }
