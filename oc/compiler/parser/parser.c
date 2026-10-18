@@ -4821,22 +4821,10 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 /**
  * Operates on a value before usage. This could be postincrement or postdecrement
+ *
+ * TODO REWRITE THIS
  */
-static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
-	//Let's first check and see if this is valid. If it's not we fail out
-	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", get_full_type_name_from_type(current_type), operator_token_to_string(operator));
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Necessary checking here
-	if(parent_node->variable != NULL){
-		//This is a mutation - so we need to check it
-		if(parent_node->variable->type_defined_as->mutability  == NOT_MUTABLE){
-			sprintf(info, "Attempt to mutate immutable variable \"%s\"", parent_node->variable->var_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-	}
+static generic_ast_node_t* emit_postoperation_code(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
 
 	//Otherwise let's allocate this
 	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
@@ -4890,30 +4878,38 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
  * TODO REWRITE THIS
  */ 
 static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream, side_type_t side){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//No matter what, we have to first see a valid primary expression
+	/**
+	 * The very first thing that we see should be a primary expression. If this fails then
+	 * kill the whole thing
+	 */
 	generic_ast_node_t* primary_expression_node = primary_expression(token_stream, side);
-
-	//If we fail, then we're bailing out here
 	if(primary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		//Just return, no need for any errors here
 		return primary_expression_node;
 	}
 
-	//If we are inside of a case condition, we will just skip
-	//out all of these rules because they cannot possibly
-	//work
+	/**
+	 * If we are inside of a case condition there's no point in going forward.
+	 * Case conditions must be constants at compile time so this will not work
+	 */
 	if(peek_nesting_level(&nesting_stack) == NESTING_CASE_CONDITION){
 		return primary_expression_node;
 	}
 
-	//The parent initially is the primary expression
+	/**
+	 * We parse this in a unique way. Initially the parent
+	 * is the primary expression. As we see operators, we keep
+	 * making new parent postfix nodes and adding the old parent in
+	 * as the left child
+	 * 		arr[3][2] will become:
+	 *				postfix
+	 *			 / 		  \
+	 * 		postfix		array acessor 2
+	 * 		/ 	\
+	 *   arr	array accessor 3
+	 * 	  
+	 */
 	generic_ast_node_t* parent = primary_expression_node;
-	//The temp holder node
 	generic_ast_node_t* temp_holder = NULL;
-	//Hold onto the operator node here
 	generic_ast_node_t* operator_node = NULL;
 
 	//TODO FLAG IF WEVE SEEN AN ACCESSOR
@@ -4927,12 +4923,13 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 	//So long as we keep seeing operators here, we keep chaining them
 	while(TRUE){
 		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
+		lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+		ollie_token_t postfix_operator = lookahead.tok;
 
 		//Let's grab whatever type that we currently have
 		generic_type_t* current_type = parent->inferred_type;
 
-		switch(lookahead.tok){
+		switch(postfix_operator){
 			case L_BRACKET:
 				//We'll push this onto the grouping stack for later matching
 				push_token(&grouping_stack, lookahead);
@@ -4964,6 +4961,22 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 			//Postincrement
 			case PLUSPLUS:
 			case MINUSMINUS:
+
+				//Let's first check and see if this is valid. If it's not we fail out
+				if(is_unary_operation_valid_for_type(current_type, postfix_operator) == FALSE){
+					sprintf(info, "Type %s is invalid for operator %s", get_full_type_name_from_type(current_type), operator_token_to_string(postfix_operator));
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				/**
+				 * Validate that what we are doing is actually within bounds of mutability. If it's not
+				 * then we need to fail out
+				 */
+				if(perform_mutability_checking(parent)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+					return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+				}
+
+
 				//TODO WTF IS THIS FOR???
 				//Copy this over
 				parent->variable = primary_expression_node->variable;
@@ -4974,7 +4987,7 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 
 
 				//We let this rule handle everything
-				return postoperation(current_type, parent, lookahead.tok, side);
+				return emit_postoperation_code(current_type, parent, lookahead.tok, side);
 
 			//When we hit this, it means that we're done. We return the parent node in this case
 			default:
