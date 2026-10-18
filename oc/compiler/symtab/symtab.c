@@ -1471,6 +1471,27 @@ symtab_function_record_t* create_overload_function_record(dynamic_string_t* name
 
 
 /**
+ * We always have one default namepsace. This is the uppermost namespace in the
+ * entire program. It will also be where the main function resides. This helper
+ * should always be called by the parser, whether or not we see the namespace
+ * keyword
+ */
+function_namespace_t* create_default_namespace(function_symtab_t* symtab){
+	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
+
+	//Flag as default
+	namespace->classification = NAMESPACE_CLASSIFICATION_DEFAULT;
+
+	//Put in a name that would be impossible for anyone else to produce
+	namespace->namespace_name = dynamic_string_alloc();
+	dynamic_string_set(&(namespace->namespace_name), "^^default^^");
+
+	//Now return it
+	return namespace;
+}
+
+
+/**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
  * child of the current one
  */
