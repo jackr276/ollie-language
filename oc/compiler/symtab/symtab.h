@@ -38,17 +38,11 @@
 #define FUNCTION_KEYSPACE 1024 
 
 /**
- * Primary namespaces exist one level below the current namespace. This keyspace
- * is larger to accomodate the fact that there may be more of them
- */
-#define PRIMARY_NAMESPACE_KEYSPACE 2048
-
-/**
  * For namespaces that themselves are nested inside of namespaces, we will
  * expect that the amount is smaller. It is for this reason that we only 
  * have room for 128 secondary namespaces
  */
-#define SECONDARY_NAMESPACE_KEYSPACE 128
+#define NAMESPACE_KEYSPACE 256
 
 //User defined jump statement keyspace(per function)
 #define USER_DEFINED_LABELED_BLOCK_KEYSPACE 64
@@ -488,7 +482,7 @@ struct function_namespace_t {
 	 * We maintain a hash table of all the secondary namespaces
 	 * that exist underneath this given namespace
 	 */
-	function_namespace_t* secondary_namespaces[SECONDARY_NAMESPACE_KEYSPACE];
+	function_namespace_t* child_namespaces[SECONDARY_NAMESPACE_KEYSPACE];
 	/**
 	 * What is the classification of this given namespace? It could
 	 * be default, primary or secondary
@@ -748,7 +742,7 @@ symtab_function_record_t* create_overload_function_record(dynamic_string_t* name
  * should always be called by the parser, whether or not we see the namespace
  * keyword
  */
-function_namespace_t* create_default_namespace(function_symtab_t* symtab);
+function_namespace_t* create_default_namespace();
 
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
@@ -757,7 +751,16 @@ function_namespace_t* create_default_namespace(function_symtab_t* symtab);
  * NOTE: this will *NOT* add the classification or the hash. That will only be added once we insert
  * this namespace underneath whatever its parent namespace is
  */
-function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name);
+function_namespace_t* create_namespace_record(char* name);
+
+/**
+ * Insert the given, fully allocated child namespace beneat the given parent. This helper
+ * will compute the hash of the child's name and determine the namespace classification
+ * of the child. If the parent is the default namespace, the child is classified as a
+ * "Primary Namespace". If the parent is a "Primary" or "Secondary" namespace, then the
+ * child is classified as a "Secondary Namespace"
+ */
+void insert_namespace_record_under_parent(function_namespace_t* parent, function_namespace_t* child);
 
 /**
  * Enter into a namespace. This namespace is now the current namespace until exit_namespace()

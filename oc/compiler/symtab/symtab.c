@@ -6,6 +6,7 @@
 
 #include "symtab.h"
 #include <limits.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -557,7 +558,7 @@ static inline u_int64_t hash_primary_namespace(char* name){
  * NOTE: a "child" namespace is a namespace that exists beneath
  * a namespace that is *NOT* the default namespace
  */
-static inline u_int64_t hash_child_namespace(char* name){
+static inline u_int64_t hash_secondary_namespace(char* name){
 	//Char pointer for the name
 	char* cursor = name;
 
@@ -579,7 +580,7 @@ static inline u_int64_t hash_child_namespace(char* name){
 	hash ^= hash >> 33;
 
 	//Cut it down to our keyspace
-	return hash & (CHILD_NAMESPACE_KEYSPACE - 1);
+	return hash & (SECONDARY_NAMESPACE_KEYSPACE - 1);
 }
 
 
@@ -1476,7 +1477,7 @@ symtab_function_record_t* create_overload_function_record(dynamic_string_t* name
  * should always be called by the parser, whether or not we see the namespace
  * keyword
  */
-function_namespace_t* create_default_namespace(function_symtab_t* symtab){
+function_namespace_t* create_default_namespace(){
 	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
 
 	//Flag as default
@@ -1498,7 +1499,7 @@ function_namespace_t* create_default_namespace(function_symtab_t* symtab){
  * NOTE: this will *NOT* add the classification or the hash. That will only be added once we insert
  * this namespace underneath whatever its parent namespace is
  */
-function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name){
+function_namespace_t* create_namespace_record(char* name){
 	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
 
 	/**
@@ -1510,6 +1511,40 @@ function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* n
 	dynamic_string_set(&(namespace->namespace_name), name);
 
 	return namespace;
+}
+
+
+/**
+ * Insert the given, fully allocated child namespace beneat the given parent. This helper
+ * will compute the hash of the child's name and determine the namespace classification
+ * of the child. If the parent is the default namespace, the child is classified as a
+ * "Primary Namespace". If the parent is a "Primary" or "Secondary" namespace, then the
+ * child is classified as a "Secondary Namespace"
+ */
+void insert_namespace_record_under_parent(function_namespace_t* parent, function_namespace_t* child){
+	/**
+	 * First get the classification. If the parent is the default namespace,
+	 * then the child is considered a primary namespace. If the parent
+	 * is a primary or secondary namespace, then the child is a secondary namespace
+	 */
+	switch(parent->classification){
+		case NAMESPACE_CLASSIFICATION_DEFAULT:
+			child->classification = NAMESPACE_CLASSIFICATION_PRIMARY;
+			child->hash = hash_primary_namespace(child->namespace_name.string);
+			break;
+
+		case NAMESPACE_CLASSIFICATION_PRIMARY:
+		case NAMESPACE_CLASSIFICATION_SECONDARY:
+			child->classification = NAMESPACE_CLASSIFICATION_SECONDARY;
+			child->hash = hash_secondary_namespace(child->namespace_name.string);
+			break;
+	}
+
+
+	parent-t>
+	
+
+
 }
 
 

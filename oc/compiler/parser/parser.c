@@ -15222,6 +15222,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		 * underneath the current one that we have. Once we've done this, this new namespace will be the
 		 * current one
 		 */
+		//TODO HERE
 		function_namespace_t* new_namepsace = create_namespace_record(function_symtab, namespace_name);
 
 		//This now is the current namespace
