@@ -4150,16 +4150,19 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
  *
  */
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
-	//Freeze the line number
 	u_int32_t current_line = parser_line_num;
-	//Lookahead token
+	ollie_token_t assignment_operator = BLANK;
 	lexitem_t lookahead;
 
-	//This will hold onto the assignment operator for us
-	ollie_token_t assignment_operator = BLANK;
-
+	//
 	//Wipe out whatever run came before us on the lexstack
+	/**
+	 * This lexstack is how we validate what kind of assignment(compressed equality, regular
+	 * assignment) that we have 
+	 */
 	reset_lexstack(&assignment_grouping_stack);
+
+	//TODO IDK IF ANY OF THIS IS NEEDED
 
 	//Let's now seek ahead in the token stream until we either find an assignment operator or the 
 	//end of a statement
@@ -4244,7 +4247,6 @@ loop_end:
 	//If we make it here however, that means that we did see the assign keyword. Since
 	//this is the case, we'll make a new assignment node and take the appropriate actions here 
 	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
-	//Add in the line number
 	asn_expr_node->line_number = current_line;
 
 	//We'll let this rule handle it
@@ -4260,36 +4262,23 @@ loop_end:
 		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
 	}
 
-
-	/**
-	 * The left hand unary expression will always be being assigned to. As such, if our
-	 *
-	 *
-	 */
-
-
-	//
-	// TODO MAYBE WE CAN PROPOGATE THAT MEMORY ACCESS IS REQUIRED HERE FOR THE LHS AND GO BASED ON THAT
-	// 
-	// TODO LOOK AT THE PROPOGATOR FOR THIS - WE MAY NOT EVEN NEED IT
-	//
-
 	//Otherwise it worked, so we'll add it in as the left child
 	add_child_node(asn_expr_node, left_hand_unary);
 
-	//Now we are required to see the := terminal
+	/**
+	 * Verify that the next token is an assignment operator
+	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	//Fail case here
 	if(is_assignment_operator(lookahead.tok) == FALSE){
 		sprintf(info, "Expected assignment operator symbol in assignment expression");
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	//Parse the initializer_expression
+	/**
+	 * Parse the initializer expression on the right hand side. If it fails to parse
+	 * then exit out
+	 */
 	generic_ast_node_t* expr = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	//Fail case here
 	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
 	}
@@ -4301,10 +4290,12 @@ loop_end:
 		return print_and_return_error("Array types cannot be assigned to unless using an initializer", parser_line_num);
 	}
 
-	//Let the helper do all mutability checking
-	generic_ast_node_t* result = perform_mutability_checking(left_hand_unary);
-	if(result->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return result;
+	/**
+	 * One final check - verify that we are able to mutate the left hand unary. There are cases for memory
+	 * region mutation that the static analyzer will not check
+	 */
+	if(perform_mutability_checking(left_hand_unary)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
 	//Let's now see if we have compatible types
@@ -4347,16 +4338,15 @@ loop_end:
 			current_function->requires_initial_alignment = TRUE;
 		}
 
-		//Otherwise the overall type is the final type
+		/**
+		 * The overall node gets its inferred type from the final type, and its variable
+		 * from the left hand unary(if there is any)
+		 */
 		asn_expr_node->inferred_type = final_type;
-
-		//Assignment expressions themselves are not assignable
 		asn_expr_node->is_assignable = FALSE;
-
-		//This will always share the unary expression's variable
 		asn_expr_node->variable = left_hand_unary->variable;
 
-		//Otherwise we know it worked, so we'll add the expression in as the right child
+		//Add the expression as the right child
 		add_child_node(asn_expr_node, expr);
 
 		//Return the reference to the overall node
