@@ -5098,79 +5098,87 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 		return print_and_return_error("Invalid cast expression given after unary operator", parser_line_num);
 	}
 
-	//Holder for our return type
-	generic_type_t* return_type;
+	/**
+	 * The return type, assignability and required memory access will be determined for
+	 * each operator that we evaluate
+	 */
+	generic_type_t* return_type = NULL;
+	u_int8_t is_assignable = FALSE;
+	u_int8_t memory_access_required = FALSE;
 
-	//An is-valid holder for our validations
-	u_int8_t is_valid = FALSE;
-
-	//Now we'll switch based on the operator
 	switch(unary_op_tok){
-		//Pointer derferencing
-		case STAR:
-			//Check to see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case STAR: {
+			/**
+			 * Are we even able to dereference on this type? If not then fail out
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
-
-			//TODO DEREFERENCE REQUIRED HERE?
-
 		
-			//Otherwise if we made it here, we only have one final tripping point
-			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_values.is_void_pointer == TRUE){
+			/**
+			  * Otherwise if we made it here, we only have one final tripping point to check: validate
+			  * that we aren't trying to dereference a NULL pointer
+			 */
+			generic_type_t* dereferencing_type = cast_expression_node->inferred_type;
+			if(dereferencing_type->type_class == TYPE_CLASS_POINTER && dereferencing_type->internal_values.is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
-			//Otherwise our dereferencing worked, so the return type will be whatever this points to
-			//Grab what it references whether its a pointer or an array
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-				return_type = cast_expr->inferred_type->internal_types.points_to;
+			/**
+			 * Otherwise our dereferencing worked, so the return type will be whatever this points to. Grab
+			 * what it references whether it's a pointer or an array
+			 */
+			if(dereferencing_type->type_class == TYPE_CLASS_POINTER){
+				return_type = dereferencing_type->internal_types.points_to;
 			} else {
-				return_type = cast_expr->inferred_type->internal_types.member_type;
+				return_type = dereferencing_type->internal_types.member_type;
 			}
 
-			//TODO THIS IS WHAT DOES IT
-			unary_node->memory_access_required = TRUE;
-
-			//This is assignable
+			/**
+			 * IMPORTANT: any time we have a dereference, we are doing memory access by default. We
+			 * have a special flag in the parent node that tells us whether or not memory access(dereference)
+			 * is required for this node. Set this flag to true. This is also always assignable, so set that to true
+			 * as well
+			 */
+			memory_access_required = TRUE;
 			is_assignable = TRUE;
 			break;
+		}
 
-		//Address operator case
-		case SINGLE_AND:
-			switch(cast_expr->ast_node_type){
-				//We can take an identifiers address
-				case AST_NODE_TYPE_IDENTIFIER:
+		case SINGLE_AND: {
+			/**
+			 * What are we taking the address of? We can take the address of identifiers(variables), functions
+			 * function calls that have return value addresses, and postfix expressions
+			 */
+			switch(cast_expression_node->ast_node_type){
+				case AST_NODE_TYPE_IDENTIFIER: {
+					//Get the variable out of the identifier node
+					symtab_variable_record_t* result_variable = cast_expression_node->variable;
+
 					/**
 					 * If this is not already a memory region, then we need to flag it as one
 					 * for later so that the cfg constructor knows what we'll eventually need to
 					 * load. We need to exclude anything that is a data segment variable for
 					 * these checks
 					 */
-					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE
-						&& is_variable_data_segment_variable(cast_expr->variable) == FALSE){
-
-						//IMPORTANT - we need to flag this as a stack variable now
-						cast_expr->variable->storage_class = STORAGE_CLASS_STACK;
+					if(is_memory_region(result_variable->type_defined_as) == FALSE && is_variable_data_segment_variable(result_variable) == FALSE){
+						result_variable->storage_class = STORAGE_CLASS_STACK;
 					}
 
 					break;
+				}
 
 				/**
 				 * For indirect function calls, if we return the value by copy(i.e. structs and unions),
 				 * then we are able to take the memory address of these items.
 				 * Other items are completely ineligible
 				 */
-				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
 					//Extract the function type from here
-					function_signature = cast_expr->optional_storage.callee_signature;
+					function_type_t* function_signature = cast_expression_node->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
@@ -5180,17 +5188,17 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
 
-					//Otherwise we are fine, just get out
 					break;
+				}
 
 				/**
 				 * For function calls, if we return the value by copy(i.e. structs and unions),
 				 * then we are able to take the memory address of these items.
 				 * Other items are completely ineligible
 				 */
-				case AST_NODE_TYPE_FUNCTION_CALL:
+				case AST_NODE_TYPE_FUNCTION_CALL: {
 					//Extract the function type from here
-					function_signature = cast_expr->optional_storage.callee_signature;
+					function_type_t* function_signature = cast_expression_node->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
@@ -5200,8 +5208,8 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
 
-					//Otherwise we are fine, just get out
 					break;
+				}
 
 				//And we can handle a postfix expression
 				case AST_NODE_TYPE_POSTFIX_EXPR:
@@ -5249,6 +5257,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			is_assignable = FALSE;
 
 			break;
+		}
 
 		//Logical not case
 		case EXCLAMATION:
@@ -5326,7 +5335,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 		 * We must note that preincrement is not assignable at all
 		 */
 		case PLUSPLUS:
-		case MINUSMINUS:
+		case MINUSMINUS: {
 			//Check to see if it is valid
 			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
 
@@ -5357,10 +5366,15 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			is_assignable = FALSE;
 
 			break;
+		}
 
-		//In reality, we should never reach here
-		default:
-			return print_and_return_error("Fatal internal compiler error: invalid unary operation", parser_line_num);
+		/**
+		 * If we get here then there's a big problem, so panic out if we do
+		 */
+		default: {
+			trigger_ice_panic("Invalid unary operation detected in the parser\n");
+			break;
+		}
 	}
 
 	/**
