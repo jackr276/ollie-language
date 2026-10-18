@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include "../ast/ast.h"
 #include "../utils/stack/heapstack.h"
 #include "../utils/constants.h"
 
@@ -2958,8 +2957,11 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
 	//Initially it's null
 	dynamic_string_t namespace_name = INITIALIZE_DYNAMIC_STRING;
 
-	//If this is the default then get out
-	if(namespace_record->is_default == TRUE){
+	/**
+	 * The default namespace has no name at all, so just leave out of here
+	 * in this case
+	 */
+	if(namespace_record->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return namespace_name;
 	}
 
@@ -2973,7 +2975,7 @@ dynamic_string_t generate_fully_qualified_namespace_name(function_namespace_t* n
 	function_namespace_t* cursor = namespace_record;
 
 	//So long as we haven't hit the default
-	while(cursor->is_default == FALSE){
+	while(cursor->classification == NAMESPACE_CLASSIFICATION_CHILD){
 		//Hold onto this pointer
 		function_namespace_t* temp = cursor;
 
@@ -3013,8 +3015,10 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 	//What namespace are we in
 	function_namespace_t* namespace_contained_in = function->namespace_contained_in;
 
-	//If the function is in the default namespace there's nothing for us to do
-	if(namespace_contained_in->is_default == TRUE){
+	/**
+	 * f the function is in the default namespace there's nothing for us to do
+	 */
+	if(namespace_contained_in->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return clone_dynamic_string(&(function->func_name));
 	}
 
@@ -3028,7 +3032,7 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
 	function_namespace_t* cursor = namespace_contained_in;
 
 	//So long as we haven't hit the default
-	while(cursor->is_default == FALSE){
+	while(cursor->classification == NAMESPACE_CLASSIFICATION_CHILD){
 		//Hold onto this pointer
 		function_namespace_t* temp = cursor;
 
@@ -3066,8 +3070,10 @@ dynamic_string_t generate_fully_qualified_function_name(symtab_function_record_t
  * a freshly allocated dynamic string
  */
 dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t* variable, function_namespace_t* var_namespace){
-	//If the function is in the default namespace there's nothing for us to do
-	if(var_namespace->is_default == TRUE){
+	/**
+	 * If the variable is in the default namespace there's nothing for us to do
+	 */
+	if(var_namespace->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return clone_dynamic_string(&(variable->var_name));
 	}
 
@@ -3081,7 +3087,7 @@ dynamic_string_t generate_fully_qualified_variable_name(symtab_variable_record_t
 	function_namespace_t* cursor = var_namespace;
 
 	//So long as we haven't hit the default
-	while(cursor->is_default == FALSE){
+	while(cursor->classification == NAMESPACE_CLASSIFICATION_CHILD){
 		//Hold onto this pointer
 		function_namespace_t* temp = cursor;
 
