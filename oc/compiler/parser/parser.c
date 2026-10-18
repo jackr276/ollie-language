@@ -5073,43 +5073,28 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
  * 	TODO I WANT TO FIX AS WELL
  */
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side){
-	//For function call validation
-	function_type_t* function_signature;
-	//The lookahead token
-	lexitem_t lookahead;
-	//Is this assignable
-	u_int8_t is_assignable = TRUE;
-
-	//Let's see what we have
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	//Save this for searching
+	/**
+	 * The first token in the stream is the unary operator. We will get this
+	 * and hold onto its token for later
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	ollie_token_t unary_op_tok = lookahead.tok;
 
-	//If this is not a unary operator, we don't need to go any more
+	/**
+	 * We don't have a unary operator at all - if not then just push it back
+	 * and call the postfix expression helper
+	 */
 	if(is_unary_operator(unary_op_tok) == FALSE){
-		//Push it back
 		push_back_token(token_stream, &parser_line_num);
-
-		//Let this handle the heavy lifting
 		return postfix_expression(token_stream, side);
 	}
 
-	//Otherwise, if we get down here we know that we have a unary operator
-	
-	//One we get here, we have both nodes that we need
-	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
-	
-	//We'll first create the unary operator node for ourselves here
-	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
-	//Assign the operator to this
-	unary_op->unary_operator = lookahead.tok;
-
-	//We will process this as if we are on the "right hand side" of an equation, because we are
-	//still reading from items here
-	generic_ast_node_t* cast_expr = cast_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	//Let's check for errors
-	if(cast_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	/**
+	 * Process the cast expression. We treat this as if we are on the "right" side of an expression
+	 * regardless, because we are treating it as a result
+	 */
+	generic_ast_node_t* cast_expression_node = cast_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(cast_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid cast expression given after unary operator", parser_line_num);
 	}
 
@@ -5378,36 +5363,54 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			return print_and_return_error("Fatal internal compiler error: invalid unary operation", parser_line_num);
 	}
 
-	//If we have a constant here, we have a chance to do some optimizations
+	/**
+	 * If, by the time we get here, we have a constant operand and a compatible
+	 * expression, we will simplify the tree by folding the expression and the constant
+	 * together now
+	 */
 	if(cast_expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		//Go based on this
 		switch (unary_op_tok) {
-			case MINUS:
+			case MINUS: {
 				negate_constant_value(cast_expr);
 				return cast_expr;
+			}
 
-			case MINUSMINUS:
+			case MINUSMINUS: {
 				decrement_constant_value(cast_expr);
 				return cast_expr;
+			}
 
-			case PLUSPLUS:
+			case PLUSPLUS: {
 				increment_constant_value(cast_expr);
 				return cast_expr;
+			}
 
-			case EXCLAMATION:
+			case EXCLAMATION: {
 				logical_not_constant_value(cast_expr);
 				return cast_expr;
+			}
 
-			case B_NOT:
+			case B_NOT: {
 				bitwise_not_constant_value(cast_expr);
 				return cast_expr;
-			//Just do nothing
-			default:
+			}
+
+			default: {
 				break;
+			}
 		}
 	}
 
-	
+	/**
+	 * By the time we make it here, we're able to start constructing the unary expression
+	 * subtree with the node, operator and cast expression
+	 */
+	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
+	generic_ast_node_t* unary_op_node = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
+	unary_op_node->unary_operator = lookahead.tok;
+
+	//TODO MEMORY ACCESS REQUIRED
+
 	//The unary operator always comes first
 	add_child_node(unary_node, unary_op);
 
