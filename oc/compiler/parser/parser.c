@@ -4250,7 +4250,7 @@ loop_end:
 	asn_expr_node->line_number = current_line;
 
 	//We'll let this rule handle it
-	generic_ast_node_t* left_hand_unary = unary_expression(token_stream, SIDE_TYPE_LEFT);
+	generic_ast_node_t* left_hand_unary = initializer_expression(token_stream, SIDE_TYPE_LEFT);
 
 	//Fail out here
 	if(left_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
