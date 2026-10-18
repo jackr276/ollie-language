@@ -4847,19 +4847,33 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					break;
 				}
 
-				/**
-				 * Case 2: we are on the right hand side, so we are doing something
-				 * like y = *x + 2. In this case, we will need to load the value out
-				 * of said memory address and return that
-				 */
 				case SIDE_TYPE_RIGHT: {
-					//Emit and add this
-					instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), memory_address, dereferenced_type, line_number);
-					add_statement(current_block, load_instruction);
+					/**
+					 * Case 2: we are on the right hand side, so we are doing something
+					 * like y = *x + 2. In this case, we will need to load the value out
+					 * of said memory address and return that. An operation like this will
+					 * have cause the parser to explicit flag this as requiring memory access,
+					 * so we'll go through and emit the load
+					 */
+					if(unary_expression_parent->memory_access_required == TRUE){
+						//Emit and add this
+						instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), memory_address, dereferenced_type, line_number);
+						add_statement(current_block, load_instruction);
 
-					//This one's assignee is our overall assignee
-					generic_results.type = CFG_RESULT_TYPE_VAR;
-					generic_results.result_value.result_var = load_instruction->operands.oir.assignee;
+						//This one's assignee is our overall assignee
+						generic_results.type = CFG_RESULT_TYPE_VAR;
+						generic_results.result_value.result_var = load_instruction->operands.oir.assignee;
+
+					/**
+					 * Case 3: we are on the right hand side, but the parser explicitly flagged this
+					 * as not requiring memory access. In this case, we'll just package up the return
+					 * address as usual
+					 */
+					} else {
+						generic_results.type = CFG_RESULT_TYPE_VAR;
+						generic_results.result_value.result_var = memory_address;
+					}
+
 					break;
 				}
 			}

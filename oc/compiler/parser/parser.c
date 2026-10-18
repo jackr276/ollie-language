@@ -703,51 +703,12 @@ static void propogate_no_memory_access_required_flag(generic_ast_node_t* node){
 			return;
 		}
 
-		//Whatever this is we aren't interested
-		default:
-			return;
-	}
-}
-
-
-/**
- * Propogate the memory access required flag down the chain. This is specifically
- * used for things like unary expressions(pointer dereference) where we are going
- * to want memory access to take place
- *
- * This rule specifically stops drilling down whenever we hit the uppermost node
- * that requires memory access. So for example with a postfix expression if we're
- * doing *(*a + b) = ..., we'll only flag the topmost unary expression tree
- * as requiring memory access in this case
- */
-static void propogate_memory_access_required_flag(generic_ast_node_t* node){
-	//Base case - we have nothing so just leave
-	if(node == NULL){
-		return;
-	}
-
-	switch(node->ast_node_type){
 		/**
-		 * Flag that we do need memory access for the postfix
-		 * expression
-		 */
-		case AST_NODE_TYPE_POSTFIX_EXPR: {
-			node->memory_access_required = TRUE;
-			return;
-		}
-
-		/**
-		 * For unary expressions - only flag that memory access is required
-		 * *IF* we end up with a STAR operator
+		 * Flag here that we do not need a dereference on the 
+		 * unary expression if we have one
 		 */
 		case AST_NODE_TYPE_UNARY_EXPR: {
-			generic_ast_node_t* unary_op_child = node->first_child;
-
-			//Seeing "*" means that we have a dereference here
-			if(unary_op_child->unary_operator == STAR){
-				node->memory_access_required = TRUE;
-			}
-
+			node->memory_access_required = FALSE;
 			return;
 		}
 
@@ -4127,6 +4088,16 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 	//Just give this back as a flag that we're fine
 	return left_hand_expression_tree;
 }
+
+
+
+static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token_stream){
+	generic_ast_node_t* left_hand_expression = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+
+	return NULL;
+}
+
+
 
 
 /**
