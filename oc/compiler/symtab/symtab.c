@@ -1494,35 +1494,21 @@ function_namespace_t* create_default_namespace(function_symtab_t* symtab){
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
  * child of the current one
+ *
+ * NOTE: this will *NOT* add the classification or the hash. That will only be added once we insert
+ * this namespace underneath whatever its parent namespace is
  */
 function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name){
-	//Allocate it
 	function_namespace_t* namespace = calloc(1, sizeof(function_namespace_t));
 
-	//It's not the default
-	namespace->is_default = FALSE;
-
-	//Allocate the name
+	/**
+	 * Add in the name. Note that we cannot create the hash right now because
+	 * we don't know if this is a primary or secondary namespace. That will
+	 * only be determined once add this underneath its parent namespace
+	 */
 	namespace->namespace_name = dynamic_string_alloc();
-
-	//Set the name in
 	dynamic_string_set(&(namespace->namespace_name), name);
 
-	//If this needs to be allocated then we will do so
-	if(symtab->current->child_namespaces.internal_array == NULL){
-		symtab->current->child_namespaces = dynamic_array_alloc();
-	}
-
-	//This namespace is going to be added as the child of the current one
-	dynamic_array_add(&(symtab->current->child_namespaces), namespace);
-
-	//Flag the current namespace as this one's parent
-	namespace->parent_namespace = symtab->current;
-
-	//Also add this to our overall array of all namespaces
-	dynamic_array_add(&(symtab->namespaces), namespace);
-	
-	//Now give it back
 	return namespace;
 }
 

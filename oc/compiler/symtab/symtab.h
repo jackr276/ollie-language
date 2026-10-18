@@ -753,6 +753,9 @@ function_namespace_t* create_default_namespace(function_symtab_t* symtab);
 /**
  * Create a namespace record and add it into the symtab. This will create the new namespace as a
  * child of the current one
+ *
+ * NOTE: this will *NOT* add the classification or the hash. That will only be added once we insert
+ * this namespace underneath whatever its parent namespace is
  */
 function_namespace_t* create_namespace_record(function_symtab_t* symtab, char* name);
 
