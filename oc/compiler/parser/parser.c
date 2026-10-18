@@ -659,6 +659,13 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 
 
 /**
+ * TODO - IDEA is to also have something that will convert a tree from left-to-right. This should
+ * be easy enough for us to do. This will allow us to completely move away from the way that we currently
+ * handle assignment expressions, which in my opinion sucks
+ */
+
+
+/**
  * Propogate the no memory access needed flag down recursively until we hit a postfix
  * expression(our "root" in this case) or nothing. This is important because we cannot
  * be dereferencing(memory accessing) if we need to perform a copy assignment
