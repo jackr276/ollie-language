@@ -9956,6 +9956,14 @@ static inline u_int8_t convert_memory_copy_statements_into_loads_and_stores(dyna
 }
 
 
+static inline u_int8_t fold_addressing_operations_into_loads_and_stores(dynamic_array_t* function_blocks){
+	u_int8_t experienced_fold = TRUE;
+
+
+	return experienced_fold;
+}
+
+
 /**
  * To run the instruction simplifier we will go in a do-while loop until the "simplifier_pass" returns
  * FALSE. Returning FALSE means that nothing changed during that run of the simplifier. Between each
@@ -10080,6 +10088,11 @@ static void simplify(cfg_t* cfg){
 			 */
 			run_simplifier(&(function->function_blocks), function_entry);
 		}
+
+		/**
+		 * TODO MAYBE HERE
+		 */
+		fold_addressing_operations_into_loads_and_stores(&(function->function_blocks));
 	}
 }
 
