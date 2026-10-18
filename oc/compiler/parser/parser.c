@@ -2426,8 +2426,7 @@ static inline u_int8_t validate_variable_access(symtab_variable_record_t* variab
 	function_namespace_t* current_namespace = function_symtab->current;
 
 	/**
-	 * Easy performance enhancement - skip the whole BFS allocation
-	 * if they'er the same
+	 * No need to search if this is the case
 	 */
 	if(namespace_contained_in == current_namespace){
 		return SUCCESS;
@@ -3700,7 +3699,7 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		 * under default or under our current namespace, so we fail out
 		 */
 		if(namespace_cursor == NULL){
-			sprintf(info, "No namespace named \"%s\" has yet been declared", ident_token.lexeme.string);
+			sprintf(info, "No namespace named \"%s\" has yet been declared", namespace_name);
 			return print_and_return_error(info, parser_line_num);
 		}
 
@@ -15214,7 +15213,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		insert_namespace_record_under_parent(current_namespace, new_namespace);
 
 		//"Enter" into it, and update our current pointer to be this namespace
-		enter_namespace(function_symtab, current_namespace);
+		enter_namespace(function_symtab, new_namespace);
 		current_namespace = new_namespace;
 
 		/**

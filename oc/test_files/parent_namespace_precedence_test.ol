@@ -21,6 +21,6 @@ namespace ambiguous {
 
 
 pub fn main() -> i32 {
-	OUNIT: [EXIT_STATUS = 7]
+	OUNIT: [exit_status = 7]
 	ret @ambiguous::my_fn() + @my_ns1::ambiguous::my_fn();
 }
