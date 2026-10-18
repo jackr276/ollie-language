@@ -728,11 +728,8 @@ function_namespace_t* create_default_namespace();
 function_namespace_t* create_namespace_record(char* name);
 
 /**
- * Insert the given, fully allocated child namespace beneat the given parent. This helper
- * will compute the hash of the child's name and determine the namespace classification
- * of the child. If the parent is the default namespace, the child is classified as a
- * "Primary Namespace". If the parent is a "Primary" or "Secondary" namespace, then the
- * child is classified as a "Secondary Namespace"
+ * Insert the given, fully allocated child namespace beneat the given parent inside of the
+ * parent's hashtable
  */
 void insert_namespace_record_under_parent(function_namespace_t* parent, function_namespace_t* child);
 

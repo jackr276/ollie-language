@@ -1453,36 +1453,35 @@ function_namespace_t* create_namespace_record(char* name){
 
 
 /**
- * Insert the given, fully allocated child namespace beneat the given parent. This helper
- * will compute the hash of the child's name and determine the namespace classification
- * of the child. If the parent is the default namespace, the child is classified as a
- * "Primary Namespace". If the parent is a "Primary" or "Secondary" namespace, then the
- * child is classified as a "Secondary Namespace"
+ * Insert the given, fully allocated child namespace beneat the given parent inside of the
+ * parent's hashtable
  */
 void insert_namespace_record_under_parent(function_namespace_t* parent, function_namespace_t* child){
-	/**
-	 * First get the classification. If the parent is the default namespace,
-	 * then the child is considered a primary namespace. If the parent
-	 * is a primary or secondary namespace, then the child is a secondary namespace
-	 */
-	switch(parent->classification){
-		case NAMESPACE_CLASSIFICATION_DEFAULT:
-			child->classification = NAMESPACE_CLASSIFICATION_PRIMARY;
-			child->hash = hash_primary_namespace(child->namespace_name.string);
-			break;
+	//First get a pointer to the area where we want to insert this
+	function_namespace_t* cursor = parent->child_namespaces[child->hash];
 
-		case NAMESPACE_CLASSIFICATION_PRIMARY:
-		case NAMESPACE_CLASSIFICATION_SECONDARY:
-			child->classification = NAMESPACE_CLASSIFICATION_SECONDARY;
-			child->hash = hash_secondary_namespace(child->namespace_name.string);
-			break;
+	/**
+	 * Case 1: no collision - we'll insert as the top level record
+	 */
+	if(cursor == NULL){
+		parent->child_namespaces[child->hash] = child;
+
+	/**
+	 * Case 2: collision, we'll need to work our way down
+	 * until the last record in the chain and add this
+	 * onto there
+	 */
+	} else {
+		while(cursor->next != NULL){
+			cursor = cursor->next;
+		}
+
+		//Add this onto the chain
+		cursor->next = child;
 	}
 
-
-	parent-t>
-	
-
-
+	//Finally update this pointer value
+	child->parent_namespace = parent;
 }
 
 
