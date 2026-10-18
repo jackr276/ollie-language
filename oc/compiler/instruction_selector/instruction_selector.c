@@ -4173,6 +4173,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
 			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
 			addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
+			addressing_operation->operands.oir.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
 
 			//Now the addressing mode
 			addressing_operation->addressing_mode = lea_statement->addressing_mode;
