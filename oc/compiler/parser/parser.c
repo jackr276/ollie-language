@@ -367,6 +367,25 @@ static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
 
 
 /**
+ * Is a given token a unary operator
+ */
+static inline u_int8_t is_unary_operator(ollie_token_t tok){
+	switch (tok) {
+		case SINGLE_AND:
+		case STAR:
+		case MINUS:
+		case MINUSMINUS:
+		case PLUSPLUS:
+		case EXCLAMATION:
+		case B_NOT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given type returned by copy from a function? Stack and union
  * types are eligible for this
  */
@@ -4824,26 +4843,7 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
  *
  * TODO REWRITE THIS
  */
-static generic_ast_node_t* emit_postoperation_code(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
-
-	//Otherwise let's allocate this
-	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
-
-	//The parent node is a child of this one
-	add_child_node(postoperation_node, parent_node);
-
-	//Saved the inferred type of this postoperation node as the current type
-	postoperation_node->inferred_type = current_type;
-
-	postoperation_node->line_number = parser_line_num;
-	//Store the unary operator too
-	postoperation_node->unary_operator = operator;
-
-	//Add this in here
-	postoperation_node->variable = parent_node->variable;
-
-	//This is *not* assignable
-	postoperation_node->is_assignable = FALSE;
+static inline generic_ast_node_t* emit_postoperation_code(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
 
 	//And give it back
 	return postoperation_node;
@@ -4912,57 +4912,68 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 	generic_ast_node_t* temp_holder = NULL;
 	generic_ast_node_t* operator_node = NULL;
 
-	//TODO FLAG IF WEVE SEEN AN ACCESSOR
-	//
-	//
-	//
-	//
-	//TODO YOU NEED TO DOC THIS
+	/**
+	 * Have we seen a postfix node that is an accessor(array/struct/union) at all?
+	 * We'll need this flag to know if a memory access required flag is needed. By
+	 * default assume no
+	 */
 	u_int8_t seen_accessor = FALSE;
 
-	//So long as we keep seeing operators here, we keep chaining them
+	/**
+	 * Infinite loop until we see a terminal sequence(++ or --) or we don't
+	 * see any more postfix operators
+	 */
 	while(TRUE){
-		//Refresh the token
+		/**
+		 * Refresh the lookahead and current type pointer
+		 */
 		lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 		ollie_token_t postfix_operator = lookahead.tok;
-
-		//Let's grab whatever type that we currently have
 		generic_type_t* current_type = parent->inferred_type;
 
 		switch(postfix_operator){
-			case L_BRACKET:
+			case L_BRACKET: {
 				//We'll push this onto the grouping stack for later matching
 				push_token(&grouping_stack, lookahead);
 
 				operator_node = array_accessor(token_stream, current_type);
 				seen_accessor = TRUE;
 				break;
+			}
 
-			case COLON:
+			case COLON: {
 				operator_node = struct_accessor(token_stream, current_type);
 				seen_accessor = TRUE;
 				break;
+			}
 
-			case FAT_ARROW:
+			case FAT_ARROW: {
 				operator_node = struct_pointer_accessor(token_stream, current_type);
 				seen_accessor = TRUE;
 				break;
+			}
 
-			case DOT:
+			case DOT: {
 				operator_node = union_accessor(token_stream, current_type);
 				seen_accessor = TRUE;
 				break;
+			}
 
-			case ARROW:
+			case ARROW: {
 				operator_node = union_pointer_accessor(token_stream, current_type);
 				seen_accessor = TRUE;
 				break;
+			}
 
-			//Postincrement
+			/**
+			 * Postincrement and postdecrement represent a terminal sequence. Once we see
+			 * this we know that we're exiting the function so we need to do all of our packaging
+			 */
 			case PLUSPLUS:
-			case MINUSMINUS:
-
-				//Let's first check and see if this is valid. If it's not we fail out
+			case MINUSMINUS: {
+				/**
+				 * Verify that we're able to do this operation on the current type
+				 */
 				if(is_unary_operation_valid_for_type(current_type, postfix_operator) == FALSE){
 					sprintf(info, "Type %s is invalid for operator %s", get_full_type_name_from_type(current_type), operator_token_to_string(postfix_operator));
 					return print_and_return_error(info, parser_line_num);
@@ -4976,18 +4987,33 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 					return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 				}
 
-
-				//TODO WTF IS THIS FOR???
-				//Copy this over
+				/**
+				 * Propogate the variable pointer up to the parent as well so that we don't
+				 * need to drill down to access it. Also, if we've seen at least one accessor,
+				 * flag that we do require memory access in this postfix expression
+				 */
 				parent->variable = primary_expression_node->variable;
 				if(seen_accessor == TRUE){
-					//Flag the parent as final - you can't go on past this
 					parent->memory_access_required = TRUE;
 				}
 
+				/**
+				 * Now let's allocate and package up the postoperation code. It carries the same type
+				 * as our current type. These nodes themselves are never assignable
+				 */
+				generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
+				postoperation_node->unary_operator = postfix_operator;
+				postoperation_node->inferred_type = current_type;
+				postoperation_node->line_number = parser_line_num;
+				postoperation_node->is_assignable = FALSE;
 
-				//We let this rule handle everything
-				return emit_postoperation_code(current_type, parent, lookahead.tok, side);
+				/**
+				 * IMPORTANT - the parent node is a child of this given node. Since it is
+				 * the highest node in the tree we'll return that
+				 */
+				add_child_node(postoperation_node, parent);
+				return postoperation_node;
+			}
 
 			//When we hit this, it means that we're done. We return the parent node in this case
 			default:
@@ -5033,27 +5059,6 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 
 	//We should never get here - just to make the static analyzer happy
 	return parent;
-}
-
-
-/**
- * Is a given token a unary operator
- */
-static u_int8_t is_unary_operator(ollie_token_t tok){
-	//Switch on tok
-	switch (tok) {
-		case SINGLE_AND:
-		case STAR:
-		case MINUS:
-		case MINUSMINUS:
-		case PLUSPLUS:
-		case EXCLAMATION:
-		case B_NOT:
-			return TRUE;
-		//By default no
-		default:
-			return FALSE;
-	}
 }
 
 
