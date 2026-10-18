@@ -479,7 +479,7 @@ dynamic_string_t generate_fully_qualified_namespace_name_for_mangling(function_n
 	dynamic_string_t namespace_name = INITIALIZE_DYNAMIC_STRING;
 
 	//If this is the default then get out
-	if(namespace_record->is_default == TRUE){
+	if(namespace_record->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return namespace_name;
 	}
 
@@ -493,7 +493,7 @@ dynamic_string_t generate_fully_qualified_namespace_name_for_mangling(function_n
 	function_namespace_t* cursor = namespace_record;
 
 	//So long as we haven't hit the default
-	while(cursor->is_default == FALSE){
+	while(cursor->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		//Hold onto this pointer
 		function_namespace_t* temp = cursor;
 
@@ -578,7 +578,7 @@ static inline void mangle_function_names_in_namespace(function_namespace_t* name
 	 * onto it. Otherwise if it is the default namespace we don't need to 
 	 * worry about the name
 	 */
-	if(namespace->is_default == FALSE){
+	if(namespace->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		/**
 		 * Now run through every single function record in this
 		 * namespace and mangle all of their names individually
@@ -662,7 +662,7 @@ static inline void mangle_function_names_in_namespace(function_namespace_t* name
  */
 static inline void mangle_variable_names_in_namespace(function_namespace_t* namespace, dynamic_string_t* old_name, dynamic_string_t* namespace_name){
 	//Unlike with functions, the default namespace does not concern us
-	if(namespace->is_default == TRUE){
+	if(namespace->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 		return;
 	}
 
@@ -699,6 +699,43 @@ static inline void mangle_variable_names_in_namespace(function_namespace_t* name
 
 
 /**
+ * Take a namespace, generate it's fully qualified namespace name, mangle the
+ * names of all functions and variables inside of it, and then recursively
+ * do this to all of its child namespaces. We have a reusable dynamic string
+ * that we pass around to cut down on allocations
+ */
+static void mangle_variable_and_function_names_rec(function_namespace_t* namespace, dynamic_string_t* old_name){
+	//Generate a fully qualified namespace name for us to use
+	dynamic_string_t namespace_name = generate_fully_qualified_namespace_name_for_mangling(namespace);
+
+	/**
+	 * Call out to each rule individually and pass in the reusable "old_name" dynamic string
+	 * and the reusable "namespace_name" so that we do not have to regenerate it for each
+	 * record
+	 */
+	mangle_function_names_in_namespace(namespace, old_name, &namespace_name);
+	mangle_variable_names_in_namespace(namespace, old_name, &namespace_name);
+
+	/**
+	 * Now run through the entire namespace keyspace and call this function for
+	 * all child namespaces
+	 */
+	for(int32_t i = 0; i < NAMESPACE_KEYSPACE; i++){
+		function_namespace_t* cursor = namespace->child_namespaces[i];
+
+		/**
+		 * Remember that they can be chained, so we'll need to keep
+		 * going so long as we have chained records
+		 */
+		while(cursor != NULL){
+			mangle_variable_and_function_names_rec(cursor, old_name);
+			cursor = cursor->next;
+		}
+	}
+}
+
+
+/**
  * Mangle all of the function and variables names so that we can guarantee
  * uniqueness in the final assembly when the time comes
  *
@@ -712,25 +749,8 @@ static void mangle_variable_and_function_names(function_symtab_t* function_symta
 	//Reusable name for concatenation
 	dynamic_string_t old_name = dynamic_string_alloc();
 
-	/**
-	 * For each namespace:
-	 * 	1.) mangle all functions that are in the namespace
-	 * 	2.) mangle all global variables that are in the namespace
-	 */
-	for(int32_t i = 0; i < function_symtab->namespaces.current_index; i++){
-		function_namespace_t* namespace = dynamic_array_get_at(&(function_symtab->namespaces), i);
-
-		//Generate a fully qualified namespace name for us to use
-		dynamic_string_t namespace_name = generate_fully_qualified_namespace_name_for_mangling(namespace);
-
-		/**
-		 * Call out to each rule individually and pass in the reusable "old_name" dynamic string
-		 * and the reusable "namespace_name" so that we do not have to regenerate it for each
-		 * record
-		 */
-		mangle_function_names_in_namespace(namespace, &old_name, &namespace_name);
-		mangle_variable_names_in_namespace(namespace, &old_name, &namespace_name);
-	}
+	//Kick off the recursive helper using the default(topmost) namespace
+	mangle_variable_and_function_names_rec(function_symtab->default_namespace, &old_name);
 
 	//This is useless now so we can scrap it
 	dynamic_string_dealloc(&old_name);
