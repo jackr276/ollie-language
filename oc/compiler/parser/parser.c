@@ -3718,17 +3718,18 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 		function_namespace_t* namespace_cursor = lookup_namespace_under_parent(function_symtab->current, namespace_name);
 
 		/**
-		 * 
+		 * Option 2: we couldn't find it underneath us, but it may exist in the overall scope. This would
+		 * be referred to as a fully qualified lookup where we're searching underneath the default
+		 * scope
 		 */
 		if(namespace_cursor == NULL){
+			namespace_cursor = lookup_namespace_under_default(function_symtab, namespace_name);
 		}
 
-
-		//Lookup the first namespace in lookahead(we know it's an ident)
-		//TODO DUAL LOOKUPS
-		function_namespace_t* namespace_cursor = lookup_namespace(function_symtab, ident_token.lexeme.string);
-
-		//We couldn't find it so fail out
+		/**
+		 * If we get here and we've still found nothing, it means that this namespace does not exist
+		 * under default or under our current namespace, so we fail out
+		 */
 		if(namespace_cursor == NULL){
 			sprintf(info, "No namespace named \"%s\" has yet been declared", ident_token.lexeme.string);
 			return print_and_return_error(info, parser_line_num);

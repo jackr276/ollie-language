@@ -883,7 +883,7 @@ symtab_variable_record_t* lookup_variable_in_namespace(function_namespace_t* nam
  * Lookup a namespace underneath the default namespace. Whenever we do fully qualified lookups we will
  * do this as a secondary lookup to see if the user is starting globally
  */
-function_namespace_t* lookup_namespace_globally(function_symtab_t* symtab, char* name);
+function_namespace_t* lookup_namespace_under_default(function_symtab_t* symtab, char* name);
 
 /**
  * Lookup a namespace under the given parent namespace. This is the only way to lookup
