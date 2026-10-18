@@ -150,6 +150,16 @@ typedef enum {
 
 
 /**
+ * A namespace may be the default namespace, or it may be
+ * a child namespace underneath that
+ */
+typedef enum {
+	NAMESPACE_CLASSIFICATION_DEFAULT,
+	NAMESPACE_CLASSIFICATION_CHILD,
+} namespace_classification_t;
+
+
+/**
  * The symtab function record. This stores data about the function's name, parameter
  * numbers, parameter types, return types, etc.
  *
@@ -466,6 +476,8 @@ struct function_namespace_t {
 	 * underneath this given one
 	 */
 	function_namespace_t* child_namespaces[NAMESPACE_KEYSPACE];
+	//Currently is just default or not but that may change
+	namespace_classification_t classification;
 };
 
 

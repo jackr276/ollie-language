@@ -1426,6 +1426,9 @@ function_namespace_t* create_default_namespace(){
 	namespace->namespace_name = dynamic_string_alloc();
 	dynamic_string_set(&(namespace->namespace_name), "^^default^^");
 
+	//This is the default record
+	namespace->classification = NAMESPACE_CLASSIFICATION_DEFAULT;
+
 	//Now return it
 	return namespace;
 }
@@ -1447,6 +1450,9 @@ function_namespace_t* create_namespace_record(char* name){
 
 	//Compute the hash for this namespace
 	namespace->hash = hash_namespace(name);
+
+	//This is not the default so mark as child
+	namespace->classification = NAMESPACE_CLASSIFICATION_CHILD;
 
 	return namespace;
 }
@@ -3375,65 +3381,8 @@ static void deallocate_namespace_rec(function_namespace_t* namespace){
  * Provide a function that will destroy the function symtab completely
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
-	//For temporary holding
-	function_namespace_t* sheaf;
-	symtab_function_record_t* record;
-	symtab_function_record_t* temp;
-
-
-
-	//Run through all of the namespaces 
-	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
-		//Get the sheaf out
-		sheaf = dynamic_array_get_at(&(symtab->namespaces), _);
-
-		//Now go through all records
-		for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
-			record = sheaf->records[i];
-
-			//We could have chaining here, so run through just in case
-			while(record != NULL){
-				temp = record;
-				record = record->next;
-
-				//Destroy the call graph infrastructure
-				dynamic_set_dealloc(&(temp->called_functions));
-
-				//Destroy the block storage
-				dynamic_array_dealloc(&(temp->function_blocks));
-
-				//Destroy the parameters
-				dynamic_array_dealloc(&(temp->function_parameters));
-
-				//Destroy the overload table
-				dynamic_array_dealloc(&(temp->overload_table));
-
-				//Dealloate the function type
-				type_dealloc(temp->signature);
-
-				//Deallocate the data area itself
-				stack_data_area_dealloc(&(temp->local_stack));
-
-				//Destroy the label symtab if it exists
-				label_symtab_dealloc(temp->user_defined_labels);
-
-				//Finally free the function
-				free(temp);
-			}
-		}
-
-		//Destroy the name
-		dynamic_string_dealloc(&(sheaf->namespace_name));
-
-		//Destroy the array of children
-		dynamic_array_dealloc(&(sheaf->child_namespaces));
-
-		//Free the sheaf itself
-		free(sheaf);
-	}
-
-	//Deallocate the namespace array
-	dynamic_array_dealloc(&(symtab->namespaces));
+	//Recursively deallocate all namespaces and functions
+	deallocate_namespace_rec(symtab->default_namespace);
 
 	//Deallocate the id to function map
 	dynamic_array_dealloc(&(symtab->id_to_function_mapping));
