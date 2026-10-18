@@ -2254,18 +2254,25 @@ function_namespace_t* lookup_namespace_globally(function_symtab_t* symtab, char*
  * a namespace, because all namespace lookups are nested
  */
 function_namespace_t* lookup_namespace_under_parent(function_namespace_t* parent_namespace, char* name){
-	//Run through the children of the current parent
-	for(int32_t i = 0; i < parent_namespace->child_namespaces.current_index; i++){
-		//Extract the namespace
-		function_namespace_t* namespace = dynamic_array_get_at(&(parent_namespace->child_namespaces), i);
+	//Compute the hash of our namespace
+	int64_t hash = hash_namespace(name);
 
-		//If they're a match then we're out
-		if(strcmp(namespace->namespace_name.string, name) == 0){
-			return namespace;
+	//Get the cursor
+	function_namespace_t* cursor = parent_namespace->child_namespaces[hash];
+
+	/**
+	 * Remember that we could have had collisions, so we'll now need to go through
+	 * and compare the namepsace name on the cursor with our name until we find a match
+	 */
+	while(cursor != NULL){
+		if(strncmp(cursor->namespace_name.string, name, cursor->namespace_name.current_length) == 0){
+			return cursor;
 		}
+
+		cursor = cursor->next;
 	}
 
-	//If we got to here then we found nothing
+	//If we made it here then we have nothing
 	return NULL;
 }
 
@@ -3301,6 +3308,70 @@ void finalize_function_symtab(function_symtab_t* symtab){
 
 
 /**
+ * Do everything needed to deallocate a function record
+ */
+static inline void deallocate_function_record(symtab_function_record_t* record){
+	//Destroy the call graph infrastructure
+	dynamic_set_dealloc(&(record->called_functions));
+
+	//Destroy the block storage
+	dynamic_array_dealloc(&(record->function_blocks));
+
+	//Destroy the parameters
+	dynamic_array_dealloc(&(record->function_parameters));
+
+	//Destroy the overload table
+	dynamic_array_dealloc(&(record->overload_table));
+
+	//Dealloate the function type
+	type_dealloc(record->signature);
+
+	//Deallocate the data area itself
+	stack_data_area_dealloc(&(record->local_stack));
+
+	//Destroy the label symtab if it exists
+	label_symtab_dealloc(record->user_defined_labels);
+
+	//Finally free the function
+	free(record);
+}
+
+
+static void deallocate_namespace_rec(function_namespace_t* namespace){
+	//First run through and deallocate all of the functions
+	for(int32_t i = 0; i < FUNCTION_KEYSPACE; i++){
+		symtab_function_record_t* record = namespace->records[i];
+
+		//They can be chained so this is necessary
+		while(record != NULL){
+			symtab_function_record_t* temp = record;
+			record = record->next;
+
+			deallocate_function_record(temp);
+		}
+	}
+
+	//Now go through and deallocate all child namepsaces
+	for(int32_t i = 0; i < NAMESPACE_KEYSPACE; i++){
+		//Get the child namespace out
+		function_namespace_t* record = namespace->child_namespaces[i];
+
+		//These can be chained so this is necessary
+		while(record != NULL){
+			function_namespace_t* temp = record;
+			record = record->next;
+
+			deallocate_namespace_rec(temp);
+		}
+	}
+
+	//Finally free this record itself
+	free(namespace);
+}
+
+
+
+/**
  * Provide a function that will destroy the function symtab completely
  */
 void function_symtab_dealloc(function_symtab_t* symtab){
@@ -3308,6 +3379,8 @@ void function_symtab_dealloc(function_symtab_t* symtab){
 	function_namespace_t* sheaf;
 	symtab_function_record_t* record;
 	symtab_function_record_t* temp;
+
+
 
 	//Run through all of the namespaces 
 	for(int32_t _ = 0; _ < symtab->namespaces.current_index; _++){
