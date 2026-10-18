@@ -5069,8 +5069,6 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
  * 								| ! 
  * 								| ++ 
  * 								| --
- *
- * 	TODO I WANT TO FIX AS WELL
  */
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side){
 	/**
@@ -5375,31 +5373,31 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 	 * expression, we will simplify the tree by folding the expression and the constant
 	 * together now
 	 */
-	if(cast_expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
+	if(cast_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
 		switch (unary_op_tok) {
 			case MINUS: {
-				negate_constant_value(cast_expr);
-				return cast_expr;
+				negate_constant_value(cast_expression_node);
+				return cast_expression_node;
 			}
 
 			case MINUSMINUS: {
-				decrement_constant_value(cast_expr);
-				return cast_expr;
+				decrement_constant_value(cast_expression_node);
+				return cast_expression_node;
 			}
 
 			case PLUSPLUS: {
-				increment_constant_value(cast_expr);
-				return cast_expr;
+				increment_constant_value(cast_expression_node);
+				return cast_expression_node;
 			}
 
 			case EXCLAMATION: {
-				logical_not_constant_value(cast_expr);
-				return cast_expr;
+				logical_not_constant_value(cast_expression_node);
+				return cast_expression_node;
 			}
 
 			case B_NOT: {
-				bitwise_not_constant_value(cast_expr);
-				return cast_expr;
+				bitwise_not_constant_value(cast_expression_node);
+				return cast_expression_node;
 			}
 
 			default: {
@@ -5416,24 +5414,22 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 	generic_ast_node_t* unary_op_node = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
 	unary_op_node->unary_operator = lookahead.tok;
 
-	//TODO MEMORY ACCESS REQUIRED
-
-	//The unary operator always comes first
-	add_child_node(unary_node, unary_op);
-
-	//The cast expression will be linked in last
-	add_child_node(unary_node, cast_expr);
-
-	//Store the type that we have here
+	/**
+	 * For the unary node, we need to store the return type, the memory access
+	 * flag and the assignability flag
+	 */
 	unary_node->inferred_type = return_type;
-	//Store the line number
-	unary_node->line_number = parser_line_num;
-	//Store the variable
-	unary_node->variable = cast_expr->variable;
-	//Is it assignable
+	unary_node->memory_access_required = memory_access_required;
 	unary_node->is_assignable = is_assignable;
+	unary_node->line_number = parser_line_num;
+	unary_node->variable = cast_expression_node->variable;
 
-	//Finally we're all done, so we can just give this back
+	/**
+	 * The unary operator is always first, followed by the cast expression
+	 */
+	add_child_node(unary_node, unary_op_node);
+	add_child_node(unary_node, cast_expression_node);
+
 	return unary_node;
 }
 
