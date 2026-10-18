@@ -3707,7 +3707,25 @@ static inline generic_ast_node_t* identifier(ollie_token_stream_t* token_stream,
 	 * function name or variable name for either a function pointer or a global variable
 	 */
 	} else {
+		//Extract this for convenience
+		char* namespace_name = ident_token.lexeme.string;
+
+		/**
+		 * Option 1: this namespace exists as a child of the "current" namespace, in which
+		 * case we're doing what's called a partially qualified lookup that really only exists 
+		 * underneath us. This is always the preferred lookup type initially
+		 */
+		function_namespace_t* namespace_cursor = lookup_namespace_under_parent(function_symtab->current, namespace_name);
+
+		/**
+		 * 
+		 */
+		if(namespace_cursor == NULL){
+		}
+
+
 		//Lookup the first namespace in lookahead(we know it's an ident)
+		//TODO DUAL LOOKUPS
 		function_namespace_t* namespace_cursor = lookup_namespace(function_symtab, ident_token.lexeme.string);
 
 		//We couldn't find it so fail out
@@ -15205,7 +15223,7 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		//If we found one, then we can't do this
 		if(found_namespace != NULL){
 			//Accurate printing based on whether or not we're in the default namespace
-			if(function_symtab->current->is_default == TRUE){
+			if(function_symtab->current->classification == NAMESPACE_CLASSIFICATION_DEFAULT){
 				sprintf(info, "Namespace \"%s\" has already been declared under the top level namespace",
 							generate_fully_qualified_namespace_name(found_namespace).string);
 			} else {
@@ -15218,25 +15236,23 @@ static generic_ast_node_t* namespace_declaration(ollie_token_stream_t* stream){
 		}
 
 		/**
-		 * Now that we are certain that this is not a duplicate, we will create this new namepace
+		 * Now that we are certain that this is not a duplicate, we will create and insert this new namepace
 		 * underneath the current one that we have. Once we've done this, this new namespace will be the
 		 * current one
 		 */
-		//TODO HERE
-		function_namespace_t* new_namepsace = create_namespace_record(function_symtab, namespace_name);
+		function_namespace_t* new_namespace = create_namespace_record(namespace_name);
+		insert_namespace_record_under_parent(current_namespace, new_namespace);
 
-		//This now is the current namespace
-		current_namespace = new_namepsace;
-
-		//Enter this new namespace
+		//"Enter" into it, and update our current pointer to be this namespace
 		enter_namespace(function_symtab, current_namespace);
+		current_namespace = new_namespace;
 
 		/**
 		 * All namespaces by definition have their own new variable scope
 		 * and type scope associated with them. As such once we've created
 		 * this namespace  we'll need to create a new scope and save the association
 		 */
-		initialize_variable_scope(variable_symtab, NULL, new_namepsace);
+		initialize_variable_scope(variable_symtab, NULL, new_namespace);
 		initialize_type_scope(type_symtab);
 		current_namespace->related_variable_sheaf = variable_symtab->current;
 
