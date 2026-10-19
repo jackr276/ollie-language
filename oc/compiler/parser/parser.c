@@ -4218,7 +4218,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		 * to do this on the old LHS tree, not the new one, in case any type incompatibilities are shook out
 		 * by this. If this fails then we're done
 		 */
-		generic_type_t* binary_operation_final_type = determine_compatability_and_coerce(type_symtab, &(left_hand_expression->inferred_type), &(right_hand_expression->inferred_type), binary_operator);
+		generic_type_t* binary_operation_final_type = determine_type_compatability_for_expression(type_symtab, left_hand_expression, right_hand_expression, binary_operator);
 		if(binary_operation_final_type == NULL){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}

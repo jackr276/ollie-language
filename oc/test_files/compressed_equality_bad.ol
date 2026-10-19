@@ -6,7 +6,7 @@ fn bad_type() -> i32 {
 	let x:mut i32 = 3;
 	let y:mut i8 = 2;
 
-	//bad size
+	//Bad size
 	y += 3;
 	 
 	ret y;
