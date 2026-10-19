@@ -8216,6 +8216,27 @@ u_int8_t constant_nodes_equal(generic_ast_node_t* constant_node1, generic_ast_no
 
 
 /**
+ * Convert a given subtree starting at root to be of a specific side type. This is
+ * really only ever used to convert from right to left but it's been made generic
+ * for nicety. 
+ *
+ * When we do this, we will only ever convert the topmost node. All lower
+ * nodes do not need to be converted to have the desired effect. This is especially
+ * true for things like unary/postfix expressions, which may have, for instance,
+ * a store expression whose offset is derived from a load
+ */
+void convert_subtree_to_given_side(generic_ast_node_t* root, side_type_t side){
+	//Nothing to do here so leave
+	if(root == NULL){
+		return;
+	}
+
+	//All that we will do 
+	root->side = side;
+}
+
+
+/**
  * We will completely duplicate a deferred statement here. Since all deferred statements
  * are logical expressions, we will perform a deep copy to create an entirely new
  * chain of deferred statements

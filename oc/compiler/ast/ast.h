@@ -200,6 +200,18 @@ void initialize_ast_system();
 generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
 
 /**
+ * Convert a given subtree starting at root to be of a specific side type. This is
+ * really only ever used to convert from right to left but it's been made generic
+ * for nicety. 
+ *
+ * When we do this, we will only ever convert the topmost node. All lower
+ * nodes do not need to be converted to have the desired effect. This is especially
+ * true for things like unary/postfix expressions, which may have, for instance,
+ * a store expression whose offset is derived from a load
+ */
+void convert_subtree_to_given_side(generic_ast_node_t* root, side_type_t side);
+
+/**
  * Perform a deep copy on a subtree
  *
  * NOTE: we only ever take the new "side" into account for the first node. All subsequent calls
