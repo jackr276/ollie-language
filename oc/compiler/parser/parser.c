@@ -4225,14 +4225,28 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		 */
 		generic_ast_node_t* assignment_expression_lhs = duplicate_subtree(left_hand_expression, SIDE_TYPE_LEFT);
 
+		/**
+		 * Now we're able to emit our binary expression subtree using the original two nodes,
+		 * and the type information that we've derived along the way
+		 */
+		generic_ast_node_t* binary_operation_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+		binary_operation_node->inferred_type = final_type;
+		binary_operation_node->binary_operator = binary_operator;
+		add_child_node(binary_operation_node, left_hand_expression);
+		add_child_node(binary_operation_node, right_hand_expression);
 
+		/**
+		 * Now once the binary expression has been created, we can create the overall assignmetn
+		 * expression using the duplicated node values
+		 */
+		generic_ast_node_t* assignment_expression_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+		assignment_expression_node->variable = left_hand_expression->variable;
+		assignment_expression_node->is_assignable = FALSE;
+		assignment_expression_node->inferred_type = final_type;
+		add_child_node(assignment_expression_node, assignment_expression_lhs);
+		add_child_node(assignment_expression_node, binary_operation_node);
 
-
-
-
-
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		return assignment_expression_node;
 	}
 }
 
