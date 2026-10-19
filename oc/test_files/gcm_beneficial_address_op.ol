@@ -11,6 +11,6 @@ pub fn main() -> i32 {
 		x[i] = (i % 2 == 0) ? i * 2 else i + 2;
 	}
 
-	OUNIT: [exit_status = 5]
+	OUNIT: [exit_status = 4]
 	ret x[2];
 }

@@ -4124,9 +4124,14 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		/**
 		 * We now know that the left hand expression that we initially parsed as being
 		 * on the rhs is truly a SIDE_TYPE_LEFT expression. To convert it, we'll pass this
-		 * to a helper 
+		 * to a helper.
+		 *
+		 * This is explained more in the helper - but the short version is that we only
+		 * need to flip the side on the very root of the expression tree. This is what
+		 * the CFG constructor will look at, so all child nodes can be left alone. This
+		 * is what allows us to do this so easily
 		 */
-		convert_expression_to_lhs(left_hand_expression);
+		convert_subtree_to_given_side(left_hand_expression, SIDE_TYPE_LEFT);
 
 		/**
 		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
