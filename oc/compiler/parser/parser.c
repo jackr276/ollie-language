@@ -4194,19 +4194,56 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	 */
 	if(operator == EQUALS){
 		/**
+		 * Validate that the right hand side's type is able to be assigned to the LHS. If this returns
+		 * NULL that means that we cannot assign anything, so we fail out here
+		 */
+		generic_type_t* left_hand_type = left_hand_expression->inferred_type;
+		generic_type_t* final_type = is_ast_node_assignable_to_destination_type(left_hand_type, right_hand_expression);
+		if(final_type == NULL){
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
 		 * We now know that the left hand expression that we initially parsed as being
 		 * on the rhs is truly a SIDE_TYPE_LEFT expression. To convert it, we'll pass this
 		 * to a helper 
 		 */
 		convert_expression_to_lhs(left_hand_expression);
 
+		/**
+		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+		 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+		 * doing an address calculation.
+		 */
+		if(is_copy_assignment_required(left_hand_type, right_hand_expression->inferred_type) == TRUE){
+			/**
+			 * If the right hand expression is a postfix expression *and* we are looking
+			 * to perform a memory copy assignment here, we need to flag that 
+			 * we do *not* require a dereference to make this work
+			 */
+			propogate_no_memory_access_required_flag(right_hand_expression);
+
+			//Store this for down the road - how many bytes do we need to copy
+			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
+
+			/**
+			 * Since we are performing a memory copy instruction, this function
+			 * is required to perform an initial alignment when we enter it. If we did
+			 * not align this way, then we would get segmentation faults when trying to execute
+			 * SIMD instructions
+			 */
+			current_function->requires_initial_alignment = TRUE;
+		}
+
+		generic_ast_node_t* assignment_expression_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+
+
+
 	} else {
-
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
 	}
-
-
-
-	return NULL;
 }
 
 
