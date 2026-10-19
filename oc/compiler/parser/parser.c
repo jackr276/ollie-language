@@ -4097,9 +4097,41 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 }
 
 
-
+/**
+ * An assignment expression can decay into a conditional expression or it
+ * can actually do assigning. There is no chaining in Ollie language of assignments. There are two
+ * options for treenodes here. If we see an actual assignment, there is a special assignment node
+ * that will be made. If not, we will simply pass the parent along. An assignment expression will return
+ * a reference to the subtree created by it
+ *
+ * BNF Rule: <assignment-expression> ::= <initializer-expression> 
+ * 									   | <unary-expression> = <initializer-expression>
+ * 									   | <unary-expression> <<= <initializer-expression>
+ * 									   | <unary-expression> >>= <initializer-expression>
+ * 									   | <unary-expression> += <initializer-expression>
+ * 									   | <unary-expression> -= <initializer-expression>
+ * 									   | <unary-expression> *= <initializer-expression>
+ * 									   | <unary-expression> /= <initializer-expression>
+ * 									   | <unary-expression> |= <initializer-expression>
+ * 									   | <unary-expression> &= <initializer-expression>
+ * 									   | <unary-expression> ^= <initializer-expression>
+ *
+ */
 static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token_stream){
+	//Hang onto the current line number for later
+	u_int32_t current_line = parser_line_num;
+
+	/**
+	 * First we need to see an initializer expression. We will initially invoke this with a side type
+	 * of right because we have not proven that we are actually an assignment expression yet. If this
+	 * fails then we fail out for the whole thing
+	 */
 	generic_ast_node_t* left_hand_expression = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(left_hand_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_RIGHT);
+	}
+
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 
 	return NULL;
 }
