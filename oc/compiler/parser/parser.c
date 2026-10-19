@@ -664,6 +664,16 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
  * handle assignment expressions, which in my opinion sucks
  */
 
+static void convert_expression_to_lhs(generic_ast_node_t* root){
+	//Nothing to do here so leave
+	if(root == NULL){
+		return;
+	}
+
+	//TODO THIS MAY BE ALL THAT WE NEED
+	root->side = SIDE_TYPE_LEFT;
+}
+
 
 /**
  * Propogate the no memory access needed flag down recursively until we hit a postfix
@@ -673,7 +683,7 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
  * NOTE: This method is recursive which is why we are not inlining it
  */
 static void propogate_no_memory_access_required_flag(generic_ast_node_t* node){
-	//Base case - we have nothing so just leave
+	//Nothing to do here so leave
 	if(node == NULL){
 		return;
 	}
@@ -4122,7 +4132,7 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	u_int32_t current_line = parser_line_num;
 
 	/**
-	 * First we need to see an initializer expression. We will initially invoke this with a side type
+	 * Step 1: First we need to see an initializer expression. We will initially invoke this with a side type
 	 * of right because we have not proven that we are actually an assignment expression yet. If this
 	 * fails then we fail out for the whole thing
 	 */
@@ -4131,7 +4141,26 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_RIGHT);
 	}
 
+	/**
+	 * Step 2: Once we've successfully parsed what may have been the LHS, we can now look ahead and
+	 * see if we have an assignment operator. If we have not, then we can push this token
+	 * back and get out because there's nothing left to do
+	 */
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	ollie_token_t operator = lookahead.tok;
+
+	if(is_assignment_operator(operator) == FALSE){
+		push_back_token(token_stream, &parser_line_num);
+		return left_hand_expression;
+	}
+
+	/**
+	 * Step 3: we no w
+	 */
+	//TODO CONVERT TO LHS EXPRESSION
+
+
+
 
 	return NULL;
 }
