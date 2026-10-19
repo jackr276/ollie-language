@@ -4463,14 +4463,6 @@ loop_end:
 		}
 
 		/**
-		 * It is invalid to ever attempt addition to/subtraction from a void pointer
-		 * because we cannot determine the size of it. This is an instant failure
-		 */
-		if(left_hand_type->internal_values.is_void_pointer == TRUE){
-			return print_and_return_error("Invalid attempt to use pointer arithmetic with a void pointer", parser_line_num);
-		}
-
-		/**
 		 * If we have something like this:
 		 * 				y(i32) += x(i64)
 		 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
@@ -6381,14 +6373,6 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
 		return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
-
-		/**
-		 * It is invalid to ever attempt addition to/subtraction from a void pointer
-		 * because we cannot determine the size of it. This is an instant failure
-		 */
-		if(temp_holder->inferred_type->internal_values.is_void_pointer == TRUE){
-			return print_and_return_error("Invalid attempt to use pointer arithmetic with a void pointer", parser_line_num);
-		}
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
