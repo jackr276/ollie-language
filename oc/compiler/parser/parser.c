@@ -4177,7 +4177,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	 * if the RHS is an array initializer
 	 */
 	if(left_hand_expression->inferred_type->type_class == TYPE_CLASS_ARRAY && is_initializer_node(right_hand_expression) == FALSE){
-		return print_and_return_error("Array types cannot be assigned to unless using an initializer", parser_line_num);
+		return print_and_return_error("Array types cannot be assigned to unless using an initializer", current_line);
 	}
 
 	/**
@@ -4249,6 +4249,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		assignment_expression_node->optional_storage.bytes_to_copy = final_type->type_size;
 		assignment_expression_node->is_assignable = FALSE;
 		assignment_expression_node->variable = left_hand_expression->variable;
+		assignment_expression_node->line_number = current_line;
 		return assignment_expression_node;
 
 	} else {
