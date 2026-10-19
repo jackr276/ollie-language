@@ -4001,6 +4001,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  * 2.) Attempting to initialize an immutable array or struct
  * 3.) Attempting to assign to an immutable "field variable" - think struct/union field
  * 4.) Attempting to assign to an immutable array/struct area
+ *
+ * TODO CAN WE MAKE THIS A BOOLEAN?
  */
 static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
 	//Get the left handle type out
@@ -4132,7 +4134,7 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	u_int32_t current_line = parser_line_num;
 
 	/**
-	 * Step 1: First we need to see an initializer expression. We will initially invoke this with a side type
+	 * First we need to see an initializer expression. We will initially invoke this with a side type
 	 * of right because we have not proven that we are actually an assignment expression yet. If this
 	 * fails then we fail out for the whole thing
 	 */
@@ -4142,7 +4144,7 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	}
 
 	/**
-	 * Step 2: Once we've successfully parsed what may have been the LHS, we can now look ahead and
+	 * Once we've successfully parsed what may have been the LHS, we can now look ahead and
 	 * see if we have an assignment operator. If we have not, then we can push this token
 	 * back and get out because there's nothing left to do
 	 */
@@ -4155,7 +4157,7 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	}
 
 	/**
-	 * Step 3: we are now going to try and assign the LHS so we'll need to verify
+	 * We are now going to try and assign the LHS so we'll need to verify
 	 * that it is assignable
 	 */
 	if(left_hand_expression->is_assignable == FALSE){
@@ -4163,14 +4165,28 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	}
 
 	/**
-	 * Step 4: now let's try parsing the RHS. Hard fail here if this fails to parse
+	 * Try parsing the RHS. Hard fail here if this fails to parse
 	 */
 	generic_ast_node_t* right_hand_expression = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
 	if(right_hand_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
 	}
 
+	/**
+	 * Validate the special case of an array type that's being assigned to. We only allow for this
+	 * if the RHS is an array initializer
+	 */
+	if(left_hand_expression->inferred_type->type_class == TYPE_CLASS_ARRAY && is_initializer_node(right_hand_expression) == FALSE){
+		return print_and_return_error("Array types cannot be assigned to unless using an initializer", parser_line_num);
+	}
 
+	/**
+	 * One final check - verify that we are able to mutate the left hand unary. There are cases for memory
+	 * region mutation that the static analyzer will not check
+	 */
+	if(perform_mutability_checking(left_hand_expression)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+	}
 
 	/**
 	 * We can either be dealing with a regular assignment(=) or some kind of compressed
@@ -4178,10 +4194,11 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	 */
 	if(operator == EQUALS){
 		/**
-		 * Step 3: we now know that the left hand expression that we initially parsed as being
+		 * We now know that the left hand expression that we initially parsed as being
 		 * on the rhs is truly a SIDE_TYPE_LEFT expression. To convert it, we'll pass this
 		 * to a helper 
 		 */
+		convert_expression_to_lhs(left_hand_expression);
 
 	} else {
 
