@@ -8216,9 +8216,95 @@ u_int8_t constant_nodes_equal(generic_ast_node_t* constant_node1, generic_ast_no
 
 
 /**
+ * Convert a given subtree starting at root to be of a specific side type. This is
+ * really only ever used to convert from right to left but it's been made generic
+ * for nicety. 
+ *
+ * When we do this, we will only ever convert the topmost node. All lower
+ * nodes do not need to be converted to have the desired effect. This is especially
+ * true for things like unary/postfix expressions, which may have, for instance,
+ * a store expression whose offset is derived from a load
+ */
+void convert_subtree_to_given_side(generic_ast_node_t* root, side_type_t side){
+	//Nothing to do here so leave
+	if(root == NULL){
+		return;
+	}
+
+	//All that we will do 
+	root->side = side;
+}
+
+
+/**
+ * Propogate the no memory access needed flag down recursively until we hit a postfix
+ * expression(our "root" in this case) or nothing. This is important because we cannot
+ * be dereferencing(memory accessing) if we need to perform a copy assignment
+ *
+ * NOTE: This method is recursive which is why we are not inlining it
+ */
+void propogate_no_memory_access_required_flag(generic_ast_node_t* node){
+	//Nothing to do here so leave
+	if(node == NULL){
+		return;
+	}
+
+	switch(node->ast_node_type){
+		/**
+		 * For a ternary expression we need to flag the left and right children
+		 * as not requiring any kind of dereference
+		 */
+		case AST_NODE_TYPE_TERNARY_EXPRESSION: {
+			generic_ast_node_t* ternary_cursor = node->first_child;
+
+			//Then the left child which we flag first
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//Flag the left child first
+			propogate_no_memory_access_required_flag(ternary_cursor);
+
+			//Now advance to the right child
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//And flag the right child
+			propogate_no_memory_access_required_flag(ternary_cursor);
+
+			return;
+		}
+
+		/**
+		 * Flag here that we do not need a dereference on the 
+		 * postfix expression if we have one
+		 */
+		case AST_NODE_TYPE_POSTFIX_EXPR: {
+			node->memory_access_required = FALSE;
+			return;
+		}
+
+		/**
+		 * Flag here that we do not need a dereference on the 
+		 * unary expression if we have one
+		 */
+		case AST_NODE_TYPE_UNARY_EXPR: {
+			node->memory_access_required = FALSE;
+			return;
+		}
+
+		//Whatever this is we aren't interested
+		default:
+			return;
+	}
+}
+
+
+/**
  * We will completely duplicate a deferred statement here. Since all deferred statements
  * are logical expressions, we will perform a deep copy to create an entirely new
  * chain of deferred statements
+ *
+ * NOTE: we only ever take the new "side" into account for the first node. All subsequent calls
+ * will carry the side type from the clonee. This is done to avoid issues specifically with postfix
+ * and unary operations
  */
 generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side){
 	//Base case here -- although in theory we shouldn't make it here
@@ -8237,10 +8323,8 @@ generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_
 
 	//So long as we aren't null
 	while(child_cursor != NULL){
-		//Recursive call
-		duplicated_child = duplicate_subtree(child_cursor, side);
-
-		//Add the duplicate child into the node
+		//Duplicate and add it
+		duplicated_child = duplicate_subtree(child_cursor, child_cursor->side);
 		add_child_node(duplicated_root, duplicated_child);
 
 		//Advance the cursor

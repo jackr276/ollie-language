@@ -4063,6 +4063,67 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 			break;
 		}
 
+
+		/**
+		 * Combine:
+		 * 	t14 <- 20(stack_pointer_0)
+		 * 	store (t14, t8, 4) <- 27
+		 *
+		 *  Into:
+		 *  store 20(t14, t8, 4) <- 27
+		 */
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+			//Only valid option is the offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
+
+			//Copy over the address operand and the offset
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
+
+			//Update the mode to reflect this
+			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
+			break;
+		}
+
+		/**
+		 * Combine:
+		 * 	t14 <- 20(stack_pointer_0)
+		 * 	store 25(t14, t8, 4) <- 27
+		 *
+		 *  Into:
+		 *  store 45(t14, t8, 4) <- 27
+		 */
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+			//Only valid option is the offset only addressing mode
+			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+				break;
+			}
+
+			//Add the two constants - result is in the lea
+			add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+
+			//Copy over the first address operand
+			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+
+			//We can now delete the lea and rebuild the window
+			delete_statement(lea_statement);
+			reconstruct_window(window, addressing_operation);
+
+			//This does count as a change
+			*changed = TRUE;
+			break;
+		}
+
+
 		/**
 		 * Combine:
 		 * 	t5 <- 4(t4)
@@ -4112,6 +4173,7 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
 			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
 			addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
+			addressing_operation->operands.oir.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
 
 			//Now the addressing mode
 			addressing_operation->addressing_mode = lea_statement->addressing_mode;

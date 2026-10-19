@@ -390,15 +390,6 @@ static inline u_int8_t does_type_decay_to_char_pointer(generic_type_t* type){
 
 
 /**
- * Simple helper to tell whether something is or is not a store operation. This also has a NULL
- * guard. It's only real purpose is for code cleanliness
- */
-static inline u_int8_t is_store_operation(instruction_t* statement){
-	return (statement != NULL && statement->statement_type == THREE_ADDR_CODE_STORE_STATEMENT) ? TRUE : FALSE;
-}
-
-
-/**
  * Is the given raw constant a lea compatible power of 2?
  * In order to work for lea, the constant must be one of: 1, 2, 4, 8. Anything else is incompatible
  */
@@ -545,6 +536,11 @@ static inline u_int8_t is_variable_data_segment_variable(symtab_variable_record_
  * segment do
  */
 static inline u_int8_t is_store_assignment_required_for_variable(symtab_variable_record_t* variable){
+	//It is expected for us to handle NULLS
+	if(variable == NULL){
+		return FALSE;
+	}
+
 	//First check - if it's a stack var we're done
 	if(variable->storage_class == STORAGE_CLASS_STACK){
 		return TRUE;
@@ -4294,6 +4290,118 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 
 
 /**
+ * Convert a base address and address offset struct into a fully fledged memory address calculation. This helper
+ * will return a variable representing the final memory address
+ */
+static inline three_addr_var_t* convert_address_offset_into_address_calculation(basic_block_t* block, three_addr_var_t* base_address, address_offset_t* address_offset, u_int32_t line_number){
+	three_addr_var_t* final_memory_address = NULL;
+
+	switch(address_offset->type){
+		/**
+		 * No offset at all - the final memory address is 
+		 * just our calculated base address
+		 */
+		case OFFSET_TYPE_NONE: {
+			final_memory_address = base_address;
+			break;
+		}
+
+		/**
+		 * Current offset is a variable so we'll convert this into a LEA
+		 * with two operands to represent the computation
+		 */
+		case OFFSET_TYPE_VAR: {
+			final_memory_address = emit_temp_var(base_address->type);
+			instruction_t* final_address_calc = emit_lea_operands_only(final_memory_address, base_address, address_offset->value.variable_offset, line_number);
+			add_statement(block, final_address_calc);
+			break;
+		}
+
+		/**
+		 * Current offset is a constant so we'll convert this to a lea
+		 * with an offset to represent the computation
+		 *
+		 * If we have a nonzero constant value then a lea is appropriate. If
+		 * however we have a constant value of 0 we can skip the lea and just
+		 * return the base address
+		 */
+		case OFFSET_TYPE_CONST: {
+			if(is_constant_value_zero(address_offset->value.constant_offset) == FALSE){
+				final_memory_address = emit_temp_var(base_address->type);
+				instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, address_offset->value.constant_offset, line_number);
+				add_statement(block, final_address_calc);
+
+			} else {
+				final_memory_address = base_address;
+			}
+
+			break;
+		}
+	}
+
+	//Give back what we've determined to be the address
+	return final_memory_address;
+}
+
+
+/**
+ * Convert a base address and given address offset into a load instruction. The result of the load will
+ * be returned as a three address variable
+ */
+static inline three_addr_var_t* convert_address_offset_into_load_statement(basic_block_t* block, generic_type_t* result_type, generic_type_t* memory_access_type,
+																			three_addr_var_t* base_address, address_offset_t* address_offset, u_int32_t line_number){
+	//The result is a temp var of the specific type given
+	three_addr_var_t* load_result = emit_temp_var(result_type);
+
+	switch(address_offset->type){
+		/**
+		 * No offset so we can do a load with just a base address
+		 */
+		case OFFSET_TYPE_NONE: {
+			instruction_t* load_instruction = emit_load_base_address_only(load_result, base_address, memory_access_type, line_number);
+			add_statement(block, load_instruction);
+			break;
+		}
+
+		/**
+		 * Loading with a variable offset so we'll have a load instruction with two 
+		 * variables in it
+		 */
+		case OFFSET_TYPE_VAR: {
+			three_addr_var_t* variable_offset = address_offset->value.variable_offset;
+
+			instruction_t* load_instruction = emit_load_base_address_and_index(load_result, base_address, variable_offset, memory_access_type, line_number);
+			add_statement(block, load_instruction);
+			break;
+		}
+
+		/**
+		 * Loading with a constant offset so we'll do a load with offset only. If the offset
+		 * value happens to be 0 then we'll skip doing that entirely and just do a load
+		 * with the base address only
+		 */
+		case OFFSET_TYPE_CONST: {
+			three_addr_const_t* constant_offset = address_offset->value.constant_offset;
+
+			if(is_constant_value_zero(constant_offset) == FALSE){
+				instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result, base_address, constant_offset, memory_access_type, line_number);
+				add_statement(block, load_instruction);
+
+			} else {
+				instruction_t* load_instruction = emit_load_base_address_only(load_result, base_address, memory_access_type, line_number);
+				add_statement(block, load_instruction);
+			}
+
+			break;
+		}
+	}
+
+	//Give back the load result in the end
+	return load_result;
+}
+
+
+/**
  * Emit a postfix expression
  *
  * Postfix expressions have their left subtree most developed. The root of the subtree
@@ -4345,203 +4453,57 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
 	generic_type_t* original_memory_access_type = right_child->inferred_type;
 
 	/**
-	 * If a dereference is required, we will need to do it based on what side of the expression
-	 * we're currently residing on. LHS means that we're doing a store, and RHS means that 
-	 * we're doing a load.
+	 * Based on the side we will process accordingly. Note that values on the right
+	 * hand side can and do generate load instructions if the root node is flagged
+	 * as "memory_access_required". Values on the left hand side can *NEVER* generate
+	 * anything of the sort
 	 */
-	if(root->dereference_needed == TRUE){
-		switch(root->side){
+	switch(root->side){
+		/**
+		 * Values on the LHS *NEVER* generate anything besides an address calculation. LHS
+		 * postfix expressions will generate a variable that represents an address, which
+		 * will be used by the caller to emit a store
+		 */
+		case SIDE_TYPE_LEFT: {
+			three_addr_var_t* final_memory_address = convert_address_offset_into_address_calculation(current_block, base_address, &current_offset, root->line_number);
+
+			results.type = CFG_RESULT_TYPE_VAR;
+			results.result_value.result_var = final_memory_address;
+			break;
+	 	}
+
+		/**
+		 * For values on the RHS, we will use the "memory_access_required" flag to determine if
+		 * we're intending to just calculate the memory address or if we would like to emit a load
+		 * and get the value at that memory address
+		 */
+		case SIDE_TYPE_RIGHT: {
 			/**
-			 * LHS means that we need to be emitting a store statement. For all store statements
-			 * we intentionally leave their storees empty, that will be for caller to populate
-			 *
-			 * IMPORTANT - for all store addresses, it is an absolute must that the assignee
-			 * of the final result package be the base address
+			 * Case 1: memory access is required, so the parser explicitly believes that
+			 * we need to load the value out of memory at this current address. We will
+			 * emit a load as needed
 			 */
-			case SIDE_TYPE_LEFT: {
-				switch(current_offset.type){
-					/**
-					 * No current offset - we just have a store with a base
-					 * address and that's it
-					 */
-					case OFFSET_TYPE_NONE:{
-						instruction_t* store_instruction = emit_store_base_address_only(base_address,
-																						NULL,
-																						original_memory_access_type,
-																						root->line_number);
-						add_statement(current_block, store_instruction);
-						break;
-					}
-
-					/**
-					 * Offset is a variable so we'll have an address calculation
-					 * with two operands, no constants
-					 */
-					case OFFSET_TYPE_VAR:{
-						instruction_t* store_instruction = emit_store_base_address_and_index(base_address,
-																								current_offset.value.variable_offset,
-																								NULL,
-																								original_memory_access_type,
-																								root->line_number);
-						add_statement(current_block, store_instruction);
-						break;
-					}
-
-					/**
-					 * Offset is a constant so we'll have an address calculation with the base
-					 * address and a constant offset
-					 *
-					 * If the constant value is nonzero then its worth it to emit the offset. If the
-					 * constant value is 0 then there is no point and we'll emit this as a store with
-					 * base address only
-					 */
-					case OFFSET_TYPE_CONST:{
-						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
-							instruction_t* store_instruction = emit_store_base_address_and_constant_offset(base_address,
-																											current_offset.value.constant_offset,
-																											NULL,
-																											original_memory_access_type,
-																											root->line_number);
-							add_statement(current_block, store_instruction);
-
-						} else {
-							instruction_t* store_instruction = emit_store_base_address_only(base_address,
-																							NULL,
-																							original_memory_access_type,
-																							root->line_number);
-
-							add_statement(current_block, store_instruction);
-						}
-
-						break;
-					}
-				}
-
-				results.type = CFG_RESULT_TYPE_VAR;
-				results.result_value.result_var = base_address;
-				break;
-			}
-
-			/**
-			 * RHS means that we have to do a load instruction. Unlike with the stores, these instructions
-			 * will be emitted as fully complete. For these, it's important that we populate the result
-			 * package with the result of the load in the end
-			 */
-			case SIDE_TYPE_RIGHT: {
-				three_addr_var_t* load_result = emit_temp_var(parent_node_type);
-
-				switch(current_offset.type){
-					/**
-					 * No offset so we can do a load with just a base address
-					 */
-					case OFFSET_TYPE_NONE: {
-						instruction_t* load_instruction = emit_load_base_address_only(load_result,
-																						base_address,
-																						original_memory_access_type,
-																						root->line_number);
-						add_statement(current_block, load_instruction);
-						break;
-					}
-
-					/**
-					 * Loading with a variable offset so we'll have a load instruction with two 
-					 * variables in it
-					 */
-					case OFFSET_TYPE_VAR: {
-						instruction_t* load_instruction = emit_load_base_address_and_index(load_result,
-																							base_address,
-																							current_offset.value.variable_offset,
-																							original_memory_access_type,
-																							root->line_number);
-						add_statement(current_block, load_instruction);
-						break;
-					}
-
-					/**
-					 * Loading with a constant offset so we'll do a load with offset only. If the offset
-					 * value happens to be 0 then we'll skip doing that entirely and just do a load
-					 * with the base address only
-					 */
-					case OFFSET_TYPE_CONST: {
-						if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
-							instruction_t* load_instruction = emit_load_base_address_and_constant_offset(load_result,
-																											base_address,
-																											current_offset.value.constant_offset,
-																											original_memory_access_type,
-																											root->line_number);
-							add_statement(current_block, load_instruction);
-
-						} else {
-							instruction_t* load_instruction = emit_load_base_address_only(load_result,
-																							base_address,
-																							original_memory_access_type,
-																							root->line_number);
-							add_statement(current_block, load_instruction);
-						}
-
-						break;
-					}
-				}
+			if(root->memory_access_required == TRUE){
+				three_addr_var_t* load_result = convert_address_offset_into_load_statement(current_block, parent_node_type, original_memory_access_type, 
+																							base_address, &current_offset, root->line_number);
 
 				results.type = CFG_RESULT_TYPE_VAR;
 				results.result_value.result_var = load_result;
-				break;
-			}
-		}
-
-	/**
-	 * If we don't need to dereference then we're just doing a memory address call. In this
-	 * case we'll calculate the memory address appropriately based on the base address and 
-	 * offset and return that in the result package
-	 */
-	} else {
-		three_addr_var_t* final_memory_address = NULL;
-
-		switch(current_offset.type){
-			/**
-			 * No offset at all - the final memory address is 
-			 * just our calculated base address
-			 */
-			case OFFSET_TYPE_NONE: {
-				final_memory_address = base_address;
-				break;
-			}
 
 			/**
-			 * Current offset is a variable so we'll convert this into a LEA
-			 * with two operands to represent the computation
+			 * Case 2: memory access is not required, so the parser explicitly believes
+			 * that we do *NOT* need to load the value out of memory, and just need to
+			 * retrieve the memory address
 			 */
-			case OFFSET_TYPE_VAR: {
-				final_memory_address = emit_temp_var(base_address->type);
-				instruction_t* final_address_calc = emit_lea_operands_only(final_memory_address, base_address, current_offset.value.variable_offset, root->line_number);
-				add_statement(current_block, final_address_calc);
-				break;
+			} else {
+				three_addr_var_t* final_memory_address = convert_address_offset_into_address_calculation(current_block, base_address, &current_offset, root->line_number);
+
+				results.type = CFG_RESULT_TYPE_VAR;
+				results.result_value.result_var = final_memory_address;
 			}
 
-			/**
-			 * Current offset is a constant so we'll convert this to a lea
-			 * with an offset to represent the computation
-			 *
-			 * If we have a nonzero constant value then a lea is appropriate. If
-			 * however we have a constant value of 0 we can skip the lea and just
-			 * return the base address
-			 */
-			case OFFSET_TYPE_CONST: {
-				if(is_constant_value_zero(current_offset.value.constant_offset) == FALSE){
-					final_memory_address = emit_temp_var(base_address->type);
-					instruction_t* final_address_calc = emit_lea_offset_only(final_memory_address, base_address, current_offset.value.constant_offset, root->line_number);
-					add_statement(current_block, final_address_calc);
-				} else {
-					final_memory_address = base_address;
-				}
-
-				break;
-			}
-		}
-
-		//Regardless of the path the reuslt is in the final memory address
-		results.type = CFG_RESULT_TYPE_VAR;
-		results.result_value.result_var = final_memory_address;
+			break;
+	  	}
 	}
 
 	//Package up and return the results package
@@ -4562,20 +4524,24 @@ static cfg_result_package_t emit_postfix_expression(basic_block_t* basic_block, 
  * It is up to use in the CFG to appropriately clone/reconstruct the way that this works
  */
 static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, generic_ast_node_t* node){
-	//Store the current block
+	cfg_result_package_t postoperation_package = INITIALIZE_BLANK_CFG_RESULT;
+	u_int32_t line_number = node->line_number;
+
+	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
 
-	//The postfix node is always the first child
+	/**
+	 * The postfix node always comes from the first child of the the given
+	 * postoperation node
+	 */
 	generic_ast_node_t* postfix_node = node->first_child;
 
-	//We will first emit the postfix expression code that comes from this
+	//Emit the postfix expression using the regular rule
 	cfg_result_package_t postfix_expression_results = emit_postfix_expression(current_block, postfix_node);
-
-	//Update the end block
 	current_block = postfix_expression_results.final_block;
 
 	//This is the value that we will be modifying. It will always be a variable
-	three_addr_var_t* assignee = unpack_result_package(&postfix_expression_results, current_block, node->line_number);
+	three_addr_var_t* postfix_assignee = unpack_result_package(&postfix_expression_results, current_block, line_number);
 
 	/**
 	 * Remember that for a postoperation, we save the value that we get before
@@ -4583,132 +4549,119 @@ static cfg_result_package_t emit_postoperation_code(basic_block_t* basic_block, 
 	 * used. To facilitate this, we will perform a temp assignment here. The result of
 	 * this temp assignment is actually what the user will be using
 	 */
-
-	//Emit the assignment
-	instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, node->line_number);
-
-	//Add this statement in
+	three_addr_var_t* returned_variable = emit_temp_var(postfix_assignee->type);
+	instruction_t* temp_assignment = emit_assignment_instruction(returned_variable, postfix_assignee, line_number);
 	add_statement(current_block, temp_assignment);
 
-	//Initialize this off the bat
-	cfg_result_package_t postoperation_package = {basic_block, current_block, {temp_assignment->operands.oir.assignee}, CFG_RESULT_TYPE_VAR, BLANK};
-
 	/**
-	 * Go first by the type that we're actually postincrementing
+	 * We will handle our actual increment/decrement accordingly based on the
+	 * type class of what we're operating on
 	 */
-	if(assignee->type->type_class == TYPE_CLASS_BASIC){
+	if(postfix_assignee->type->type_class == TYPE_CLASS_BASIC){
 		/**
 		 * Breakdown by operator and then by whether or not we're an SSE
 		 * (floating point) operation or not
 		 */
 		if(node->unary_operator == PLUSPLUS){
-			if(IS_FLOATING_POINT(assignee->type) == FALSE){
-				assignee = emit_general_purpose_inc_code(current_block, assignee, node->line_number);
+			if(IS_FLOATING_POINT(postfix_assignee->type) == FALSE){
+				postfix_assignee = emit_general_purpose_inc_code(current_block, postfix_assignee, line_number);
 			} else {
-				assignee = emit_sse_inc_code(current_block, assignee, node->line_number);
+				postfix_assignee = emit_sse_inc_code(current_block, postfix_assignee, line_number);
 			}
 
 		} else {
-			if(IS_FLOATING_POINT(assignee->type) == FALSE){
-				assignee = emit_general_purpose_dec_code(current_block, assignee, node->line_number);
+			if(IS_FLOATING_POINT(postfix_assignee->type) == FALSE){
+				postfix_assignee = emit_general_purpose_dec_code(current_block, postfix_assignee, line_number);
 			} else {
-				assignee = emit_sse_dec_code(current_block, assignee, node->line_number);
+				postfix_assignee = emit_sse_dec_code(current_block, postfix_assignee, line_number);
 			}
 		}
- 
-	} else if(assignee->type->type_class == TYPE_CLASS_POINTER){
-		assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, assignee, node->line_number);
 
+	} else if(postfix_assignee->type->type_class == TYPE_CLASS_POINTER){
+		postfix_assignee = generate_pointer_arithmetic_for_unary_operation(current_block, node->unary_operator, postfix_assignee, line_number);
+
+	/**
+	 * This should be impossible - trigger a panic if we hit this
+	 */
 	} else {
-		printf("Fatal internal compiler error: Unreachable path hit for postinc in the CFG with type %s\n", assignee->type->type_name.string);
-		exit(1);
+		trigger_ice_panic("Invalid type class detected for postoperation code in the CFG");
 	}
 
 	/**
-	 * Logic here: if this is not some simple identifier(it could be array access, struct access, etc.), then
-	 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
+	 * If what we're postoperating over is some complex expresssion, then we'll need to
+	 * duplicate it on the left hand side. This is mainly used when we are postoperating
+	 * on values from memory
 	 */
 	if(postfix_node->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-		//Duplicate the subtree here for us to use
+		/**
+		 * Duplicate the subtree, but flag it so that the very top node
+		 * has a side type of SIDE_TYPE_LEFT. This will tell the postfix
+		 * expression helper that we intend to emit a store
+		 */
 		generic_ast_node_t* copy = duplicate_subtree(postfix_node, SIDE_TYPE_LEFT);
-
-		//Now we emit the copied package
 		cfg_result_package_t copied_package = emit_postfix_expression(current_block, copy);
-
-		//This is now the final block
 		current_block = copied_package.final_block;
 
-		//Is this a store operation? If so, we just need to fill in the op1 here
-		if(is_store_operation(current_block->exit_statement) == TRUE){
-			//This is our store statement
-			instruction_t* store_statement = current_block->exit_statement;
+		//Get the value out of the copied pacakge
+		three_addr_var_t* lhs_var = unpack_result_package(&copied_package, current_block, line_number);
 
-			//Throw this inside of the operand1 
-			store_statement->operands.oir.operand1 = assignee;
-
-		//Otherwise we just have a regular assignment
+		/**
+		 * If we are flagged as requiring memory access, then we will emit a store 
+		 * using the value given to us in the copied package. Otherwise, we'll just
+		 * use a regular assignment
+		 */
+		if(copy->memory_access_required == TRUE){
+			instruction_t* store_statement = emit_store_base_address_only(lhs_var, postfix_assignee, postfix_assignee->type, line_number);
+			add_statement(current_block, store_statement);
 		} else {
-			//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-			instruction_t* assignment_instruction = emit_assignment_instruction(unpack_result_package(&copied_package, current_block, node->line_number), assignee, node->line_number);
-
-			//Add this into the block
-			add_statement(current_block, assignment_instruction);
+			instruction_t* assignment = emit_assignment_instruction(lhs_var, postfix_assignee, line_number);
+			add_statement(current_block, assignment);
 		}
-
-		//This is always the new final block
-		postoperation_package.final_block = current_block;
 
 	/**
 	 * Otherwise - it is possible that we have a stack variable or global/static variable here. In that case, we'll need to emit a
 	 * store to get the variable back to where it needs to be
 	 */
 	} else if (is_store_assignment_required_for_variable(postfix_node->variable) == TRUE){
+		//We'll need a type and a memory address variable
 		generic_type_t* type = postfix_node->variable->type_defined_as; 
-
-		/**
-		 * Get the version that represents our memory indirection. Be sure to use the "true type" here
-		 * just in case we were dealing with a reference
-		 */
 		three_addr_var_t* memory_address_var = emit_memory_address_var(postfix_node->variable);
 
-		//Now we need to add the final store
-		instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, node->line_number);
-
-		//Get this in there
+		//We're able to emit a fully-fledged store right now
+		instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, postfix_assignee, type, node->line_number);
 		add_statement(current_block, store_instruction);
-		
-		//This is always the new final block
-		postoperation_package.final_block = current_block;
 	}
 
-	//Give back the final unary package
+	//Package up our final result - we return the unmodified value
+	postoperation_package.starting_block = basic_block;
+	postoperation_package.final_block = current_block;
+	postoperation_package.type = CFG_RESULT_TYPE_VAR;
+	postoperation_package.result_value.result_var = returned_variable;
 	return postoperation_package;
 }
 
 
 /**
- * Handle a unary operator, in whatever form it may be
+ * Translate all unary expression operations into valid OIR for the CFG
  */
 static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, generic_ast_node_t* unary_expression_parent){
-	//Top level declarations to avoid using them in the switch statement
-	instruction_t* assignment;
-	three_addr_var_t* assignee;
-	//The unary expression package
-	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
+	//Initialize our generic results here
 	cfg_result_package_t generic_results = INITIALIZE_BLANK_CFG_RESULT;
+	cfg_result_package_t unary_package = INITIALIZE_BLANK_CFG_RESULT;
 
-	//We'll keep track of what the current block here is
+	//Tracker for the current block
 	basic_block_t* current_block = basic_block;
 
-	//Extract the first child from the unary expression parent node
+	//Hang onto this for our use
+	u_int32_t line_number = unary_expression_parent->line_number;
+
+	//Extract the two nodes that we'll be focusing on
 	generic_ast_node_t* unary_operator_node = unary_expression_parent->first_child;
-	// For use later on
 	generic_ast_node_t* unary_expression_child = unary_operator_node->next_sibling;
 
-	//Now that we've emitted the assignee, we can handle the specific unary operators
 	switch(unary_operator_node->unary_operator){
 		/**
-		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
+		 * Preop/dec operations involve the actual increment/decrement and the saving operation. The value
 		 * that is returned to be used by the user is the incremented/decremented value unlike in a
 		 * postfix expression
 		 *
@@ -4718,15 +4671,15 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * 				 use temp going forward
 		 */
 		case PLUSPLUS:
-		case MINUSMINUS:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		case MINUSMINUS: {
+			/**
+			 * First emit the unary expression from the child
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
 			/**
 			 * Split this down by what kind of types we have. We are only able to see basic types
@@ -4740,16 +4693,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 */
 				if(unary_operator_node->unary_operator == PLUSPLUS){
 					if(IS_FLOATING_POINT(assignee->type) == FALSE){
-						assignee = emit_general_purpose_inc_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_general_purpose_inc_code(current_block, assignee, line_number);
 					} else {
-						assignee = emit_sse_inc_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_sse_inc_code(current_block, assignee, line_number);
 					}
 
 				} else {
 					if(IS_FLOATING_POINT(assignee->type) == FALSE){
-						assignee = emit_general_purpose_dec_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_general_purpose_dec_code(current_block, assignee, line_number);
 					} else {
-						assignee = emit_sse_dec_code(current_block, assignee, unary_expression_child->line_number);
+						assignee = emit_sse_dec_code(current_block, assignee, line_number);
 					}
 				}
 
@@ -4758,10 +4711,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * size so we'll have the helper generate all of this for us
 			 */
  			} else if(assignee->type->type_class == TYPE_CLASS_POINTER){
-				assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee, unary_expression_child->line_number);
+				assignee = generate_pointer_arithmetic_for_unary_operation(current_block, unary_operator_node->unary_operator, assignee, line_number);
+
+			/**
+			 * This is invalid so we will panic if we ever hit it
+			 */
 			} else {
-				printf("Fatal internal compiler error: unreachable type for postincrement found\n");
-				exit(1);
+				trigger_ice_panic("Unreachable assignee type for postincrement found");
 			}
 
 			/**
@@ -4769,29 +4725,30 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * we'll need to perform this duplication. If it is just an identifier, then we're able to leave this be
 			 */
 			if(unary_expression_child->ast_node_type != AST_NODE_TYPE_IDENTIFIER){
-				//Duplicate the subtree here for us to use
+				/**
+				 * Duplicate the subtree so that the top node has a side type of "left". This will only
+				 * change the topmost node, leaving the bottom unchanged
+				 */
 				generic_ast_node_t* copy = duplicate_subtree(unary_expression_child, SIDE_TYPE_LEFT);
 
 				//Now we emit the copied package
 				cfg_result_package_t copied_package = emit_unary_expression(current_block, copy);
-
-				//This is now the final block
 				current_block = unary_package.final_block;
 
-				//Is this a store operation? If so, we just need to fill in the op1 here
-				if(is_store_operation(current_block->exit_statement) == TRUE){
-					//This is our store statement
-					instruction_t* store_statement = current_block->exit_statement;
+				/**
+				 * If this is flagged as requiring a memory access, that means that we're dereferencing, so
+				 * go ahead and emit the store here
+				 */
+				if(copy->memory_access_required == TRUE){
+					instruction_t* store_instruction = emit_store_base_address_only(copied_package.result_value.result_var, assignee, unary_expression_child->inferred_type, line_number);
+					add_statement(current_block, store_instruction);
 
-					//Throw this into the store statement's operand1
-					store_statement->operands.oir.operand1 = assignee;
-
-				//Otherwise we just have a regular assignment
+				/**
+				 * Otherwise this is just a regular expression with no memory access, so we'll be able to
+				 * emit a regular assignment for this
+				 */
 				} else {
-					//And finally, we'll emit the save instruction that stores the value that we've incremented into the location we got it from
-					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee, unary_expression_child->line_number);
-
-					//Add this into the block
+					instruction_t* assignment_instruction = emit_assignment_instruction(copied_package.result_value.result_var, assignee, line_number);
 					add_statement(current_block, assignment_instruction);
 				}
 
@@ -4800,59 +4757,60 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * store to get the variable back to where it needs to be
 			 */
 			} else if (is_store_assignment_required_for_variable(unary_expression_child->variable) == TRUE){
-				//Type of the variable
+				//Get the variable type and emit a memory address variable for it
 				generic_type_t* type = unary_expression_child->variable->type_defined_as; 
-
-				//Get the version that represents our memory indirection
 				three_addr_var_t* memory_address_var = emit_memory_address_var(unary_expression_child->variable);
 
-				//Now we need to add the final store
-				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, unary_expression_child->line_number);
-
-				//Get this in there
+				//Emit and add the store instruction
+				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, line_number);
 				add_statement(current_block, store_instruction);
-				
-				//This is always the new final block
-				unary_package.final_block = current_block;
 			}
 
-			//Store the assignee as this
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = assignee;
-			//Update the final block if it has change
-			unary_package.final_block = current_block;
-		
-			//Give back the final unary package
-			return unary_package;
+			//Package up and return our results
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			generic_results.result_value.result_var = emit_var_copy(assignee);
+			generic_results.type = CFG_RESULT_TYPE_VAR;
+			return generic_results;
+		}
 
-		//Handle a dereference
-		case STAR:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		/**
+		 * A star is a memory dereference of any kind. If we dereference a value on the
+		 * RHS, and we are flagged as "memory access required", we will automatically emit
+		 * a load to get that value out of memory. If we dereference on the LHS, we will
+		 * always compute the memory address and return that as a variable, so that
+		 * the caller can emit a store
+		 */
+		case STAR: {
+			/**
+			 * First emit the expression that represents our memory address that we'll
+			 * be dereferencing from
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the block
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			/**
+			 * The value that we're unpacking here will represent a memory address that will
+			 * either be loaded to or store from
+			 */
+			three_addr_var_t* memory_address = unpack_result_package(&unary_package, current_block, line_number);
 
-			//The pointer will be on the unary expression child
+			/**
+			 * Extract the pointer type which comes from the child and the 
+			 * dereferenced type
+			 */
 			generic_type_t* pointer_type = unary_expression_child->inferred_type;
-			//And the final type comes from when we dereference it
 			generic_type_t* dereferenced_type = dereference_type(pointer_type);
 
 			/**
-			 * If we what we have is an array pointer, then we don't need to do anything besides assign the
-			 * value over. This is because when we take the address of an array, all that we do is load
+			 * If what we have is a memory region pointer, then we don't need to do anything besides assign the
+			 * value over. This is because when we take the address of an array/struct/etc, all that we do is load
 			 * the rsp offset in memory
 			 *
 			 * Example:
-			 * 	 declare x:i32[5]; //Suppose that this is at rsp + 20
-			 *
-			 * 	 let y:i32[5]* = &x;
-			 *
-			 * All that this really is in our assembly is:
-			 * 		y <- 20 + rsp
+			 * let x:i32[5] = [1, 2, 3, 4, 5]; //Suppose that this is at %rsp + 20
+			 * let y:i32[5]* = &x; //This just grabs that %rsp + 20 address
+			 * let z:i32* = *y; //We don't want to actually deref, just move the value over
 			 *
 			 * So when we go to "dereference" y, we just need to assign the value over in a simple
 			 * move instruction. This is the same kind of rule for structs & unions, which is why
@@ -4861,71 +4819,89 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 * indirection that we need to do
 			 */
 			if(is_memory_region(dereferenced_type) == TRUE){
-				//Emit the assignment
-				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), assignee, unary_expression_child->line_number);
-
-				//Get this into the block
+				//Emit and add the simple assignment
+				instruction_t* assignment_instruction = emit_assignment_instruction(emit_temp_var(dereferenced_type), memory_address, line_number);
 				add_statement(current_block, assignment_instruction);
 
-				//Package this up and get out
-				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = assignment_instruction->operands.oir.assignee;
-				return unary_package;
+				//Package up and return
+				generic_results.result_value.result_var = assignment_instruction->operands.oir.assignee;
+				generic_results.type = CFG_RESULT_TYPE_VAR;
+				generic_results.starting_block = basic_block;
+				generic_results.final_block = current_block;
+				return generic_results;
 			}
 
 			/**
-			 * If we make it here, we will return an *incomplete* store
-			 * instruction with the knowledge that whomever called use
-			 * will fill it in
-			 *
-			 * Conditions here: If we are on the left hand side *and* our next sibling is on the right hand side,
-			 * that means that we need to be doing an assignment here. As such, we emit a store. In any other
-			 * area, we emit a load
+			 * Based on the side of the expression we will emit what is needed
 			 */
-			if(unary_expression_parent->side == SIDE_TYPE_LEFT &&
-				(unary_expression_parent->next_sibling != NULL && unary_expression_parent->next_sibling->side == SIDE_TYPE_RIGHT)){
-				//We will intentionally leave op1 blank so that it can be filled in down the line
-				instruction_t* store_instruction = emit_store_base_address_only(assignee, NULL, dereferenced_type, unary_expression_parent->line_number);
+			switch(unary_expression_parent->side){
+				/**
+				 * Case 1: we are on the left hand side, so we are doing something like 
+				 * *x = <something>. In this case, we will emit the *MEMORY ADDRESS ONLY*
+				 * in anticipation that the caller will take that memory address and use
+				 * it for a store
+				 */
+				case SIDE_TYPE_LEFT: {
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = memory_address;
+					break;
+				}
 
-				//Now let's get this into the block
-				add_statement(current_block, store_instruction);
+				case SIDE_TYPE_RIGHT: {
+					/**
+					 * Case 2: we are on the right hand side, so we are doing something
+					 * like y = *x + 2. In this case, we will need to load the value out
+					 * of said memory address and return that. An operation like this will
+					 * have cause the parser to explicit flag this as requiring memory access,
+					 * so we'll go through and emit the load
+					 */
+					if(unary_expression_parent->memory_access_required == TRUE){
+						//Emit and add this
+						instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), memory_address, dereferenced_type, line_number);
+						add_statement(current_block, load_instruction);
 
-				//Add the assignee in here
-				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = assignee;
+						//This one's assignee is our overall assignee
+						generic_results.type = CFG_RESULT_TYPE_VAR;
+						generic_results.result_value.result_var = load_instruction->operands.oir.assignee;
 
-			/**
-			 * If we get here, we know that we either have a right hand operation or we're on the left hand
-			 * side but we're not entirely done with the unary operations yet. Either way, we'll need a load
-			 */
-			} else {
-				//If the side type here is right, we'll need a load instruction
-				instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(unary_expression_parent->inferred_type), assignee, dereferenced_type, unary_expression_parent->line_number);
+					/**
+					 * Case 3: we are on the right hand side, but the parser explicitly flagged this
+					 * as not requiring memory access. In this case, we'll just package up the return
+					 * address as usual
+					 */
+					} else {
+						generic_results.type = CFG_RESULT_TYPE_VAR;
+						generic_results.result_value.result_var = memory_address;
+					}
 
-				//Add it in
-				add_statement(current_block, load_instruction);
-
-				//This one's assignee is our overall assignee
-				unary_package.type = CFG_RESULT_TYPE_VAR;
-				unary_package.result_value.result_var = load_instruction->operands.oir.assignee;
+					break;
+				}
 			}
 
-			//Give back the final unary package
-			return unary_package;
+			//Package up and return
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = basic_block;
+			return generic_results;
+		}
 
-		//Logical not operator
-		case EXCLAMATION:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+
+		/**
+		 * The ! results in a logical not. This expression is largely handled in the simplifier,
+		 * it's just represented as an OIR expression for us
+		 */
+		case EXCLAMATION: {
+			/**
+			 * First emit the unary expression that is represented in the child
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			//Get the assignee out from the result package
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
-			//This will always overwrite the other value
-			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, unary_expression_child->line_number);
+			//Emit and add the logical not expression
+			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
+			add_statement(current_block, logical_not_statement);
 
 			/**
 			 * If we came from a floating point operation, then we will just flag as such here
@@ -4934,18 +4910,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				logical_not_statement->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 			}
 
-			//Get it into the block right after the unary expression
-			add_statement(current_block, logical_not_statement);
-
-			//The package's assignee is now the result of this logical not instruction
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = logical_not_statement->operands.oir.assignee;
-
-			//The operator here is logical not
-			unary_package.operator = EXCLAMATION;
-
-			//Give the package back
-			return unary_package;
+			//Package up and return the result
+			generic_results.operator = EXCLAMATION;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			generic_results.type = CFG_RESULT_TYPE_VAR;
+			generic_results.result_value.result_var = logical_not_statement->operands.oir.assignee;
+			return generic_results;
+		}
 	
 		/**
 		 * Bitwise not operation
@@ -4953,33 +4925,39 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 *
 		 * Becomes:
 		 * t <- a
-		 * negl t
+		 * bitwise not t
 		 * x <- t
 		 */
-		case B_NOT:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		case B_NOT: {
+			/**
+			 * First emit the given unary expression into the given block
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_parent->line_number);
+			//The assignee will always be a variable
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
-			//Assign over to a temp var that we will be notting
-			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_parent->line_number);
-			add_statement(current_block, assignment);
+			/**
+			 * First assign over to a temporary variable so we don't modify the original one
+			 */
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, line_number);
+			add_statement(current_block, temp_assignment);
 
-			//Now emit annd add the bitwise not on the temp var
-			instruction_t* bitwise_not = emit_not_instruction(assignment->operands.oir.assignee, unary_expression_parent->line_number);
+			/**
+			 * Now emit and add the actual bitwise not logic
+			 */
+			instruction_t* bitwise_not = emit_not_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, bitwise_not);
 
-			//The new assignee will come from this helper
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = bitwise_not->operands.oir.assignee;
-
-			//Give the package back
-			return unary_package;
+			//Package up and return the results
+			generic_results.operator = B_NOT;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			generic_results.type = CFG_RESULT_TYPE_VAR;
+			generic_results.result_value.result_var = bitwise_not->operands.oir.assignee;
+			return generic_results;
+		}
 
 		/**
 		 * Arithmetic negation operator
@@ -4987,52 +4965,58 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 *
 		 * Becomes:
 		 * t <- a
-		 * negl t
+		 * negate t
 		 * x <- t
-		 *
-		 * Uses strategy of: negl rdx
 		 */
-		case MINUS:
-			//The very first thing that we'll do is emit the assignee that comes after the unary expression
+		case MINUS: {
+			/**
+			 * First emit the given unary expression so that we have the thing to negate
+			 * on hand
+			 */
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
-
-			//Update the current block
 			current_block = unary_package.final_block;
 
-			//The assignee comes from the package
-			assignee = unpack_result_package(&unary_package, current_block, unary_expression_child->line_number);
+			//The result will always be a variable that we can unpack
+			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
-			//We'll need to assign to a temp here, these are only ever on the RHS
-			assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, unary_expression_child->line_number);
-			add_statement(current_block, assignment);
+			/**
+			 * Now assign to a temporary variable so that the actual value isn't affected by the negation
+			 */
+			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, line_number);
+			add_statement(current_block, temp_assignment);
 
-			//Now emit the instruction itself
-			instruction_t* negation_instruction = emit_neg_instruction(assignment->operands.oir.assignee, unary_expression_child->line_number);
+			/**
+			 * Once we have the temp to use emit the negation using it
+			 */
+			instruction_t* negation_instruction = emit_neg_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, negation_instruction);
 
-			//Rewrite the assignee to be this now
-			unary_package.type = CFG_RESULT_TYPE_VAR;
-			unary_package.result_value.result_var = negation_instruction->operands.oir.assignee;
-			
-			//And give back the final value
-			return unary_package;
+			//Package up and return the results
+			generic_results.operator = MINUS;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			generic_results.type = CFG_RESULT_TYPE_VAR;
+			generic_results.result_value.result_var = negation_instruction->operands.oir.assignee;
+			return generic_results;
+		}
 
 		/**
 		 * Handle the case of the address operator - this is a very unique case, we will not call the unary expression
 		 * helper here, because we know that this must always be an identifier node
 		 */
-		case SINGLE_AND:
+		case SINGLE_AND: {
 			//Go based on the type here
 			switch(unary_expression_child->ast_node_type){
-				case AST_NODE_TYPE_IDENTIFIER:
+				case AST_NODE_TYPE_IDENTIFIER: {
 					/**
 					 * This variable is already on the stack. As such, to get it's memory address,
 					 * all we need to do is take emit a specialized "memory address var" from the existing
 					 * stack region and slap it into a variable
 					 */
-					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = emit_memory_address_var(unary_expression_child->variable);
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = emit_memory_address_var(unary_expression_child->variable);
 					break;
+				}
 
 				/**
 				 * For function calls, there are some scenarios where we are able to take the memory address
@@ -5041,49 +5025,61 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				 * work is needed to actually use the memory address, we just need to assign it over
 				 */
 				case AST_NODE_TYPE_FUNCTION_CALL:
-				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
 					//Let the dedicated translator handle the call
-					generic_results = emit_function_call(current_block, unary_expression_child);
+					cfg_result_package_t func_call_results = emit_function_call(current_block, unary_expression_child);
+					current_block = func_call_results.final_block;
 
-					//Bump the block up if need be
-					current_block = generic_results.final_block;
-
-					//All that we need to do now is package up the results here and move along our way
-					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = generic_results.result_value.result_var;
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = func_call_results.result_value.result_var;
 					
 					break;
+				}
 
-				//The other case here
-				case AST_NODE_TYPE_POSTFIX_EXPR:
-					//Set the deref flag to false so we don't deref
-					unary_expression_child->dereference_needed = FALSE;
-					//Emit the whole thing
-					generic_results = emit_postfix_expression(current_block, unary_expression_child);
+				/**
+				 * Postfix expressions require no special help with the excpetion of setting the memory
+				 * access required flag to false. The parser should have done this but we do it just
+				 * to be safe
+				 */
+				case AST_NODE_TYPE_POSTFIX_EXPR: {
+					/**
+					 * We are taking the memory address, so we do *NOT* want to perform
+					 * any loading here. Set this flag to stop that
+					 */
+					unary_expression_child->memory_access_required = FALSE;
 
-					//Update the current block
-					current_block = generic_results.final_block;
+					//Let the dedicated translator handle this
+					cfg_result_package_t postfix_results = emit_postfix_expression(current_block, unary_expression_child);
+					current_block = postfix_results.final_block;
 
-					//And package the value up as what we want here
-					unary_package.type = CFG_RESULT_TYPE_VAR;
-					unary_package.result_value.result_var = unpack_result_package(&generic_results, current_block, unary_expression_child->line_number);
+					generic_results.type = CFG_RESULT_TYPE_VAR;
+					generic_results.result_value.result_var = unpack_result_package(&postfix_results, current_block, line_number);
 					break;
+				}
 
-				//This should never occur
-				default:
-					fprintf(stderr, "Fatal internal compiler error. Unrecognized node type for address operation");
-					exit(0);
+				/**
+				 * Some unrecognized type - this should never happen in normal operation
+				 */
+				default: {
+					trigger_ice_panic("Invalid node type given for memory address operation in CFG");
+					break;
+				}
 			}
 
-			//Set the final block here
-			unary_package.final_block = current_block;
+			//Package up and return the geneirc results
+			generic_results.operator = SINGLE_AND;
+			generic_results.starting_block = basic_block;
+			generic_results.final_block = current_block;
+			return generic_results;
+		}
 
-			//Give back the unary package
-			return unary_package;
-
-		//In reality we should never actually hit this, it's just there for the C compiler to be happy
-		default:
-			return unary_package;
+		/**
+		 * If we ever hit this it means that something is wrong
+		 */
+		default: {
+			trigger_ice_panic("Invalid/current unrecognized unary expression type detected");
+			return generic_results;
+	 	}
 	}
 }
 
@@ -5095,14 +5091,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
  * 	<postfix-expression> | <unary-operator> <cast-expression> | typesize(<type-specifier>) | sizeof(<logical-or-expression>) 
  */
 static inline cfg_result_package_t emit_unary_expression(basic_block_t* basic_block, generic_ast_node_t* unary_expression){
-	//Switch based on what class this node actually is
 	switch(unary_expression->ast_node_type){
-		//If we see the actual node here, we know that we are actually doing a unary operation
 		case AST_NODE_TYPE_UNARY_EXPR:	
 			return emit_unary_operation(basic_block, unary_expression);
+
 		case AST_NODE_TYPE_POSTOPERATION:
 			return emit_postoperation_code(basic_block, unary_expression);
-		//Otherwise if we don't see this node, we instead know that this is really a postfix expression of some kind
+
 		default:
 			return emit_postfix_expression(basic_block, unary_expression);
 	}
@@ -6391,245 +6386,210 @@ static cfg_result_package_t emit_truncating_cast_expression(basic_block_t* basic
 
 
 /**
+ * There are some assignment expression scenarios where we have some thing like the
+ * following:
+ * 	t1 <- t5 + t7
+ * 	x <- t1
+ *
+ * Instead of doing this in the IR, we could for the sake of efficiency just do
+ * the following instead:
+ * 	x <- t5 + t7
+ *
+ * This helper determines if we're eligible to do that or not
+ */
+static inline u_int8_t is_statement_eligible_for_assignee_replacement(instruction_t* statement, three_addr_var_t* reported_result_var){
+	if(statement == NULL){
+		return FALSE;
+	}
+
+	/**
+	 * Currently we only support this for lea's and binary operation
+	 * statements, but this could be expanded in the future
+	 */
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_LEA_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+			break;
+		default:
+			return FALSE;
+	}
+
+	three_addr_var_t* assignee = statement->operands.oir.assignee;
+
+	//Must be a temporary variable to work
+	if(assignee->variable_type != VARIABLE_TYPE_TEMP){
+		return FALSE;
+	}
+
+	/**
+	 * If this variable is the same as the result variable in our
+	 * cfg_result_package_t, then we are good to go here. If it is
+	 * not then we can't do the combination
+	 */
+	return variables_equal_no_ssa(assignee, reported_result_var);
+}
+
+
+
+/**
  * Handle an assignment expression and all of the required bookkeeping that comes 
  * with it
+ *
+ * Assignment expressions are guaranteed to evaluate from left-to-right. The LHS must
+ * always be evaluated first under the Ollie standard. Once both expressions have
+ * been emitted, a final determination will be made to see if a store, memory copy, or 
+ * initialization is required
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
 	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
 
-	/**
-	 * We will start by emitting the right hand side first. This will allow
-	 * us to emit the left side second, leaving the door open for us to 
-	 * fill in any incomplete store operations that could be generated by
-	 * the left side
-	 */
-
-	//Current block always starts off as the basic_block
+	//Maintain a pointer to the current block
 	basic_block_t* current_block = basic_block;
 		
-	//This should always be a unary expression
+	//Extract these both for convenience
 	generic_ast_node_t* left_child = parent_node->first_child;
 	generic_ast_node_t* right_child = left_child->next_sibling;
 
-	//Now emit the right hand expression
-	cfg_result_package_t right_hand_package = emit_expression(current_block, right_child);
-
-	//Hold onto this for later
-	instruction_t* last_instruction = current_block->exit_statement;
-
-	//Reassign current to be at the end
-	current_block = right_hand_package.final_block;
-
-	//Emit the left hand unary expression
-	cfg_result_package_t unary_package = emit_unary_expression(current_block, left_child);
-
-	//Reassign current to be at the end
-	current_block = unary_package.final_block;
-
-	//This is always a var but we call the unpacker for safety
-	three_addr_var_t* left_hand_var = unpack_result_package(&unary_package, current_block, parent_node->line_number);
+	/**
+	 * Step 1: The LHS of the expression is *ALWAYS* emitted first. Ollie guarantees
+	 * that we always execute in order of left-to-right
+	 */
+	cfg_result_package_t left_hand_results = emit_unary_expression(current_block, left_child);
+	current_block = left_hand_results.final_block;
 
 	/**
-	 * Based on what kind of result we have on the right hand package,
-	 * we will process accordingly
+	 * Step 2: The RHS of the expression is *ALWAYS* emitted second. This means that everything
+	 * on the right only executes after the left has executed
 	 */
-	switch(right_hand_package.type){
+	cfg_result_package_t right_hand_results = emit_expression(current_block, right_child);
+	current_block = right_hand_results.final_block;
+
+	/**
+	 * Step 3: based on what kind of result we're dealing with from the RHS, we'll
+	 * emit the appropriate kind of instruction. We will also need to make the determination
+	 * now if this is a register-to-register assignment(movX instruction), a store instruction, 
+	 * a memory copy instruction, or an initialization instruction, though the last one is easy
+	 * to decide
+	 */
+	three_addr_var_t* lhs_result_var = left_hand_results.result_value.result_var;
+	switch(right_hand_results.type){
 		/**
-		 * For result types, there are many different things that we need to account
-		 * for like copy assignees, store operations, and optimizations for binary expressions
-		 */
-		case CFG_RESULT_TYPE_VAR: {
-			//Extract the result variable
-			three_addr_var_t* result_var = right_hand_package.result_value.result_var;
-
-			/**
-			 * Is a copy assignment required between the destination and source types? This
-			 * is going to have to be our first case because it may be incorrectly
-			 * identified by the other checks down the road
-			 */
-			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
-				//Emit the copy from the left hand var to the final op1
-				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(left_hand_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
-
-				//Get it into the block
-				add_statement(current_block, copy_statement);		
-
-			/**
-			 * Do we have a pre-loaded up store statement ready for us to go? If so, then
-			 * we'll need to handle this appropriately. We need to be sure that we aren't
-			 * invalidly hitting this though
-			 *
-			 * NOTE: We check for 100% *exact* equality between the exit statement's assignee
-			 * and the left hand var here. That is the only way that we can know for sure 
-			 * that we aren't having a false positive
-			 */
-			} else if(current_block->exit_statement != NULL
-						&& is_store_operation(current_block->exit_statement) == TRUE
-						&& current_block->exit_statement->operands.oir.address_operand1 == left_hand_var){
-				instruction_t* store_statement = current_block->exit_statement;
-
-				//This goes inside of the store statement's operand1
-				store_statement->operands.oir.operand1 = result_var;
-
-			/**
-			 * If we have a variable that is on the stack or is a global/static variable, then a regular assignment won't
-			 * work. We'll need to do a store here
-			 */
-			} else if(left_hand_var->linked_var != NULL && is_store_assignment_required_for_variable(left_hand_var->linked_var) == TRUE){
-				//Emit the memory address var for this variable
-				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
-
-				//Now for the final store code
-				instruction_t* final_assignment = emit_store_base_address_only(memory_address, result_var, left_hand_var->type, parent_node->line_number);
-
-				//Now add thi statement in here
-				add_statement(current_block, final_assignment);
-			
-			/**
-			 * If we get here, then we just have a regular variable that is not on the stack at all and is not a global variable,
-			 * so a regular assignment will work just fine
-			 */
-			} else {
-				/**
-				 * If this is not a binary operation, then we will just copy it over. If it is, then we will
-				 * use that binary operation for our own purposes here with the left hand var
-				 */
-				instruction_t* binary_expression;
-				instruction_t* final_assignment;
-
-				/**
-				 * Reach back into the block to see if the last instruction that we emitted for our op1
-				 * here is a constant assignment or a binary expression. If it's either, we can avoid
-				 * the copy assignment for this assignment expression and go to emitting directly
-				 */
-				if(last_instruction != NULL
-					&& last_instruction->operands.oir.assignee != NULL
-					&& last_instruction->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& variables_equal_no_ssa(last_instruction->operands.oir.assignee, result_var) == TRUE){
-
-					switch(last_instruction->statement_type){
-						case THREE_ADDR_CODE_BIN_OP_STMT:
-						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-							binary_expression = last_instruction;
-
-							//Make this one's assignee the left hand var
-							binary_expression->operands.oir.assignee = left_hand_var;
-							
-							break;
-
-						/**
-						 * If we have this then there's no clever optimization that we can do, we'll
-						 * just emti a copy assignment
-						 */
-						default:
-							//Finally we'll struct the whole thing
-							final_assignment = emit_assignment_instruction(left_hand_var, result_var, parent_node->line_number);
-
-							//Copy this over if there is one
-							left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
-							
-							//Now add thi statement in here
-							add_statement(current_block, final_assignment);
-
-							break;
-					}
-
-				/**
-				 * Otherwise there is no clever optimization that we could do, so we'll need to emit an assignment
-				 * from the left hand var over to the final op1
-				 */
-				} else {
-					//Finally we'll struct the whole thing
-					final_assignment = emit_assignment_instruction(left_hand_var, result_var, parent_node->line_number);
-
-					//Copy this over if there is one
-					left_hand_var->associated_memory_region.stack_region = result_var->associated_memory_region.stack_region;
-					
-					//Now add thi statement in here
-					add_statement(current_block, final_assignment);
-				}
-			}
-			
-			break;
-		}
-
-		/**
-		 * For constant result types, really the only thing that we have
-		 * to worry about is whether or not we have a store.
+		 * Constant results can emit stores or regular assignments. This depends on 3 scenarios
+		 * that we'll have to check:
+		 * 		1.) Is the LHS flagged as "memory access required"? This means that we've returned
+		 * 			a memory address and need to store into it. Things like *x = 5 generate this
+		 * 		2.) Does the LHS have a variable that is a stack variable? If so then we need to
+		 * 			store into that as well. Things like: int x = &y, y = 2; flag this
+		 * 		3.) Failing all that, we emit a regular assignment 
 		 */
 		case CFG_RESULT_TYPE_CONST: {
+			three_addr_const_t* result_const = right_hand_results.result_value.result_const;
+
 			/**
-			 * First case: we have a store statement that just needs a constant put to it
+			 * Case 1: we are specifically flagged as requiring memory access so we need
+			 * to emit that now. The LHS variable is the memory address
 			 */
-			if(current_block->exit_statement != NULL
-				&& is_store_operation(current_block->exit_statement)
-				&& current_block->exit_statement->operands.oir.address_operand1 == left_hand_var){
-
-				//Simply give this one the constant that we had
-				current_block->exit_statement->operands.oir.constant_operand = right_hand_package.result_value.result_const;
+			if(left_child->memory_access_required == TRUE){
+				instruction_t* store_instruction = emit_store_const_base_address_only(lhs_result_var, result_const, left_child->inferred_type, left_child->line_number);
+				add_statement(current_block, store_instruction);
 
 			/**
-			 * Second case: If we have a variable that is on the stack or is a global/static variable, then a regular assignment won't
-			 * work. We'll need to do a store here and emit this one ourselves
+			 * Case 2: we have a variable that is either a global or static variable or it's a variable that lives on the stack(variables
+			 * that have had their memory address taken are part of this). Either way, a regular assingment won't do so we'll need a store
+			 * here
 			 */
-			} else if(left_hand_var->linked_var != NULL && is_store_assignment_required_for_variable(left_hand_var->linked_var) == TRUE){
-				three_addr_var_t* memory_address = emit_memory_address_var(left_hand_var->linked_var);
+			} else if(is_store_assignment_required_for_variable(lhs_result_var->linked_var) == TRUE){
+				//We'll need a memory address var for this
+				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
 
-				//Now for the final store code
-				instruction_t* final_assignment = emit_store_base_address_only(memory_address, NULL, left_hand_var->type, parent_node->line_number);
-
-				//This guy's operand is the result constant
-				final_assignment->operands.oir.constant_operand = right_hand_package.result_value.result_const;
-
-				//Now add thi statement in here
-				add_statement(current_block, final_assignment);
+				//Emit and add the store
+				instruction_t* store_instruction = emit_store_const_base_address_only(memory_address, result_const, lhs_result_var->type, parent_node->line_number);
+				add_statement(current_block, store_instruction);
 
 			/**
-			 * Otherwise there is nothing else for us to do here but emit a regular
-			 * assign const from our result to the given one
+			 * Case 3: failing all of those other cases, we will come here and emit a regular assignment
+			 * expression
 			 */
 			} else {
-				//Emit it
-				instruction_t* const_assignment = emit_assignment_with_const_instruction(left_hand_var, right_hand_package.result_value.result_const, parent_node->line_number);
-
-				//Throw it into the block
-				add_statement(current_block, const_assignment);
+				instruction_t* constant_assignment = emit_assignment_with_const_instruction(lhs_result_var, result_const, parent_node->line_number);
+				add_statement(current_block, constant_assignment);
 			}
-			
+
 			break;
 		}
 
 		/**
-		 * Handle the special case of an initializer after an assignment expression
+		 * Variable results can emit memory copies, stores or regular assignments. This depends on 4 scenarios
+		 * that we'll have to check:
+		 * 		1.) Do the LHS type and RHS type require a memory copy? If so then we will always emit a 
+		 * 			memory copy instruction
+		 * 		2.) Is the LHS flagged as "memory access required"? This means that we've returned
+		 * 			a memory address and need to store into it. Things like *x = a generate this
+		 * 		3.) Does the LHS have a variable that is a stack variable? If so then we need to
+		 * 			store into that as well. Things like: int x = &y, y = a; flag this
+		 * 		4.) Failing all that, we emit a regular assignment 
 		 */
-		case CFG_RESULT_TYPE_INITIALIZER: {
-			three_addr_initializer_t* initializer = right_hand_package.result_value.result_initializer;
+		case CFG_RESULT_TYPE_VAR: {
+			three_addr_var_t* result_var = right_hand_results.result_value.result_var;
 
 			/**
-			 * Option 1: if we have a store statement on the LHS, we can simply 
-			 * convert it into an initializer statement and tack the result initializer
-			 * on
+			 * Case 1: the LHS and RHS side are both types that necessitate a copy assignment. We will
+			 * always emit a copy assignment in this case
 			 */
-			if(current_block->exit_statement != NULL
-				&& is_store_operation(current_block->exit_statement) == TRUE
-				&& current_block->exit_statement->operands.oir.address_operand1 == left_hand_var){
-
-				//Extract this and convert it
-				instruction_t* initializer_statement = current_block->exit_statement;
-				initializer_statement->statement_type = THREE_ADDR_CODE_INITIALIZER_STMT;
-				
-				//Tack the initializer on
-				initializer_statement->operands.oir.initializer_operand = initializer;
+			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(lhs_result_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
+				add_statement(current_block, copy_statement);
 
 			/**
-			 * Option 2: we don't have a premade store statement so we'll have to emit
-			 * the intiailization statement from scratch here
+			 * Case 2: we have specifically flagged the LHS as requiring memory access. This means
+			 * that we're coming from a postfix expression or a pointer derefernce on the LHS. Either
+			 * way, this will necessitate a store instruction from us
+			 */
+			} else if(left_child->memory_access_required == TRUE){
+				instruction_t* store_instruction = emit_store_base_address_only(lhs_result_var, result_var, left_child->inferred_type, left_child->line_number);
+				add_statement(current_block, store_instruction);
+
+			/**
+			 * Case 3: we're not flagged as requiring memory access, but the symtab variable that we are linked
+			 * to is a variable that is either global, static, or specifically stored on the stack. In this special
+			 * case, all assignments to this variable must be emitted as stores
+			 */
+			} else if(is_store_assignment_required_for_variable(lhs_result_var->linked_var) == TRUE){
+				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
+
+				//Emit and add the store
+				instruction_t* store_instruction = emit_store_base_address_only(memory_address, result_var, lhs_result_var->type, parent_node->line_number);
+				add_statement(current_block, store_instruction);
+
+			/**
+			 * Case 4: if the last statement in our prior block is a binary expression or a lea statement, and our 
+			 * reported result variable matches the assignee, we can go ahead and combine these as-is. This will cut
+			 * down on the overall number of instructions in our IR which is a boon in a large program
+			 */
+			} else if(is_statement_eligible_for_assignee_replacement(current_block->exit_statement, result_var) == TRUE){
+				current_block->exit_statement->operands.oir.assignee = lhs_result_var;
+
+			/**
+			 * Case 5: nothing fancy at all here - we just emit a regular assignment
 			 */
 			} else {
-				instruction_t* initializer_statement = emit_initialization_instruction(left_hand_var, initializer, parent_node->line_number);
-				add_statement(current_block, initializer_statement);
+				instruction_t* assignment = emit_assignment_instruction(lhs_result_var, result_var, parent_node->line_number);
+				add_statement(current_block, assignment);
 			}
-			
+
+			break;
+		}
+
+		/**
+		 * Initializers are easy. If we see an initializer then we know that we just need to initialize
+		 * into whatever the LHS result was
+		 */
+		case CFG_RESULT_TYPE_INITIALIZER: {
+			three_addr_initializer_t* result_initializer = right_hand_results.result_value.result_initializer;
+
+			instruction_t* initializer_statement = emit_initialization_instruction(lhs_result_var, result_initializer, parent_node->line_number);
+			add_statement(current_block, initializer_statement);
 			break;
 		}
 	}
@@ -6638,7 +6598,8 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 	 * Package up and return all of our results
 	 */
 	result_package.type = CFG_RESULT_TYPE_VAR;
-	result_package.result_value.result_var = left_hand_var;
+	result_package.result_value.result_var = lhs_result_var;
+	result_package.starting_block = basic_block;
 	result_package.final_block = current_block;
 	return result_package;
 }
@@ -6669,8 +6630,6 @@ static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_bloc
 	//Package up the assignee inisde of these results
 	results.type = CFG_RESULT_TYPE_VAR; 
 	results.result_value.result_var = paramcount_result;
-
-	//Give back the results
 	return results;
 }
 
@@ -11996,7 +11955,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			three_addr_var_t* let_result_var = let_initializer_results.result_value.result_var;
 
 			/**
-			 * Is a copy assignment required between the two variables? This will only
+			 * Case 1: Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
 			 */
@@ -12007,10 +11966,10 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				add_statement(current_block, copy_statement);
 
 			/**
-			 * If we have a variable that requires a store assignment, we will
+			 * Case 2: If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			} else if(assignee->linked_var != NULL && is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
+			} else if(is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening
@@ -12026,54 +11985,20 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 				//Now add thi statement in here
 				add_statement(current_block, store_statement);
 
+			/**
+			 * Case 3: if we have a binary operation or lea statement as the last statement in our current block, we can
+			 * cut down on an extra assignment statement by just replacing the assignee without our let variabel
+			 */
+			} else if(is_statement_eligible_for_assignee_replacement(current_block->exit_statement, let_result_var) == TRUE){
+				current_block->exit_statement->operands.oir.assignee = assignee;
+
+			/**
+			 * Case 4: we don't need to store and we aren't eligible for any fancy optimizations, so just
+			 * emit a regular assignment
+			 */
 			} else {
-				/**
-				 * If we have an exit statement *and* we are dealing with what the final_op1 is, we may
-				 * be able to shrink our footprint here
-				 */
-				if(current_block->exit_statement != NULL
-					&& current_block->exit_statement->operands.oir.assignee != NULL
-					&& current_block->exit_statement->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-					&& current_block->exit_statement->operands.oir.assignee == let_result_var){
-
-					switch(current_block->exit_statement->statement_type){
-						/**
-						 * For binary operations we can hijack the statement itself
-						 */
-						case THREE_ADDR_CODE_BIN_OP_STMT:
-						case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-							instruction_t* binary_operation = current_block->exit_statement;
-
-							//Just replace it with our variable
-							binary_operation->operands.oir.assignee = assignee;
-
-							break;
-						}
-
-						/**
-						 * Something else here - don't know what it is but we play it safe
-						 * and assign things over
-						 */
-						default:{
-							//The actual statement is the assignment of right to left
-							instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
-
-							//Finally we'll add this into the overall block
-							add_statement(current_block, assignment_statement);
-						}
-					}
-
-				/**
-				 * No fancy optimizations here - just emit an assignment over and we'll be
-				 * fine here
-				 */
-				} else {
-					//The actual statement is the assignment of right to left
-					instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
-
-					//Finally we'll add this into the overall block
-					add_statement(current_block, assignment_statement);
-				}
+				instruction_t* assignment_statement = emit_assignment_instruction(assignee, let_result_var, expression_node->line_number);
+				add_statement(current_block, assignment_statement);
 			}
 
 			break;
@@ -12089,7 +12014,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * If we have a variable that requires a store assignment, we will
 			 * emit that now
 			 */
-			if(assignee->linked_var != NULL && is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
+			if(is_store_assignment_required_for_variable(assignee->linked_var) == TRUE){
 				/**
 				 * Store the "true" stored type. This will only change if our type is a reference, because
 				 * we need to account for the implicit dereference that's happening

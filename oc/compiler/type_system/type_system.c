@@ -2352,6 +2352,14 @@ u_int8_t is_binary_operation_valid_for_type(generic_type_t* type, ollie_token_t 
 			break;
 	}
 
+	/**
+	 * It is never valid to do any kind of arithmetic with a void pointer, so if we have
+	 * this we're done
+	 */
+	if(type->internal_values.is_void_pointer == TRUE){
+		return FALSE;
+	}
+
 	//Switch based on what the operator is
 	switch(binary_op){
 		/**

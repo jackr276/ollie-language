@@ -167,8 +167,13 @@ struct generic_ast_node_t{
 	ollie_token_t unary_operator;
 	//Is this assignable
 	u_int8_t is_assignable;
-	//Is a dereference needed at the end of this value?
-	u_int8_t dereference_needed;
+	/**
+	 * Does this AST subtree require memory access. This flag is *EXTREMELY* important
+	 * for the CFG to generate correct code. If this flag is true on the LHS(SIDE_TYPE_LEFT),
+	 * it will lead to us generating a "store" instruction in the CFG. If this is true on the
+	 * RHS(SIDE_TYPE_RIGHT), it will lead to us generating a "load" instruction in the CFG
+	 */
+	u_int8_t memory_access_required;
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
 	/**
@@ -195,7 +200,32 @@ void initialize_ast_system();
 generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t side);
 
 /**
+ * Convert a given subtree starting at root to be of a specific side type. This is
+ * really only ever used to convert from right to left but it's been made generic
+ * for nicety. 
+ *
+ * When we do this, we will only ever convert the topmost node. All lower
+ * nodes do not need to be converted to have the desired effect. This is especially
+ * true for things like unary/postfix expressions, which may have, for instance,
+ * a store expression whose offset is derived from a load
+ */
+void convert_subtree_to_given_side(generic_ast_node_t* root, side_type_t side);
+
+/**
+ * Propogate the no memory access needed flag down recursively until we hit a postfix
+ * expression(our "root" in this case) or nothing. This is important because we cannot
+ * be dereferencing(memory accessing) if we need to perform a copy assignment
+ *
+ * NOTE: This method is recursive which is why we are not inlining it
+ */
+void propogate_no_memory_access_required_flag(generic_ast_node_t* node);
+
+/**
  * Perform a deep copy on a subtree
+ *
+ * NOTE: we only ever take the new "side" into account for the first node. All subsequent calls
+ * will carry the side type from the clonee. This is done to avoid issues specifically with postfix
+ * and unary operations
  */
 generic_ast_node_t* duplicate_subtree(generic_ast_node_t* duplicatee, side_type_t side);
 

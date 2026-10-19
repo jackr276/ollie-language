@@ -8,7 +8,7 @@
 * Size should be: 4 + 4 pad + 8 + 1 + 7 pad = 24 (end must be a multiple of 8)
 */
 define struct custom {
-		x:i32;
+		x:mut i32;
 		a:i64;
 		y:char;
 } as my_struct;
@@ -37,6 +37,7 @@ pub fn main(arg:i32, argv:char**) -> i32{
 	// This should FAIL
 	++tester:x = 3;
 
+	OUNIT: [fail_to_compile]
 	//So it isn't optimized away
 	ret tester:x;
 }
