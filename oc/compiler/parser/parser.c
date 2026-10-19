@@ -4206,6 +4206,29 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 			return print_and_return_error(info, parser_line_num);
 		}
 
+		/**
+		 * If we have something like this:
+		 * 				y(i32) += x(i64)
+		 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
+		 * 	As such, we need to check if the types are assignable first. This rule also handles any/all constant
+		 * 	coercion
+		 */
+		generic_type_t* final_type = is_ast_node_assignable_to_destination_type(left_hand_expression->inferred_type, right_hand_expression);
+		if(final_type == NULL){
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
+		 * Now that we know everything is valid, we will duplicate the subtree for the LHS so that
+		 * we can have that as the LHS of our assignment. The duplicator helper provides us with a
+		 * way to duplicate it as an LHS subtree, so we'll do that
+		 */
+		generic_ast_node_t* assignment_expression_lhs = duplicate_subtree(left_hand_expression, SIDE_TYPE_LEFT);
+
+
+
+
+
 
 
 		printf("TODO NOT IMPLEMENTED\n");
