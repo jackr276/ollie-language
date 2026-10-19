@@ -4207,18 +4207,6 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		}
 
 		/**
-		 * If we have something like this:
-		 * 				y(i32) += x(i64)
-		 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
-		 * 	As such, we need to check if the types are assignable first. This rule also handles any/all constant
-		 * 	coercion
-		 */
-		generic_type_t* final_type = is_ast_node_assignable_to_destination_type(left_hand_expression->inferred_type, right_hand_expression);
-		if(final_type == NULL){
-			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
-		}
-
-		/**
 		 * Now that we know everything is valid, we will duplicate the subtree for the LHS so that
 		 * we can have that as the LHS of our assignment. The duplicator helper provides us with a
 		 * way to duplicate it as an LHS subtree, so we'll do that
@@ -4226,20 +4214,41 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		generic_ast_node_t* assignment_expression_lhs = duplicate_subtree(left_hand_expression, SIDE_TYPE_LEFT);
 
 		/**
+		 * Let's get the final type for the binary operation. Note that this will perform type coercion, so we want
+		 * to do this on the old LHS tree, not the new one, in case any type incompatibilities are shook out
+		 * by this. If this fails then we're done
+		 */
+		generic_type_t* binary_operation_final_type = determine_compatability_and_coerce(type_symtab, &(left_hand_expression->inferred_type), &(right_hand_expression->inferred_type), binary_operator);
+		if(binary_operation_final_type == NULL){
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
 		 * Now we're able to emit our binary expression subtree using the original two nodes,
 		 * and the type information that we've derived along the way
 		 */
 		generic_ast_node_t* binary_operation_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-		binary_operation_node->inferred_type = final_type;
+		binary_operation_node->line_number = current_line;
+		binary_operation_node->inferred_type = binary_operation_final_type;
 		binary_operation_node->binary_operator = binary_operator;
 		add_child_node(binary_operation_node, left_hand_expression);
 		add_child_node(binary_operation_node, right_hand_expression);
 
 		/**
-		 * Now once the binary expression has been created, we can create the overall assignmetn
-		 * expression using the duplicated node values
+		 * Now that we have a fully formed binary operation node and a distinct type for it, we can determine assignability for the
+		 * actual left hand expression and this binary operation
+		 */
+		generic_type_t* final_type = is_ast_node_assignable_to_destination_type(assignment_expression_lhs->inferred_type, binary_operation_node);
+		if(final_type == NULL){
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
+		 * Once we have the binary operation and all of the type information looks good, we can
+		 * create our assignment expression node
 		 */
 		generic_ast_node_t* assignment_expression_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+		assignment_expression_node->line_number = current_line;
 		assignment_expression_node->variable = left_hand_expression->variable;
 		assignment_expression_node->is_assignable = FALSE;
 		assignment_expression_node->inferred_type = final_type;
