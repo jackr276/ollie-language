@@ -4001,10 +4001,8 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  * 2.) Attempting to initialize an immutable array or struct
  * 3.) Attempting to assign to an immutable "field variable" - think struct/union field
  * 4.) Attempting to assign to an immutable array/struct area
- *
- * TODO CAN WE MAKE THIS A BOOLEAN?
  */
-static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
+static u_int8_t perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
 	//Get the left handle type out
 	generic_type_t* left_hand_type = dealias_type(left_hand_expression_tree->inferred_type);
 
@@ -4022,7 +4020,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			if(variable->type_defined_as->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable static or global variable. First defined here: ");
 				print_variable_name_to_buffer(info, variable);
-				return print_and_return_error(info, parser_line_num);
+				return print_and_return_failure(info, parser_line_num);
 			}
 		}
 	}
@@ -4035,7 +4033,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 	if(left_hand_type->type_class == TYPE_CLASS_ARRAY || left_hand_type->type_class == TYPE_CLASS_STRUCT){
 		if(left_hand_type->mutability == NOT_MUTABLE){
 			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", get_full_type_name_from_type(left_hand_type));
-			return print_and_return_error(info, parser_line_num);
+			return print_and_return_failure(info, parser_line_num);
 		}
 	}
 
@@ -4052,7 +4050,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		if(left_hand_expression_tree->optional_storage.field_variable->type_defined_as->mutability == NOT_MUTABLE){
 			sprintf(info, "Field \"%s\" is not mutable. Fields must be declared as mutable to be assigned to.",
 		   				left_hand_expression_tree->optional_storage.field_variable->var_name.string);
-			return print_and_return_error(info, parser_line_num);
+			return print_and_return_failure(info, parser_line_num);
 		}
 
 	/**
@@ -4072,7 +4070,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		if(accessor->ast_node_type == AST_NODE_TYPE_ARRAY_ACCESSOR){
 			if(first_child->inferred_type->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(first_child));
-				return print_and_return_error(info, parser_line_num);
+				return print_and_return_failure(info, parser_line_num);
 			}
 		}
 
@@ -4097,15 +4095,13 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR && first_child->unary_operator == STAR){
 			if(dereferenced->inferred_type->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(dereferenced));
-				return print_and_return_error(info, parser_line_num);
+				return print_and_return_failure(info, parser_line_num);
 			}
 		}
 	}
 
-
-
-	//Just give this back as a flag that we're fine
-	return left_hand_expression_tree;
+	//This worked so give back success
+	return SUCCESS;
 }
 
 
@@ -4184,7 +4180,7 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 	 * One final check - verify that we are able to mutate the left hand unary. There are cases for memory
 	 * region mutation that the static analyzer will not check
 	 */
-	if(perform_mutability_checking(left_hand_expression)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(perform_mutability_checking(left_hand_expression) == FAILURE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
@@ -4426,7 +4422,7 @@ loop_end:
 	 * One final check - verify that we are able to mutate the left hand unary. There are cases for memory
 	 * region mutation that the static analyzer will not check
 	 */
-	if(perform_mutability_checking(left_hand_unary)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	if(perform_mutability_checking(left_hand_unary) == FAILURE){
 		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
@@ -5090,7 +5086,7 @@ static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream
 				 * Validate that what we are doing is actually within bounds of mutability. If it's not
 				 * then we need to fail out
 				 */
-				if(perform_mutability_checking(parent)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+				if(perform_mutability_checking(parent) == FAILURE){
 					return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 				}
 
@@ -5496,7 +5492,7 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 			 * If we are trying to mutate values that are immutable, this is another failure. We will exit
 			 * out if this is the case
 			 */
-			if(perform_mutability_checking(cast_expression_node)->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+			if(perform_mutability_checking(cast_expression_node) == FAILURE){
 				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 			}
 			
