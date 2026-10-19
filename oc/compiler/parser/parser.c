@@ -4155,10 +4155,37 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 	}
 
 	/**
-	 * Step 3: we no w
+	 * Step 3: we are now going to try and assign the LHS so we'll need to verify
+	 * that it is assignable
 	 */
-	//TODO CONVERT TO LHS EXPRESSION
+	if(left_hand_expression->is_assignable == FALSE){
+		return print_and_return_error("Expression is not assignable", current_line);
+	}
 
+	/**
+	 * Step 4: now let's try parsing the RHS. Hard fail here if this fails to parse
+	 */
+	generic_ast_node_t* right_hand_expression = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(right_hand_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
+	}
+
+
+
+	/**
+	 * We can either be dealing with a regular assignment(=) or some kind of compressed
+	 * equality expression like +=. The handling is different so we'll split along those lines here
+	 */
+	if(operator == EQUALS){
+		/**
+		 * Step 3: we now know that the left hand expression that we initially parsed as being
+		 * on the rhs is truly a SIDE_TYPE_LEFT expression. To convert it, we'll pass this
+		 * to a helper 
+		 */
+
+	} else {
+
+	}
 
 
 
