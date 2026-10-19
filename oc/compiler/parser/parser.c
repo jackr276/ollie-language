@@ -4175,7 +4175,39 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		assignment_expression_node->line_number = current_line;
 		return assignment_expression_node;
 
+	/**
+	 * If we get here then we have what's called a "compressed equality operator" in Ollie. This
+	 * is something like +=/-= etc.. We will convert this into an assignment operation plus
+	 * a binary operation for the AST
+	 */
 	} else {
+		ollie_token_t binary_operator = compressed_assignment_to_binary_op(operator);
+
+		/**
+		 * Validate that the type on the LHS is valid to be used with the operator in the left hand of our
+		 * expression. There are rules around pointer math and orientation, which is why the side is important
+		 */
+		if(is_binary_operation_valid_for_type(left_hand_expression->inferred_type, binary_operator, SIDE_TYPE_LEFT) == FALSE){
+			sprintf(info, "Type %s is invalid for operation %s",
+					get_full_type_name_from_ast_node(left_hand_expression),
+					operator_token_to_string(operator));
+
+			return print_and_return_error(info, parser_line_num);
+		}
+
+		/**
+		 * Do the same for the right hand side expression
+		 */
+		if(is_binary_operation_valid_for_type(right_hand_expression->inferred_type, binary_operator, SIDE_TYPE_RIGHT) == FALSE){
+			sprintf(info, "Type %s is invalid for operation %s",
+					get_full_type_name_from_ast_node(right_hand_expression),
+					operator_token_to_string(operator));
+
+			return print_and_return_error(info, parser_line_num);
+		}
+
+
+
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
