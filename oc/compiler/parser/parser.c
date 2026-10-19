@@ -4129,7 +4129,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
  * 									   | <unary-expression> ^= <initializer-expression>
  *
  */
-static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token_stream){
+static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
 	//Hang onto the current line number for later
 	u_int32_t current_line = parser_line_num;
 
@@ -4224,9 +4224,6 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 			 */
 			propogate_no_memory_access_required_flag(right_hand_expression);
 
-			//Store this for down the road - how many bytes do we need to copy
-			asn_expr_node->optional_storage.bytes_to_copy = final_type->type_size;
-
 			/**
 			 * Since we are performing a memory copy instruction, this function
 			 * is required to perform an initial alignment when we enter it. If we did
@@ -4236,9 +4233,23 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
 			current_function->requires_initial_alignment = TRUE;
 		}
 
+		/**
+		 * We've made it here so we can now create package up our assignment expression
+		 * node overall
+		 */
 		generic_ast_node_t* assignment_expression_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+		add_child_node(assignment_expression_node, left_hand_expression);
+		add_child_node(assignment_expression_node, right_hand_expression);
 
-
+		/**
+		 * The overall node gets its inferred type from the final type, and its variable
+		 * from the left hand unary(if there is any)
+		 */
+		assignment_expression_node->inferred_type = final_type;
+		assignment_expression_node->optional_storage.bytes_to_copy = final_type->type_size;
+		assignment_expression_node->is_assignable = FALSE;
+		assignment_expression_node->variable = left_hand_expression->variable;
+		return assignment_expression_node;
 
 	} else {
 		printf("TODO NOT IMPLEMENTED\n");
@@ -4269,7 +4280,7 @@ static generic_ast_node_t* assignment_expression__v2(ollie_token_stream_t* token
  * 									   | <unary-expression> ^= <ternary-expression>
  *
  */
-static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
+static generic_ast_node_t* assignment_expression__OLD(ollie_token_stream_t* token_stream){
 	u_int32_t current_line = parser_line_num;
 	ollie_token_t assignment_operator = BLANK;
 	lexitem_t lookahead;
