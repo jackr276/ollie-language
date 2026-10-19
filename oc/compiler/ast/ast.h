@@ -212,6 +212,15 @@ generic_ast_node_t* ast_node_alloc(ast_node_type_t ast_node_type, side_type_t si
 void convert_subtree_to_given_side(generic_ast_node_t* root, side_type_t side);
 
 /**
+ * Propogate the no memory access needed flag down recursively until we hit a postfix
+ * expression(our "root" in this case) or nothing. This is important because we cannot
+ * be dereferencing(memory accessing) if we need to perform a copy assignment
+ *
+ * NOTE: This method is recursive which is why we are not inlining it
+ */
+void propogate_no_memory_access_required_flag(generic_ast_node_t* node);
+
+/**
  * Perform a deep copy on a subtree
  *
  * NOTE: we only ever take the new "side" into account for the first node. All subsequent calls

@@ -8237,6 +8237,67 @@ void convert_subtree_to_given_side(generic_ast_node_t* root, side_type_t side){
 
 
 /**
+ * Propogate the no memory access needed flag down recursively until we hit a postfix
+ * expression(our "root" in this case) or nothing. This is important because we cannot
+ * be dereferencing(memory accessing) if we need to perform a copy assignment
+ *
+ * NOTE: This method is recursive which is why we are not inlining it
+ */
+void propogate_no_memory_access_required_flag(generic_ast_node_t* node){
+	//Nothing to do here so leave
+	if(node == NULL){
+		return;
+	}
+
+	switch(node->ast_node_type){
+		/**
+		 * For a ternary expression we need to flag the left and right children
+		 * as not requiring any kind of dereference
+		 */
+		case AST_NODE_TYPE_TERNARY_EXPRESSION: {
+			generic_ast_node_t* ternary_cursor = node->first_child;
+
+			//Then the left child which we flag first
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//Flag the left child first
+			propogate_no_memory_access_required_flag(ternary_cursor);
+
+			//Now advance to the right child
+			ternary_cursor = ternary_cursor->next_sibling;
+
+			//And flag the right child
+			propogate_no_memory_access_required_flag(ternary_cursor);
+
+			return;
+		}
+
+		/**
+		 * Flag here that we do not need a dereference on the 
+		 * postfix expression if we have one
+		 */
+		case AST_NODE_TYPE_POSTFIX_EXPR: {
+			node->memory_access_required = FALSE;
+			return;
+		}
+
+		/**
+		 * Flag here that we do not need a dereference on the 
+		 * unary expression if we have one
+		 */
+		case AST_NODE_TYPE_UNARY_EXPR: {
+			node->memory_access_required = FALSE;
+			return;
+		}
+
+		//Whatever this is we aren't interested
+		default:
+			return;
+	}
+}
+
+
+/**
  * We will completely duplicate a deferred statement here. Since all deferred statements
  * are logical expressions, we will perform a deep copy to create an entirely new
  * chain of deferred statements

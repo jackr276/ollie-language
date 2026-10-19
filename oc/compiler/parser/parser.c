@@ -659,67 +659,6 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 
 
 /**
- * Propogate the no memory access needed flag down recursively until we hit a postfix
- * expression(our "root" in this case) or nothing. This is important because we cannot
- * be dereferencing(memory accessing) if we need to perform a copy assignment
- *
- * NOTE: This method is recursive which is why we are not inlining it
- */
-static void propogate_no_memory_access_required_flag(generic_ast_node_t* node){
-	//Nothing to do here so leave
-	if(node == NULL){
-		return;
-	}
-
-	switch(node->ast_node_type){
-		/**
-		 * For a ternary expression we need to flag the left and right children
-		 * as not requiring any kind of dereference
-		 */
-		case AST_NODE_TYPE_TERNARY_EXPRESSION: {
-			generic_ast_node_t* ternary_cursor = node->first_child;
-
-			//Then the left child which we flag first
-			ternary_cursor = ternary_cursor->next_sibling;
-
-			//Flag the left child first
-			propogate_no_memory_access_required_flag(ternary_cursor);
-
-			//Now advance to the right child
-			ternary_cursor = ternary_cursor->next_sibling;
-
-			//And flag the right child
-			propogate_no_memory_access_required_flag(ternary_cursor);
-
-			return;
-		}
-
-		/**
-		 * Flag here that we do not need a dereference on the 
-		 * postfix expression if we have one
-		 */
-		case AST_NODE_TYPE_POSTFIX_EXPR: {
-			node->memory_access_required = FALSE;
-			return;
-		}
-
-		/**
-		 * Flag here that we do not need a dereference on the 
-		 * unary expression if we have one
-		 */
-		case AST_NODE_TYPE_UNARY_EXPR: {
-			node->memory_access_required = FALSE;
-			return;
-		}
-
-		//Whatever this is we aren't interested
-		default:
-			return;
-	}
-}
-
-
-/**
  * Crawl the array initializer list and validate that we have a compatible type for each entry in the list
  */
 static u_int8_t validate_types_for_array_initializer_list(generic_type_t* array_type, generic_ast_node_t* initializer_list_node){
