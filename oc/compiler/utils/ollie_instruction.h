@@ -68,6 +68,8 @@ struct instruction_t{
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
+	//What kind of memory addressing mode do we have?
+	memory_addressing_mode_t addressing_mode;
 	//What is the operator for the instruction?
 	ollie_token_t op;
 	/**
@@ -87,8 +89,6 @@ struct instruction_t{
 			three_addr_var_t* operand2;
 			//Constant operand if need be
 			three_addr_const_t* constant_operand;
-			//Assignee for the expression
-			three_addr_var_t* assignee;
 
 			/**
 			 * Since we can have OIR expressions with a memory
