@@ -89,29 +89,20 @@ struct instruction_t{
 			three_addr_var_t* operand2;
 			//Constant operand if need be
 			three_addr_const_t* constant_operand;
-			//Assignee
-			three_addr_var_t* assignee;
+
 			/**
-			 * We maintain separate variable storage for lea/address
-			 * calculation statements. Reminder that these statements
-			 * go like(at their maximum): offset(operand1, operand2, multiplier)
+			 * Since we can have OIR expressions with a memory
+			 * source(lea(kindof), and load), and we can have expressions
+			 * with a memory destination(store), and we can have expressions
+			 * with a memory source and destination(memory copy), we have 
+			 * room for both in here
 			 */
-			three_addr_const_t* address_offset;
-			three_addr_var_t* address_operand1;
-			three_addr_var_t* address_operand2;
-
-			//This can never be anything besides a 64 bit integer
-			u_int64_t address_multiplier;
+			addressing_operands_t source_address_expression;
+			addressing_operands_t destination_address_expression;
 
 			/**
-			 * Some variables are represented as RIP offsets. We will use a special
-			 * space here so that they are excluded from the register allocator's
-			 * processing
-			 */
-			three_addr_var_t* rip_offset_var;
-
-			/**
-			 * TODO FLESH THIS OUT MORE
+			 * We are able to initialize from an initializer into a destination memory 
+			 * area. This initializer operand supports that
 			 */
 			three_addr_initializer_t* initializer_operand;
 		} oir; 
