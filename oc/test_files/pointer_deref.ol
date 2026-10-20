@@ -5,5 +5,6 @@ pub fn main(argc:i32, argv:char**) -> i32 {
 
 	*y = 32 + *y;
 
+	OUNIT: [exit_status = 64]
 	ret *y;
 }

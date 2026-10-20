@@ -72,7 +72,6 @@ static dependency_graph_node_t* current_dependency_node = NULL;
 
 //Our stack for storing variables, etc
 static lex_stack_t grouping_stack;
-static lex_stack_t assignment_grouping_stack;
 
 //Generic types here for us to repeatedly reference
 static generic_type_t* immut_char = NULL;
@@ -367,6 +366,25 @@ static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
 
 
 /**
+ * Is a given token a unary operator
+ */
+static inline u_int8_t is_unary_operator(ollie_token_t tok){
+	switch (tok) {
+		case SINGLE_AND:
+		case STAR:
+		case MINUS:
+		case MINUSMINUS:
+		case PLUSPLUS:
+		case EXCLAMATION:
+		case B_NOT:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
  * Is the given type returned by copy from a function? Stack and union
  * types are eligible for this
  */
@@ -648,58 +666,6 @@ static inline generic_type_t* determine_type_compatability_for_expression(type_s
 			//Give back whatever we got
 			return return_type;
 		}
-	}
-}
-
-
-/**
- * Propogate the dereference needed flag down recursively until we hit a postfix
- * expression(our "root" in this case) or nothing. This is important because we cannot
- * be dereferencing if we need to perform a copy assignment
- *
- * NOTE: This method is recursive which is why we are not inlining it
- */
-static void propogate_no_dereference_required_flag(generic_ast_node_t* node){
-	//Base case - we have nothing so just leave
-	if(node == NULL){
-		return;
-	}
-
-	switch(node->ast_node_type){
-		/**
-		 * For a ternary expression we need to flag the left and right children
-		 * as not requiring any kind of dereference
-		 */
-		case AST_NODE_TYPE_TERNARY_EXPRESSION: {
-			generic_ast_node_t* ternary_cursor = node->first_child;
-
-			//Then the left child which we flag first
-			ternary_cursor = ternary_cursor->next_sibling;
-
-			//Flag the left child first
-			propogate_no_dereference_required_flag(ternary_cursor);
-
-			//Now advance to the right child
-			ternary_cursor = ternary_cursor->next_sibling;
-
-			//And flag the right child
-			propogate_no_dereference_required_flag(ternary_cursor);
-
-			return;
-		}
-
-		/**
-		 * Flag here that we do not need a dereference on the 
-		 * postfix expression if we have one
-		 */
-		case AST_NODE_TYPE_POSTFIX_EXPR: {
-			node->dereference_needed = FALSE;
-			return;
-		}
-
-		//Whatever this is we aren't interested
-		default:
-			return;
 	}
 }
 
@@ -1718,7 +1684,7 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	 * the value, we do not accidentally copy from already dereferenced memory
 	 */
 	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
-		propogate_no_dereference_required_flag(expr_node);
+		propogate_no_memory_access_required_flag(expr_node);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -2280,7 +2246,7 @@ static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_s
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
-				propogate_no_dereference_required_flag(elaborated_param);
+				propogate_no_memory_access_required_flag(elaborated_param);
 			}
 
 			//This counts as one more elaborated param
@@ -2857,7 +2823,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 						 * to perform a memory copy assignment here, we need to flag that 
 						 * we do *not* require a dereference to make this work
 						 */
-						propogate_no_dereference_required_flag(param_expression);
+						propogate_no_memory_access_required_flag(param_expression);
 					}
 
 					//Add this to the overarching elaborative param node
@@ -3227,7 +3193,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 						 * to perform a memory copy assignment here, we need to flag that 
 						 * we do *not* require a dereference to make this work
 						 */
-						propogate_no_dereference_required_flag(param_expression);
+						propogate_no_memory_access_required_flag(param_expression);
 					}
 
 					//Add this to the overarching elaborative param node
@@ -3994,7 +3960,7 @@ static generic_ast_node_t* primary_expression(ollie_token_stream_t* token_stream
  * 3.) Attempting to assign to an immutable "field variable" - think struct/union field
  * 4.) Attempting to assign to an immutable array/struct area
  */
-static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
+static u_int8_t perform_mutability_checking(generic_ast_node_t* left_hand_expression_tree){
 	//Get the left handle type out
 	generic_type_t* left_hand_type = dealias_type(left_hand_expression_tree->inferred_type);
 
@@ -4012,7 +3978,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 			if(variable->type_defined_as->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable static or global variable. First defined here: ");
 				print_variable_name_to_buffer(info, variable);
-				return print_and_return_error(info, parser_line_num);
+				return print_and_return_failure(info, parser_line_num);
 			}
 		}
 	}
@@ -4025,7 +3991,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 	if(left_hand_type->type_class == TYPE_CLASS_ARRAY || left_hand_type->type_class == TYPE_CLASS_STRUCT){
 		if(left_hand_type->mutability == NOT_MUTABLE){
 			sprintf(info, "Attempt to mutate immutable memory region of type %s\n", get_full_type_name_from_type(left_hand_type));
-			return print_and_return_error(info, parser_line_num);
+			return print_and_return_failure(info, parser_line_num);
 		}
 	}
 
@@ -4042,7 +4008,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		if(left_hand_expression_tree->optional_storage.field_variable->type_defined_as->mutability == NOT_MUTABLE){
 			sprintf(info, "Field \"%s\" is not mutable. Fields must be declared as mutable to be assigned to.",
 		   				left_hand_expression_tree->optional_storage.field_variable->var_name.string);
-			return print_and_return_error(info, parser_line_num);
+			return print_and_return_failure(info, parser_line_num);
 		}
 
 	/**
@@ -4062,7 +4028,7 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		if(accessor->ast_node_type == AST_NODE_TYPE_ARRAY_ACCESSOR){
 			if(first_child->inferred_type->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(first_child));
-				return print_and_return_error(info, parser_line_num);
+				return print_and_return_failure(info, parser_line_num);
 			}
 		}
 
@@ -4087,15 +4053,13 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
 		if(first_child->ast_node_type == AST_NODE_TYPE_UNARY_OPERATOR && first_child->unary_operator == STAR){
 			if(dereferenced->inferred_type->mutability == NOT_MUTABLE){
 				sprintf(info, "Attempt to mutate an immutable memory reference type \"%s\"", get_full_type_name_from_ast_node(dereferenced));
-				return print_and_return_error(info, parser_line_num);
+				return print_and_return_failure(info, parser_line_num);
 			}
 		}
 	}
 
-
-
-	//Just give this back as a flag that we're fine
-	return left_hand_expression_tree;
+	//This worked so give back success
+	return SUCCESS;
 }
 
 
@@ -4106,177 +4070,104 @@ static generic_ast_node_t* perform_mutability_checking(generic_ast_node_t* left_
  * that will be made. If not, we will simply pass the parent along. An assignment expression will return
  * a reference to the subtree created by it
  *
- * BNF Rule: <assignment-expression> ::= <ternary-expression> 
- * 									   | <unary-expression> = <ternary-expression>
- * 									   | <unary-expression> <<= <ternary-expression>
- * 									   | <unary-expression> >>= <ternary-expression>
- * 									   | <unary-expression> += <ternary-expression>
- * 									   | <unary-expression> -= <ternary-expression>
- * 									   | <unary-expression> *= <ternary-expression>
- * 									   | <unary-expression> /= <ternary-expression>
- * 									   | <unary-expression> |= <ternary-expression>
- * 									   | <unary-expression> &= <ternary-expression>
- * 									   | <unary-expression> ^= <ternary-expression>
+ * BNF Rule: <assignment-expression> ::= <initializer-expression> 
+ * 									   | <unary-expression> = <initializer-expression>
+ * 									   | <unary-expression> <<= <initializer-expression>
+ * 									   | <unary-expression> >>= <initializer-expression>
+ * 									   | <unary-expression> += <initializer-expression>
+ * 									   | <unary-expression> -= <initializer-expression>
+ * 									   | <unary-expression> *= <initializer-expression>
+ * 									   | <unary-expression> /= <initializer-expression>
+ * 									   | <unary-expression> |= <initializer-expression>
+ * 									   | <unary-expression> &= <initializer-expression>
+ * 									   | <unary-expression> ^= <initializer-expression>
+ *
  */
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
-	//Freeze the line number
+	//Hang onto the current line number for later
 	u_int32_t current_line = parser_line_num;
-	//Lookahead token
-	lexitem_t lookahead;
 
-	//This will hold onto the assignment operator for us
-	ollie_token_t assignment_operator = BLANK;
-
-	//Wipe out whatever run came before us on the lexstack
-	reset_lexstack(&assignment_grouping_stack);
-
-	//Let's now seek ahead in the token stream until we either find an assignment operator or the 
-	//end of a statement
-	u_int32_t token_pointer = token_stream->token_pointer;
-	while(TRUE){
-		//Grab the lookahead
-		lookahead = token_stream->token_stream.internal_array[token_pointer];
-
-		//If we see an assignment operator or something that indicates the end
-		//of a statement, we're done here
-		switch(lookahead.tok){
-			//For these instances, there's no chance of us being caught
-			//inside of a nested expression
-			case SEMICOLON:
-			case L_CURLY:
-			case R_CURLY:
-				assignment_operator = lookahead.tok;
-				goto loop_end;
-
-			case EQUALS:
-			case LSHIFTEQ:
-			case RSHIFTEQ:
-			case XOREQ:
-			case OREQ:
-			case ANDEQ:
-			case PLUSEQ:
-			case MINUSEQ:
-			case STAREQ:
-			case SLASHEQ:
-			case MODEQ:
-				/**
-				 * When we encounter this, we need to know
-				 * if we're actually seeing an equals sign or
-				 * if we're trapped inside of a parenthesized expression.
-				 * We'll be able to tell if we can peek the private
-				 * stack and not see anything
-				 */
-				if(peek_token(&assignment_grouping_stack).tok != L_PAREN){
-					assignment_operator = lookahead.tok;
-					goto loop_end;
-				}
-
-				//If we got here, it means we saw an assignment operator but we
-				//were stuck inside of a parenthesis, so we can't actually
-				//escape here
-				token_pointer++;
-				break;
-
-			//Put it onto the stack
-			case L_PAREN:
-				push_token(&assignment_grouping_stack, lookahead);
-				token_pointer++;
-				break;
-
-			//Pop it off of the stack
-			case R_PAREN:
-				//If we don't have an L_PAREN on here, it means we hit
-				//the end of some barrier and cannot escape
-				if(peek_token(&assignment_grouping_stack).tok != L_PAREN){
-					assignment_operator = lookahead.tok;
-					goto loop_end;
-				}
-
-				pop_token(&assignment_grouping_stack);
-				token_pointer++;
-				break;
-
-			//Otherwise we must keep searching
-			default:
-				//Bump it up
-				token_pointer++;
-				break;
-		}
+	/**
+	 * First we need to see an initializer expression. We will initially invoke this with a side type
+	 * of right because we have not proven that we are actually an assignment expression yet. If this
+	 * fails then we fail out for the whole thing
+	 */
+	generic_ast_node_t* left_hand_expression = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(left_hand_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_RIGHT);
 	}
 
-loop_end:
-	//If whatever our operator here is is not an assignment operator, we can just use the in expression rule
-	if(is_assignment_operator(assignment_operator) == FALSE){
-		return initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	/**
+	 * Once we've successfully parsed what may have been the LHS, we can now look ahead and
+	 * see if we have an assignment operator. If we have not, then we can push this token
+	 * back and get out because there's nothing left to do
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+	ollie_token_t operator = lookahead.tok;
+
+	if(is_assignment_operator(operator) == FALSE){
+		push_back_token(token_stream, &parser_line_num);
+		return left_hand_expression;
 	}
 
-	//If we make it here however, that means that we did see the assign keyword. Since
-	//this is the case, we'll make a new assignment node and take the appropriate actions here 
-	generic_ast_node_t* asn_expr_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
-	//Add in the line number
-	asn_expr_node->line_number = current_line;
-
-	//We'll let this rule handle it
-	generic_ast_node_t* left_hand_unary = unary_expression(token_stream, SIDE_TYPE_LEFT);
-
-	//Fail out here
-	if(left_hand_unary->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return print_and_return_error("Invalid left hand side given to assignment expression", current_line);
-	}
-	
-	//If it isn't assignable, we also fail
-	if(left_hand_unary->is_assignable == FALSE){
-		return print_and_return_error("Expression is not assignable", left_hand_unary->line_number);
+	/**
+	 * We are now going to try and assign the LHS so we'll need to verify
+	 * that it is assignable
+	 */
+	if(left_hand_expression->is_assignable == FALSE){
+		return print_and_return_error("Expression is not assignable", current_line);
 	}
 
-	//Otherwise it worked, so we'll add it in as the left child
-	add_child_node(asn_expr_node, left_hand_unary);
-
-	//Now we are required to see the := terminal
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	
-	//Fail case here
-	if(is_assignment_operator(lookahead.tok) == FALSE){
-		sprintf(info, "Expected assignment operator symbol in assignment expression");
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Parse the initializer_expression
-	generic_ast_node_t* expr = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	//Fail case here
-	if(expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	/**
+	 * Try parsing the RHS. Hard fail here if this fails to parse
+	 */
+	generic_ast_node_t* right_hand_expression = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(right_hand_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid right hand side given to assignment expression", current_line);
 	}
 
 	/**
-	 * We can only every assign to array types using an initailizer type in this scenario
+	 * Validate the special case of an array type that's being assigned to. We only allow for this
+	 * if the RHS is an array initializer
 	 */
-	if(left_hand_unary->inferred_type->type_class == TYPE_CLASS_ARRAY && is_initializer_node(expr) == FALSE){
-		return print_and_return_error("Array types cannot be assigned to unless using an initializer", parser_line_num);
+	if(left_hand_expression->inferred_type->type_class == TYPE_CLASS_ARRAY && is_initializer_node(right_hand_expression) == FALSE){
+		return print_and_return_error("Array types cannot be assigned to unless using an initializer", current_line);
 	}
 
-	//Let the helper do all mutability checking
-	generic_ast_node_t* result = perform_mutability_checking(left_hand_unary);
-	if(result->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		return result;
+	/**
+	 * One final check - verify that we are able to mutate the left hand unary. There are cases for memory
+	 * region mutation that the static analyzer will not check
+	 */
+	if(perform_mutability_checking(left_hand_expression) == FAILURE){
+		return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 	}
 
-	//Let's now see if we have compatible types
-	generic_type_t* left_hand_type = left_hand_unary->inferred_type;
-
-	//What is our final type?
-	generic_type_t* final_type = NULL;
-
-	//If we have a generic assignment(=), we can just do the assignability check
-	if(assignment_operator == EQUALS){
-		//Handle the assignability and any/all coercing
-		final_type = is_ast_node_assignable_to_destination_type(left_hand_type, expr);
-
-		//If they're not, we fail here
+	/**
+	 * We can either be dealing with a regular assignment(=) or some kind of compressed
+	 * equality expression like +=. The handling is different so we'll split along those lines here
+	 */
+	if(operator == EQUALS){
+		/**
+		 * Validate that the right hand side's type is able to be assigned to the LHS. If this returns
+		 * NULL that means that we cannot assign anything, so we fail out here
+		 */
+		generic_type_t* left_hand_type = left_hand_expression->inferred_type;
+		generic_type_t* final_type = is_ast_node_assignable_to_destination_type(left_hand_type, right_hand_expression);
 		if(final_type == NULL){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
+
+		/**
+		 * We now know that the left hand expression that we initially parsed as being
+		 * on the rhs is truly a SIDE_TYPE_LEFT expression. To convert it, we'll pass this
+		 * to a helper.
+		 *
+		 * This is explained more in the helper - but the short version is that we only
+		 * need to flip the side on the very root of the expression tree. This is what
+		 * the CFG constructor will look at, so all child nodes can be left alone. This
+		 * is what allows us to do this so easily
+		 */
+		convert_subtree_to_given_side(left_hand_expression, SIDE_TYPE_LEFT);
 
 		/**
 		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
@@ -4284,20 +4175,13 @@ loop_end:
 		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
 		 * doing an address calculation.
 		 */
-		if(is_copy_assignment_required(left_hand_type, expr->inferred_type) == TRUE){
-			/**
-			 * If the left hand unary is a postfix expression *and* we are looking
-			 * to perform a memory copy assignment here, we need to flag that 
-			 * we do *not* require a dereference to make this work
-			 */
-			propogate_no_dereference_required_flag(left_hand_unary);
-
+		if(is_copy_assignment_required(left_hand_type, right_hand_expression->inferred_type) == TRUE){
 			/**
 			 * If the right hand expression is a postfix expression *and* we are looking
 			 * to perform a memory copy assignment here, we need to flag that 
 			 * we do *not* require a dereference to make this work
 			 */
-			propogate_no_dereference_required_flag(expr);
+			propogate_no_memory_access_required_flag(right_hand_expression);
 
 			/**
 			 * Since we are performing a memory copy instruction, this function
@@ -4310,109 +4194,106 @@ loop_end:
 			//TODO MEMORY INVESTIGATION HERE FOR LHS UNARY
 		}
 
-		//Otherwise the overall type is the final type
-		asn_expr_node->inferred_type = final_type;
+		/**
+		 * We've made it here so we can now create package up our assignment expression
+		 * node overall
+		 */
+		generic_ast_node_t* assignment_expression_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+		add_child_node(assignment_expression_node, left_hand_expression);
+		add_child_node(assignment_expression_node, right_hand_expression);
 
-		//Assignment expressions themselves are not assignable
-		asn_expr_node->is_assignable = FALSE;
+		/**
+		 * The overall node gets its inferred type from the final type, and its variable
+		 * from the left hand unary(if there is any)
+		 */
+		assignment_expression_node->inferred_type = final_type;
+		assignment_expression_node->optional_storage.bytes_to_copy = final_type->type_size;
+		assignment_expression_node->is_assignable = FALSE;
+		assignment_expression_node->variable = left_hand_expression->variable;
+		assignment_expression_node->line_number = current_line;
+		return assignment_expression_node;
 
-		//This will always share the unary expression's variable
-		asn_expr_node->variable = left_hand_unary->variable;
-
-		//Otherwise we know it worked, so we'll add the expression in as the right child
-		add_child_node(asn_expr_node, expr);
-
-		//Return the reference to the overall node
-		return asn_expr_node;
-		
-	//Otherwise, we'll need to perform any needed type coercion
+	/**
+	 * If we get here then we have what's called a "compressed equality operator" in Ollie. This
+	 * is something like +=/-= etc.. We will convert this into an assignment operation plus
+	 * a binary operation for the AST
+	 */
 	} else {
-		//Convert this into the assignment operator
-		ollie_token_t binary_op = compressed_assignment_to_binary_op(assignment_operator);
+		ollie_token_t binary_operator = compressed_assignment_to_binary_op(operator);
 
-		//Let's check if the left is valid
-		if(is_binary_operation_valid_for_type(left_hand_type, binary_op, SIDE_TYPE_LEFT) == FALSE){
+		/**
+		 * Validate that the type on the LHS is valid to be used with the operator in the left hand of our
+		 * expression. There are rules around pointer math and orientation, which is why the side is important
+		 */
+		if(is_binary_operation_valid_for_type(left_hand_expression->inferred_type, binary_operator, SIDE_TYPE_LEFT) == FALSE){
 			sprintf(info, "Type %s is invalid for operation %s",
-					get_full_type_name_from_type(left_hand_type),
-					operator_token_to_string(assignment_operator));
-
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//Let's also see if the right hand type is valid
-		if(is_binary_operation_valid_for_type(expr->inferred_type, binary_op, SIDE_TYPE_RIGHT) == FALSE){
-			sprintf(info, "Type %s is invalid for operation %s",
-					get_full_type_name_from_ast_node(expr),
-					operator_token_to_string(assignment_operator));
+					get_full_type_name_from_ast_node(left_hand_expression),
+					operator_token_to_string(operator));
 
 			return print_and_return_error(info, parser_line_num);
 		}
 
 		/**
-		 * It is invalid to ever attempt addition to/subtraction from a void pointer
-		 * because we cannot determine the size of it. This is an instant failure
+		 * Do the same for the right hand side expression
 		 */
-		if(left_hand_type->internal_values.is_void_pointer == TRUE){
-			return print_and_return_error("Invalid attempt to use pointer arithmetic with a void pointer", parser_line_num);
+		if(is_binary_operation_valid_for_type(right_hand_expression->inferred_type, binary_operator, SIDE_TYPE_RIGHT) == FALSE){
+			sprintf(info, "Type %s is invalid for operation %s",
+					get_full_type_name_from_ast_node(right_hand_expression),
+					operator_token_to_string(operator));
+
+			return print_and_return_error(info, parser_line_num);
 		}
 
 		/**
-		 * If we have something like this:
-		 * 				y(i32) += x(i64)
-		 * 	This needs to fail because we cannot coerce y to be bigger than it already is, it's not assignable.
-		 * 	As such, we need to check if the types are assignable first. This rule also handles any/all constant
-		 * 	coercion
+		 * Now that we know everything is valid, we will duplicate the subtree for the LHS so that
+		 * we can have that as the LHS of our assignment. The duplicator helper provides us with a
+		 * way to duplicate it as an LHS subtree, so we'll do that
 		 */
-		final_type = is_ast_node_assignable_to_destination_type(left_hand_type, expr);
+		generic_ast_node_t* assignment_expression_lhs = duplicate_subtree(left_hand_expression, SIDE_TYPE_LEFT);
 
-		//If this fails, that means that we have an invalid operation
+		/**
+		 * Let's get the final type for the binary operation. Note that this will perform type coercion, so we want
+		 * to do this on the old LHS tree, not the new one, in case any type incompatibilities are shook out
+		 * by this. If this fails then we're done
+		 */
+		generic_type_t* binary_operation_final_type = determine_type_compatability_for_expression(type_symtab, left_hand_expression, right_hand_expression, binary_operator);
+		if(binary_operation_final_type == NULL){
+			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
+		}
+
+		/**
+		 * Now we're able to emit our binary expression subtree using the original two nodes,
+		 * and the type information that we've derived along the way
+		 */
+		generic_ast_node_t* binary_operation_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
+		binary_operation_node->line_number = current_line;
+		binary_operation_node->inferred_type = binary_operation_final_type;
+		binary_operation_node->binary_operator = binary_operator;
+		add_child_node(binary_operation_node, left_hand_expression);
+		add_child_node(binary_operation_node, right_hand_expression);
+
+		/**
+		 * Now that we have a fully formed binary operation node and a distinct type for it, we can determine assignability for the
+		 * actual left hand expression and this binary operation
+		 */
+		generic_type_t* final_type = is_ast_node_assignable_to_destination_type(assignment_expression_lhs->inferred_type, binary_operation_node);
 		if(final_type == NULL){
 			return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, SIDE_TYPE_LEFT);
 		}
 
-		//We'll also want to create a complete, distinct copy of the subtree here
-		generic_ast_node_t* left_hand_duplicate = duplicate_subtree(left_hand_unary, SIDE_TYPE_RIGHT);
-
 		/**
-		 * Determine type compatibility and perform coercions. We can only perform coercions on the left hand duplicate, because we
-		 * don't want to mess with the actual type of the variable
+		 * Once we have the binary operation and all of the type information looks good, we can
+		 * create our assignment expression node
 		 */
-		final_type = determine_type_compatability_for_expression(type_symtab, left_hand_duplicate, expr, binary_op);
+		generic_ast_node_t* assignment_expression_node = ast_node_alloc(AST_NODE_TYPE_ASNMNT_EXPR, SIDE_TYPE_LEFT);
+		assignment_expression_node->line_number = current_line;
+		assignment_expression_node->variable = left_hand_expression->variable;
+		assignment_expression_node->is_assignable = FALSE;
+		assignment_expression_node->inferred_type = final_type;
+		add_child_node(assignment_expression_node, assignment_expression_lhs);
+		add_child_node(assignment_expression_node, binary_operation_node);
 
-		//If this fails, that means that we have an invalid operation
-		if(final_type == NULL){
-			sprintf(info, "Types \"%s\" and \"%s\" cannot be applied to operator %s",
-					get_full_type_name_from_ast_node(left_hand_duplicate),
-					get_full_type_name_from_ast_node(expr),
-					operator_token_to_string(assignment_operator));
-
-			return print_and_return_error(info, parser_line_num);
-		}
-
-		//By the time that we get here, we know that all coercion has been completed
-		generic_ast_node_t* binary_op_node = ast_node_alloc(AST_NODE_TYPE_BINARY_EXPR, SIDE_TYPE_RIGHT);
-		//Store the type and operator
-		binary_op_node->inferred_type = final_type;
-		binary_op_node->binary_operator = binary_op;
-
-		//Now we'll add the duplicates in as children
-		add_child_node(binary_op_node, left_hand_duplicate);
-		add_child_node(binary_op_node, expr);
-
-		//Assignment expressions themselves are not assignable
-		asn_expr_node->is_assignable = FALSE;
-		
-		//Store the final type
-		asn_expr_node->inferred_type = final_type;
-
-		//This will always share the unary expression's variable
-		asn_expr_node->variable = left_hand_unary->variable;
-
-		//This is an overall child of the assignment expression
-		add_child_node(asn_expr_node, binary_op_node);
-
-		//And now we can return this
-		return asn_expr_node;
+		return assignment_expression_node;
 	}
 }
 
@@ -4802,49 +4683,6 @@ static generic_ast_node_t* array_accessor(ollie_token_stream_t* token_stream, ge
 
 
 /**
- * Operates on a value before usage. This could be postincrement or postdecrement
- */
-static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_ast_node_t* parent_node, ollie_token_t operator, side_type_t side){
-	//Let's first check and see if this is valid. If it's not we fail out
-	if(is_unary_operation_valid_for_type(current_type, operator) == FALSE){
-		sprintf(info, "Type %s is invalid for operator %s", get_full_type_name_from_type(current_type), operator_token_to_string(operator));
-		return print_and_return_error(info, parser_line_num);
-	}
-
-	//Necessary checking here
-	if(parent_node->variable != NULL){
-		//This is a mutation - so we need to check it
-		if(parent_node->variable->type_defined_as->mutability  == NOT_MUTABLE){
-			sprintf(info, "Attempt to mutate immutable variable \"%s\"", parent_node->variable->var_name.string);
-			return print_and_return_error(info, parser_line_num);
-		}
-	}
-
-	//Otherwise let's allocate this
-	generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
-
-	//The parent node is a child of this one
-	add_child_node(postoperation_node, parent_node);
-
-	//Saved the inferred type of this postoperation node as the current type
-	postoperation_node->inferred_type = current_type;
-
-	postoperation_node->line_number = parser_line_num;
-	//Store the unary operator too
-	postoperation_node->unary_operator = operator;
-
-	//Add this in here
-	postoperation_node->variable = parent_node->variable;
-
-	//This is *not* assignable
-	postoperation_node->is_assignable = FALSE;
-
-	//And give it back
-	return postoperation_node;
-}
-
-
-/**
  * A postfix expression decays into a primary expression, and there are certain
  * operators that can be chained if context allows. Like all other rules, this rule
  * returns a reference to the root node that it creates
@@ -4870,137 +4708,202 @@ static generic_ast_node_t* postoperation(generic_type_t* current_type, generic_a
  * 			<postfix-tail> ::= {=> <identifier> | : <identifier> | . <identifier> | -> <identifier> | [ <expression> ] | ++ | --}
  */ 
 static generic_ast_node_t* postfix_expression(ollie_token_stream_t* token_stream, side_type_t side){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//No matter what, we have to first see a valid primary expression
+	/**
+	 * The very first thing that we see should be a primary expression. If this fails then
+	 * kill the whole thing
+	 */
 	generic_ast_node_t* primary_expression_node = primary_expression(token_stream, side);
-
-	//If we fail, then we're bailing out here
 	if(primary_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-		//Just return, no need for any errors here
 		return primary_expression_node;
 	}
 
-	//If we are inside of a case condition, we will just skip
-	//out all of these rules because they cannot possibly
-	//work
+	/**
+	 * If we are inside of a case condition there's no point in going forward.
+	 * Case conditions must be constants at compile time so this will not work
+	 */
 	if(peek_nesting_level(&nesting_stack) == NESTING_CASE_CONDITION){
 		return primary_expression_node;
 	}
 
-	//The parent initially is the primary expression
+	/**
+	 * We parse this in a unique way. Initially the parent
+	 * is the primary expression. As we see operators, we keep
+	 * making new parent postfix nodes and adding the old parent in
+	 * as the left child
+	 * 		arr[3][2] will become:
+	 *				postfix
+	 *			 / 		  \
+	 * 		postfix		array acessor 2
+	 * 		/ 	\
+	 *   arr	array accessor 3
+	 * 	  
+	 */
 	generic_ast_node_t* parent = primary_expression_node;
-	//The temp holder node
-	generic_ast_node_t* temp_holder = NULL;
-	//Hold onto the operator node here
 	generic_ast_node_t* operator_node = NULL;
 
-	//So long as we keep seeing operators here, we keep chaining them
-	while(TRUE){
-		//Refresh the token
-		lookahead = get_next_token(token_stream, &parser_line_num);
+	/**
+	 * Have we seen a postfix node that is an accessor(array/struct/union) at all?
+	 * We'll need this flag to know if a memory access required flag is needed. By
+	 * default assume no
+	 */
+	u_int8_t seen_accessor = FALSE;
 
-		//Let's grab whatever type that we currently have
+	/**
+	 * Infinite loop until we see a terminal sequence(++ or --) or we don't
+	 * see any more postfix operators
+	 */
+	while(TRUE){
+		/**
+		 * Refresh the lookahead and current type pointer
+		 */
+		lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
+		ollie_token_t postfix_operator = lookahead.tok;
 		generic_type_t* current_type = parent->inferred_type;
 
-		switch(lookahead.tok){
-			case L_BRACKET:
+		switch(postfix_operator){
+			case L_BRACKET: {
 				//We'll push this onto the grouping stack for later matching
 				push_token(&grouping_stack, lookahead);
 
 				operator_node = array_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
+			}
 
-			case COLON:
+			case COLON: {
 				operator_node = struct_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
+			}
 
-			case FAT_ARROW:
+			case FAT_ARROW: {
 				operator_node = struct_pointer_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
+			}
 
-			case DOT:
+			case DOT: {
 				operator_node = union_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
+			}
 
-			case ARROW:
+			case ARROW: {
 				operator_node = union_pointer_accessor(token_stream, current_type);
+				seen_accessor = TRUE;
 				break;
+			}
 
-			//Postincrement
+			/**
+			 * Postincrement and postdecrement represent a terminal sequence. Once we see
+			 * this we know that we're exiting the function so we need to do all of our packaging
+			 */
 			case PLUSPLUS:
-			case MINUSMINUS:
-				//Copy this over
+			case MINUSMINUS: {
+				/**
+				 * Verify that we're able to do this operation on the current type
+				 */
+				if(is_unary_operation_valid_for_type(current_type, postfix_operator) == FALSE){
+					sprintf(info, "Type %s is invalid for operator %s", get_full_type_name_from_type(current_type), operator_token_to_string(postfix_operator));
+					return print_and_return_error(info, parser_line_num);
+				}
+
+				/**
+				 * Validate that what we are doing is actually within bounds of mutability. If it's not
+				 * then we need to fail out
+				 */
+				if(perform_mutability_checking(parent) == FAILURE){
+					return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
+				}
+
+				/**
+				 * Propogate the variable pointer up to the parent as well so that we don't
+				 * need to drill down to access it. Also, if we've seen at least one accessor,
+				 * flag that we do require memory access in this postfix expression
+				 */
 				parent->variable = primary_expression_node->variable;
-				//Flag the parent as final - you can't go on past this
-				parent->dereference_needed = TRUE;
+				if(seen_accessor == TRUE){
+					parent->memory_access_required = TRUE;
+				}
 
-				//We let this rule handle everything
-				return postoperation(current_type, parent, lookahead.tok, side);
+				/**
+				 * Now let's allocate and package up the postoperation code. It carries the same type
+				 * as our current type. These nodes themselves are never assignable
+				 */
+				generic_ast_node_t* postoperation_node = ast_node_alloc(AST_NODE_TYPE_POSTOPERATION, side);
+				postoperation_node->unary_operator = postfix_operator;
+				postoperation_node->inferred_type = current_type;
+				postoperation_node->line_number = parser_line_num;
+				postoperation_node->is_assignable = FALSE;
 
-			//When we hit this, it means that we're done. We return the parent node in this case
-			default:
+				/**
+				 * IMPORTANT - the parent node is a child of this given node. Since it is
+				 * the highest node in the tree we'll return that
+				 */
+				add_child_node(postoperation_node, parent);
+				return postoperation_node;
+			}
+
+			/**
+			 * Once we hit this we no longer have a postfix operator, so we'll package up
+			 * what we need to and get out
+			 */
+			default: {
+				//Let the next rule handle whatever this is
 				push_back_token(token_stream, &parser_line_num);
-				//Store the variable too
-				parent->variable = primary_expression_node->variable;
 
-				//Mark as final
-				parent->dereference_needed = TRUE;
-				//And give it back
+				/**
+				 * Propogate the variable pointer up to the parent as well so that we don't
+				 * need to drill down to access it. Also, if we've seen at least one accessor,
+				 * flag that we do require memory access in this postfix expression
+				 */
+				parent->variable = primary_expression_node->variable;
+				if(seen_accessor == TRUE){
+					parent->memory_access_required = TRUE;
+				}
+
 				return parent;
+			}
 		}
 
-		//If this is invalid, then we'll just leave
+		/**
+		 * Make sure that we don't have some error in the accessor
+		 */
 		if(operator_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 			return print_and_return_error("Invalid postfix operation", parser_line_num);
 		}
 
-		//Hang onto the old parent
-		temp_holder = parent;
-
-		//The new parent now becomes a postfix expression
+		/**
+		 * If we get down here, it means that we've seen a valid postfix operation. Remember
+		 * that the terminal sequences will never hit here. We need to create a new parent node
+		 * and make the old parent node the LHS of a postfix expression
+		 *
+		 * 		arr[3][2] will become:
+		 *				postfix
+		 *			 / 		  \
+		 * 		postfix		array acessor 2
+		 * 		/ 	\
+		 *   arr	array accessor 3
+		 * 	  
+		 *
+		 * To do this we allocate a fresh parent node and add the old parent as its first
+		 * child, with the operator as its second child
+		 */
+		generic_ast_node_t* old_parent = parent;
 		parent = ast_node_alloc(AST_NODE_TYPE_POSTFIX_EXPR, side);
-
-		//The old parent now becomes a child to the new postfix expression node
-		add_child_node(parent, temp_holder);
-		
-		//And the operator is the other child
+		add_child_node(parent, old_parent);
 		add_child_node(parent, operator_node);
 
-		//The type of this parent is always the type of the operator node
+		/**
+		 * The parent inherits its inferred type, optional field variable
+		 * and assignability from the operator node
+		 */
 		parent->inferred_type = operator_node->inferred_type;
-
-		//Transfer this around
 		parent->optional_storage.field_variable = operator_node->optional_storage.field_variable;
-
-		//The parent's assignability inherits from the operator
 		parent->is_assignable = operator_node->is_assignable;
 	}
 
-	//We should never get here - just to make the static analyzer happy
 	return parent;
-}
-
-
-/**
- * Is a given token a unary operator
- */
-static u_int8_t is_unary_operator(ollie_token_t tok){
-	//Switch on tok
-	switch (tok) {
-		case SINGLE_AND:
-		case STAR:
-		case MINUS:
-		case MINUSMINUS:
-		case PLUSPLUS:
-		case EXCLAMATION:
-		case B_NOT:
-			return TRUE;
-		//By default no
-		default:
-			return FALSE;
-	}
 }
 
 
@@ -5031,111 +4934,112 @@ static u_int8_t is_unary_operator(ollie_token_t tok){
  * 								| --
  */
 static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, side_type_t side){
-	//For function call validation
-	function_type_t* function_signature;
-	//The lookahead token
-	lexitem_t lookahead;
-	//Is this assignable
-	u_int8_t is_assignable = TRUE;
-
-	//Let's see what we have
-	lookahead = get_next_token(token_stream, &parser_line_num);
-	//Save this for searching
+	/**
+	 * The first token in the stream is the unary operator. We will get this
+	 * and hold onto its token for later
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	ollie_token_t unary_op_tok = lookahead.tok;
 
-	//If this is not a unary operator, we don't need to go any more
+	/**
+	 * We don't have a unary operator at all - if not then just push it back
+	 * and call the postfix expression helper
+	 */
 	if(is_unary_operator(unary_op_tok) == FALSE){
-		//Push it back
 		push_back_token(token_stream, &parser_line_num);
-
-		//Let this handle the heavy lifting
 		return postfix_expression(token_stream, side);
 	}
 
-	//Otherwise, if we get down here we know that we have a unary operator
-	
-	//We'll first create the unary operator node for ourselves here
-	generic_ast_node_t* unary_op = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
-	//Assign the operator to this
-	unary_op->unary_operator = lookahead.tok;
-
-	//We will process this as if we are on the "right hand side" of an equation, because we are
-	//still reading from items here
-	generic_ast_node_t* cast_expr = cast_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	//Let's check for errors
-	if(cast_expr->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	/**
+	 * Process the cast expression. We treat this as if we are on the "right" side of an expression
+	 * regardless, because we are treating it as a result
+	 */
+	generic_ast_node_t* cast_expression_node = cast_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(cast_expression_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid cast expression given after unary operator", parser_line_num);
 	}
 
-	//Holder for our return type
-	generic_type_t* return_type;
+	/**
+	 * The return type, assignability and required memory access will be determined for
+	 * each operator that we evaluate
+	 */
+	generic_type_t* return_type = NULL;
+	u_int8_t is_assignable = FALSE;
+	u_int8_t memory_access_required = FALSE;
 
-	//An is-valid holder for our validations
-	u_int8_t is_valid = FALSE;
-
-	//Now we'll switch based on the operator
 	switch(unary_op_tok){
-		//Pointer derferencing
-		case STAR:
-			//Check to see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case STAR: {
+			/**
+			 * Are we even able to dereference on this type? If not then fail out
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
-
 		
-			//Otherwise if we made it here, we only have one final tripping point
-			//Ensure that we aren't trying to deref a null pointer
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER && cast_expr->inferred_type->internal_values.is_void_pointer == TRUE){
+			/**
+			  * Otherwise if we made it here, we only have one final tripping point to check: validate
+			  * that we aren't trying to dereference a NULL pointer
+			 */
+			generic_type_t* dereferencing_type = cast_expression_node->inferred_type;
+			if(dereferencing_type->type_class == TYPE_CLASS_POINTER && dereferencing_type->internal_values.is_void_pointer == TRUE){
 				return print_and_return_error("Attempt to derefence void*, you must cast before derefencing", parser_line_num);
 			}
 
-			//Otherwise our dereferencing worked, so the return type will be whatever this points to
-			//Grab what it references whether its a pointer or an array
-			if(cast_expr->inferred_type->type_class == TYPE_CLASS_POINTER){
-				return_type = cast_expr->inferred_type->internal_types.points_to;
+			/**
+			 * Otherwise our dereferencing worked, so the return type will be whatever this points to. Grab
+			 * what it references whether it's a pointer or an array
+			 */
+			if(dereferencing_type->type_class == TYPE_CLASS_POINTER){
+				return_type = dereferencing_type->internal_types.points_to;
 			} else {
-				return_type = cast_expr->inferred_type->internal_types.member_type;
+				return_type = dereferencing_type->internal_types.member_type;
 			}
 
-			//This is assignable
+			/**
+			 * IMPORTANT: any time we have a dereference, we are doing memory access by default. We
+			 * have a special flag in the parent node that tells us whether or not memory access(dereference)
+			 * is required for this node. Set this flag to true. This is also always assignable, so set that to true
+			 * as well
+			 */
+			memory_access_required = TRUE;
 			is_assignable = TRUE;
 			break;
+		}
 
-		//Address operator case
-		case SINGLE_AND:
-			switch(cast_expr->ast_node_type){
-				//We can take an identifiers address
-				case AST_NODE_TYPE_IDENTIFIER:
+		case SINGLE_AND: {
+			/**
+			 * What are we taking the address of? We can take the address of identifiers(variables), functions
+			 * function calls that have return value addresses, and postfix expressions
+			 */
+			switch(cast_expression_node->ast_node_type){
+				case AST_NODE_TYPE_IDENTIFIER: {
+					//Get the variable out of the identifier node
+					symtab_variable_record_t* result_variable = cast_expression_node->variable;
+
 					/**
 					 * If this is not already a memory region, then we need to flag it as one
 					 * for later so that the cfg constructor knows what we'll eventually need to
 					 * load. We need to exclude anything that is a data segment variable for
 					 * these checks
 					 */
-					if(is_memory_region(cast_expr->variable->type_defined_as) == FALSE
-						&& is_variable_data_segment_variable(cast_expr->variable) == FALSE){
-
-						//IMPORTANT - we need to flag this as a stack variable now
-						cast_expr->variable->storage_class = STORAGE_CLASS_STACK;
+					if(is_memory_region(result_variable->type_defined_as) == FALSE && is_variable_data_segment_variable(result_variable) == FALSE){
+						result_variable->storage_class = STORAGE_CLASS_STACK;
 					}
 
 					break;
+				}
 
 				/**
 				 * For indirect function calls, if we return the value by copy(i.e. structs and unions),
 				 * then we are able to take the memory address of these items.
 				 * Other items are completely ineligible
 				 */
-				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+				case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
 					//Extract the function type from here
-					function_signature = cast_expr->optional_storage.callee_signature;
+					function_type_t* function_signature = cast_expression_node->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
@@ -5145,17 +5049,17 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
 
-					//Otherwise we are fine, just get out
 					break;
+				}
 
 				/**
 				 * For function calls, if we return the value by copy(i.e. structs and unions),
 				 * then we are able to take the memory address of these items.
 				 * Other items are completely ineligible
 				 */
-				case AST_NODE_TYPE_FUNCTION_CALL:
+				case AST_NODE_TYPE_FUNCTION_CALL: {
 					//Extract the function type from here
-					function_signature = cast_expr->optional_storage.callee_signature;
+					function_type_t* function_signature = cast_expression_node->optional_storage.callee_signature;
 
 					/**
 					 * If this type is *not* returned by copy, then we can't be doing this
@@ -5165,118 +5069,126 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
 
-					//Otherwise we are fine, just get out
 					break;
+				}
 
-				//And we can handle a postfix expression
-				case AST_NODE_TYPE_POSTFIX_EXPR:
-					//If this fails then we leave
-					if(is_postfix_expression_tree_address_eligible(cast_expr) == FALSE){
+				/**
+				 * For postfix expressions, we are able to prevent dereferencing and take the address of a given
+				 * result under valid circumstances
+				 */
+				case AST_NODE_TYPE_POSTFIX_EXPR: {
+					if(is_postfix_expression_tree_address_eligible(cast_expression_node) == FALSE){
 						return print_and_return_error("Invalid return value for address operator &", parser_line_num);
 					}
+
+					/**
+					 * IMPORTANT - propogate down the chain that we will not require any memory access, just
+					 * memory address computation
+					 */
+					propogate_no_memory_access_required_flag(cast_expression_node);
 					break;
+				}
 				
-				//Otherwise it doesn't work
-				default:
+				/**
+				 * Invalid here so we can fail out
+				 */
+				default: {
 					return print_and_return_error("Invalid return value for address operator &", parser_line_num);
+			 	}
 			}
 
-			//Check to see if it's valid
-			u_int8_t is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+			/**
+			 * Final validation - make sure that they type system approves of us taking the address of this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
-						operator_token_to_string(unary_op_tok));
+							get_full_type_name_from_ast_node(cast_expression_node),
+							operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was. The mutability here is *always*
-			//the child's mutability by default. If the user wants that to change, they need to cast
-			generic_type_t* pointer = create_pointer_type(cast_expr->inferred_type, parser_line_num, cast_expr->inferred_type->mutability);
+			/**
+			 * Otherwise it worked just fine, so we'll create a type of pointer to whatever it's type was. The mutability here is *always*
+			 * the child's mutability by default. If the user wants that to change, they need to cast
+			 */
+			generic_type_t* pointer = create_pointer_type(cast_expression_node->inferred_type, parser_line_num, cast_expression_node->inferred_type->mutability);
 
-			//We'll check to see if this type is already in existence
+			/**
+			 * We want to reuse where we can, so let's see if there's already a pointer type like
+			 * this in the symtab. If there's not, we'll make it ourselves
+			 */
 			symtab_type_record_t* type_record = lookup_type(type_symtab, pointer);
-			
-			//It didn't exist, so we'll add it
 			if(type_record == NULL){
 				insert_type(type_symtab, create_type_record(pointer));
-				//Set the return type to be a pointer
 				return_type = pointer;
 
-			//Otherwise it does exist so we'll just grab whatever we got
 			} else {
 				return_type = type_record->type;
 			}
 
-			//This is not assignable
+			/**
+			 * The memory address operator will never generate an assignable result
+			 */
 			is_assignable = FALSE;
-
 			break;
+		}
 
-		//Logical not case
-		case EXCLAMATION:
-			//Check to see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case EXCLAMATION: {
+			/**
+			 * Validate that we are able to do logical notting for this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//The return type of a logical not is a boolean
+			/**
+			 * These are always of type boolean and they are never assignable
+			 */
 			return_type = lookup_type_name_only(type_symtab, "bool", NOT_MUTABLE)->type;
-			
-			//This is not assignable
 			is_assignable = FALSE;
-			
 			break;
+		}
 	
-		//Bitwise not case
-		case B_NOT:
-			//Check to see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case B_NOT: {
+			/**
+			 * Validate that we are able to do bitwise notting for this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Save the return type as whatever the cast expression got
-			return_type = cast_expr->inferred_type;
-
-			//This is not assignable
+			/**
+			 * The return type is the same as the cast expression. This is never assignable
+			 */
+			return_type = cast_expression_node->inferred_type;
 			is_assignable = FALSE;
-			
 			break;
+		}
 	
-		//Arithmetic negation case
-		case MINUS:
-			//Let's see if it's valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case MINUS: {
+			/**
+			 * Validate that we are able to do an arithmetic negation on this
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
 
-			//Save the return type as whatever the cast expression got
-			return_type = cast_expr->inferred_type;
-
-			//This is not assignable
+			/**
+			 * The return type is always the same as the cast expression. This is never assignable
+			 */
+			return_type = cast_expression_node->inferred_type;
 			is_assignable = FALSE;
-
 			break;
+		}
 
 		/**
 		 * Prefix operations involve the actual increment/decrement and the saving operation. The value
@@ -5291,91 +5203,104 @@ static generic_ast_node_t* unary_expression(ollie_token_stream_t* token_stream, 
 		 * We must note that preincrement is not assignable at all
 		 */
 		case PLUSPLUS:
-		case MINUSMINUS:
-			//Check to see if it is valid
-			is_valid = is_unary_operation_valid_for_type(cast_expr->inferred_type, unary_op_tok);
-
-			//If it it's invalid, we fail here
-			if(is_valid == FALSE){
+		case MINUSMINUS: {
+			/**
+			 * Validate that we are able to preincrement/predecrement the given type
+			 */
+			if(is_unary_operation_valid_for_type(cast_expression_node->inferred_type, unary_op_tok) == FALSE){
 				sprintf(info, "Type %s is invalid for operator %s",
-						get_full_type_name_from_ast_node(cast_expr),
+						get_full_type_name_from_ast_node(cast_expression_node),
 						operator_token_to_string(unary_op_tok));
 				return print_and_return_error(info, parser_line_num);
 			}
-			
-			//Save the return type as whatever the cast expression got
-			return_type = cast_expr->inferred_type;
 
-			//This counts as mutation -- unless it's a constant
-			if(cast_expr->variable != NULL){
-				//If this is not mutable, then we cannot change it in this way
-				if(cast_expr->variable->type_defined_as->mutability == NOT_MUTABLE){
-					sprintf(info, "Attempt to mutate immutable variable \"%s\"", cast_expr->variable->var_name.string);
-					return print_and_return_error(info, parser_line_num);
-				}
+			/**
+			 * If we are trying to mutate values that are immutable, this is another failure. We will exit
+			 * out if this is the case
+			 */
+			if(perform_mutability_checking(cast_expression_node) == FAILURE){
+				return ast_node_alloc(AST_NODE_TYPE_ERR_NODE, side);
 			}
-
-			//Force this to be an rvalue for the cfg constructor
-			cast_expr->side = SIDE_TYPE_RIGHT;
-
-			//These expressions are never assignable
+			
+			/**
+			 * The return type is always shared. This is never assignable
+			 */
+			return_type = cast_expression_node->inferred_type;
 			is_assignable = FALSE;
-
 			break;
+		}
 
-		//In reality, we should never reach here
-		default:
-			return print_and_return_error("Fatal internal compiler error: invalid unary operation", parser_line_num);
-	}
-
-	//If we have a constant here, we have a chance to do some optimizations
-	if(cast_expr->ast_node_type == AST_NODE_TYPE_CONSTANT){
-		//Go based on this
-		switch (unary_op_tok) {
-			case MINUS:
-				negate_constant_value(cast_expr);
-				return cast_expr;
-
-			case MINUSMINUS:
-				decrement_constant_value(cast_expr);
-				return cast_expr;
-
-			case PLUSPLUS:
-				increment_constant_value(cast_expr);
-				return cast_expr;
-
-			case EXCLAMATION:
-				logical_not_constant_value(cast_expr);
-				return cast_expr;
-
-			case B_NOT:
-				bitwise_not_constant_value(cast_expr);
-				return cast_expr;
-			//Just do nothing
-			default:
-				break;
+		/**
+		 * If we get here then there's a big problem, so panic out if we do
+		 */
+		default: {
+			trigger_ice_panic("Invalid unary operation detected in the parser\n");
+			break;
 		}
 	}
 
-	//One we get here, we have both nodes that we need
+	/**
+	 * If, by the time we get here, we have a constant operand and a compatible
+	 * expression, we will simplify the tree by folding the expression and the constant
+	 * together now
+	 */
+	if(cast_expression_node->ast_node_type == AST_NODE_TYPE_CONSTANT){
+		switch (unary_op_tok) {
+			case MINUS: {
+				negate_constant_value(cast_expression_node);
+				return cast_expression_node;
+			}
+
+			case MINUSMINUS: {
+				decrement_constant_value(cast_expression_node);
+				return cast_expression_node;
+			}
+
+			case PLUSPLUS: {
+				increment_constant_value(cast_expression_node);
+				return cast_expression_node;
+			}
+
+			case EXCLAMATION: {
+				logical_not_constant_value(cast_expression_node);
+				return cast_expression_node;
+			}
+
+			case B_NOT: {
+				bitwise_not_constant_value(cast_expression_node);
+				return cast_expression_node;
+			}
+
+			default: {
+				break;
+			}
+		}
+	}
+
+	/**
+	 * By the time we make it here, we're able to start constructing the unary expression
+	 * subtree with the node, operator and cast expression
+	 */
 	generic_ast_node_t* unary_node = ast_node_alloc(AST_NODE_TYPE_UNARY_EXPR, side);
-	
-	//The unary operator always comes first
-	add_child_node(unary_node, unary_op);
+	generic_ast_node_t* unary_op_node = ast_node_alloc(AST_NODE_TYPE_UNARY_OPERATOR, side);
+	unary_op_node->unary_operator = lookahead.tok;
 
-	//The cast expression will be linked in last
-	add_child_node(unary_node, cast_expr);
-
-	//Store the type that we have here
+	/**
+	 * For the unary node, we need to store the return type, the memory access
+	 * flag and the assignability flag
+	 */
 	unary_node->inferred_type = return_type;
-	//Store the line number
-	unary_node->line_number = parser_line_num;
-	//Store the variable
-	unary_node->variable = cast_expr->variable;
-	//Is it assignable
+	unary_node->memory_access_required = memory_access_required;
 	unary_node->is_assignable = is_assignable;
+	unary_node->line_number = parser_line_num;
+	unary_node->variable = cast_expression_node->variable;
 
-	//Finally we're all done, so we can just give this back
+	/**
+	 * The unary operator is always first, followed by the cast expression
+	 */
+	add_child_node(unary_node, unary_op_node);
+	add_child_node(unary_node, cast_expression_node);
+
 	return unary_node;
 }
 
@@ -6223,14 +6148,6 @@ static generic_ast_node_t* additive_expression(ollie_token_stream_t* token_strea
 
 		//Use the type compatibility function to determine compatibility and apply necessary coercions
 		return_type = determine_type_compatability_for_expression(type_symtab, temp_holder, right_child, op.tok);
-
-		/**
-		 * It is invalid to ever attempt addition to/subtraction from a void pointer
-		 * because we cannot determine the size of it. This is an instant failure
-		 */
-		if(temp_holder->inferred_type->internal_values.is_void_pointer == TRUE){
-			return print_and_return_error("Invalid attempt to use pointer arithmetic with a void pointer", parser_line_num);
-		}
 
 		//If this fails, that means that we have an invalid operation
 		if(return_type == NULL){
@@ -11384,7 +11301,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	 * the value, we do not accidentally copy from already dereferenced memory
 	 */
 	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
-		propogate_no_dereference_required_flag(expr_node);
+		propogate_no_memory_access_required_flag(expr_node);
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
@@ -13442,7 +13359,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 			 * expression(our "root" in this case) or nothing. This is important because we cannot
 			 * be dereferencing if we need to perform a copy assignment
 			 */
-			propogate_no_dereference_required_flag(initializer_node);
+		propogate_no_memory_access_required_flag(initializer_node);
 
 			/**
 			 * Since we are performing a memory copy instruction, this function
@@ -15719,7 +15636,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Also create a stack for our matching uses(curlies, parens, etc.)
 	grouping_stack = lex_stack_alloc();
-	assignment_grouping_stack = lex_stack_alloc();
 	//Create a stack for recording our depth/nesting levels
 	nesting_stack = nesting_stack_alloc();
 
@@ -15783,7 +15699,6 @@ front_end_results_package_t* parse(compiler_options_t* options){
 
 	//Deallocate these when done
 	lex_stack_dealloc(&grouping_stack);
-	lex_stack_dealloc(&assignment_grouping_stack);
 	nesting_stack_dealloc(&nesting_stack);
 
 	//Destroy these temporary arrays
