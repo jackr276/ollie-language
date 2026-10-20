@@ -2497,91 +2497,101 @@ static char* branch_type_to_string(branch_type_t branch_type){
  * Print out an OIR addressing mode expression. This is specifically just for OIR instructions, there is a separate
  * version for x86 instructions
  */
-static void print_OIR_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	switch (instruction->addressing_mode) {
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+static void print_OIR_addressing_mode_expression(FILE* fl, addressing_operands_t* addressing_expression, variable_printing_mode_t mode){
+	switch (addressing_expression->addressing_mode) {
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ")");
 			break;
+		}
 
-		case ADDRESSING_MODE_RIP_RELATIVE:
-			//We want the actual var name here
-			print_variable(fl, instruction->operands.oir.rip_offset_var, mode);
+		case ADDRESSING_MODE_RIP_RELATIVE: {
+			print_variable(fl, addressing_expression->rip_offset_var, mode);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ")");
 		   	break;
+		}
 
-		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
+			print_three_addr_constant(fl, addressing_expression->address_offset);
 			fprintf(fl, "+");
-			print_variable(fl, instruction->operands.oir.rip_offset_var, mode);
+			print_variable(fl, addressing_expression->rip_offset_var, mode);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ")");
 		   	break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			print_variable(fl, addressing_expression->address_operand2, mode);
 			fprintf(fl, ", ");
-			fprintf(fl, "%ld", instruction->operands.oir.address_multiplier);
+			fprintf(fl, "%ld", addressing_expression->address_multiplier);
 			fprintf(fl, ")");
 			break;
+		}
 
-		case ADDRESSING_MODE_OFFSET_ONLY:
-			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+		case ADDRESSING_MODE_OFFSET_ONLY: {
+			print_three_addr_constant(fl, addressing_expression->address_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ")");
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			print_variable(fl, addressing_expression->address_operand2, mode);
 			fprintf(fl, ")");
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+			print_three_addr_constant(fl, addressing_expression->address_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.oir.address_operand2, mode);
+			print_variable(fl, addressing_expression->address_operand2, mode);
 			fprintf(fl, ")");
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+			print_three_addr_constant(fl, addressing_expression->address_offset);
 			fprintf(fl, "(");
-			print_variable(fl, instruction->operands.oir.address_operand1, mode);
+			print_variable(fl, addressing_expression->address_operand1, mode);
 			fprintf(fl, ", ");
-			print_variable(fl, instruction->operands.oir.address_operand2, mode);
-			fprintf(fl, ", %ld)", instruction->operands.oir.address_multiplier);
+			print_variable(fl, addressing_expression->address_operand2, mode);
+			fprintf(fl, ", %ld)", addressing_expression->address_multiplier);
 			break;
+		}
 
-		case ADDRESSING_MODE_INDEX_AND_SCALE:
+		case ADDRESSING_MODE_INDEX_AND_SCALE: {
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->operands.oir.address_operand2, mode);
-			fprintf(fl, ", %ld)", instruction->operands.oir.address_multiplier);
+			print_variable(fl, addressing_expression->address_operand2, mode);
+			fprintf(fl, ", %ld)", addressing_expression->address_multiplier);
 			break;
+		}
 			
-		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-			print_three_addr_constant(fl, instruction->operands.oir.address_offset);
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+			print_three_addr_constant(fl, addressing_expression->address_offset);
 			fprintf(fl, "( , ");
-			print_variable(fl, instruction->operands.oir.address_operand2, mode);
-			fprintf(fl, ", %ld)", instruction->operands.oir.address_multiplier);
+			print_variable(fl, addressing_expression->address_operand2, mode);
+			fprintf(fl, ", %ld)", addressing_expression->address_multiplier);
 			break;
+		}
 
 		//Should be unreachable but we have it anwyas
-		default:
+		default: {
 			fprintf(stderr, "Fatal internal compiler error: unreachable path hit in OIR addressing mode printer\n");
 			exit(1);
+		}
 	}
 }
 
