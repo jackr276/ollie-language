@@ -1352,11 +1352,9 @@ instruction_t* emit_lea_offset_only(three_addr_var_t* assignee, three_addr_var_t
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = address_operand1;
-	stmt->operands.oir.address_offset = address_offset;
 
-	//This only has registers
-	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+	//Package up and store the addressing operands
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){address_operand1, NULL, address_offset, 0, NULL, ADDRESSING_MODE_OFFSET_ONLY};
 
 	//And now we give it back
 	stmt->line_number = line_number;
@@ -1376,11 +1374,9 @@ instruction_t* emit_lea_operands_only(three_addr_var_t* assignee, three_addr_var
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = address_operand1;
-	stmt->operands.oir.address_operand2 = address_operand2;
 
-	//This only has registers
-	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+	//Package up and store the addressing operands
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){address_operand1, address_operand2, NULL, 0, NULL, ADDRESSING_MODE_REGISTERS_ONLY};
 
 	//And now we give it back
 	stmt->line_number = line_number;
@@ -1398,12 +1394,9 @@ instruction_t* emit_lea_operands_and_offset(three_addr_var_t* assignee, three_ad
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = address_operand1;
-	stmt->operands.oir.address_operand2 = address_operand2;
-	stmt->operands.oir.address_offset = offset;
 
-	//We have registers and an offset
-	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+	//Package up and store the addressing operands
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){address_operand1, address_operand2, offset, 0, NULL, ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 
 	//And now we give it back
 	stmt->line_number = line_number;
@@ -1422,12 +1415,9 @@ instruction_t* emit_lea_index_offset_and_scale(three_addr_var_t* assignee, three
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand2 = address_operand2;
-	stmt->operands.oir.address_offset = offset;
-	stmt->operands.oir.address_multiplier = scale;
 
-	//This only has registers
-	stmt->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+	//Package up and store the addressing operands
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){NULL, address_operand2, offset, scale, NULL, ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE};
 
 	//And now we give it back
 	stmt->line_number = line_number;
@@ -1446,14 +1436,9 @@ instruction_t* emit_lea_multiplier_and_operands(three_addr_var_t* assignee, thre
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = address_operand1;
-	stmt->operands.oir.address_operand2 = address_operand2;
 
-	//Multiplier is the type size
-	stmt->operands.oir.address_multiplier = type_size;
-
-	//This has registers and a multiplier
-	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+	//Package up and store the addressing operands
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){address_operand1, address_operand2, NULL, type_size, NULL, ADDRESSING_MODE_REGISTERS_AND_SCALE};
 
 	//And now we give it back
 	stmt->line_number = line_number;
@@ -1471,12 +1456,9 @@ instruction_t* emit_lea_rip_relative_constant(three_addr_var_t* assignee, three_
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = instruction_pointer;
-	//This goes in the rip offset var
-	stmt->operands.oir.rip_offset_var = local_constant;
 
-	//This is a rip-relative lea
-	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+	//Package up and store the addressing operands
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){instruction_pointer, NULL, NULL, 0, local_constant, ADDRESSING_MODE_RIP_RELATIVE};
 
 	//And now we give it back
 	stmt->line_number = line_number;
@@ -1494,12 +1476,9 @@ instruction_t* emit_lea_index_and_scale_only(three_addr_var_t* assignee, three_a
 	//Now we'll make our populations
 	stmt->statement_type = THREE_ADDR_CODE_LEA_STMT;
 	stmt->operands.oir.assignee = assignee;
-	//Scale is in op2
-	stmt->operands.oir.address_operand2 = index;
-	stmt->operands.oir.address_multiplier = scale;
 
-	//This has registers and a multiplier
-	stmt->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
+	//Package up and store the addressing operands
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){NULL, index, NULL, scale, NULL, ADDRESSING_MODE_INDEX_AND_SCALE};
 
 	//And now we give it back
 	stmt->line_number = line_number;
