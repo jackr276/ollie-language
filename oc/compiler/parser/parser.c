@@ -2734,7 +2734,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
-				propogate_no_dereference_required_flag(current_param);
+				propogate_no_memory_access_required_flag(current_param);
 
 				/**
 				 * If we are calling a return-by-copy function and planning
@@ -3105,7 +3105,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				 * to perform a memory copy assignment here, we need to flag that 
 				 * we do *not* require a dereference to make this work
 				 */
-				propogate_no_dereference_required_flag(current_param);
+				propogate_no_memory_access_required_flag(current_param);
 
 				/**
 				 * If we are calling a return-by-copy function and planning
