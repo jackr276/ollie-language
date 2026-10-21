@@ -1344,18 +1344,6 @@ void delete_statement(instruction_t* stmt){
 	//Grab the block out
 	basic_block_t* block = stmt->block_contained_in;
 
-	/**
-	 * If we have a string constant and we're doing this, we'll need to decrement the reference
-	 * count by 1 because we are losing a reference to it. Any/all local constant values are always
-	 * stored inside of the second address register
-	 */
-	three_addr_var_t* local_constant_var = stmt->operands.oir.rip_offset_var;
-
-	//Knock one off of the reference count if it's valid
-	if(local_constant_var != NULL && local_constant_var->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
-		local_constant_var->associated_memory_region.local_constant->reference_count--;
-	}
-
 	//No matter what, we are reducing the number of statements in this block
 	block->number_of_instructions--;
 
@@ -1485,6 +1473,16 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 
 	//If we make it all of the way down here, then we can add it
 	dynamic_array_add(use_set, variable);
+}
+
+
+/**
+ * This helper goes through and adds all applicable addressing expression
+ * values to the use set
+ */
+static inline void add_address_operands_to_use_set(addressing_operands_t* address_operands, basic_block_t* block){
+	add_variable_to_use_set(address_operands->address_operand1, block);
+	add_variable_to_use_set(address_operands->address_operand2, block);
 }
 
 
@@ -1666,9 +1664,8 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * properly
 				 */
 				case THREE_ADDR_CODE_INITIALIZER_STMT: {
-					//Initializers are addressing mode compatible
-					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
-					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
+					//Initializers are addressing mode compatible in the destination
+					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
 
 					add_initializer_members_to_use_set(cursor->operands.oir.initializer_operand, block);
 					break;
@@ -1681,9 +1678,11 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				default: {
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 					add_variable_to_use_set(cursor->operands.oir.operand2, block);
-					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
-					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
-					
+
+					//We could have source or destination address expressions, or both
+					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
+					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
+
 					//The assignee is in the def set
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					break;
@@ -6491,7 +6490,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * to emit that now. The LHS variable is the memory address
 			 */
 			if(left_child->memory_access_required == TRUE){
-				instruction_t* store_instruction = emit_store_const_base_address_only(lhs_result_var, result_const, left_child->inferred_type, left_child->line_number);
+				instruction_t* store_instruction = emit_constant_store_base_address_only(lhs_result_var, result_const, left_child->inferred_type, left_child->line_number);
 				add_statement(current_block, store_instruction);
 
 			/**
@@ -6504,7 +6503,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
 
 				//Emit and add the store
-				instruction_t* store_instruction = emit_store_const_base_address_only(memory_address, result_const, lhs_result_var->type, parent_node->line_number);
+				instruction_t* store_instruction = emit_constant_store_base_address_only(memory_address, result_const, lhs_result_var->type, parent_node->line_number);
 				add_statement(current_block, store_instruction);
 
 			/**
