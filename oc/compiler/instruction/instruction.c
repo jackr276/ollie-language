@@ -3299,7 +3299,7 @@ static void print_immediate_value_no_prefix(FILE* fl, three_addr_const_t* consta
  * version for regular OIR instructions
  */
 static void print_x86_addressing_mode_expression(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
-	switch (instruction->addressing_mode) {
+	switch (instruction->operands.x86.addressing_mode) {
 		/**
 		 * This is the case where we only have a deref
 		 */
@@ -5917,14 +5917,15 @@ instruction_t* emit_initialization_instruction(three_addr_var_t* being_initializ
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	stmt->statement_type = THREE_ADDR_CODE_INITIALIZER_STMT;
-	stmt->operands.oir.address_operand1 = being_initialized;
 	stmt->operands.oir.initializer_operand = initializer;
-	stmt->line_number = line_number;
 
-	//This is a write to memory statement
+	/**
+	 * Initialization instructions only ever have a destination address expression
+	 */
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){being_initialized, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
 	stmt->memory_access_type = WRITE_TO_MEMORY;
-	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
 
+	stmt->line_number = line_number;
 	return stmt;
 }
 
@@ -5991,6 +5992,9 @@ instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee
 /**
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
+ *
+ *
+ * TODO WILL NEED AN UPDATE
  */
 instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
@@ -6006,12 +6010,7 @@ instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_a
 	 * The destination is always represented as an addressing mode expression itself,
 	 * while the source is in the form of a single variable in op1
 	 */
-	stmt->operands.oir.address_operand1 = destination_address->address_operand1;
-	stmt->operands.oir.address_operand2 = destination_address->address_operand2;
-	stmt->operands.oir.address_offset = destination_address->address_offset;
-	stmt->operands.oir.address_multiplier = destination_address->address_multiplier;
-	stmt->operands.oir.rip_offset_var = destination_address->rip_offset_var;
-	stmt->addressing_mode = destination_address->addressing_mode;
+	stmt->operands.oir.destination_address_expression = *destination_address;
 
 	//Store the source as our op1
 	stmt->operands.oir.operand1 = source_memory_region;
@@ -6042,8 +6041,7 @@ instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* 
 	 * In this case we know that we just have a destination address so
 	 * throw it in address op1
 	 */
-	stmt->operands.oir.address_operand1 = destination_address;
-	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){destination_address, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
 
 	//Store the source as our op1
 	stmt->operands.oir.operand1 = source_memory_region;
