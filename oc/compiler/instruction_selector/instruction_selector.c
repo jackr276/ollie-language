@@ -2204,8 +2204,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 					//This should never happen
 					default: {
-						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
-						exit(1);
+						trigger_ice_panic("Unreachable path hit in global/static variable memory address remediation\n");
 					}
 				}
 
@@ -2509,8 +2508,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 				//This should never happen
 				default: {
-					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-					exit(1);
+					trigger_ice_panic("Unreachable path hit in  memory address remediation\n");
 				}
 			}
 
@@ -2537,21 +2535,22 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT: {
-					//Convert this into our lea offest
-					instruction->operands.oir.address_offset = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
-
-					//Add the additional offset in as an adjustment(it's usually 0)
-					instruction->operands.oir.address_offset->constant_adjustment = additional_offset;
+					/**
+					 * Emit a fresh stack passed parameter offset for this region. Attach the additional offset 
+					 * so that, if we're using a memory address after say a function call stack allocation, we
+					 * can adjust it accordingly
+					 */
+					three_addr_const_t* new_address_offset = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+					new_address_offset->constant_adjustment = additional_offset;
 
 					//Turn it into a LEA
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-					//First register is the stack pointer
-					instruction->operands.oir.address_operand1 = stack_pointer_variable;
-
-					//This is a lea with an offset only
-					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
+					instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																									NULL,
+																									new_address_offset,
+																									0,
+																									NULL,
+																									ADDRESSING_MODE_OFFSET_ONLY};
 					break;
 				}
 
@@ -2562,10 +2561,12 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * the offset from %rsp is 0 because that will never happen
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT: {
-					//Emit the special stack constant
+					/**
+					 * Emit a fresh stack passed parameter offset for this region. Attach the additional offset 
+					 * so that, if we're using a memory address after say a function call stack allocation, we
+					 * can adjust it accordingly
+					 */
 					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
-
-					//Store the additional offset here as well
 					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//Now emit the address calculation
@@ -2593,10 +2594,12 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *  expression and then use that result in place of the old operand1
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-					//Emit the constant
+					/**
+					 * Emit a fresh stack passed parameter offset for this region. Attach the additional offset 
+					 * so that, if we're using a memory address after say a function call stack allocation, we
+					 * can adjust it accordingly
+					 */
 					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
-
-					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
 
 					/**
@@ -2609,11 +2612,13 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
 							//Convert this into a lea
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_offset = stack_offset_constant;
 							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											NULL,
+																											stack_offset_constant,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_OFFSET_ONLY};
 							//Wipe out the old fields
 							instruction->op = BLANK;
 							instruction->operands.oir.operand1 = NULL;
@@ -2626,17 +2631,18 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
 							//Convert this into a lea
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_offset = stack_offset_constant;
 							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											NULL,
+																											stack_offset_constant,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_OFFSET_ONLY};
 							//Wipe out the old fields
 							instruction->op = BLANK;
 							instruction->operands.oir.operand1 = NULL;
 							instruction->operands.oir.constant_operand = NULL;
 							break;
-
 						}
 
 						/**
@@ -6983,6 +6989,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 	/**
 	 * ====================== Combining loads/stores and operations =============
+	 *
+	 * TODO WERE GOING TO BREAK THIS OUT
+	 *
 	 * If we have a memory movement operation preceeded by any kind of operation
 	 * that is resulting in a temp assignment(think binary operation, lea, constant assignment, etc.), then
 	 * we will look to see if we are able to combine anything here. There are instances where we are able
@@ -7082,6 +7091,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * where their offsets end up become 0. If this is the case, we'll want to remediate those
 	 * here. We do this directly after the addressing mode simplifier to catch those
 	 * cases quickly
+	 *
+	 * TODO IS THIS EVEN CORRECT??? WHAT IF WE HAVE A STORE OR LOAD THAT DOES THIS??? We're
+	 * just blindly converting these without thinking
 	 */
 	if(does_addressing_mode_use_multiplier(window->instruction1->addressing_mode) == TRUE
 		&& window->instruction1->operands.oir.address_multiplier == 1){
@@ -7176,6 +7188,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * is 0. If we find an instruction with an addressing mode that uses the offset
 	 * constant, it is worth it to do a quick check and see if we can't eliminate
 	 * the offset here entirely
+	 *
+	 * TODO THIS NEEDS REWORKING AS WELL
 	 */
 	if(does_addressing_mode_use_offset_constant(window->instruction1->addressing_mode) == TRUE
 		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
