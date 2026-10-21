@@ -1241,6 +1241,22 @@ static void rename_intitializer_members(three_addr_initializer_t* initializer){
 
 
 /**
+ * Rename all address operands in an addressing operands struct. Since these are
+ * exclusively uses, we only ever to RHS new name on them
+ */
+static inline void rename_addressing_operands(addressing_operands_t* operands){
+	if(is_variable_ssa_eligible(operands->address_operand1) == TRUE){
+		rhs_new_name(operands->address_operand1);
+	}
+
+	if(is_variable_ssa_eligible(operands->address_operand2) == TRUE){
+		rhs_new_name(operands->address_operand2);
+	}
+}
+
+
+
+/**
  * Rename all variables to be in SSA form. This is the final step in our conversion
  *
  * Algorithm:
@@ -1368,18 +1384,36 @@ static void rename_block(basic_block_t* entry){
 			 * handling for these instructinos
 			 */
 			case THREE_ADDR_CODE_INITIALIZER_STMT: {
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand1) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand1);
-				}
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand2);
-				}
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.destination_address_expression));
 
 				//Call out to the helper for this renaming
 				rename_intitializer_members(cursor->operands.oir.initializer_operand);
 
 				break;
+			}
+
+			case THREE_ADDR_CODE_STORE_STATEMENT: {
+
+			}
+
+			case THREE_ADDR_CODE_LOAD_STATEMENT: {
+
+
+				/**
+				 * After we rename the RHS, we need to rename the left hand variable if
+				 * it itself is eligible
+				 */
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
+				}
+			}
+
+			/**
+			 * TODO UPDATE AS WE CHANGE MEMORY COPY
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+
 			}
 
 			/**
