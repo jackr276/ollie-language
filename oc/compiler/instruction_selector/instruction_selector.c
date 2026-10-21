@@ -568,21 +568,6 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 
 
 /**
- * Is the given load instruction going to require any kind of converting move between the 
- * memory read/write type and the destination type? If so, we cannot use it for any
- * kind of binary operation condensation optimization
- */
-static inline u_int8_t does_load_operation_require_converting_move(instruction_t* instruction){
-	//Extract the region/destination type
-	generic_type_t* memory_region_type = instruction->type_storage.memory_read_write_type;
-	generic_type_t* destination_type = instruction->operands.oir.address_operand2->type;
-
-	//Give back whether or not the converting move is needed
-	return is_converting_move_required(destination_type, memory_region_type);
-}
-
-
-/**
  * Does the block that we're passing in end in a direct(jmp) jump to
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
@@ -2065,8 +2050,10 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 
 			increment_use_count_for_variable(instruction_cursor->operands.oir.operand1);
 			increment_use_count_for_variable(instruction_cursor->operands.oir.operand2);
-			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
-			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.source_address_expression.address_operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.source_address_expression.address_operand2);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.destination_address_expression.address_operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.destination_address_expression.address_operand2);
 			increment_use_count_for_variable(instruction_cursor->relies_on);
 
 			//If we have an initializer we'll increment it's use count as well
@@ -2097,7 +2084,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	if(instruction->statement_type != THREE_ADDR_CODE_LEA_STMT){
 		memory_address_operand = instruction->operands.oir.operand1;
 	} else {
-		memory_address_operand = instruction->operands.oir.address_operand1;
+		memory_address_operand = instruction->operands.oir.source_address_expression.address_operand1;
 	}
 
 	symtab_variable_record_t* associated_variable = memory_address_operand->linked_var;
@@ -2204,13 +2191,13 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					case THREE_ADDR_CODE_LEA_STMT: {
 						//Let the helper emit the statement
-						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable, instruction->line_number);
+						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), memory_address_operand, instruction_pointer_variable, instruction->line_number);
 
 						//Put this right before the store
 						insert_instruction_before_given(address_instruction, instruction);
 
 						//The assignee here now is our first address operand variable
-						instruction->operands.oir.address_operand1 = address_instruction->operands.oir.assignee;
+						instruction->operands.oir.source_address_expression.address_operand1 = address_instruction->operands.oir.assignee;
 						
 						break;
 					}
@@ -2266,18 +2253,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * straight assignment depending on the offset
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT: {
-					//Make into a lea statement
+					//Make into a lea statement we OFFSET_ONLY operands
 					if(stack_offset != 0){
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-						//For a lea we use address operands
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
-
-						//And op1_const is our offset
-						instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-						//This is a lea with an offset only
-						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+						three_addr_const_t* stack_offset_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+						instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, NULL, stack_offset_const, 0, NULL, ADDRESSING_MODE_OFFSET_ONLY};
 
 					/**
 					 * Otherwise, we'll just swap the var out with the stack pointer since
@@ -7009,6 +6989,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		&& window->instruction1->operands.oir.assignee != NULL
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
 		&& get_use_count_for_variable(window->instruction1->operands.oir.assignee) <= 1){
+
+		//TODO NEED TO BE SMART ABOUT *WHAT* ADDRESSING MODE WE'RE USING
 
 		//Extract the two instructions for convenience
 		instruction_t* to_be_combined = window->instruction1;
