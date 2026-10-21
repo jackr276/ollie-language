@@ -423,6 +423,15 @@ static void mark_initializer_values(three_addr_initializer_t* initializer, dynam
 
 
 /**
+ * Mark and add the definition for all of our given address operands
+ */
+static inline void mark_addressing_operands(dynamic_array_t* current_function_blocks, dynamic_array_t* worklist, addressing_operands_t* address_operands){
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand1, worklist);
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand2, worklist);
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -601,20 +610,17 @@ static void mark(dynamic_array_t* function_blocks){
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
-			case THREE_ADDR_CODE_PHI_STMT:
-				//Add this in here
+			case THREE_ADDR_CODE_PHI_STMT: {
 				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
-					//Add the definitions in
 					mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
 				}
 
 				break;
+			}
 
 			//If we have a function call, everything in the function call is important
-			case THREE_ADDR_CODE_FUNC_CALL:
-				//Run through them all and mark them
+			case THREE_ADDR_CODE_FUNC_CALL: {
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					switch(result->result_type){
@@ -630,19 +636,18 @@ static void mark(dynamic_array_t* function_blocks){
 				}
 
 				break;
+			}
 
 			/**
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
 			 */
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				//Run through them all and mark them
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					switch(result->result_type){
@@ -658,19 +663,54 @@ static void mark(dynamic_array_t* function_blocks){
 				}
 
 				break;
+			}
 
 			/**
 			 * For an initializer statement there are special steps that we 
 			 * need to take to work on the 
 			 */
-			case THREE_ADDR_CODE_INITIALIZER_STMT:
-				//The address that we're writing to will always be needed
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+			case THREE_ADDR_CODE_INITIALIZER_STMT:  {
+				//Mark the destination address
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
 
 				//Now let the recursive helper mark all of our initializer values
 				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
+			}
+
+			/**
+			 * Leas have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LEA_STMT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Loads have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LOAD_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Stores have a destination address that needs to be marked as well as the operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+		    }
+
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+
+		    }
+
+			case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
+
+		    }
 
 			/**
 			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
