@@ -1432,6 +1432,25 @@ static void rename_block(basic_block_t* entry){
 			}
 
 			/**
+			 * Leas have addressing operands as the source. They can have an assignee
+			 * so we will handle that here
+			 */
+			case THREE_ADDR_CODE_LEA_STMT: {
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.source_address_expression));
+
+				/**
+				 * After we rename the RHS, we need to rename the left hand variable if
+				 * it itself is eligible
+				 */
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
+				}
+
+				break;
+			}
+
+			/**
 			 * TODO UPDATE AS WE CHANGE MEMORY COPY
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
