@@ -704,12 +704,23 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 		    }
 
+			/**
+			 * TODO UPDATE THIS
+			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
-
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
 		    }
 
+			/**
+			 * Indirect jump statements do contain address operands but we will mark them differently
+			 */
 			case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
-
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				break;
 		    }
 
 			/**
@@ -717,32 +728,31 @@ static void mark(dynamic_array_t* function_blocks){
 			 * so we'll need to mark that as well
 			 */
 			case THREE_ADDR_CODE_BRANCH_STMT:
-			case THREE_ADDR_CODE_SETNE_STMT:
+			case THREE_ADDR_CODE_SETNE_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				break;
+			}
 
 			/**
 			 * Conditional movement statements need their "relies on" tag included
 			 * as well as the two actual operands
 			 */
-			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
 				break;
+			}
 
 			/**
 			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
 			 * will ignore
 			 */
-			default:
-				//We need to mark the place where each definition is set
+			default: {
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
-
 				break;
+			}
 		}
 
 		//Grab this out for convenience
@@ -1139,6 +1149,14 @@ static void mark_and_add_definition_block_local(instruction_t* starting_point, t
 	}
 }
 
+/**
+ * Mark and add the definition for all of our given address operands
+ */
+static inline void mark_addressing_operands_block_local(instruction_t* starting_point, instruction_t* worklist, u_int32_t current_index, addressing_operands_t* address_operands){
+	mark_and_add_definition_block_local(starting_point, address_operands->address_operand1, &worklist, &current_index);
+	mark_and_add_definition_block_local(starting_point, address_operands->address_operand2, &worklist, &current_index);
+}
+
 
 /**
  * Is a given block only a branching block?. We will be able to tell
@@ -1248,8 +1266,6 @@ static inline void mark_all_branch_related_statements(basic_block_t* block){
 			default:
 				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
 				mark_and_add_definition_block_local(current, current->operands.oir.operand2, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->operands.oir.address_operand1, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->operands.oir.address_operand2, worklist, &worklist_current_index);
 				break;
 		}
 	}
