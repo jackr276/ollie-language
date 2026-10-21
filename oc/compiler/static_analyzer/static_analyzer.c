@@ -1985,6 +1985,20 @@ static u_int8_t check_initializer_for_definite_assignment(instruction_t* instruc
 
 
 /**
+ * Check variable addressing mode operands for definite assignment
+ */
+static inline u_int8_t check_addressing_operands_for_definite_assignment(instruction_t* instruction, addressing_operands_t* operands){
+	u_int8_t overall_result = SUCCESS;
+
+	//Only the two variables need to be checked
+	overall_result &= check_variable_for_definite_assignment(instruction, operands->address_operand1);
+	overall_result &= check_variable_for_definite_assignment(instruction, operands->address_operand2);
+
+	return overall_result;
+}
+
+
+/**
  * Does the given instruction comply with the definite assignment rules? We will check 
  * every single eligible variable for compliance. If one variable fails, the whole thing
  * fails out
@@ -2006,8 +2020,8 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	 */
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1);
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2);
-	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
-	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
+	overall_result &= check_addressing_operands_for_definite_assignment(instruction, &(instruction->operands.oir.destination_address_expression));
+	overall_result &= check_addressing_operands_for_definite_assignment(instruction, &(instruction->operands.oir.source_address_expression));
 
 	//If we have an initializer then we'll check that(null check is in the helper)
 	overall_result &= check_initializer_for_definite_assignment(instruction, instruction->operands.oir.initializer_operand);
