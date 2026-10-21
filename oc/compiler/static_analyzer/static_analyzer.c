@@ -1393,12 +1393,32 @@ static void rename_block(basic_block_t* entry){
 				break;
 			}
 
+			/**
+			 * Stores specifically have addressing operands in the destination only, so we
+			 * can ignore the source operands. Stores should also never have an assignee
+			 */
 			case THREE_ADDR_CODE_STORE_STATEMENT: {
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.destination_address_expression));
 
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand1);
+				}
+
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand2) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand2);
+				}
+
+				break;
 			}
 
+			/**
+			 * Loads have addressing operands as the source. They can have an assignee
+			 * so we will handle that here
+			 */
 			case THREE_ADDR_CODE_LOAD_STATEMENT: {
-
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.source_address_expression));
 
 				/**
 				 * After we rename the RHS, we need to rename the left hand variable if
@@ -1407,13 +1427,26 @@ static void rename_block(basic_block_t* entry){
 				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
 					lhs_new_name(cursor->operands.oir.assignee);
 				}
+
+				break;
 			}
 
 			/**
 			 * TODO UPDATE AS WE CHANGE MEMORY COPY
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.destination_address_expression));
 
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand1);
+				}
+
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand2) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand2);
+				}
+
+				break;
 			}
 
 			/**
@@ -1426,14 +1459,6 @@ static void rename_block(basic_block_t* entry){
 
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand2) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand2);
-				}
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand1) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand1);
-				}
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand2);
 				}
 
 				/**
