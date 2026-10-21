@@ -1672,16 +1672,54 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				}
 
 				/**
-				 * In the default case, we just add the USE/DEF for each 
-				 * variable that we can see
+				 * Store statements will have a destination addressing mode and source operands
 				 */
-				default: {
+				case THREE_ADDR_CODE_STORE_STATEMENT: {
+					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
+
+					add_variable_to_use_set(cursor->operands.oir.operand1, block);
+					add_variable_to_use_set(cursor->operands.oir.operand2, block);
+					break;
+				}
+
+				/**
+				 * Load statements will have an assignee and a source addressing mode
+				 */
+				case THREE_ADDR_CODE_LOAD_STATEMENT: {
+					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
+					add_variable_to_def_set(cursor->operands.oir.assignee, block);
+					break;
+				}
+
+				/**
+				 * Like stores, leas have an assignee and a use set
+				 */
+				case THREE_ADDR_CODE_LEA_STMT: {
+					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
+					add_variable_to_def_set(cursor->operands.oir.assignee, block);
+					break;
+				}
+
+				/**
+				 * TODO REFACTOR
+				 */
+				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 					add_variable_to_use_set(cursor->operands.oir.operand2, block);
 
 					//We could have source or destination address expressions, or both
-					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
+					//TODO REFACTOR TO ONLY BE DOING THIS WHEN APPROPRIATE
 					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
+					break;
+				}
+
+				/**
+				 * In the default case, we just add the USE/DEF for each 
+				 * variable that we can see and is not in an addressing mode
+				 */
+				default: {
+					add_variable_to_use_set(cursor->operands.oir.operand1, block);
+					add_variable_to_use_set(cursor->operands.oir.operand2, block);
 
 					//The assignee is in the def set
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
