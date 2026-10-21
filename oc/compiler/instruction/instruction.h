@@ -381,11 +381,6 @@ instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* 
 instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
- * Emit a store statement that only uses the base address
- */
-instruction_t* emit_store_const_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
-
-/**
  * Emit a store with a base address and an index value(variable offset). This maps
  * to an addressing mode of REGISTERS_ONLY
  */

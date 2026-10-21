@@ -6089,7 +6089,7 @@ instruction_t* emit_load_instruction(three_addr_var_t* assignee, three_addr_var_
 	stmt->operands.x86.destination_register = assignee;
 	//Stack pointer is source 1
 	stmt->operands.x86.address_register1 = stack_pointer;
-	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+	stmt->operands.x86.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 	//Loading is reading from memory
 	stmt->memory_access_type = READ_FROM_MEMORY;
 
@@ -6141,7 +6141,7 @@ instruction_t* emit_store_instruction(three_addr_var_t* source, three_addr_var_t
 	
 	//Stack pointer our base address
 	stmt->operands.x86.address_register1 = stack_pointer;
-	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+	stmt->operands.x86.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 	//Storing is writing to memory
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 
@@ -6230,13 +6230,9 @@ instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* 
 instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and destination address expression
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-
-	//This is the base address only mode
-	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-
-	//The first address op is the memory address
-	stmt->operands.oir.address_operand1 = base_address;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){base_address, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -6253,42 +6249,12 @@ instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, thre
 /**
  * Emit a store statement that only uses the base address
  */
-instruction_t* emit_store_const_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
-	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-
-	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-
-	//This is the base address only mode
-	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-
-	//The first address op is the memory address
-	stmt->operands.oir.address_operand1 = base_address;
-
-	//Important - add the type that we expect to be writing to in memory
-	stmt->type_storage.memory_read_write_type = memory_write_type;
-
-	//The storee goes inside of the constant operand
-	stmt->operands.oir.constant_operand = storee;
-
-	//And that's it, we'll now just give it back
-	stmt->line_number = line_number;
-	return stmt;
-}
-
-
-/**
- * Emit a store statement that only uses the base address
- */
 instruction_t* emit_constant_store_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and destination address expression
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-
-	//This is the base address only mode
-	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-
-	//The first address op is the memory address
-	stmt->operands.oir.address_operand1 = base_address;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){base_address, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
 
 	//Important - add the type that we expect to be writing to in memory
 	stmt->type_storage.memory_read_write_type = memory_write_type;
@@ -6309,16 +6275,9 @@ instruction_t* emit_constant_store_base_address_only(three_addr_var_t* base_addr
 instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address, three_addr_var_t* index, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and destination address expression
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-
-	//This maps to the REGISTERS_ONLY addressing mode
-	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-
-	//Base address is the first operand
-	stmt->operands.oir.address_operand1 = base_address;
-
-	//Now the index goes in here
-	stmt->operands.oir.address_operand2 = index;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){base_address, index, NULL, 0, NULL, ADDRESSING_MODE_REGISTERS_ONLY};
 
 	//What we're storing
 	stmt->operands.oir.operand1 = storee;
