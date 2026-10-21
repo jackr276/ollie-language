@@ -2321,14 +2321,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							case PLUS: {
 								add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
-								//Make this into a full-fledged lea
-								instruction->op = BLANK;
-								instruction->operands.oir.address_operand1 = stack_pointer_variable;
-								instruction->operands.oir.address_offset = stack_offset_constant;
+								//Convert this to a lea
 								instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-								instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+								instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																												NULL,
+																												stack_offset_constant,
+																												0,
+																												NULL,
+																												ADDRESSING_MODE_OFFSET_ONLY};
 
-								//Remove any remnants of what it was
+								//Wipe out what made this a bin op expression
+								instruction->op = BLANK;
 								instruction->operands.oir.operand1 = NULL;
 								instruction->operands.oir.constant_operand = NULL;
 								break;
@@ -2337,14 +2340,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							case MINUS: {
 								subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
-								//Make this into a full-fledged lea
-								instruction->op = BLANK;
-								instruction->operands.oir.address_operand1 = stack_pointer_variable;
-								instruction->operands.oir.address_offset = stack_offset_constant;
+								//Convert this to a LEA
 								instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-								instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+								instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																												NULL,
+																												stack_offset_constant,
+																												0,
+																												NULL,
+																												ADDRESSING_MODE_OFFSET_ONLY};
 
-								//Remove any remnants of what it was
+								//Wipe out what made this a bin op expression
+								instruction->op = BLANK;
 								instruction->operands.oir.operand1 = NULL;
 								instruction->operands.oir.constant_operand = NULL;
 								break;
@@ -2379,19 +2385,19 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						 * If we have a PLUS, we can make this into a lea
 						 */
 						if(instruction->op == PLUS){
+							//Convert this to a LEA
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											NULL,
+																											instruction->operands.oir.constant_operand,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_OFFSET_ONLY};
 
-							//Update the offset and address op
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_offset = instruction->operands.oir.constant_operand;
-
-							//Wipe these out for any future reference
+							//Wipe out what made this a BIN_OP
 							instruction->operands.oir.constant_operand = NULL;
 							instruction->operands.oir.operand1 = NULL;
-							
-							//Make this a lea with a given addressing mode
 							instruction->op = BLANK;
-							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 						/**
 						 * Otherwise it's not LEA eligible so we'll have to leave it as a binary
@@ -2420,19 +2426,19 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						 * registers and an offset
 						 */
 						if(instruction->op == PLUS){
-							//Populate the lea fields
-							instruction->operands.oir.address_offset = stack_offset_constant;
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+							//Convert this to a LEA
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											instruction->operands.oir.operand2,
+																											stack_offset_constant,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 
 							//Wipe out the old fields
 							instruction->op = BLANK;
 							instruction->operands.oir.operand1 = NULL;
 							instruction->operands.oir.operand2 = NULL;
-
-							//Flag this as a lea now
-							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 						/**
 						 * Any operator besides plus is not compatible with a lea, so we'll need to emit the 
@@ -2456,11 +2462,14 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					} else {
 						if(instruction->op == PLUS){
-							//Set the new operands and make it a lea
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+							//Convert this to a LEA
 							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											instruction->operands.oir.operand2,
+																											NULL,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_ONLY};
 
 							//Wipe out all of the old fields
 							instruction->op = BLANK;
@@ -2489,10 +2498,10 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						insert_instruction_before_given(above_lea, instruction);
 
 						//Replace the address operand
-						instruction->operands.oir.address_operand1 = above_lea->operands.oir.assignee;
+						instruction->operands.oir.source_address_expression.address_operand1 = above_lea->operands.oir.assignee;
 
 					} else {
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
+						instruction->operands.oir.source_address_expression.address_operand1 = stack_pointer_variable;
 					}
 
 					break;
