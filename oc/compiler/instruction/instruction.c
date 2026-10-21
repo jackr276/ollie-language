@@ -6410,18 +6410,12 @@ instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, thre
 instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_const_t* constant_offset, generic_type_t* memory_read_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and source address expression
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
-
-	//This maps to an addressing mode of OFFSET_ONLY
-	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){base_address, NULL, constant_offset, 0, NULL, ADDRESSING_MODE_OFFSET_ONLY};
 
 	//The assignee that we're loading into
 	stmt->operands.oir.assignee = assignee;
-	//The op1 is our base address
-	stmt->operands.oir.address_operand1 = base_address;
-
-	//Our offset is stored in "offset", not constant operand
-	stmt->operands.oir.address_offset = constant_offset;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -6438,19 +6432,12 @@ instruction_t* emit_load_base_address_and_constant_offset(three_addr_var_t* assi
 instruction_t* emit_load_rip_relative(three_addr_var_t* assignee, three_addr_var_t* rip_relative_variable, three_addr_var_t* instruction_pointer, generic_type_t* memory_read_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and source address expression
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
-
-	//This maps to an addressing mode of RIP_RELATIVE 
-	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){instruction_pointer, NULL, NULL, 0, rip_relative_variable, ADDRESSING_MODE_RIP_RELATIVE};
 
 	//The assignee that we're loading into
 	stmt->operands.oir.assignee = assignee;
-
-	//The base address is the instruction pointer
-	stmt->operands.oir.address_operand1 = instruction_pointer;
-
-	//The rip relative variable is stored in the special spot
-	stmt->operands.oir.rip_offset_var = rip_relative_variable;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
@@ -6558,6 +6545,8 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump
+ *
+ * NOTE: indirect jumps store their addressing mode in the destination address expression
  */
 instruction_t* emit_indirect_jump_statement(void* jump_table, three_addr_var_t* index, u_int64_t multiplier){
 	//First we allocate it
@@ -6565,13 +6554,7 @@ instruction_t* emit_indirect_jump_statement(void* jump_table, three_addr_var_t* 
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_INDIRECT_JUMP_STMT;
-
-	//Leverage the addressing mode for printing
-	stmt->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
-
-	//Store the index and multiplier
-	stmt->operands.oir.address_operand2 = index;
-	stmt->operands.oir.address_multiplier = multiplier;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){NULL, index, NULL, multiplier, NULL, ADDRESSING_MODE_INDEX_AND_SCALE};
 
 	//Store the block that we are jumping to here
 	stmt->if_block = jump_table;
@@ -6841,18 +6824,10 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 
 	//This will be leaq always
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-	//Global var address calc mode
-	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+	lea->operands.oir.source_address_expression = (addressing_operands_t){instruction_pointer, NULL, NULL, 0, global_variable, ADDRESSING_MODE_RIP_RELATIVE};
 
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
-
-	//Op1 is the instruction pointer(relative addressing)
-	lea->operands.oir.address_operand1 = instruction_pointer;
-
-	//Store this in the rip-relative area
-	lea->operands.oir.rip_offset_var = global_variable;
 
 	//And give it back
 	lea->line_number = line_number;
@@ -6863,7 +6838,7 @@ instruction_t* emit_global_variable_address_calculation_oir(three_addr_var_t* as
 /**
  * Emit a fully formed global variable OIR address calculation with offset lea
  *
- * This will always produce instructions like: t8 <- global_var(%rip)
+ * This will always produce instructions like: t8 <- 4+global_var(%rip)
  */
 instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_addr_var_t* assignee, three_addr_var_t* global_variable, three_addr_var_t* instruction_pointer, three_addr_const_t* constant, u_int32_t line_number){
 	//Get the intstruction out
@@ -6871,21 +6846,10 @@ instruction_t* emit_global_variable_address_calculation_with_offset_oir(three_ad
 
 	//This will be leaq always
 	lea->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-	//Global var address calc mode
-	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+	lea->operands.oir.source_address_expression = (addressing_operands_t){instruction_pointer, NULL, constant, 0, global_variable, ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET};
 
 	//We already know what the destination will be
 	lea->operands.oir.assignee = assignee;
-
-	//Op1 is the instruction pointer(relative addressing)
-	lea->operands.oir.address_operand1 = instruction_pointer;
-
-	//Store this in the dedicated rip offset area
-	lea->operands.oir.rip_offset_var = global_variable;
-
-	//Store the constant offset here as well
-	lea->operands.oir.address_offset = constant;
 
 	//And give it back
 	lea->line_number = line_number;
@@ -6909,7 +6873,7 @@ instruction_t* emit_global_variable_address_calculation_x86(three_addr_var_t* gl
 	lea->instruction_type = LEAQ;
 
 	//Global var address calc mode
-	lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+	lea->operands.x86.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 	//We already know what the destination will be
 	lea->operands.x86.destination_register = destination;
