@@ -2621,9 +2621,13 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			 */
 			if(stmt->memory_access_type == NO_MEMORY_ACCESS){
 				print_variable(fl, stmt->operands.oir.operand2, PRINTING_VAR_INLINE);
+			
+			/**
+			 * The addressing operation would come as a source
+			 */
 			} else {
 				printf("LOAD ");
-				print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+				print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.source_address_expression), PRINTING_VAR_INLINE);
 			}
 
 			//And end it out here
@@ -2683,10 +2687,15 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 *
 		 * Memory copies store the destination address as an OIR addressing
 		 * mode instruction while they store the source as a singular operand in op1
+		 *
+		 *
+		 * TODO THIS WILL BE UPDATED TO HAVE BOTH MEMORY DESTINATIONS
+		 *
+		 *
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 			fprintf(fl, "memory copy %ld bytes ", stmt->optional_storage.byte_amount_to_copy);
-			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.destination_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
@@ -2745,8 +2754,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 */
 		case THREE_ADDR_CODE_STORE_STATEMENT:
 			fprintf(fl, "store ");
-			//Print out the addressing mode expression
-			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+
+			/**
+			 * The addressing mode expression always comes from the destination for stores
+			 */
+			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.destination_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
 
 			//Finally the storee(op1 or constant operand)
@@ -2768,8 +2780,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			fprintf(fl, "load ");
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 			fprintf(fl, " <- "); 
-			//Print out the addressing mode expression
-			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+
+			/**
+			 * The addressing mode expression always comes from the source for loads
+			 */
+			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.source_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -3056,9 +3071,11 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			//Var name comes first
 			print_variable(fl, stmt->operands.oir.assignee, PRINTING_VAR_INLINE);
 
-			//Let the overall helper take over and do the printing for us here
+			/**
+			 * Let the helper do the printing for us here. Lea's only ever have source address expressions
+			 */
 			fprintf(fl, " <- ");
-			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.source_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -3089,16 +3106,19 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		/**
 		 * Indirect jump statements carry all of the operands that they need with them for the
 		 * address calculation and the jump itself
+		 *
+		 * NOTE: indirect jump statements only have destination address expressions
 		 */
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			//Print out the jump offset
 			fprintf(fl, "jmp *.JT%d(, ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
 
-			//Now print out the variable
-			print_variable(fl, stmt->operands.oir.address_operand2, PRINTING_VAR_INLINE);
-
-			//Finally the multiplicator
-			fprintf(fl, " ,%ld)\n", stmt->operands.oir.address_multiplier);
+			/**
+			 * A bit unique here - unlike regular addressing mode expressions we print
+			 * this one out directly without using the helper due to its unqiueness
+			 */
+			print_variable(fl, stmt->operands.oir.destination_address_expression.address_operand2, PRINTING_VAR_INLINE);
+			fprintf(fl, " ,%ld)\n", stmt->operands.oir.destination_address_expression.address_multiplier);
 
 			break;
 
@@ -3128,7 +3148,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			break;
 
 		case THREE_ADDR_CODE_INITIALIZER_STMT:
-			print_OIR_addressing_mode_expression(fl, stmt, PRINTING_VAR_INLINE);
+			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.destination_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, " <- initialize from ");
 			print_initializer(fl, stmt->operands.oir.initializer_operand, PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
