@@ -6298,16 +6298,9 @@ instruction_t* emit_store_base_address_and_index(three_addr_var_t* base_address,
 instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and destination address expression
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-
-	//This maps to the OFFSET ONLY addressing mode
-	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-	//The base address is the first operand
-	stmt->operands.oir.address_operand1 = base_address;
-
-	//The offset placeholder is used for our offset, not constant operand 
-	stmt->operands.oir.address_offset = offset;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){base_address, NULL, offset, 0, NULL, ADDRESSING_MODE_OFFSET_ONLY};
 
 	//What we're storing goes in op1
 	stmt->operands.oir.operand1 = storee;
@@ -6328,16 +6321,9 @@ instruction_t* emit_store_base_address_and_constant_offset(three_addr_var_t* bas
 instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, three_addr_var_t* rip_relative_variable, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and destination address expression
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-
-	//This maps to the RIP_RELATIVE addressing mode
-	stmt->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-
-	//The base address is the instruction pointer
-	stmt->operands.oir.address_operand1 = instruction_pointer;
-
-	//Store the rip relative variable in it's dedicated area
-	stmt->operands.oir.rip_offset_var = rip_relative_variable;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){instruction_pointer, NULL, NULL, 0, rip_relative_variable, ADDRESSING_MODE_RIP_RELATIVE};
 
 	//What we're storing goes in op1
 	stmt->operands.oir.operand1 = storee;
@@ -6358,16 +6344,9 @@ instruction_t* emit_store_rip_relative(three_addr_var_t* instruction_pointer, th
 instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_var_t* base_address, three_addr_const_t* offset, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and destination address expression
 	stmt->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-
-	//This is an OFFSET_ONLY type
-	stmt->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-	//The base address that we're assigning to
-	stmt->operands.oir.address_operand1 = base_address;
-
-	//The offset placeholder is used for our offset, not constant operand 
-	stmt->operands.oir.address_offset = offset;
+	stmt->operands.oir.destination_address_expression = (addressing_operands_t){base_address, NULL,	offset, 0, NULL, ADDRESSING_MODE_RIP_RELATIVE};
 
 	//What we're storing
 	stmt->operands.oir.constant_operand = storee;
@@ -6387,17 +6366,13 @@ instruction_t* emit_constant_store_base_address_and_constant_offset(three_addr_v
 instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_addr_var_t* base_address, generic_type_t* memory_read_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and source address expression
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
-
-	//This maps to an addressing mode type of BASE_ADDRESS_ONLY
-	stmt->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-
-	//The base address is in operand1
-	stmt->operands.oir.assignee = assignee;
-	stmt->operands.oir.address_operand1 = base_address;
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){base_address, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
+	stmt->operands.oir.assignee = assignee;
 	
 	//And that's it, we'll now just give it back
 	stmt->line_number = line_number;
@@ -6412,17 +6387,12 @@ instruction_t* emit_load_base_address_only(three_addr_var_t* assignee, three_add
 instruction_t* emit_load_base_address_and_index(three_addr_var_t* assignee, three_addr_var_t* base_address, three_addr_var_t* index, generic_type_t* memory_read_type, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
+	//Package up the statement type and source address expression
 	stmt->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
-
-	//This maps to the addressing mode of REGISTERS_ONLY
-	stmt->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){base_address, index, NULL, 0, NULL, ADDRESSING_MODE_REGISTERS_ONLY};
 
 	//The base address that we're assigning to
 	stmt->operands.oir.assignee = assignee;
-
-	//Populate the two address operands to reflect REGISTERS_ONLY
-	stmt->operands.oir.address_operand1 = base_address;
-	stmt->operands.oir.address_operand2 = index;
 
 	//Important - store the type that we expect to be getting out of memory
 	stmt->type_storage.memory_read_write_type = memory_read_type;
