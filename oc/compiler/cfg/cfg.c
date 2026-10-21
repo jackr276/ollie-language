@@ -2351,11 +2351,13 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			&& is_binary_operation(current_block->exit_statement)
 			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
 
-			//If we have a result type use that, otherwise take from op1
+			/**
+			 * If we have a result use that, otherwise use the assignee
+			 */
 			if(current_block->exit_statement->type_storage.result_type != NULL){
 				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
 			} else {
-				type_signed = is_type_signed(current_block->exit_statement->operands.oir.address_operand1->type);
+				type_signed = is_type_signed(current_block->exit_statement->operands.oir.assignee->type);
 			}
 
 		} else {
@@ -13170,12 +13172,13 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
 
 			/**
-			 * Clone over all of the addressing variables as we don't know which are populated and which aren't
+			 * First clone the destination addressing expression
 			 */
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
-			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->operands.oir.destination_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.destination_address_expression), variable_map);
+
+			/**
+			 * Then all normal variables
+			 */
 			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
@@ -13184,7 +13187,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 * and function references
 			 */
 			new_instruction->statement_type = source_instruction->statement_type;
-			new_instruction->addressing_mode = source_instruction->addressing_mode;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
 
@@ -13209,10 +13211,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 */
 			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
 			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
 			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
@@ -13220,8 +13219,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 * memory copy for all of them
 			 */
 			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
-			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
-			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
 
 			/**
 			 * Clone over all of the instruction types, addressing modes, etc.
@@ -13230,7 +13227,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 */
 			new_instruction->statement_type = source_instruction->statement_type;
 			new_instruction->op = source_instruction->op;
-			new_instruction->addressing_mode = source_instruction->addressing_mode;
 			new_instruction->branch_type = source_instruction->branch_type;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
