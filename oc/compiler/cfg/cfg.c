@@ -13128,6 +13128,41 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 
 			return;
 		}
+
+		/**
+		 * lea statments always have a addressing expression that
+		 * we'll need to clone over
+		 */
+		case THREE_ADDR_CODE_LEA_STMT: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			/**
+			 * First clone the source addressing mode expression
+			 */
+			new_instruction->operands.oir.source_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.source_address_expression), variable_map);
+
+			/**
+			 * Then clone all normal variables/constants
+			 */
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			//Add it in and get out
+			add_statement(cloning_into_block, new_instruction);
+
+			return;
+		}
 												   
 		/**
 		 * Store statements always have a destination address that we'll need to

@@ -1406,7 +1406,7 @@ instruction_t* emit_lea_operands_and_offset(three_addr_var_t* assignee, three_ad
 
 /**
  * Emit a lea statement that has the index, offset, and scale. This corresponds
- * to an addressing mode of ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE
+ * to an addressing mode of ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE
  */
 instruction_t* emit_lea_index_offset_and_scale(three_addr_var_t* assignee, three_addr_var_t* address_operand2, three_addr_const_t* offset, u_int64_t scale, u_int32_t line_number){
 	//First we allocate it
@@ -2589,7 +2589,7 @@ static void print_OIR_addressing_mode_expression(FILE* fl, addressing_operands_t
 
 		//Should be unreachable but we have it anwyas
 		default: {
-			fprintf(stderr, "Fatal internal compiler error: unreachable path hit in OIR addressing mode printer\n");
+			fprintf(stderr, "Fatal internal compiler error: unreachable path hit in OIR addressing mode printer of %s\n", addressing_mode_to_string(addressing_expression->addressing_mode));
 			exit(1);
 		}
 	}
