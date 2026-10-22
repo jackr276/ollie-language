@@ -3558,12 +3558,10 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
 		 * store (t6, t7) <- 8
 		 */
 		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
-			//Copy the two operands over
-			addressing_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-			addressing_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-
-			//This is now a REGISTERS_ONLY addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+			//Copy the two operands over and flip this to REGISTERS_ONLY
+			operands_to_combine->address_operand1 = binary_operation->operands.oir.operand1;
+			operands_to_combine->address_operand2 = binary_operation->operands.oir.operand2;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 			//Scrap the old binary operation
 			delete_statement(binary_operation);
@@ -3583,12 +3581,10 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
 		 * store 4(t6, t7) <- 8
 		 */
 		case ADDRESSING_MODE_OFFSET_ONLY: {
-			//Copy the two operands over
-			addressing_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-			addressing_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-
-			//This is now a REGISTERS_AND_OFFSET addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+			//Copy the two operands over and flip this to REGISTERS_AND_OFFSET
+			operands_to_combine->address_operand1 = binary_operation->operands.oir.operand1;
+			operands_to_combine->address_operand2 = binary_operation->operands.oir.operand2;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			//Scrap the old binary operation
 			delete_statement(binary_operation);
@@ -3600,8 +3596,9 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
 		}
 
 		//Unsupported - do nothing
-		default:
+		default: {
 			break;
+		}
 	}
 }
 
@@ -3612,11 +3609,25 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
  *
  * It can be assumed that the first instruction is the constant binary operation, and the second
  * is the addressing operation
+ *
+ * The operand side tells us whether we should be using the source or destination memory
+ * address operands for this
  */
-static inline void combine_constant_binary_operation_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_constant_binary_operation_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* constant_binary_operation = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;	
+
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
 
 	/**
 	 * We are only able to do this *if* we have an addition/subtraction binary operation.
@@ -3624,8 +3635,8 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 	 * compression
 	 */
 	switch(constant_binary_operation->op){
-		case PLUS:
-			switch(addressing_operation->addressing_mode){
+		case PLUS: {
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t5 <- t6 + 4 
@@ -3634,22 +3645,20 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4(t6) <- 8
 				 */
-				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-					//Copy the operands over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+					//Copy the operands over and flip the mode to OFFSET_ONLY
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3659,21 +3668,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 12(t6) <- 8
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//Add the new constant to the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3683,21 +3692,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 12(t6, t7) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 					//Add the first instruction's constant to the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//No mode changes, just delete the old bin op
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3707,22 +3716,20 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4+x1(t6) <- 8
 				 */
-				case ADDRESSING_MODE_RIP_RELATIVE:
-					//Copy the offset and operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//This is now RIP-relative with an offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				case ADDRESSING_MODE_RIP_RELATIVE: {
+					//Copy the offset and operand over and flip the mode
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3732,21 +3739,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 12+x1(t6) <- 8
 				 */
-				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 					//Add the first instruction's constant to the existing operand
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3756,21 +3763,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store 8(t6, t7, 8) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 					//Add the first instruction's constant to the existing operand
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3780,24 +3787,20 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store 4(t6, t7) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//First copy the constant over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Now copy over the addrss operand
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset so update the mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Copy over the constant, first address operand and flip the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3832,8 +3835,9 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 			}
 
 			break;
+		}
 
-		case MINUS:
+		case MINUS: {
 			switch(addressing_operation->addressing_mode){
 				/**
 				 * Combine:
@@ -4073,12 +4077,14 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 			}
 
 			break;
+		}
 
 		/**
 		 * Something unsupported so we skip it
 		 */
-		default:
+		default: {
 			break;
+		}
 	}
 }
 
