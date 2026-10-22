@@ -464,12 +464,10 @@ static inline u_int8_t is_memory_movement_operation(instruction_t* instruction){
 
 
 /**
- * Does the given operation make use of an addressing mode expression?
- * There are only certain operations that are at all eligible for this,
- * and this rule will help us determine if they are. It also
- * does a quick NULL check
+ * Does the given statement use a source addressing operation? Statements like lea's,
+ * loads and memory copies do
  */
-static inline u_int8_t does_operation_use_addressing_mode(instruction_t* instruction){
+static inline u_int8_t does_statement_use_source_addressing_operation(instruction_t* instruction){
 	if(instruction == NULL){
 		return FALSE;
 	}
@@ -478,7 +476,28 @@ static inline u_int8_t does_operation_use_addressing_mode(instruction_t* instruc
 	 * If we use any addressing mode at all, then this counts as an addressing mode
 	 * instruction
 	 */
-	if(instruction->addressing_mode != ADDRESSING_MODE_NONE){
+	if(instruction->operands.oir.source_address_expression.addressing_mode != ADDRESSING_MODE_NONE){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
+ * Does the given statement use a destination addressing operation? Statements like stores,
+ * initializers and memory copies do
+ */
+static inline u_int8_t does_statement_use_destination_addressing_operation(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	/**
+	 * If we use any addressing mode at all, then this counts as an addressing mode
+	 * instruction
+	 */
+	if(instruction->operands.oir.destination_address_expression.addressing_mode != ADDRESSING_MODE_NONE){
 		return TRUE;
 	} else {
 		return FALSE;
@@ -2923,7 +2942,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1,
 																											NULL,
 																											address_offset,
-																											NULL,
+																											0,
 																											base_address->rip_offset_var,
 																											ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET};
 				break;
@@ -2940,7 +2959,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1,
 																											NULL,
 																											address_offset,
-																											NULL,
+																											0,
 																											base_address->rip_offset_var,
 																											ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET};
 				break;
