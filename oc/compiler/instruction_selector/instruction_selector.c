@@ -2830,13 +2830,16 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 * We're going to end up with something like store 4 + 8(x_0, y_0) <- 5
 			 */
 			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				//Emit the address offset as a copy of the given one and add the additional offset in
+				three_addr_const_t* address_offset = emit_constant_copy(base_address->address_offset);
+				sum_constant_with_raw_int64_value(address_offset, i64, additional_offset);
 
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1, 
+																											base_address->address_operand2,
+																											address_offset,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 				break;
 			}
 
@@ -2844,10 +2847,13 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 * We'll get something like store 4(, y_0, 8) <- 5
 			 */
 			case ADDRESSING_MODE_INDEX_AND_SCALE: {
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+				three_addr_const_t* address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){NULL,
+																											base_address->address_operand2,
+																											address_offset,
+																											base_address->address_multiplier,
+																											NULL,
+																											ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE};
 				break;
 			}
 
@@ -2855,13 +2861,16 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 * We'll get something like store 4 + 8(, y_0, 8) <- 5
 			 */
 			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+				//Emit a copy of the original offset and sum the new value in
+				three_addr_const_t* address_offset = emit_constant_copy(base_address->address_offset);
+				sum_constant_with_raw_int64_value(address_offset, i64, additional_offset);
 
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){NULL,
+																											base_address->address_operand2,
+																											address_offset,
+																											base_address->address_multiplier,
+																											NULL,
+																											ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE};
 				break;
 		 	}
 
@@ -2869,11 +2878,13 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 * We'll get something like store 4(x_0, y_0, 8) <- 5
 			 */
 			case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				three_addr_const_t* address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1,
+																											base_address->address_operand2,
+																											address_offset,
+																											base_address->address_multiplier,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE};
 				break;
 			}
 
@@ -2881,14 +2892,16 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 * We'll get something like store 4+8(x_0, y_0, 8) <- 5
 			 */
 			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				//Emit a copy of the original offset and sum the new value in
+				three_addr_const_t* address_offset = emit_constant_copy(base_address->address_offset);
+				sum_constant_with_raw_int64_value(address_offset, i64, additional_offset);
 
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1,
+																											base_address->address_operand2,
+																											address_offset,
+																											base_address->address_multiplier,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE};
 				break;
 			}
 
@@ -2896,10 +2909,13 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 * We'll get something like store 4+x_0(%rip) <- 5
 			 */
 			case ADDRESSING_MODE_RIP_RELATIVE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				three_addr_const_t* address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
+				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1,
+																											NULL,
+																											address_offset,
+																											NULL,
+																											base_address->rip_offset_var,
+																											ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET};
 				break;
 			}
 
@@ -2907,13 +2923,16 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			 * We'll get something like store 4+8+x_0(%rip) <- 5
 			 */
 			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				//Emit a copy of the original offset and sum the new value in
+				three_addr_const_t* address_offset = emit_constant_copy(base_address->address_offset);
+				sum_constant_with_raw_int64_value(address_offset, i64, additional_offset);
 
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
+				store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1,
+																											NULL,
+																											address_offset,
+																											NULL,
+																											base_address->rip_offset_var,
+																											ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET};
 				break;
 			}
 
