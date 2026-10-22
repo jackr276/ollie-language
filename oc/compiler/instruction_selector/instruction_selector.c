@@ -4590,7 +4590,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 		}
 
 		case PLUS: {
-			switch(addressing_operation->addressing_mode){
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Case where we have:
 				 * 	t4 <- t3 + 8
@@ -4599,22 +4599,20 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 8(t2, t3) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//Copy the constant and address register over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Copy over the address offset, second operand and update the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4624,21 +4622,21 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 16(t2, t3) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 					//Add the first operation's constant to the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4654,24 +4652,24 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 72(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
 					//Now sum it into the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4687,27 +4685,23 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 64(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
-					//This now has an offset
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					//Add the offset, update the second operand and change the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4723,27 +4717,23 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	leaq 64(, t4, 8), t7 
 				 */
-				case ADDRESSING_MODE_INDEX_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
-					//This now has an offset
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+					//Add the offset, update the second operand and change the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4759,24 +4749,24 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	leaq 136(, t4, 8), t7 
 				 */
-				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 					
 					//Now add the result to the existing address offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				//Anything else we don't support so leave it as-is
 				default:
@@ -5408,7 +5398,7 @@ static void perform_memory_address_remediations(instruction_window_t* window, in
 		case THREE_ADDR_CODE_ASSN_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT: {
 			/**
 			 * If have a value in operand1 *and* it's a memory address,
 			 * we will need to remediate it
@@ -5428,12 +5418,13 @@ static void perform_memory_address_remediations(instruction_window_t* window, in
 			}
 			
 			break;
+		}
 
 		/**
 		 * It is possible for a lea statement to have its address operand1
 		 * be a memory address. If this is the case then we need to remediate it now
 		 */
-		case THREE_ADDR_CODE_LEA_STMT:
+		case THREE_ADDR_CODE_LEA_STMT: {
 			if(instruction->operands.oir.address_operand1 != NULL){
 				switch(instruction->operands.oir.address_operand1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
@@ -5443,21 +5434,23 @@ static void perform_memory_address_remediations(instruction_window_t* window, in
 						break;
 
 					default:
-					break;
+						break;
 				}
 			}
 
 			break;
+		}
 
 		/**
 		 * If we have an elaborative param offset calculation, now is the time
 		 * where we will convert it into a constant assignment
 		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET: {
 			convert_elaborative_param_offset_to_constant_assignment(instruction);
 
 			*changed = TRUE;
 			break;
+		}
 
 		//By default do nothing
 		default:
