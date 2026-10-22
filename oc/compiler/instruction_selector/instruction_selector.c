@@ -2937,8 +2937,7 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 			}
 
 			default: {
-				fprintf(stderr, "Invalid addressing mode detected");
-				exit(1);
+				trigger_ice_panic("Invalid addressing mode detected");
 		 	}
 		}
 
@@ -2947,16 +2946,19 @@ static instruction_t* generate_store_instruction_from_addressing_operands(addres
 	 * mode operands from the given base address pointer
 	 */
 	} else {
-		store_instruction->addressing_mode = base_address->addressing_mode;
-		store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-		store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-		store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-		store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-
 		//Because of the potential for address offset manipulation we need this to be distinct
-		if(base_address->address_offset != NULL){
-			store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
+		three_addr_const_t* address_offset = base_address->address_offset;
+		if(address_offset != NULL){
+			address_offset = emit_constant_copy(base_address->address_offset);
 		}
+		
+		//Just copy over the rest of our operands
+		store_instruction->operands.oir.destination_address_expression = (addressing_operands_t){base_address->address_operand1,
+																									base_address->address_operand2,
+																									address_offset,
+																									base_address->address_multiplier,
+																									base_address->rip_offset_var,
+																									base_address->addressing_mode};
 	}
 
 	//Populate the storee and exit
