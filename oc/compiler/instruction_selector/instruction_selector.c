@@ -2683,17 +2683,18 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 * registers and an offset
 					 */
 					if(instruction->op == PLUS){
-						//Populate the LEA statement
-						instruction->operands.oir.address_offset = stack_offset_constant;
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
-						instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+						//Convert this into a lea
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-						//Wipe out the old values
+						instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																										instruction->operands.oir.operand2,
+																										stack_offset_constant,
+																										0,
+																										NULL,
+																										ADDRESSING_MODE_REGISTERS_AND_OFFSET};
+						//Wipe out the old fields
 						instruction->op = BLANK;
 						instruction->operands.oir.operand1 = NULL;
-						instruction->operands.oir.operand2 = NULL;
+						instruction->operands.oir.constant_operand = NULL;
 
 					/**
 					 * Otherwise we'll need to do an address calculation first and then use the result
@@ -2729,24 +2730,19 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					insert_instruction_before_given(lea_statement, instruction);
 
 					//Update the first address operand
-					instruction->operands.oir.address_operand1 = lea_statement->operands.oir.assignee;
-
+					instruction->operands.oir.source_address_expression.address_operand1 = lea_statement->operands.oir.assignee;
 					break;
 				}
 				
-				//This should never happen
 				default:
-					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-					exit(1);
+					trigger_ice_panic("Unreachable path hit in memory address remediation");
 				}
 
 			break;
 		}
 
-		//This should be impossible
 		default: {
-			printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
-			exit(1);
+			trigger_ice_panic("Ivalid variable membership found in memory address remediator");
 		}	
 	}
 }
