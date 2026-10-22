@@ -3948,24 +3948,22 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4+x1(t6) <- 8
 				 */
-				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-					//Convert the existing offset to an i64 so that we can go negative if need be
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
-
-					//Subtract the first instruction's constant from the existing operand
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
+					//Convert the existing offset to an i64 so that we can go negative if need be, then subtract the other constant from it
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3975,24 +3973,22 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store 4(t6, t7, 8) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-					//Convert this to an i64 so that we can go negative if need be
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
-
-					//Subtrace the first instruction's constant from the existing operand
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+					//Convert this to an i64 so that we can go negative if need be, then subtract the other constant from it
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -4002,30 +3998,24 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store -4(t6, t7) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//Convert this to an i64 so that we know for sure we can negate
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Convert this to an i64 so that we know for sure we can negate and then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					
-					//No we can negate
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
-					//First copy the constant over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Now copy over the addrss operand
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset so update the mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+					//Copy over the contsant, first operand and flip the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -4035,30 +4025,24 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store -4(t6, t7, 8) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-					//Convert this to an i64 so that we know for sure we can negate
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+					//Convert this to an i64 so that we know for sure we can negate, then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					
-					//No we can negate
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
-					//First copy the constant over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Now copy over the addrss operand
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset so update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					//Copy over the contsant, first operand and flip the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation 
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				//Unsupported - just do nothing
 				default: {
