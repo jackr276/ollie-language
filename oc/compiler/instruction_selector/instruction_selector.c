@@ -4484,10 +4484,21 @@ static inline void combine_constant_assignment_with_address_operand2(instruction
  * It can be assumed that the first instruction is the constant binary operation, and the second
  * is the addressing operation
  */
-static inline void combine_constant_binary_operation_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_constant_binary_operation_with_address_operand2(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* constant_binary_operation = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
+
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
 
 	/**
 	 * Handle cases where the second addressing operand
@@ -4500,7 +4511,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 	 * of 2 are addressing mode compatible and account for that in our selection
 	 */
 	switch(constant_binary_operation->op){
-		case STAR:
+		case STAR: {
 			/**
 			 * For STAR, it has to be a lea compatible power of 2. If it is not then we leave now
 			 */
@@ -4508,7 +4519,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				break;
 			}
 
-			switch(addressing_operation->addressing_mode){
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Case where we have:
 				 * 	t4 <- t3 * 8
@@ -4517,24 +4528,20 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 8(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-					//Copy the mulitplier over
-					addressing_operation->operands.oir.address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
-
-					//Copy over the second address operand as well
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset and a scale
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+					//Copy over the multiplier, second operand and update the mode
+					operands_to_combine->address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//We no longer need the first statement
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4544,24 +4551,20 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store (t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//Copy the mulitplier over
-					addressing_operation->operands.oir.address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
-
-					//Copy over the second address operand as well
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset and a scale
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Copy over the multiplier, second operand and update the mode
+					operands_to_combine->address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
 					//We no longer need the first statement
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Anything else that *already* has an existing scale would not be worth it for this
@@ -4584,8 +4587,9 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 			}
 
 			break;
+		}
 
-		case PLUS:
+		case PLUS: {
 			switch(addressing_operation->addressing_mode){
 				/**
 				 * Case where we have:
@@ -4780,8 +4784,9 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 			}
 
 			break;
+		}
 
-		case MINUS:
+		case MINUS: {
 			switch(addressing_operation->addressing_mode){
 				/**
 				 * Case where we have:
@@ -4999,6 +5004,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 			}
 
 			break;
+		}
 
 		/**
 		 * Anything else is an unsupported operation so we will not bother with it
