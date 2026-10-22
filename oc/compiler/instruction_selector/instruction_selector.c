@@ -91,6 +91,16 @@ typedef enum {
 	INSERTION_ORDER_AFTER
 } insertion_order_t ;
 
+/**
+ * What side are our addressing operands in question on? Is it on the source side
+ * or the destination side
+ */
+typedef enum {
+	ADDRESSING_OPERANDS_SIDE_SOURCE,
+	ADDRESSING_OPERANDS_SIDE_DEST,
+} addressing_operands_side_t;
+
+
 //Define the instructions per window
 #define INSTRUCTIONS_PER_WINDOW 3
 
@@ -3296,21 +3306,33 @@ static void convert_elaborative_param_offset_to_constant_assignment(instruction_
  *
  * It can be assumed that the first instruction is the assignment, and the second
  * is the addressing operation
+ *
+ * The operand side tells us whether we should be using the source or destination memory
+ * address operands for this
  */
-static inline void combine_assignment_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_assignment_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	instruction_t* assignment = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-	//Copy it over
-	addressing_operation->operands.oir.address_operand1 = assignment->operands.oir.operand1;
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
+
+	//Copy this over to do the combination
+	operands_to_combine->address_operand1 = assignment->operands.oir.operand1;
 
 	//Scrap the first statement
 	delete_statement(assignment);
 
-	//Rebuilt the window around the addressing operation
+	//Rebuild around the addressing operation
 	reconstruct_window(window, addressing_operation);
-
-	//Flag that there was a change
 	*changed = TRUE;
 }
 
