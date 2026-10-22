@@ -3343,13 +3343,27 @@ static inline void combine_assignment_with_address_operand1(instruction_window_t
  *
  * It can be assumed that the first instruction is the constant assignment, and the second
  * is the addressing operation
+ *
+ * The operand side tells us whether we should be using the source or destination memory
+ * address operands for this
  */
-static inline void combine_constant_assignment_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_constant_assignment_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract these for convenience
 	instruction_t* constant_assignment = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-	switch(addressing_operation->addressing_mode){
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
+
+	switch(operands_to_combine->addressing_mode){
 		/**
 		 * LEA ONLY
 		 *
@@ -3359,21 +3373,21 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * t5 <- 8
 		 */
-		case ADDRESSING_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY: {
 			//Skip if it is not a lea
 			if(addressing_operation->statement_type != THREE_ADDR_CODE_LEA_STMT){
 				break;
 			}
 
 			//Add the two constants together
-			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+			add_constants(operands_to_combine->address_offset, constant_assignment->operands.oir.constant_operand);
 
 			//Move the address offset over, NULL out the old address operand
-			addressing_operation->operands.oir.constant_operand = addressing_operation->operands.oir.address_offset;
-			addressing_operation->operands.oir.operand1 = addressing_operation->operands.oir.address_operand1;
+			addressing_operation->operands.oir.constant_operand = operands_to_combine->address_offset;
+			addressing_operation->operands.oir.operand1 = operands_to_combine->address_operand1;
 
-			//Wipe away the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_NONE;
+			//Completely NULL out all of these operands now
+			*operands_to_combine = (addressing_operands_t){NULL, NULL, NULL, 0, NULL, ADDRESSING_MODE_NONE};
 
 			//This is now an assign const statement
 			addressing_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -3383,9 +3397,9 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
@@ -3395,25 +3409,23 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * leaq 4(t5), t6
 		 */
-		case ADDRESSING_MODE_REGISTERS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
 			//Copy the constant over
-			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
+			operands_to_combine->address_offset = constant_assignment->operands.oir.constant_operand;
 
 			//Move the address operand over, NULL out the second one
-			addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
-			addressing_operation->operands.oir.address_operand2 = NULL;
-
-			//Update the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			operands_to_combine->address_operand1 = operands_to_combine->address_operand2;
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Delete the first statement
 			delete_statement(constant_assignment);
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
@@ -3423,25 +3435,23 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * leaq 504(t5), t6
 		 */
-		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 			//First add the constant with our existing offset
-			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+			add_constants(operands_to_combine->address_offset, constant_assignment->operands.oir.constant_operand);
 
 			//Move the address operand over, NULL out the second one
-			addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
-			addressing_operation->operands.oir.address_operand2 = NULL;
-
-			//Update the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			operands_to_combine->address_operand1 = operands_to_combine->address_operand2;
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Remove the first statement
 			delete_statement(constant_assignment);
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
@@ -3451,7 +3461,7 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * leaq 4(, t5, 8), t6
 		 */
-		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 			//Move the constant over
 			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
 
@@ -3469,6 +3479,7 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
