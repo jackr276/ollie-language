@@ -8388,11 +8388,17 @@ static inline u_int8_t perform_gvn_variable_substitutions(value_numbering_table_
 	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.operand2);
 	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.operand2), gvn_equivalent);
 
-	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand1);
-	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand1), gvn_equivalent);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.source_address_expression.address_operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.source_address_expression.address_operand1), gvn_equivalent);
 
-	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand2);
-	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand2), gvn_equivalent);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.source_address_expression.address_operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.source_address_expression.address_operand2), gvn_equivalent);
+
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.destination_address_expression.address_operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.destination_address_expression.address_operand1), gvn_equivalent);
+
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.destination_address_expression.address_operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.destination_address_expression.address_operand2), gvn_equivalent);
 
 	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
 		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
@@ -8534,10 +8540,8 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 				//Null out everything else just to be safe
 				cursor->operands.oir.operand2 = NULL;
-				cursor->operands.oir.address_operand1 = NULL;
-				cursor->operands.oir.address_operand2 = NULL;
-				cursor->operands.oir.address_offset = NULL;
-				cursor->operands.oir.address_multiplier = 0;
+				cursor->operands.oir.source_address_expression = INITIALIZE_NULL_ADDRESS_OPERANDS;
+				cursor->operands.oir.destination_address_expression = INITIALIZE_NULL_ADDRESS_OPERANDS;
 				cursor->operands.oir.constant_operand = NULL;
 				cursor->op = BLANK;
 
