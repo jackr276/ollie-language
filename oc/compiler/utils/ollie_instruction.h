@@ -45,6 +45,11 @@ struct addressing_operands_t {
 
 
 /**
+ * Utility to initialize NULL addressing operands
+ */
+#define INITIALIZE_NULL_ADDRESS_OPERANDS (addressing_operands_t){NULL, NULL, NULL, 0, NULL, ADDRESSING_MODE_NONE}
+
+/**
  * Are we forcing something to be signed or unsigned
  * regardless of the assignee type? This is mainly used
  * for shift operations but I can see it potentially
