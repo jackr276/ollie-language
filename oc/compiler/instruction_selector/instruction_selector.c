@@ -216,6 +216,29 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * Get the side for the addressing operands(source or dest) based on the type of statement. By
+ * the time that we're calling this, this should all be mutually exclusive, so nothing like a memory
+ * copy where both source and dest are addressing modes should be happening here
+ */
+static inline addressing_operands_side_t get_operand_side_for_statement(instruction_t* statement){
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_LEA_STMT:
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			return ADDRESSING_OPERANDS_SIDE_SOURCE;
+
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_INITIALIZER_STMT:
+			return ADDRESSING_OPERANDS_SIDE_DEST;
+		
+		default:
+			trigger_ice_panic("Invalid operand side request for given statement type");
+			return ADDRESSING_OPERANDS_SIDE_DEST;
+	}
+}
+
+
+/**
  * Is the given f32 negative? We need to use bit manipulation to deterine
  * this because regular float equality will not detect cases like -0.0 == 0.0
  */
@@ -2802,6 +2825,8 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
  *
  * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
  * result that is an actual initializer here. This is just for variables and constants
+ *
+ * TODO SEE IF WE CAN COMBINE WITH THE OTHER GENERATOR I BET WE CAN
  */
 static instruction_t* generate_store_instruction_from_addressing_operands(addressing_operands_t* base_address, int32_t additional_offset,
 																			three_addr_var_t* storee, generic_type_t* memory_write_type){
@@ -9921,30 +9946,18 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
  * NOTE: this function will return the final created statement to the caller
  */
 static instruction_t* convert_initializer_statement_into_OIR_store_statements(instruction_t* initializer_statement){
-	/**
-	 * We will need to know the base address, so we'll pass around this instruction's
-	 * current base address inside of this specialized struct. We will want to make
-	 * copies of the variables in here when we actually use them, but this will
-	 * give us a jumping off point
-	 */
-	addressing_operands_t base_address = {
-											initializer_statement->operands.oir.address_operand1,
-											initializer_statement->operands.oir.address_operand2,
-											initializer_statement->operands.oir.address_offset,
-											initializer_statement->operands.oir.address_multiplier,
-											initializer_statement->operands.oir.rip_offset_var,
-											initializer_statement->addressing_mode
-										  };
+	//Grab a pointer to the base address to make this work
+	addressing_operands_t* base_address = &(initializer_statement->operands.oir.destination_address_expression);
 
 	//Extract the initializer and call out to the appropriate rule
 	three_addr_initializer_t* initializer = initializer_statement->operands.oir.initializer_operand;
 	switch(initializer->initializer_type){
 		case INITIALIZER_TYPE_ARRAY:
-			convert_array_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
+			convert_array_initializer_into_OIR_stores(base_address, initializer, initializer_statement);
 			break;
 
 		case INITIALIZER_TYPE_STRUCT:
-			convert_struct_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
+			convert_struct_initializer_into_OIR_stores(base_address, initializer, initializer_statement);
 			break;
 	}
 
@@ -10140,6 +10153,9 @@ static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* so
  *	 that we maintain all of the existing logic around memory address variables
  *
  * NOTE: this will return a pointer to the last instruction that was emitted by this function
+ *
+ *
+ * TODO THIS WILL NEED TO BE FIXED
  */
 static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instruction_t* memory_copy_statement){
 	/**
@@ -10157,14 +10173,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	 * the addressing mode expression that is stored in the instruction
 	 */
 	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.operand1;
-	addressing_operands_t destination_memory_address = {
-														memory_copy_statement->operands.oir.address_operand1,
-														memory_copy_statement->operands.oir.address_operand2,
-														memory_copy_statement->operands.oir.address_offset,
-														memory_copy_statement->operands.oir.address_multiplier,
-														memory_copy_statement->operands.oir.rip_offset_var,
-														memory_copy_statement->addressing_mode
-														};
+	addressing_operands_t* destination_memory_address = &(memory_copy_statement->operands.oir.destination_address_expression);
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;
@@ -10190,7 +10199,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			copy_pair = emit_16_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_16_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
@@ -10202,7 +10211,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			copy_pair = emit_8_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_8_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
@@ -10214,7 +10223,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			copy_pair = emit_4_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_4_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
@@ -10226,7 +10235,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			copy_pair = emit_2_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_2_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
