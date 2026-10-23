@@ -6969,9 +6969,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Grab these for convenience
 		instruction_t* first_lea = window->instruction1;
 		instruction_t* second_bin_op = window->instruction2;
+		addressing_operands_t* lea_operands = &(first_lea->operands.oir.source_address_expression);
 
-		//Go based on what kind of lea we have
-		switch(first_lea->addressing_mode){
+		switch(lea_operands->addressing_mode){
 			/**
 			 * 	 t45 <- global_var(t3)
 			 * 	 t46 <- t45 + 12
@@ -6979,24 +6979,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	 Turns into:
 			 * 	 	t46 <- 12+global_var(t3)
 			 */
-			case ADDRESSING_MODE_RIP_RELATIVE:
+			case ADDRESSING_MODE_RIP_RELATIVE: {
 				//Back-copy the assignee and op1_const
 				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
-				first_lea->operands.oir.address_offset = second_bin_op->operands.oir.constant_operand;
 
-				//Change the lea type to be rip relative but with an offset
-				first_lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				//Change the address offset and addressing mode for the lea operands
+				lea_operands->address_offset = second_bin_op->operands.oir.constant_operand;
+				lea_operands->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 				//The second instruction is now useless
 				delete_statement(second_bin_op);
 
 				//And we will rebuild around the first instruction
 				reconstruct_window(window, first_lea);
-
-				//This counts as a change
 				changed = TRUE;
-				
 				break;
+			}
 
 			/**
 			 * 	t45 <- 12+global_var(t3)
@@ -7005,22 +7003,21 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	Turns into:
 			 * 		t46 <- 18+global_var(t3)
 			 */
-			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 				//Back-copy the assignee
 				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
 
 				//Add the 2 constants together, the result will be in the first one's constant
-				add_constants(first_lea->operands.oir.address_offset, second_bin_op->operands.oir.constant_operand);
+				add_constants(lea_operands->address_offset, second_bin_op->operands.oir.constant_operand);
 
 				//The second instruction is now useless
 				delete_statement(second_bin_op);
 
 				//And we will rebuild around the first instruction
 				reconstruct_window(window, first_lea);
-
-				//This counts as a change
 				changed = TRUE;
 				break;
+			}
 
 			//By default do nothing
 			default:
@@ -7342,7 +7339,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * It is safe to assume that a logical and binary operation with constant is always
 			 * simplifiable
 			 */
-			case DOUBLE_AND:
+			case DOUBLE_AND: {
 				//First option - the value is 0
 				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
 					//It's now just an assign statement
@@ -7377,6 +7374,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//We changed something
 				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * ======================= Logical OR operation simplifying ==========================
@@ -7386,7 +7384,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * It is safe to assume that a logical and binary operation with constant is always
 			 * simplifiable
 			 */
-			case DOUBLE_OR:
+			case DOUBLE_OR: {
 				//First option - the value is 0. If it is, then anything else is irrelevant
 				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
 					//First we add a test instruction
@@ -7424,6 +7422,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//We changed something
 				changed = TRUE;
 				break;
+			}
 
 			//By default do nothing
 			default:
@@ -7473,7 +7472,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case PLUS:
 				case MINUS:
 				case L_SHIFT:
-				case R_SHIFT:
+				case R_SHIFT: {
 					//We're just assigning here
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 					//Wipe the values out
@@ -7484,10 +7483,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//We changed something
 					changed = TRUE;
-
 					break;
+				}
 
-				case STAR:
+				case STAR: {
 					//Now we're assigning a const
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
@@ -7496,8 +7495,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//We changed something
 					changed = TRUE;
-
 					break;
+				}
 
 				//Just do nothing here
 				default:
