@@ -9044,6 +9044,15 @@ static void mark_initializer_values(three_addr_initializer_t* initializer, dynam
 
 
 /**
+ * Mark and add the definition for all of our given address operands
+ */
+static inline void mark_addressing_operands(dynamic_array_t* current_function_blocks, dynamic_array_t* worklist, addressing_operands_t* address_operands){
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand1, worklist);
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand2, worklist);
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -9073,8 +9082,10 @@ static void mark(dynamic_array_t* function_blocks){
 
 	//Now we'll go through every single operation in every single block
 	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
+		//Grab the block we'll work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
 
+		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
 
 		/**
@@ -9087,6 +9098,7 @@ static void mark(dynamic_array_t* function_blocks){
 		 * 		accessed outside of the procedure(i.e. a parameter that is a pointer)
 		 */
 		while(current_stmt != NULL){
+			//Clear it's mark
 			current_stmt->mark = FALSE;
 
 			/**
@@ -9169,20 +9181,20 @@ static void mark(dynamic_array_t* function_blocks){
 					break;
 
 				/**
-				 * Any/all memory copying statements are considered useful by the ollie
-				 * optimizer regardless of use count tracking
+				 * All initializers are basically like store statements. They are always considered
+				 * useful because we are writiing to memory
 				 */
-				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+				case THREE_ADDR_CODE_INITIALIZER_STMT:
 					current_stmt->mark = TRUE;
 					dynamic_array_add(&worklist, current_stmt);
 					current->contains_mark = TRUE;
 					break;
 
 				/**
-				 * Initializers are always considered to be useful seeing
-				 * as they are in a way equivalent to stores
+				 * Any/all memory copying statements are considered useful by the ollie
+				 * optimizer regardless of use count tracking
 				 */
-				case THREE_ADDR_CODE_INITIALIZER_STMT:
+				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 					current_stmt->mark = TRUE;
 					dynamic_array_add(&worklist, current_stmt);
 					current->contains_mark = TRUE;
@@ -9210,106 +9222,158 @@ static void mark(dynamic_array_t* function_blocks){
 		}
 	}
 
-	/**
-	 * Now that we've marked everything that is initially critical, we'll go through and trace
-	 * these values back through the code
-	 */
+	//Now that we've marked everything that is initially critical, we'll go through and trace
+	//these values back through the code
 	while(dynamic_array_is_empty(&worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
 		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
-		//Generic array for holding parameters
-		dynamic_array_t params;
 
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
-			case THREE_ADDR_CODE_PHI_STMT:
-				params = stmt->parameters;
-
-				//Add this in here
-				for(int32_t i = 0; i < params.current_index; i++){
-					//Grab the param out
-					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
-
-					//Add the definitions in
-					mark_and_add_definition(function_blocks, phi_func_param, &worklist);
+			case THREE_ADDR_CODE_PHI_STMT: {
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
 				}
 
 				break;
+			}
 
 			//If we have a function call, everything in the function call is important
-			case THREE_ADDR_CODE_FUNC_CALL:
-				//Grab the parameters out
-				params = stmt->parameters;
+			case THREE_ADDR_CODE_FUNC_CALL: {
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-				//Run through them all and mark them
-				for(int32_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							break;
+					}
 				}
 
 				break;
+			}
 
 			/**
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
 			 */
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				//Grab the parameters out
-				params = stmt->parameters;
+				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
-				//Run through them all and mark them
-				for(int32_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+					switch(result->result_type){
+						case PARAM_RESULT_TYPE_VAR:
+							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_INITIALIZER:
+							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+							break;
+						case PARAM_RESULT_TYPE_CONST:
+							break;
+					}
 				}
 
 				break;
+			}
 
 			/**
 			 * For an initializer statement there are special steps that we 
 			 * need to take to work on the 
 			 */
-			case THREE_ADDR_CODE_INITIALIZER_STMT:
-				//The address that we're writing to will always be needed
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+			case THREE_ADDR_CODE_INITIALIZER_STMT:  {
+				//Mark the destination address
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
 
 				//Now let the recursive helper mark all of our initializer values
 				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
+			}
+
+			/**
+			 * Leas have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LEA_STMT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Loads have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LOAD_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Stores have a destination address that needs to be marked as well as the operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+		    }
+
+			/**
+			 * TODO UPDATE THIS
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+		    }
+
+			/**
+			 * Indirect jump statements do contain address operands but we will mark them differently
+			 */
+			case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				break;
+		    }
 
 			/**
 			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
 			 * so we'll need to mark that as well
 			 */
 			case THREE_ADDR_CODE_BRANCH_STMT:
-			case THREE_ADDR_CODE_SETNE_STMT:
+			case THREE_ADDR_CODE_SETNE_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				break;
+			}
 
 			/**
 			 * Conditional movement statements need their "relies on" tag included
 			 * as well as the two actual operands
 			 */
-			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
 				break;
+			}
 
-
-			//In all other cases, we'll just mark and add every operand
-			default:
-				//We need to mark the place where each definition is set
+			/**
+			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
+			 * will ignore
+			 */
+			default: {
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
-
 				break;
+			}
 		}
 
 		//Grab this out for convenience
@@ -9327,22 +9391,27 @@ static void mark(dynamic_array_t* function_blocks){
 		 */
 		//If this block even has an RDF(it may now)
 		if(block->reverse_dominance_frontier.internal_array != NULL){
-			for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+			for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 				//Grab the block out of the RDF
 				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
 
 				//Grab out the exit statement
 				instruction_t* exit_statement = rdf_block->exit_statement;
 
+				//We'll now go based on what the exit statement is
 				switch(exit_statement->statement_type){
 					/**
 					 * An indirect jump means that we had some kind of switch statement. This
 					 * will be marked as important
 					 */
 					case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+						//Avoids infinite loops
 						if(exit_statement->mark == FALSE){
+							//Mark it
 							exit_statement->mark = TRUE;
+							//Add it to the worklist
 							dynamic_array_add(&worklist, exit_statement);
+							//This now has a mark
 							rdf_block->contains_mark = TRUE;
 						}
 
@@ -9353,9 +9422,13 @@ static void mark(dynamic_array_t* function_blocks){
 					 * ends the predecessor
 					 */
 					case THREE_ADDR_CODE_BRANCH_STMT:
+						//Avoids infinite loops
 						if(exit_statement->mark == FALSE){
+							//Mark it
 							exit_statement->mark = TRUE;
+							//Add it to the worklist
 							dynamic_array_add(&worklist, exit_statement);
+							//This now has a mark
 							rdf_block->contains_mark = TRUE;
 						}
 
@@ -9369,6 +9442,7 @@ static void mark(dynamic_array_t* function_blocks){
 		}
 	}
 
+	//And get rid of the worklist
 	dynamic_array_dealloc(&worklist);
 }
 
