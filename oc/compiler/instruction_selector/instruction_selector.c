@@ -506,6 +506,25 @@ static inline u_int8_t does_statement_use_destination_addressing_operation(instr
 
 
 /**
+ * Is the given variable a single use temp var variable?
+ */
+static inline u_int8_t is_variable_single_use_temp_var(three_addr_var_t* variable){
+	if(variable == NULL){
+		return FALSE;
+	}
+
+	//Must be a temp var specifically
+	if(variable->variable_type != VARIABLE_TYPE_TEMP){
+		return FALSE;
+	}
+
+	//We only want variables that are used exactly once
+	return get_use_count_by_id(&use_count_tracker, variable->variable_id) <= 1 ? TRUE : FALSE;
+}
+
+
+
+/**
  * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
  * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
  * function here will contain all the logic for every kind of binary operation to unpack and return that field
@@ -7024,6 +7043,29 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				break;
 		}
 	}
+
+	/**
+	 * ====================== Combining source address operands and operations =============
+	 *
+	 * If we have an operation that uses a source memory address, preceeded by any
+	 * kind of operation that is resulting in a temp assignment(think binary operation, lea, constant
+	 * assignment, etc.), then we will look to see if we are able to combine the first operation
+	 * with the addressing expression. There are instances where we are able to smash mulitple
+	 * expressions into one big addressing mode expression, which is always a win for us when
+	 * it comes to instruction complexity
+	 */
+	if(does_statement_use_source_addressing_operation(window->instruction2) == TRUE
+		&& is_variable_single_use_temp_var(window->instruction1->operands.oir.assignee) == TRUE){
+		//Extract these values for convenience
+		instruction_t* to_be_combined = window->instruction1;
+		instruction_t* addressing_operation = window->instruction2;
+		addressing_operands_t* address_operands = &(addressing_operation->operands.oir.source_address_expression);
+
+	}
+
+
+
+
 
 
 	/**
