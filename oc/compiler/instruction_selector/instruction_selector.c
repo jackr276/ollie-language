@@ -7225,6 +7225,127 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * ====================== Simplifying addressing modes internally =======================
+	 * We may end up with cases where addressing have multipliers that are 1, or 
+	 * where their offsets end up become 0. If this is the case, we'll want to remediate those
+	 * here. We do this directly after the addressing mode simplifier to catch those
+	 * cases quickly. This is the specific region where we do this for the source
+	 * addressing expressions
+	 */
+	if(does_statement_use_source_addressing_operation(window->instruction1) == TRUE) {
+		instruction_t* addressing_statement = window->instruction1;
+		addressing_operands_t* address_operands = &(addressing_statement->operands.oir.source_address_expression);
+
+		/**
+		 * First case: if the address multiplier is somehow 1, then it is useless
+		 * and we can fold this into a different and simpler addressing expression
+		 */
+		if(address_operands->address_multiplier == 1){
+			//First off 0 this out so we don't hit it again
+			address_operands->address_multiplier = 0;
+
+			switch(address_operands->addressing_mode){
+				/**
+				 * NOTE: this only works for leas
+				 *
+				 * We have something like: 
+				 * 	t3 <- lea (, x, 1)
+				 *
+				 * We just convert it into t3 <- x
+				 *
+				 * We should already be set here with the assignee and all
+				 */
+				case ADDRESSING_MODE_INDEX_AND_SCALE: {
+					//Only works for leas
+					if(addressing_statement->statement_type != THREE_ADDR_CODE_LEA_STMT){
+						break;
+					}
+
+					//Convert it over
+					addressing_mode_statement->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+					//Clear it out
+					addressing_mode_statement->addressing_mode = ADDRESSING_MODE_NONE;
+
+					//Move thte scale to where it needs to be
+					addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
+
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * NOTE: this only works for leas
+				 *
+				 * We have something like
+				 * 	t3 <- lea 4(, x, 1)
+				 *
+				 * 	We can convert it into t3 <- x + 4
+				 */
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+					//No more addressing mode
+					addressing_mode_statement->addressing_mode = ADDRESSING_MODE_NONE;
+
+					//Convert it here
+					addressing_mode_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+
+					//Flag that this is addition
+					addressing_mode_statement->op = PLUS;
+
+					//Convert the operands into where they need to go
+					addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
+					addressing_mode_statement->operands.oir.constant_operand = addressing_mode_statement->operands.oir.address_offset;
+
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * We have something like
+				 * 	t3 <- lea (x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea (x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+					addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+					
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * We have something like
+				 * 	t3 <- lea 4(x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea 4(x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+					addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+
+					changed = TRUE;
+					break;
+				}
+
+				//This should be impossible to reach, the default just makes the compiler happy
+				default:
+					fprintf(stderr, "Fatal internal compiler error: unreachable addressing mode hit in mulitplier simplifier\n");
+					exit(1);
+			}
+		}
+
+		/**
+		 * Second case: if the address offset is somehow 0, then we can simplify this addressing
+		 * mode to no longer use an offset constant at all
+		 */
+		if(does_addressing_mode_use_offset_constant(address_operands->addressing_mode)
+			&& is_constant_value_zero(address_operands->address_offset) == TRUE){
+		}
+	}
+
+
 
 	/**
 	 * ====================== Simplifying addressing modes internally =======================
@@ -7244,82 +7365,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Before we go on we can knock the address multiplier itself out
 		addressing_mode_statement->operands.oir.address_multiplier = 0;
 
-		switch(addressing_mode_statement->addressing_mode){
-			/**
-			 * We have something like: 
-			 * 	t3 <- lea (, x, 1)
-			 *
-			 * 	We just convert it into t3 <- x
-			 *
-			 * We should already be set here with the assignee and all
-			 */
-			case ADDRESSING_MODE_INDEX_AND_SCALE:
-				//Convert it over
-				addressing_mode_statement->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-				//Clear it out
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_NONE;
-
-				//Move thte scale to where it needs to be
-				addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
-
-				changed = TRUE;
-				break;
-
-			/**
-			 * We have something like
-			 * 	t3 <- lea 4(, x, 1)
-			 *
-			 * 	We can convert it into t3 <- x + 4
-			 */
-			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-				//No more addressing mode
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_NONE;
-
-				//Convert it here
-				addressing_mode_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-				//Flag that this is addition
-				addressing_mode_statement->op = PLUS;
-
-				//Convert the operands into where they need to go
-				addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
-				addressing_mode_statement->operands.oir.constant_operand = addressing_mode_statement->operands.oir.address_offset;
-
-				changed = TRUE;
-				break;
-
-			/**
-			 * We have something like
-			 * 	t3 <- lea (x, y, 1)
-			 *
-			 * 	Just turn it into 
-			 * 	t3 <- lea (x, y)
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-				
-				changed = TRUE;
-				break;
-
-			/**
-			 * We have something like
-			 * 	t3 <- lea 4(x, y, 1)
-			 *
-			 * 	Just turn it into 
-			 * 	t3 <- lea 4(x, y)
-			 */
-			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-				changed = TRUE;
-				break;
-
-			//This should be impossible to reach, the default just makes the compiler happy
-			default:
-				fprintf(stderr, "Fatal internal compiler error: unreachable addressing mode hit in mulitplier simplifier\n");
-				exit(1);
-		}
 	}
 
 
