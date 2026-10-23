@@ -6805,17 +6805,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * one lea with an offset and two registers
 		 */
 		if(is_type_lea_compatible(result_type) == TRUE){
-			//We'll work on the second one
+			//Convert this into a LEA using the addressing operands
 			constant_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-			//This is a register and offset lea type
-			constant_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-			//Copy over both operands from here
-			constant_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-			constant_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-			constant_operation->operands.oir.address_offset = constant_operation->operands.oir.constant_operand;
-
+			constant_operation->operands.oir.source_address_expression = (addressing_operands_t){binary_operation->operands.oir.operand1,
+																									binary_operation->operands.oir.operand2,
+																									constant_operation->operands.oir.constant_operand,
+																									0,
+																									NULL,
+																									ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 			/**
 			 * Since this is now a lea operands 1 and 2 do not exist, we'll
 			 * NULL them out to reflect this
@@ -6873,17 +6870,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 *
 				 * 	t22 <- 8(t19, t20)
 				 */
-				case PLUS:
+				case PLUS: {
 					//Convert instruction2 into a lea
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-					binary_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-					//Translate the operands & constants
-					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.constant_operand;
-					
-
+					binary_operation->operands.oir.source_address_expression = (addressing_operands_t){binary_operation->operands.oir.operand1,
+																											bin_operation_with_const->operands.oir.operand1,
+																											bin_operation_with_const->operands.oir.constant_operand,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 					/**
 					 * Since this is now a lea operands 1 and 2 do not exist, we'll
 					 * NULL them out to reflect this
@@ -6896,10 +6891,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
-
-					//This is a change
 					changed = TRUE;
 					break;
+				}
 
 				/**
 				 * For the case of a *:
@@ -6908,7 +6902,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 *
 				 * 	t22 <- (t19, t20, 8)
 				 */
-				case STAR:
+				case STAR: {
 					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
 					if(is_constant_lea_compatible_power_of_2(bin_operation_with_const->operands.oir.constant_operand) == FALSE){
 						break;
@@ -6916,13 +6910,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Convert instruction2 into a lea
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-					binary_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
-
-					//Convert to LEA form
-					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_multiplier = bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant;
-
+					binary_operation->operands.oir.source_address_expression = (addressing_operands_t){binary_operation->operands.oir.operand1,
+																											bin_operation_with_const->operands.oir.operand1,
+																											NULL,
+																											bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_AND_SCALE};
 					/**
 					 * Since this is now a lea operands 1 and 2 do not exist, we'll
 					 * NULL them out to reflect this
@@ -6935,11 +6928,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
-
-					//This is a change
 					changed = TRUE;
-
 					break;
+				}
 
 				//By default do nothing
 				default:
