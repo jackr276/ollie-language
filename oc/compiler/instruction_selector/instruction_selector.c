@@ -7061,6 +7061,76 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		instruction_t* addressing_operation = window->instruction2;
 		addressing_operands_t* address_operands = &(addressing_operation->operands.oir.source_address_expression);
 
+		/**
+		 * There are now two paths that we have. We could have the temp
+		 * assignee as being equal to the very first address operand, which
+		 * will take use down one simplification path. The other option is that
+		 * the second address operand is equal to the assignee, which is a different
+		 * path. These paths are *mutually exclusive*. In the rare event that they
+		 * do match, it will be picked up in the next go around
+		 */
+		if(does_addressing_mode_use_address_operand1(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
+			/**
+			 * Go based on what kind of statement we have as the first way to split
+			 */
+			switch(to_be_combined->statement_type){
+				case THREE_ADDR_CODE_ASSN_STMT:
+					combine_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+					
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					combine_constant_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+					combine_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					combine_constant_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				case THREE_ADDR_CODE_LEA_STMT:
+					combine_lea_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				/**
+				 * Anything else we don't support so we just leave
+				 */
+				default:
+					break;
+			}
+
+		} else if(does_addressing_mode_use_address_operand2(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
+			/**
+			 * Go based on what kind of statement we have as the first way to split
+			 */
+			switch(to_be_combined->statement_type){
+				case THREE_ADDR_CODE_ASSN_STMT:
+					combine_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					combine_constant_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					combine_constant_binary_operation_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				case THREE_ADDR_CODE_LEA_STMT:
+					combine_lea_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
+					break;
+
+				/**
+				 * Anything else we don't support so we just leave
+				 */
+				default:
+					break;
+			}
+		}
 	}
 
 
