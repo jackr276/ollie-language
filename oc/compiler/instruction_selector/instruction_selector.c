@@ -5432,8 +5432,11 @@ static void perform_memory_address_remediations(instruction_window_t* window, in
 		 * be a memory address. If this is the case then we need to remediate it now
 		 */
 		case THREE_ADDR_CODE_LEA_STMT: {
-			if(instruction->operands.oir.address_operand1 != NULL){
-				switch(instruction->operands.oir.address_operand1->variable_type){
+			//Get a pointer to these for convenience
+			addressing_operands_t* lea_operands = &(instruction->operands.oir.source_address_expression);
+
+			if(lea_operands->address_operand1 != NULL){
+				switch(lea_operands->address_operand1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
 					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 						remediate_memory_address_variable_in_non_access_context(window, instruction);
@@ -5575,15 +5578,9 @@ static inline void combine_binary_operation_with_source_operand_load(instruction
 
 	/**
 	 * Step 1: Copy over all of the addressing information from the load
-	 * operation over into the binary operation. We will also
-	 * need to copy over the addressing mode itself
+	 * operation over into the binary operation. 
 	 */
-	binary_operation->operands.oir.address_multiplier = load_operation->operands.oir.address_multiplier;
-	binary_operation->operands.oir.address_offset = load_operation->operands.oir.address_offset;
-	binary_operation->operands.oir.address_operand1 = load_operation->operands.oir.address_operand1;
-	binary_operation->operands.oir.address_operand2 = load_operation->operands.oir.address_operand2;
-	binary_operation->operands.oir.rip_offset_var = load_operation->operands.oir.rip_offset_var;
-	binary_operation->addressing_mode = load_operation->addressing_mode;
+	binary_operation->operands.oir.source_address_expression = load_operation->operands.oir.source_address_expression;
 
 	/**
 	 * Step 2: NULL out the old operand2 as it is no longer in use
