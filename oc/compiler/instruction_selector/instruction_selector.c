@@ -7377,6 +7377,103 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
+	/**
+	 * ====================== Simplifying destination addressing expressions internally =======================
+	 * We may end up with cases where addressing have multipliers that are 1, or 
+	 * where their offsets end up become 0. If this is the case, we'll want to remediate those
+	 * here. We do this directly after the addressing mode simplifier to catch those
+	 * cases quickly. This is the specific region where we do this for the source
+	 * addressing expressions
+	 */
+	if(does_statement_use_destination_addressing_operation(window->instruction1) == TRUE) {
+		instruction_t* addressing_statement = window->instruction1;
+		addressing_operands_t* address_operands = &(addressing_statement->operands.oir.destination_address_expression);
+
+		/**
+		 * First case: if the address multiplier is somehow 1, then it is useless
+		 * and we can fold this into a different and simpler addressing expression
+		 */
+		if(address_operands->address_multiplier == 1){
+			//First off 0 this out so we don't hit it again
+			address_operands->address_multiplier = 0;
+
+			switch(address_operands->addressing_mode){
+				/**
+				 * We have something like
+				 * 	t3 <- lea (x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea (x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * We have something like
+				 * 	t3 <- lea 4(x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea 4(x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * This should be impossible to reach, the default just makes the compiler happy
+				 */
+				default:
+					trigger_ice_panic("Unreachable addressing mode hit in mulitplier simplifier");
+			}
+		}
+
+		/**
+		 * Second case: if the address offset is somehow 0, then we can simplify this addressing
+		 * mode to no longer use an offset constant at all
+		 */
+		if(does_addressing_mode_use_offset_constant(address_operands->addressing_mode)
+			&& is_constant_value_zero(address_operands->address_offset) == TRUE){
+			//NULL it out
+			address_operands->address_offset = NULL;
+
+			/**
+			 * Run through all of the addressing modes and convert
+			 * them appropriately
+			 */
+			switch(address_operands->addressing_mode){
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+					address_operands->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
+					break;
+
+				case ADDRESSING_MODE_OFFSET_ONLY:
+					address_operands->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+					break;
+
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+					break;
+
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+					break;
+
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+					address_operands->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+					break;
+
+				/**
+				 * Should be impossible but just in case
+				 */
+				default:
+					trigger_ice_panic("Unreachable addressing mode hit in 0 simplifier");
+			}
+		}
+	}
 
 	/**
 	 * ==================== On-the-fly logical and/or ========================
