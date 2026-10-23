@@ -7133,37 +7133,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
-
-
-
-
 	/**
-	 * ====================== Combining loads/stores and operations =============
+	 * ====================== Combining destination address operands and operations =============
 	 *
-	 * TODO WERE GOING TO BREAK THIS OUT
+	 * If we have an operation that uses a destination memory address, preceeded by any
+	 * kind of operation that is resulting in a temp assignment(think binary operation, lea, constant
+	 * assignment, etc.), then we will look to see if we are able to combine the first operation
+	 * with the addressing expression. There are instances where we are able to smash mulitple
+	 * expressions into one big addressing mode expression, which is always a win for us when
+	 * it comes to instruction complexity
 	 *
-	 * If we have a memory movement operation preceeded by any kind of operation
-	 * that is resulting in a temp assignment(think binary operation, lea, constant assignment, etc.), then
-	 * we will look to see if we are able to combine anything here. There are instances where we are able
-	 * to smash two instructions into one big addressing mode expression, which is a win for us in terms
-	 * of overall complexity and instruction count
-	 *
-	 * Special note: we will always skip indirect jump statements. It is never correct for us to try
-	 * and combine these due to the unqiue way they are handled, even though they do use addressing
-	 * modes
+	 * NOTE: we specifically skip indirect jump statements here as this does not apply to them
 	 */
-	if(does_operation_use_addressing_mode(window->instruction2) == TRUE
+	if(does_statement_use_source_addressing_operation(window->instruction2) == TRUE
 		&& window->instruction2->statement_type != THREE_ADDR_CODE_INDIRECT_JUMP_STMT
-		&& window->instruction1->operands.oir.assignee != NULL
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& get_use_count_for_variable(window->instruction1->operands.oir.assignee) <= 1){
-
-		//TODO NEED TO BE SMART ABOUT *WHAT* ADDRESSING MODE WE'RE USING
-
-		//Extract the two instructions for convenience
+		&& is_variable_single_use_temp_var(window->instruction1->operands.oir.assignee) == TRUE){
+		//Extract these values for convenience
 		instruction_t* to_be_combined = window->instruction1;
 		instruction_t* addressing_operation = window->instruction2;
+		addressing_operands_t* address_operands = &(addressing_operation->operands.oir.destination_address_expression);
 
 		/**
 		 * There are now two paths that we have. We could have the temp
@@ -7173,30 +7161,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * path. These paths are *mutually exclusive*. In the rare event that they
 		 * do match, it will be picked up in the next go around
 		 */
-		if(does_addressing_mode_use_address_operand1(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
+		if(does_addressing_mode_use_address_operand1(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
 				case THREE_ADDR_CODE_ASSN_STMT:
-					combine_assignment_with_address_operand1(window, &changed);
+					combine_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 					
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					combine_constant_assignment_with_address_operand1(window, &changed);
+					combine_constant_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
 				case THREE_ADDR_CODE_BIN_OP_STMT:
-					combine_binary_operation_with_address_operand1(window, &changed);
+					combine_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					combine_constant_binary_operation_with_address_operand1(window, &changed);
+					combine_constant_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
-					combine_lea_with_address_operand1(window, &changed);
+					combine_lea_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
 				/**
@@ -7206,29 +7194,31 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 
-		} else if(does_addressing_mode_use_address_operand2(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
+		} else if(does_addressing_mode_use_address_operand2(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
 				case THREE_ADDR_CODE_ASSN_STMT:
-					combine_assignment_with_address_operand2(window, &changed);
+					combine_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					combine_constant_assignment_with_address_operand2(window, &changed);
+					combine_constant_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					combine_constant_binary_operation_with_address_operand2(window, &changed);
+					combine_constant_binary_operation_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
-					combine_lea_with_address_operand2(window, &changed);
+					combine_lea_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
 					break;
 
-				//Unsupported statement combo - just leave
+				/**
+				 * Anything else we don't support so we just leave
+				 */
 				default:
 					break;
 			}
