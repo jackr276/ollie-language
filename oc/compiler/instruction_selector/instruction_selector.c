@@ -8119,6 +8119,106 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 
 
 /**
+ * Special helper that will generate the GVN key for an addressing operand set. This is standard
+ * across all expressions that use addressing operands
+ */
+static inline void generate_gvn_key_for_addressing_operands(addressing_operands_t* operands, dynamic_string_t* textual_key){
+	dynamic_string_add_char_to_back(textual_key, operands->addressing_mode);
+
+	//Based on the addressing mode these all get different names
+	switch(operands->addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_INDEX_AND_SCALE:{
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_OFFSET_ONLY:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->rip_offset_var, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_RIP_RELATIVE:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->rip_offset_var, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_ONLY:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			break;
+		}
+
+		/**
+		 * Some invalid addressing mode here. Examples include "addressing mode none"
+		 */
+		default:{
+			fprintf(stderr, "Fatal internal compiler error: Invalid addressing mode %s in lea value numberer", addressing_mode_to_string(operands->addressing_mode));
+			exit(1);
+		}
+	}
+}
+
+
+/**
  * Generate the key for a given instruction. The key for a given
  * instruction consists of the instruction type converted to a char *and*
  * the variables that are inside of it. We are given an allocated
@@ -8173,99 +8273,9 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 		case THREE_ADDR_CODE_LEA_STMT: {
 			//Starting key that also include the addressing mode
 			dynamic_string_concatenate(textual_key, "LEA");
-			dynamic_string_add_char_to_back(textual_key, instruction->addressing_mode);
 
-			//Based on the addressing mode these all get different names
-			switch(instruction->addressing_mode){
-				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_INDEX_AND_SCALE:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_OFFSET_ONLY:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_RIP_RELATIVE:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_ONLY:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					break;
-				}
-
-				/**
-				 * Some invalid addressing mode here. Examples include "addressing mode none"
-				 */
-				default:{
-					fprintf(stderr, "Fatal internal compiler error: Invalid addressing mode %s in lea value numberer", addressing_mode_to_string(instruction->addressing_mode));
-					exit(1);
-				}
-			}
-
+			//Let the helper create the addressing expression key
+			generate_gvn_key_for_addressing_operands(&(instruction->operands.oir.source_address_expression), textual_key);
 			break;
 		}
 			
