@@ -7182,7 +7182,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * NOTE: we specifically skip indirect jump statements here as this does not apply to them
 	 */
-	if(does_statement_use_source_addressing_operation(window->instruction2) == TRUE
+	if(does_statement_use_destination_addressing_operation(window->instruction2) == TRUE
 		&& window->instruction2->statement_type != THREE_ADDR_CODE_INDIRECT_JUMP_STMT
 		&& is_variable_single_use_temp_var(window->instruction1->operands.oir.assignee) == TRUE){
 		//Extract these values for convenience
