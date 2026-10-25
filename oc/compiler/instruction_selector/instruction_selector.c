@@ -9405,7 +9405,20 @@ static instruction_t* generate_OIR_store_variable_from_address_operands(addressi
 																		generic_type_t* memory_write_type){
 	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
 
+	//Populate the access type, write type and copy all of the operands over
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	store_instruction->operands.oir.destination_address_expression = *address_operands;
 
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	store_instruction->operands.oir.destination_address_expression.address_offset = emit_constant_copy_if_not_null(address_operands->address_offset);
+
+	//Storing variable goes in operand1
+	store_instruction->operands.oir.operand1 = result_to_store;
 	return store_instruction;
 }
 
@@ -9419,7 +9432,20 @@ static instruction_t* generate_OIR_store_constant_from_address_operands(addressi
 
 	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
 
+	//Populate the access type, write type and copy all of the operands over
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	store_instruction->operands.oir.destination_address_expression = *address_operands;
 
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	store_instruction->operands.oir.destination_address_expression.address_offset = emit_constant_copy_if_not_null(address_operands->address_offset);
+
+	//Put the storing constant in the constant operand
+	store_instruction->operands.oir.constant_operand = result_to_store;
 	return store_instruction;
 }
 
