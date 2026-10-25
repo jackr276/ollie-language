@@ -1657,6 +1657,10 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 }
 
 
+
+
+
+
 /**
  * This algorithm will look for branches that are always true/false,
  * and see where we can optimize them. This will be done after we
@@ -1677,18 +1681,11 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
  * we did not
  */
 static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_blocks){
-	//By default assume that we found nothing to optimize
+	/**
+	 * We will give back whether or not we found branches to optimize. The default
+	 * assumption is always that we did not
+	 */
 	u_int8_t found_branches_to_optimize = FALSE;
-
-	//What does the branch rely on?
-	three_addr_var_t* branch_relies_on = NULL;
-
-	//The if and else blocks from the branch
-	basic_block_t* if_block;
-	basic_block_t* else_block;
-
-	//The unconditional jump that we may end up emitting
-	instruction_t* unconditional_jump;
 
 	//Run through every single block in the CFG
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
@@ -1712,11 +1709,11 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		instruction_t* statement_cursor = current_block->exit_statement;
 
 		//Store these blocks for later processing
-		if_block = branch_instruction->if_block;
-		else_block = branch_instruction->else_block;
+		basic_block_t* if_block = branch_instruction->if_block;
+		basic_block_t* else_block = branch_instruction->else_block;
 
-		//Get what the branch relies on.
-		branch_relies_on = branch_instruction->relies_on;
+		//Get what the branch relies on
+		three_addr_var_t* branch_relies_on = branch_instruction->relies_on;
 
 		/**
 		 * If we have that it relies on nothing(shouldn't happen but there could be special cases)
@@ -1750,7 +1747,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 				//Is it an inverse branch or not? This will impact how we handle things
 				if(branch_instruction->inverse_branch == FALSE){
 					//We will emit an unconditional jump to the else block
-					unconditional_jump = emit_jmp_instruction(else_block);
+					instruction_t* unconditional_jump = emit_jmp_instruction(else_block);
 
 					//Add this in as the very last statement
 					add_statement(current_block, unconditional_jump);
@@ -1765,7 +1762,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 				//false will go to the if block
 				} else {
 					//We will emit an unconditional jump to the if block
-					unconditional_jump = emit_jmp_instruction(if_block);
+					instruction_t* unconditional_jump = emit_jmp_instruction(if_block);
 
 					//Add this in as the very last statement
 					add_statement(current_block, unconditional_jump);
@@ -1791,7 +1788,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 				//Is it an inverse branch or not? This will impact how we handle things
 				if(branch_instruction->inverse_branch == FALSE){
 					//We will emit an unconditional jump to the if block
-					unconditional_jump = emit_jmp_instruction(if_block);
+					instruction_t* unconditional_jump = emit_jmp_instruction(if_block);
 
 					//Add this in as the very last statement
 					add_statement(current_block, unconditional_jump);
@@ -1806,7 +1803,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 				//true will send us to the else block
 				} else {
 					//We will emit an unconditional jump to the else block
-					unconditional_jump = emit_jmp_instruction(else_block);
+					instruction_t* unconditional_jump = emit_jmp_instruction(else_block);
 
 					//Add this in as the very last statement
 					add_statement(current_block, unconditional_jump);
