@@ -17129,9 +17129,7 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	instruction->operands.x86.destination_register = destination_variable;
 
 	//This will be a rip-relative address calculation
-	instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-
-	//This is a read from memory movement
+	instruction->operands.x86.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//The first address calc will be the instruction pointer
@@ -17377,123 +17375,13 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 
 
 /**
- * Handle the base address for a load statement in all of its forms. This includes
- * global variables, stack variables, and plain variables as well. This is meant to
- * be used by the lea combiner rule. It will *not* modify addressing modes and it should
- * not be expected to give a full and complete result back. It will only modify
- * address calc reg1 and the offset if appropriate
- */
-static inline void handle_load_instruction_base_address(instruction_t* load_statement){
-	int64_t stack_offset;
-	instruction_t* address_calculation;
-
-	//Extract the base address and the linked variable
-	three_addr_var_t* base_address = load_statement->operands.oir.address_operand1;
-	symtab_variable_record_t* linked_var = base_address->linked_var;
-
-	/**
-	 * Go based on the kind of variable that we have here
-	 */
-	switch(base_address->variable_type){
-		/**
-		 * We have a regular memory address variable(super common). We'll handle this
-		 * here
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			if(linked_var != NULL){
-				switch(linked_var->membership){
-					/**
-					 * We are loading a global/static variable(same thing) with a subsequent offset. We will need to first
-					 * load the address of said global variable, and then use that with an address calculation. We 
-					 * are not able to combine the 2 in such a way
-					 */
-					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						//Let the helper do the work
-						address_calculation = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64, load_statement->line_number);
-
-						//Now insert this before the given instruction
-						insert_instruction_before_given(address_calculation, load_statement);
-
-						/**
-						 * The destination of the global variable address will be our new address calc reg 1. 
-						 * We already have the offset loaded in, so that remains unchanged
-						 */
-						load_statement->operands.x86.address_register1 = address_calculation->operands.x86.destination_register;
-
-						break;
-
-					/**
-					 * Otherwise we're here with a non global/static variable so we do the normal procedure
-					 */
-					default:
-						//This is our stack offset, it will be needed going forward
-						stack_offset = linked_var->stack_region->function_local_base_address;
-
-						//If we actually have a stack offset to deal with. We'll store the offset constant and first operand
-						if(stack_offset != 0){
-							//Emit the offset
-							load_statement->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-							//This will be the stack pointer
-							load_statement->operands.x86.address_register1 = stack_pointer_variable;
-
-						//Otherwise there's no stack offset, so we'll just have the stack pointer
-						} else {
-							load_statement->operands.x86.address_register1 = stack_pointer_variable;
-						}
-
-						break;
-				}
-
-			} else {
-				//This is our stack offset, it will be needed going forward
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
-
-				//If we actually have a stack offset to deal with. We'll store the offset constant and first operand
-				if(stack_offset != 0){
-					//Emit the offset
-					load_statement->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-					//This will be the stack pointer
-					load_statement->operands.x86.address_register1 = stack_pointer_variable;
-
-				//Otherwise there's no stack offset, so we'll just have the stack pointer
-				} else {
-					load_statement->operands.x86.address_register1 = stack_pointer_variable;
-				}
-			}
-
-			break;
-
-		/**
-		 * Unlike a regular memory address, a stack passed parameter address is going to come
-		 * with a few caveats. First, it will never be 0 due to the way that function calling works,
-		 * and second, it will never be global, so we can have some simpler processing here
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//Emit the offset
-			load_statement->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
-
-			//This will be the stack pointer
-			load_statement->operands.x86.address_register1 = stack_pointer_variable;
-
-			break;
-
-		default:
-			//Assign over like such
-			load_statement->operands.x86.address_register1 = base_address;
-			break;
-	}
-}
-
-
-/**
  * Combine an indirect jump address calculation with the indirect jump itself to 
  * minimize the instruction footprint. This is most often used with switch/raise
  * statements
  *
  * NOTE: we assume that the indirect jump is always the first statement
+ *
+ * NOTE: indirect jumps always have their address operands as the destination operands
  */
 static inline void handle_indirect_jump(instruction_window_t* window){
 	//Extract it
@@ -17503,7 +17391,7 @@ static inline void handle_indirect_jump(instruction_window_t* window){
 	indirect_jump_statement->instruction_type = INDIRECT_JMP;
 
 	//By default the true source is this, but we may need to emit a converting move
-	three_addr_var_t* true_source = indirect_jump_statement->operands.oir.address_operand2;
+	three_addr_var_t* true_source = indirect_jump_statement->operands.oir.destination_address_expression.address_operand2;
 
 	//Extract the type
 	generic_type_t* source_type = true_source->type;
@@ -17530,7 +17418,7 @@ static inline void handle_indirect_jump(instruction_window_t* window){
 
 	//The index register goes in the second address register
 	indirect_jump_statement->operands.x86.address_register2 = true_source;
-	indirect_jump_statement->operands.x86.address_multiplier = indirect_jump_statement->operands.oir.address_multiplier;
+	indirect_jump_statement->operands.x86.address_multiplier = indirect_jump_statement->operands.oir.destination_address_expression.address_multiplier;
 
 	//Reconstruct the window with the indirect jump as the start
 	reconstruct_window(window, indirect_jump_statement);
@@ -17545,7 +17433,7 @@ static inline void handle_indirect_jump(instruction_window_t* window){
  * we have from there
  */
 static inline alignment_type_t is_alignment_guaranteed_for_memory_operation(instruction_t* instruction){
-	switch(instruction->addressing_mode){
+	switch(instruction->operands.x86.addressing_mode){
 		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 			//If this is the stack pointer then we can guarantee alignment
 			if(instruction->operands.x86.address_register1 == stack_pointer_variable){
