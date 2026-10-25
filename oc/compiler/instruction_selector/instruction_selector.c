@@ -8287,7 +8287,9 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 		 * For a bin op statement we'll have
 		 * value names like BINx_0+y_0
 		 *
-		 * TODO WHAT IF ITS HAVINTG AN ADDRESSING MODE??
+		 * NOTE: some binary operation statements can have addressing
+		 * modes in them. We will generate the GVN addressing mode key
+		 * instead of the second operand if this is the case
 		 */
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
 			//Starting key
@@ -8299,8 +8301,14 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
 
-			//Second op
-			concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
+			//Based on whether or not we have memory access do this
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				//Second op
+				concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
+			} else {
+				//Let the helper create the addressing expression key
+				generate_gvn_key_for_addressing_operands(&(instruction->operands.oir.source_address_expression), textual_key);
+			}
 
 			break;
 		}
