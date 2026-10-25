@@ -13658,12 +13658,8 @@ static inline void handle_signed_modulus(instruction_window_t* window, generic_t
 		division = emit_div_instruction(result_type, NULL, dividend, higher_order_dividend_bits, TRUE);
 
 		//Copy over all of the addressing mode operands
-		division->operands.oir.address_multiplier = modulus_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = modulus_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = modulus_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = modulus_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = modulus_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = modulus_instruction->addressing_mode;
 
 		//Let the dedicated helper rule convert from OIR to x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
@@ -13778,12 +13774,8 @@ static inline void handle_unsigned_modulus(instruction_window_t* window, generic
 		division = emit_div_instruction(result_type, NULL, dividend, cleared_rdx, FALSE);
 
 		//Copy over all of the addressing mode operands
-		division->operands.oir.address_multiplier = modulus_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = modulus_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = modulus_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = modulus_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = modulus_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = modulus_instruction->addressing_mode;
 
 		//Let the dedicated helper rule convert from OIR to x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
@@ -14411,13 +14403,9 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
 		division = emit_div_instruction(destination_type, NULL, dividend, higher_order_dividend_bits, TRUE);
 
 		//Copy all of the addressing info over
-		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = original_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = original_instruction->addressing_mode;
-
+		
 		//Now invoke the helper to translate from OIR into x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
 	}
@@ -14541,12 +14529,8 @@ static void handle_unsigned_division(instruction_window_t* window, generic_type_
 		division = emit_div_instruction(destination_type, NULL, dividend, cleared_rdx, FALSE);
 
 		//Copy all of the addressing info over
-		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = original_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = original_instruction->addressing_mode;
 
 		//Now invoke the helper to translate from OIR into x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
@@ -15263,11 +15247,11 @@ static void handle_addition_instruction(instruction_window_t* window){
 			
 			//Based on the constant status we do it one way or the other
 			if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-				original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+				original_addition->operands.x86.addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 				original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
 
 			} else {
-				original_addition->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				original_addition->operands.x86.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 				original_addition->operands.x86.address_offset = original_addition->operands.oir.constant_operand;
 			}
 
@@ -16478,6 +16462,9 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 	}
 
+	//Get a pointer to this for convenience
+	addressing_operands_t* operands = &(instruction->operands.oir.source_address_expression);
+
 	/**
 	 * Since the addressing mode is always the same here, we don't need to do any splitting
 	 * out by address register. In theory, everything that we have don't want should be NULL
@@ -16490,17 +16477,18 @@ static void handle_lea_statement(instruction_t* instruction){
 	 * Step 1: Extract all fields(E)
 	 */
 	three_addr_var_t* destination_register = instruction->operands.oir.assignee;
-	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
-	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
-	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
-	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
-	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+	three_addr_var_t* address_register1 = operands->address_operand1;
+	three_addr_var_t* address_register2 = operands->address_operand2;
+	three_addr_var_t* rip_offset_var = operands->rip_offset_var;
+	three_addr_const_t* address_offset = operands->address_offset;
+	u_int64_t address_multiplier = operands->address_multiplier;
+	memory_addressing_mode_t addressing_mode = operands->addressing_mode;
+
 
 	/**
 	 * Step 2: Transform the second address register if a type adjustment is needed(T) 
 	 */
-	if(address_register1 != NULL
-		&& address_register2 != NULL
+	if(address_register1 != NULL && address_register2 != NULL
 		&& is_converting_move_required(address_register1->type, address_register2->type) == TRUE){
 
 		//Let the helper emit and insert the move
@@ -16516,6 +16504,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	instruction->operands.x86.rip_offset_var = rip_offset_var;
 	instruction->operands.x86.address_offset = address_offset;
 	instruction->operands.x86.address_multiplier = address_multiplier;
+	instruction->operands.x86.addressing_mode = addressing_mode;
 }
 
 
