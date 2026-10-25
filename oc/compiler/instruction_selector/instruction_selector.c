@@ -220,7 +220,7 @@ static void print_instruction_window(instruction_window_t* window){
  * the time that we're calling this, this should all be mutually exclusive, so nothing like a memory
  * copy where both source and dest are addressing modes should be happening here
  */
-static inline addressing_operands_side_t get_operand_side_for_statement(instruction_t* statement){
+static inline addressing_operands_side_t get_addressing_operand_side_for_statement(instruction_t* statement){
 	switch(statement->statement_type){
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_LEA_STMT:
@@ -234,6 +234,18 @@ static inline addressing_operands_side_t get_operand_side_for_statement(instruct
 		default:
 			trigger_ice_panic("Invalid operand side request for given statement type");
 			return ADDRESSING_OPERANDS_SIDE_DEST;
+	}
+}
+
+
+/**
+ * Get a pointer to the addressing operands for our given statement
+ */
+static inline addressing_operands_t* get_addressing_operands_for_statement(instruction_t* statement){
+	if(get_addressing_operand_side_for_statement(statement) == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		return &(statement->operands.oir.source_address_expression);
+	} else {
+		return &(statement->operands.oir.destination_address_expression);
 	}
 }
 
@@ -12433,9 +12445,14 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
 static inline void handle_base_address_and_addressing_mode_for_instruction(instruction_t* instruction){
 	//Needed declarations for later
 	int64_t stack_offset = 0;
-	three_addr_var_t* base_address;
-	symtab_variable_record_t* linked_var;
 	instruction_t* rip_offset_lea;
+
+	/**
+	 * Our instructions store their address operands in different areas based on if we
+	 * have the address as a source or destination. This helper will return a pointer
+	 * to the operands that we're after
+	 */
+	addressing_operands_t* operands = get_addressing_operands_for_statement(instruction);
 
 	/**
 	 * First standardize everyting by moving it all over into the x86 registers off
@@ -12447,19 +12464,18 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 	/**
 	 * Step 1: Extract all fields(E)
 	 */
-	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
-	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
-	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
-	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
-	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+	three_addr_var_t* address_register1 = operands->address_operand1;
+	three_addr_var_t* address_register2 = operands->address_operand2;
+	three_addr_var_t* rip_offset_var = operands->rip_offset_var;
+	three_addr_const_t* address_offset = operands->address_offset;
+	u_int64_t address_multiplier = operands->address_multiplier;
 
 	/**
 	 * Step 2: Transform the second address register if a type adjustment is needed(T)
 	 *
 	 * We are *always* using 64 bit registers for addressing operations in memory movements
 	 */
-	if(address_register1 != NULL
-		&& address_register2 != NULL
+	if(address_register1 != NULL && address_register2 != NULL
 		&& is_converting_move_required(u64, address_register2->type) == TRUE){
 
 		//Let the helper emit and insert the move
@@ -12481,9 +12497,9 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 	 * of the base address(address_register1) field. Let's first extract
 	 * the values that we have in there to process
 	 */
-	base_address = instruction->operands.x86.address_register1;
+	three_addr_var_t* base_address = address_register1;
 	//Remember there is a chance that this is NULL, it's not a guaranteed field
-	linked_var = base_address->linked_var;
+	symtab_variable_record_t* linked_var = base_address->linked_var;
 
 	/**
 	 * Go based on the variable type of the base address itself to make determinations
@@ -12504,8 +12520,8 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 					 * Global or static variable, we will need to load these as rip-relative
 					 */
 					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						switch(instruction->addressing_mode){
+					case STATIC_VARIABLE: {
+						switch(operands->addressing_mode){
 							/**
 							 * Going from
 							 * 	store (t4) <- 5
@@ -12513,15 +12529,15 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 * To 
 							 * 	store <var>(%rip) <- 5
 							 */
-							case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+							case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+								//Update the x86 mode
+								instruction->operands.x86.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 								//Update the two operands
 								instruction->operands.x86.rip_offset_var = base_address;
 								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-								
 								break;
+							}
 
 							/**
 							 * Going from
@@ -12530,15 +12546,15 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 * To 
 							 * 	store 4+<var>(%rip) <- 5
 							 */
-							case ADDRESSING_MODE_OFFSET_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+							case ADDRESSING_MODE_OFFSET_ONLY: {
+								//Update the x86 mode
+								instruction->operands.x86.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 								//Update the two operands
 								instruction->operands.x86.rip_offset_var = base_address;
 								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-
 								break;
+							}
 
 							/**
 							 * For every other kind of addressing mode with the rip offset variable, we are actually
@@ -12546,7 +12562,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 * the rip offset variable beforehand in a lea and then substitute that variable in for the 
 							 * base address
 							 */
-							default:
+							default: {
 								//Emit the rip offset address calculation here
 								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64, instruction->line_number);
 
@@ -12556,17 +12572,21 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 								//The base address now becomes this value
 								instruction->operands.x86.address_register1 = rip_offset_lea->operands.x86.destination_register;
 
+								//Copy over the addressing mode
+								instruction->operands.x86.addressing_mode = operands->addressing_mode;
 								break;
+							}
 						}
 						
 						break;
+					}
 
 					/**
 					 * We have a non global memory address variable. Any/all changes here are going to 
 					 * hinge around whether or not there is a present stack offset for us to consider. 
 					 * This will only change the addressing mode if we were not using the offset before
 					 */
-					default:
+					default: {
 						//No matter what the address register is now the stack pointer
 						instruction->operands.x86.address_register1 = stack_pointer_variable;
 
@@ -12625,6 +12645,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 						}
 
 						break;
+					}
 				}
 
 			/**
