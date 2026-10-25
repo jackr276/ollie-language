@@ -1529,6 +1529,10 @@ static inline void remove_all_successors(basic_block_t* block){
  * to trace up the block to find out. If we are unable to
  * find out, that is ok, we just return false and assume
  * that it can't be done
+ *
+ *
+ *
+ * TODO WE SHOULD UPDATE THIS TO BE A FLAG DETERMINATION INSTEAD OF ANYTHING ELSE
  */
 static inline conditional_status_t determine_conditional_status(instruction_t* conditional){
 	//There are several conditional types that we are going
@@ -1655,10 +1659,6 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
 			return CONDITIONAL_UNKNOWN;
 	}
 }
-
-
-
-
 
 
 /**

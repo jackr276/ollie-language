@@ -220,6 +220,12 @@ struct instruction_t{
 		 * of a computation may actually be different as compared to a final type
 		 */
 		generic_type_t* result_type;
+		/**
+		 * Is the given branch a direct jump(in otherwords, the if the condition is true
+		 * we jump to the if block) or an inverse jump(in otherwords, if the condition is
+		 * true do we jump to the else block)
+		 */
+		branch_category_t branch_category;
 	} type_storage;
 
 	//The function called
