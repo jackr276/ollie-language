@@ -6597,7 +6597,7 @@ instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to
 /**
  * Emit a branch statement
  */
-instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type, u_int32_t line_number){
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type, branch_category_t branch_category, u_int32_t line_number){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 

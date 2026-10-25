@@ -1672,9 +1672,9 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
  * 		if block ends in branch:
  * 			determine what the branch relies on
  * 			if what it relies on is always true:
- * 				rewrite the branch to always jump to the if case
+ * 				rewrite the branch to always jump to the affirmative case
  * 			else if what it relies on is always false:
- * 				rewrite the branch to always jump to the else case
+ * 				rewrite the branch to always jump to the negative case
  * 	
  *
  * This will return true if we did find anything to optimize, and false if
@@ -1734,16 +1734,18 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 			statement_cursor = statement_cursor->previous_statement;
 		}
 
-		//Let the helper determine what kind of conditional we have here
+		/**
+		 * Are we able to determine what the result of this conditional will always be. For
+		 * example, something like "1 == 1" is always true, something like "0 < -1" is always
+		 * false, etc.. If we are, then we're able to rework the way that this branch works
+		 */
 		conditional_status_t conditional_status = determine_conditional_status(statement_cursor);
-
-		//Based on our status, there are a few actions we can take
 		switch(conditional_status){
 			/**
 			 * If the conditional is always false, then we will forever branch to the
 			 * else case. We will rewrite the branch to be an unconditional jump to the else block
 			 */
-			case CONDITIONAL_ALWAYS_FALSE:
+			case CONDITIONAL_ALWAYS_FALSE: {
 				//Is it an inverse branch or not? This will impact how we handle things
 				if(branch_instruction->inverse_branch == FALSE){
 					//We will emit an unconditional jump to the else block
@@ -1776,15 +1778,15 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 				//Flag that we did find at least one branch to optimize
 				found_branches_to_optimize = TRUE;
-
 				break;
+			}
 
 			/**
 			 * If the condition is always true, then we will forever branch to the if
 			 * case. We will rewrite the branch to be an unconditional jump to the if
 			 * block
 			 */
-			case CONDITIONAL_ALWAYS_TRUE:
+			case CONDITIONAL_ALWAYS_TRUE: {
 				//Is it an inverse branch or not? This will impact how we handle things
 				if(branch_instruction->inverse_branch == FALSE){
 					//We will emit an unconditional jump to the if block
@@ -1817,20 +1819,20 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 				//Flag that we did find at least one branch to optimize
 				found_branches_to_optimize = TRUE;
-
 				break;
+			}
 
 			/**
 			 * Do nothing, we can't be sure about what the conditionalal
 			 * is which is perfectly fine. In fact, we expect this to
 			 * be the majority case
 			 */
-			case CONDITIONAL_UNKNOWN:
+			case CONDITIONAL_UNKNOWN: {
 				break;
+			}
 		}
 	}
 
-	//Give this back
 	return found_branches_to_optimize;
 }
 

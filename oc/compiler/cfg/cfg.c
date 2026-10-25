@@ -2365,7 +2365,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * Select the appropriate branch type and then emit the branch statement
 		 */
 		branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
-		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type, conditional_node->line_number);
+		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type, branch_category, conditional_node->line_number);
 
 		//Add it into the block
 		add_statement(current_block, branch_statement);
