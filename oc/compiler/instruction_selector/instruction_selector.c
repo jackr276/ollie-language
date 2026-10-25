@@ -8286,6 +8286,8 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 		/**
 		 * For a bin op statement we'll have
 		 * value names like BINx_0+y_0
+		 *
+		 * TODO WHAT IF ITS HAVINTG AN ADDRESSING MODE??
 		 */
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
 			//Starting key
@@ -8781,6 +8783,10 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 	if(variable == NULL){
 		return;
 	}
+
+	printf("TRYING TO MARK\n");
+	print_variable(stdout, variable, PRINTING_VAR_INLINE);
+	printf("\n");
 
 	/**
 	 * There is no point in trying to mark a variable like this, we will
@@ -9399,6 +9405,26 @@ static void mark(dynamic_array_t* function_blocks){
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+			}
+
+			/**
+			 * These require special treatment due to the potential for addressing expressions inside
+			 * of them
+			 */
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:{
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+
+				/**
+				 * Remember that when we combine binary operations with address expressions we may end
+				 * up with addressing operands, so we'll need to mark those too
+				 */
+				if(stmt->memory_access_type == READ_FROM_MEMORY){
+					mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				}
+
 				break;
 			}
 
