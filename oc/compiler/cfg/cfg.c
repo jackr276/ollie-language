@@ -2240,12 +2240,8 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
  * branch category is also given and will be used when we're accounting for how to place things
  */
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
-	instruction_t* constant_assignment;
-
-	//Allcoate the results
+	//Allcoate the results, hang onto the current block
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
-
-	//Keep track of the current block
 	basic_block_t* current_block = starting_block;
 
 	/**
@@ -2270,7 +2266,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			 * If regular branch -> jump to if always
 			 * If inverse branch -> jump to else always
 			 */
-			case BRANCH_CONDITIONAL_ALWAYS_TRUE:
+			case BRANCH_CONDITIONAL_ALWAYS_TRUE: {
 				if(branch_category == BRANCH_CATEGORY_NORMAL){
 					emit_jump(current_block, if_block);
 				} else {
@@ -2278,6 +2274,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				}
 
 				return results;
+			}
 
 			/**
 			 * We have something that is provable to always be false. 
@@ -2285,7 +2282,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			 * If regular branch -> jump to else always
 			 * If inverse branch -> jump to if always
 			 */
-			case BRANCH_CONDITIONAL_ALWAYS_FALSE:
+			case BRANCH_CONDITIONAL_ALWAYS_FALSE: {
 				if(branch_category == BRANCH_CATEGORY_NORMAL){
 					emit_jump(current_block, else_block);
 				} else {
@@ -2293,6 +2290,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				}
 
 				return results;
+			}
 
 			//Anything else it's impossible to determine so we process normally
 			default:
@@ -2309,11 +2307,9 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		three_addr_var_t* conditional_decider;
 
 		switch(binary_results.type){
-			//For a constant type, we are going to need to emit an assignment
 			case CFG_RESULT_TYPE_CONST: {
-				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
-
-				//Get it in the block
+				//Emit and add the constant assignment as our decider
+				instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
 				add_statement(current_block, constant_assignment);
 
 				//This now is our decider
@@ -2321,7 +2317,6 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				break;
 			}
 
-			//For this we can extract the result var
 			case CFG_RESULT_TYPE_VAR: {
 				conditional_decider = binary_results.result_value.result_var;
 				break;
@@ -2366,10 +2361,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		//Flag that this sets condition codes
 		conditional_decider->sets_cc = TRUE;
 
-		//Now let's try to decide the branch type
+		/**
+		 * Select the appropriate branch type and then emit the branch statement
+		 */
 		branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
-
-		//Now we can finall spit this one out
 		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type, conditional_node->line_number);
 
 		//Add it into the block
@@ -2383,12 +2378,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		if(branch_category == BRANCH_CATEGORY_NORMAL){
 			add_successor(current_block, if_block);
 			add_successor(current_block, else_block);
-			branch_statement->inverse_branch = FALSE;
 
 		} else {
 			add_successor(current_block, else_block);
 			add_successor(current_block, if_block);
-			branch_statement->inverse_branch = TRUE;
 		}
 
 	/**
@@ -6893,9 +6886,6 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 
 	add_successor(basic_block, if_destination);
 	add_successor(basic_block, else_destination);
-
-	//These are always normal branches
-	branch_instruction->inverse_branch = FALSE;
 }
 
 /**
@@ -12876,7 +12866,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			branch_stmt->op = source_instruction->op;
 			branch_stmt->branch_type = source_instruction->branch_type;
 			branch_stmt->line_number = source_instruction->line_number;
-			branch_stmt->inverse_branch = source_instruction->inverse_branch;
 
 			//Branch statements *need* to have the "relies_on" field populated properly
 			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map);
@@ -13191,7 +13180,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			new_instruction->branch_type = source_instruction->branch_type;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
-			new_instruction->inverse_branch = source_instruction->inverse_branch;
 
 			//We choose to use the result type for this copy over. The memory type will be used by other cloning
 			new_instruction->type_storage.result_type = source_instruction->type_storage.result_type;
