@@ -8784,10 +8784,6 @@ static void mark_and_add_definition(dynamic_array_t* current_function_blocks, th
 		return;
 	}
 
-	printf("TRYING TO MARK\n");
-	print_variable(stdout, variable, PRINTING_VAR_INLINE);
-	printf("\n");
-
 	/**
 	 * There is no point in trying to mark a variable like this, we will
 	 * never find the definition since they exist by default
@@ -9282,21 +9278,15 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 			}
 
-			//If we have a function call, everything in the function call is important
+			/**
+			 * If we have a function call then everything is important. Remember that by
+			 * now this has been converted away from parameter results to using the
+			 * regular parameter array
+			 */
 			case THREE_ADDR_CODE_FUNC_CALL: {
-				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
-
-					switch(result->result_type){
-						case PARAM_RESULT_TYPE_VAR:
-							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_INITIALIZER:
-							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_CONST:
-							break;
-					}
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(stmt->parameters), i);
+					mark_and_add_definition(function_blocks, parameter, &worklist);
 				}
 
 				break;
@@ -9311,19 +9301,13 @@ static void mark(dynamic_array_t* function_blocks){
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
-
-					switch(result->result_type){
-						case PARAM_RESULT_TYPE_VAR:
-							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_INITIALIZER:
-							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_CONST:
-							break;
-					}
+				/**
+				 * Remember that by now this has been converted away from parameter results to using the
+				 * regular parameter array
+				 */
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(stmt->parameters), i);
+					mark_and_add_definition(function_blocks, parameter, &worklist);
 				}
 
 				break;
