@@ -9482,212 +9482,15 @@ static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_
 }
 
 
-
 /**
- * Generate an OIR store instruction using the addressing mode operands given *and* accounting
- * for the given additional offset. 
- *
- * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
- * result that is an actual initializer here. This is just for variables and constants
- *
- *
- * TODO SEE IF WE CAN COMBINE THIS WITH THE OTHER STORE GENERATOR I DONT LIKE HAVING 2
+ * Generate the appropriate store or memory copy statement for an initializer result given the complete set of
+ * address operands(with the offset already baked in) and the given initializer result
  */
-static instruction_t* generate_OIR_store_with_additional_offset(addressing_operands_t* base_address, int32_t additional_offset,
-																initializer_result_t* result_to_store, generic_type_t* memory_write_type){
-	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+static inline instruction_t* generate_result_storage_for_initializer(addressing_operands_t* address_operands, initializer_result_t* result, generic_type_t* result_type){
+	if(is_memo)
 
-	/**
-	 * If we have a type that is not assigned by copy we will need
-	 * a store statement. Otherwise if we have a type that is assigned by copy
-	 * we will need a memory copy statement
-	 */
-	if(is_type_assigned_by_copy(memory_write_type) == FALSE){
-		store_instruction->memory_access_type = WRITE_TO_MEMORY;
-		store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-		store_instruction->type_storage.memory_read_write_type = memory_write_type;
-	} else {
-		store_instruction->memory_access_type = WRITE_TO_MEMORY;
-		store_instruction->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
-		store_instruction->type_storage.memory_read_write_type = memory_write_type;
-		store_instruction->optional_storage.byte_amount_to_copy = memory_write_type->type_size;
-	}
-
-	//Get a pointer to this for convenience
-	addressing_operands_t* store_operands = &(store_instruction->operands.oir.destination_address_expression);
-
-	/**
-	 * Based on the addressing mode *and8 the value of the additional offset
-	 * we may have an addressing mode that varies slightly from the one
-	 * that was provided. It's only going to really vary though if said additional
-	 * offset is not 0. If it is 0, then we can just copy everything over 
-	 * literally
-	 *
-	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
-	 */
-	if(additional_offset != 0){
-		/**
-		 * Remember that ending up in here means that the constant is specifically
-		 * nonzero so we're going to need to change addressing modes that don't have
-		 * constants to ones that do
-		 */
-		switch(base_address->addressing_mode){
-			/**
-			 * We'll end up with something like store 4(x_0) <- 5
-			 */
-			case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_operands->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-				break;
-			}
-
-			/**
-			 * With this if we have an additional offset of 4 and already
-			 * have something like store 4(x_0) <- 5 we'll just add to it
-			 * to get store 8(x_0) <- 5
-			 */
-			case ADDRESSING_MODE_OFFSET_ONLY: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->address_offset = emit_constant_copy(base_address->address_offset);
-				store_operands->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_operands->address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * Going to end up with something like store 4(x_0, y_0) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_ONLY: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->address_operand2 = base_address->address_operand2;
-				store_operands->address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-				break;
-			}
-
-			/**
-			 * We're going to end up with something like store 4 + 8(x_0, y_0) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->address_operand2 = base_address->address_operand2;
-				store_operands->address_offset = emit_constant_copy(base_address->address_offset);
-				store_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_operands->address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4(, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_INDEX_AND_SCALE: {
-				store_operands->address_operand2 = base_address->address_operand2;
-				store_operands->address_multiplier = base_address->address_multiplier;
-				store_operands->address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_operands->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4 + 8(, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
-				store_operands->address_operand2 = base_address->address_operand2;
-				store_operands->address_multiplier = base_address->address_multiplier;
-				store_operands->address_offset = emit_constant_copy(base_address->address_offset);
-				store_operands->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_operands->address_offset, i64, additional_offset);
-				break;
-		 	}
-
-			/**
-			 * We'll get something like store 4(x_0, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->address_operand2 = base_address->address_operand2;
-				store_operands->address_multiplier = base_address->address_multiplier;
-				store_operands->address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+8(x_0, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->address_operand2 = base_address->address_operand2;
-				store_operands->address_multiplier = base_address->address_multiplier;
-				store_operands->address_offset = emit_constant_copy(base_address->address_offset);
-				store_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_operands->address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+x_0(%rip) <- 5
-			 */
-			case ADDRESSING_MODE_RIP_RELATIVE: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->rip_offset_var = base_address->rip_offset_var;
-				store_operands->address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_operands->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+8+x_0(%rip) <- 5
-			 */
-			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
-				store_operands->address_operand1 = base_address->address_operand1;
-				store_operands->rip_offset_var = base_address->rip_offset_var;
-				store_operands->address_offset = emit_constant_copy(base_address->address_offset);
-				store_operands->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_operands->address_offset, i64, additional_offset);
-				break;
-			}
-
-			default: {
-				trigger_ice_panic("Invalid addressing mode detected");
-				break;
-		 	}
-		}
-
-	/**
-	 * Additional offset is 0 so we don't need to do anything besides copy over all of the addressing
-	 * mode operands from the given base address pointer
-	 */
-	} else {
-		//Complete copy
-		*store_operands = *base_address;
-
-		//Because of the potential for address offset manipulation we need this to be distinct
-		store_operands->address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
-	}
-
-	/**
-	 * Now that we're done emitting everything we can store the result in here
-	 */
-	if(result_to_store->result_type == INITIALIZER_RESULT_TYPE_CONSTANT){
-		store_instruction->operands.oir.constant_operand = result_to_store->value.constant_value;
-	} else {
-		store_instruction->operands.oir.operand1 = result_to_store->value.variable_value;
-	}
-
-	return store_instruction;
 }
+
 
 
 /**
@@ -9723,8 +9526,12 @@ static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* ba
 			 */
 			case INITIALIZER_RESULT_TYPE_VARIABLE:
 			case INITIALIZER_RESULT_TYPE_CONSTANT:{
-				instruction_t* store_statement = generate_OIR_store_with_additional_offset(base_address, current_offset, result, struct_record->type_defined_as);
-				insert_instruction_before_given(store_statement, original_instruction);
+				//First generate the final operands
+				addressing_operands_t final_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_offset);
+
+				//Let the helper generate this and then insert before the original
+				instruction_t* result_storage = generate_result_storage_for_initializer(&final_operands, result, struct_record->type_defined_as);
+				insert_instruction_before_given(result_storage, original_instruction);
 				break;
 		 	}
 
@@ -9792,8 +9599,11 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
 			 */
 			case INITIALIZER_RESULT_TYPE_VARIABLE:
 			case INITIALIZER_RESULT_TYPE_CONSTANT: {
+				//Let the helper do all of our packaging
+				addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_array_offset);
+
 				//Emit and get this inserted right *BEFORE* the original
-				instruction_t* result_storage = generate_OIR_store_with_additional_offset(base_address, current_array_offset, result, member_type);
+				instruction_t* result_storage = generate_result_storage_for_initializer(&new_operands, result, member_type);
 				insert_instruction_before_given(result_storage, original_instruction);
 				break;
 			}
