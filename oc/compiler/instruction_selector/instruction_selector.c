@@ -9751,8 +9751,11 @@ static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* s
 	//First load the 16 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, 0);
 
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, double_quad_word);
+	/**
+	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, double_quad_word);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
@@ -9779,8 +9782,11 @@ static inline instruction_copy_pair_t emit_8_byte_copy_pair(three_addr_var_t* so
 	//First load the 8 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, 0);
 
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i64);
+	/**
+	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i64);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
@@ -9807,8 +9813,11 @@ static inline instruction_copy_pair_t emit_4_byte_copy_pair(three_addr_var_t* so
 	//First load the 4 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, 0);
 
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i32);
+	/**
+	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i32);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
@@ -9835,8 +9844,11 @@ static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* so
 	//First load the 2 bytes out of memory
 	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, 0);
 
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i16);
+	/**
+	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i16);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
