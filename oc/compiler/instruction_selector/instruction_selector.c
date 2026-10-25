@@ -9483,17 +9483,6 @@ static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_
 
 
 /**
- * Generate the appropriate store or memory copy statement for an initializer result given the complete set of
- * address operands(with the offset already baked in) and the given initializer result
- */
-static inline instruction_t* generate_result_storage_for_initializer(addressing_operands_t* address_operands, initializer_result_t* result, generic_type_t* result_type){
-	if(is_memo)
-
-}
-
-
-
-/**
  * Go through all of the members of the given struct initializer and create the equivalent OIR store statement
  * for each member along the way. In the event that a recursive initializer is hit, we will package up a fresh
  * addressing_operands_t struct and invoke that
@@ -9519,18 +9508,30 @@ static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* ba
 		//The current offset will always just be this struct offset
 		current_offset = struct_record->struct_offset;
 
+		/**
+		 * First we'll generate all of our new operands using the current base address and the new offset
+		 */
+		addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_offset);
+
 		switch(result->result_type){
 			/**
-			 * If we have variables or constant results then all we'll need to do is emit the equivalent
-			 * OIR store statement 
+			 * For a variable we could be doing a regular store or a memory copy. The type of
+			 * the struct record will determine this
 			 */
-			case INITIALIZER_RESULT_TYPE_VARIABLE:
-			case INITIALIZER_RESULT_TYPE_CONSTANT:{
-				//First generate the final operands
-				addressing_operands_t final_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_offset);
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				if(is_type_assigned_by_copy(struct_record->type_defined_as) == FALSE){
+					instruction_t* result_storage = generate_OIR_store_variable_from_address_operands(&new_operands, result->value.variable_value, struct_record->type_defined_as);
+					insert_instruction_before_given(result_storage, original_instruction);
+				} else {
+					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, result->value.variable_value, struct_record->type_defined_as);
+					insert_instruction_before_given(result_storage, original_instruction);
+				}
 
-				//Let the helper generate this and then insert before the original
-				instruction_t* result_storage = generate_result_storage_for_initializer(&final_operands, result, struct_record->type_defined_as);
+				break;
+		    }
+
+			case INITIALIZER_RESULT_TYPE_CONSTANT:{
+				instruction_t* result_storage = generate_OIR_store_constant_from_address_operands(&new_operands, result->value.constant_value, struct_record->type_defined_as);
 				insert_instruction_before_given(result_storage, original_instruction);
 				break;
 		 	}
@@ -9541,9 +9542,6 @@ static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* ba
 			 * create a new offset that accounts for the current offset
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				//Let the helper do all of our packaging
-				addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_offset);
-
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
 				 * the appropriate emitter based on the initializer result
@@ -9589,21 +9587,35 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
 	 * the initializer could have a mismatch of variables and constants
 	 */
 	for(int32_t i = 0; i < array_initializer->results.results_current_index; i++){
+		/**
+		 * Extract the result and generate a new set of addressing operands with this
+		 * new offset
+		 */
 		initializer_result_t* result = get_intializer_result_at_index(array_initializer, i);
+		addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_array_offset);
 
 		switch(result->result_type){
 			/**
-			 * For variables and constants we will emit the store with the additional
-			 * offset using the helper. The helper itself will deal with cloning the constants
-			 * if needed for us
+			 * We may be doing a memory copy based on the type that we're storing, or a generic store. Split
+			 * based on the member type and emit appropriately
 			 */
-			case INITIALIZER_RESULT_TYPE_VARIABLE:
-			case INITIALIZER_RESULT_TYPE_CONSTANT: {
-				//Let the helper do all of our packaging
-				addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_array_offset);
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				if(is_type_assigned_by_copy(member_type) == FALSE){
+					instruction_t* result_storage = generate_OIR_store_variable_from_address_operands(&new_operands, result->value.variable_value, member_type);
+					insert_instruction_before_given(result_storage, original_instruction);
+				} else {
+					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, result->value.variable_value, member_type);
+					insert_instruction_before_given(result_storage, original_instruction);
+				}
 
-				//Emit and get this inserted right *BEFORE* the original
-				instruction_t* result_storage = generate_result_storage_for_initializer(&new_operands, result, member_type);
+				break;
+		    }
+
+			/**
+			 * For constant storage just emit the store constant instruction and insert before given
+			 */
+			case INITIALIZER_RESULT_TYPE_CONSTANT: {
+				instruction_t* result_storage = generate_OIR_store_constant_from_address_operands(&new_operands, result->value.constant_value, member_type);
 				insert_instruction_before_given(result_storage, original_instruction);
 				break;
 			}
@@ -9614,8 +9626,6 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
 			 * create a new offset that accounts for the current offset
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				//Let the helper do all of our packaging
-				addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_array_offset);
 
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
