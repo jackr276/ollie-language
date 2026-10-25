@@ -9332,6 +9332,9 @@ static inline three_addr_const_t* emit_constant_copy_if_not_null(three_addr_cons
 
 /**
  * Create a new addressing operands struct based on the original one that was given to us
+ *
+ * NOTE: we will also create a straight duplicate of the constant so that we avoid any collisions
+ * in the future. Constant values are expected to be mutated
  */
 static addressing_operands_t generate_OIR_addressing_operands_with_additional_offset(addressing_operands_t* original_operands, int64_t offset){
 	//Get a direct copy of these operands
@@ -9394,6 +9397,31 @@ static addressing_operands_t generate_OIR_addressing_operands_with_additional_of
 }
 
 
+/**
+ * Generate an OIR store statement for the given address operands, that stores the given result variable
+ * with the given memory write type
+ */
+static instruction_t* generate_OIR_store_variable_from_address_operands(addressing_operands_t* address_operands, three_addr_var_t* result_to_store,
+																		generic_type_t* memory_write_type){
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+
+	return store_instruction;
+}
+
+
+/**
+ * Generate an OIR store statement for the given address operands, that stores the given result variable
+ * with the given memory write type
+ */
+static instruction_t* generate_OIR_store_constant_from_address_operands(addressing_operands_t* address_operands, three_addr_const_t* result_to_store,
+																		generic_type_t* memory_write_type){
+
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+
+	return store_instruction;
+}
 
 
 /**
@@ -9603,10 +9631,6 @@ static instruction_t* generate_OIR_store_with_additional_offset(addressing_opera
 }
 
 
-static inline addressing_operands_t package_new_addressing_operands_with_additional_offset(addressing_operands_t* original_operands, int32_t offset){
-}
-
-
 /**
  * Go through all of the members of the given struct initializer and create the equivalent OIR store statement
  * for each member along the way. In the event that a recursive initializer is hit, we will package up a fresh
@@ -9652,7 +9676,7 @@ static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* ba
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
 				//Let the helper do all of our packaging
-				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_offset);
+				addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_offset);
 
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
@@ -9722,7 +9746,7 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
 				//Let the helper do all of our packaging
-				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_array_offset);
+				addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_array_offset);
 
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
