@@ -9407,6 +9407,7 @@ static instruction_t* generate_OIR_store_variable_from_address_operands(addressi
 
 	//Populate the access type, write type and copy all of the operands over
 	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 	store_instruction->type_storage.memory_read_write_type = memory_write_type;
 	store_instruction->operands.oir.destination_address_expression = *address_operands;
 
@@ -9429,11 +9430,11 @@ static instruction_t* generate_OIR_store_variable_from_address_operands(addressi
  */
 static instruction_t* generate_OIR_store_constant_from_address_operands(addressing_operands_t* address_operands, three_addr_const_t* result_to_store,
 																		generic_type_t* memory_write_type){
-
 	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
 
 	//Populate the access type, write type and copy all of the operands over
 	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
 	store_instruction->type_storage.memory_read_write_type = memory_write_type;
 	store_instruction->operands.oir.destination_address_expression = *address_operands;
 
@@ -9448,6 +9449,38 @@ static instruction_t* generate_OIR_store_constant_from_address_operands(addressi
 	store_instruction->operands.oir.constant_operand = result_to_store;
 	return store_instruction;
 }
+
+
+/**
+ * Generate an OIR memory copy statement from the given address operands 
+ *
+ * TODO WILL CHANGE
+ */
+static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_operands_t* destination_address, three_addr_var_t* source_address,
+																		generic_type_t* memory_write_type){
+
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	//Populate the access type, write type and copy all of the operands over
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	store_instruction->optional_storage.byte_amount_to_copy = memory_write_type->type_size;
+
+	store_instruction->operands.oir.destination_address_expression = *destination_address;
+
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	store_instruction->operands.oir.destination_address_expression.address_offset = emit_constant_copy_if_not_null(destination_address->address_offset);
+
+	//Put the storing constant in the constant operand
+	store_instruction->operands.oir.operand1 = source_address;
+	return store_instruction;
+}
+
 
 
 /**
