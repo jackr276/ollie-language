@@ -9797,14 +9797,14 @@ static inline instruction_copy_pair_t emit_8_byte_copy_pair(addressing_operands_
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-
-	//First load the 8 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, 0);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, i64);
 
 	/**
-	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
 	 */
 	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
 	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i64);
@@ -9826,14 +9826,14 @@ static inline instruction_copy_pair_t emit_4_byte_copy_pair(addressing_operands_
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-
-	//First load the 4 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, 0);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, i32);
 
 	/**
-	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
 	 */
 	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
 	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i32);
@@ -9855,14 +9855,14 @@ static inline instruction_copy_pair_t emit_2_byte_copy_pair(addressing_operands_
 	//Word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-
-	//First load the 2 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, 0);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, i16);
 
 	/**
-	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
 	 */
 	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
 	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i16);
