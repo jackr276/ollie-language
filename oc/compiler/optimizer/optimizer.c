@@ -423,6 +423,15 @@ static void mark_initializer_values(three_addr_initializer_t* initializer, dynam
 
 
 /**
+ * Mark and add the definition for all of our given address operands
+ */
+static inline void mark_addressing_operands(dynamic_array_t* current_function_blocks, dynamic_array_t* worklist, addressing_operands_t* address_operands){
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand1, worklist);
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand2, worklist);
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -601,20 +610,17 @@ static void mark(dynamic_array_t* function_blocks){
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
-			case THREE_ADDR_CODE_PHI_STMT:
-				//Add this in here
+			case THREE_ADDR_CODE_PHI_STMT: {
 				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
-					//Add the definitions in
 					mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
 				}
 
 				break;
+			}
 
 			//If we have a function call, everything in the function call is important
-			case THREE_ADDR_CODE_FUNC_CALL:
-				//Run through them all and mark them
+			case THREE_ADDR_CODE_FUNC_CALL: {
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					switch(result->result_type){
@@ -630,19 +636,18 @@ static void mark(dynamic_array_t* function_blocks){
 				}
 
 				break;
+			}
 
 			/**
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
 			 */
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				//Run through them all and mark them
 				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					//Get the result out
 					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
 
 					switch(result->result_type){
@@ -658,51 +663,96 @@ static void mark(dynamic_array_t* function_blocks){
 				}
 
 				break;
+			}
 
 			/**
 			 * For an initializer statement there are special steps that we 
 			 * need to take to work on the 
 			 */
-			case THREE_ADDR_CODE_INITIALIZER_STMT:
-				//The address that we're writing to will always be needed
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+			case THREE_ADDR_CODE_INITIALIZER_STMT:  {
+				//Mark the destination address
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
 
 				//Now let the recursive helper mark all of our initializer values
 				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
+			}
+
+			/**
+			 * Leas have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LEA_STMT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Loads have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LOAD_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Stores have a destination address that needs to be marked as well as the operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+		    }
+
+			/**
+			 * Memory copy statements have addressing operands in the source and destination, so we'll need to mark
+			 * both sets of those addressing operands
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Indirect jump statements do contain address operands but we will mark them differently
+			 */
+			case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				break;
+		    }
 
 			/**
 			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
 			 * so we'll need to mark that as well
 			 */
 			case THREE_ADDR_CODE_BRANCH_STMT:
-			case THREE_ADDR_CODE_SETNE_STMT:
+			case THREE_ADDR_CODE_SETNE_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				break;
+			}
 
 			/**
 			 * Conditional movement statements need their "relies on" tag included
 			 * as well as the two actual operands
 			 */
-			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
 				break;
+			}
 
 			/**
 			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
 			 * will ignore
 			 */
-			default:
-				//We need to mark the place where each definition is set
+			default: {
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
-
 				break;
+			}
 		}
 
 		//Grab this out for convenience
@@ -977,272 +1027,6 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 	 * that have been flagged as unimportant
 	 */
 	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
-}
-
-
-/**
- * Mark and add the definition from within a block
- *
- * A small optimization that we can do is provide a "starting point" instruction to begin our search at. This will
- * avoid us having to crawl through the entire block searching since we'll be providing the instruction where this
- * variable was last used
- */
-static void mark_and_add_definition_block_local(instruction_t* starting_point, three_addr_var_t* variable, instruction_t* worklist[], u_int32_t* current_index){
-	//If this is NULL then get out
-	if(variable == NULL){
-		return;
-	}
-
-	/**
-	 * There is no point in trying to mark a variable like this, we will
-	 * never find the definition since they exist by default
-	 */
-	if(variable == stack_pointer_variable || variable == instruction_pointer_variable){
-		return;
-
-	}
-
-	/**
-	 * Same with any of these kind of variables. We will never find an assignment
-	 * spot for them so don't even bother
-	 */
-	switch(variable->variable_type){
-		case VARIABLE_TYPE_LOCAL_CONSTANT:
-		case VARIABLE_TYPE_FUNCTION_ADDRESS:
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			return;
-		default:
-			break;
-	}
-
-	/**
-	 * If this variable has a stack region, then we will be marking
-	 * said stack region. We know that this discriminating union is a stack
-	 * region because of the if-check above that rules out local constants
-	 */
-	if(variable->associated_memory_region.stack_region != NULL){
-		mark_stack_region(variable->associated_memory_region.stack_region);
-	}
-
-	//Grab a cursor
-	instruction_t* cursor = starting_point;
-
-	/**
-	 * We'll have different things to look at based 
-	 */
-	switch(variable->variable_type){
-		case VARIABLE_TYPE_NON_TEMP:
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			//So long as this isn't NULL
-			while(cursor != NULL){
-				//Extract the assignee here for convenience
-				three_addr_var_t* assignee = cursor->operands.oir.assignee;
-
-				//If it's marked we're out of here
-				if(cursor->mark == TRUE || assignee == NULL){
-					cursor = cursor->previous_statement;
-					continue;
-				}
-
-				//Is the assignee our variable AND it's unmarked?
-				if(assignee->linked_var == variable->linked_var
-					&& assignee->ssa_generation == variable->ssa_generation){
-					//Mark the cursor
-					cursor->mark = TRUE;
-
-					//Add it to the worklist
-					ADD_TO_STACK_WORKLIST(cursor, worklist, (*current_index));
-
-					//We're done
-					return;
-				}
-
-				//Advance the statement
-				cursor = cursor->previous_statement;
-			}
-
-			break;
-
-		case VARIABLE_TYPE_TEMP:
-			//So long as this isn't NULL
-			while(cursor != NULL){
-				//Extract the assignee here for convenience
-				three_addr_var_t* assignee = cursor->operands.oir.assignee;
-
-				//If this is the case, we'll just go onto the next one
-				if(cursor->mark == TRUE || assignee == NULL){
-					cursor = cursor->previous_statement;
-					continue;
-				}
-
-				//Is the assignee our variable AND it's unmarked?
-				if(assignee->variable_id == variable->variable_id){
-					//Mark it
-					cursor->mark = TRUE;
-
-					//Add it to the worklist
-					ADD_TO_STACK_WORKLIST(cursor, worklist, (*current_index));
-
-					//We're done
-					return;
-				}
-
-				//Advance the statement
-				cursor = cursor->previous_statement;
-			}
-
-			break;
-
-		default:
-			printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
-			exit(1);
-	}
-}
-
-
-/**
- * Is a given block only a branching block?. We will be able to tell
- * by tracing our way back up the block and marking everything in the block
- * that is relied on by the branch
- *
- * We are going to do this using a modified mark algorithm similar to mark and sweep. The 
- * good thing is that we're able to keep this entire algorithm block-local
- *
- * NOTE: we guarantee that the end statement is a branch
- *
- * This is deprecated as of 09/27/2026
- */
-static inline void mark_all_branch_related_statements(basic_block_t* block){
-	//Guarantee that the exit statement is a branch statement
-	instruction_t* branch_statement = block->exit_statement;
-
-	//If this isn't a branch statement then leave
-	if(branch_statement->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
-		return;
-	}
-
-	//Reset all of the marks
-	reset_marks_for_block(block);
-
-	/**
-	 * We can use a compile-time VLA as the worklist here. We know
-	 * that the maximum number of items on the worklist at any time is 
-	 * the number of instructions inside of the block, and that value is
-	 * known to us
-	 */
-	instruction_t* worklist[block->number_of_instructions];
-	//Keep track of the current index
-	u_int32_t worklist_current_index = 0;
-
-	//We will mark where the op1 for this branch came from
-	mark_and_add_definition_block_local(branch_statement, branch_statement->operands.oir.operand1, worklist, &worklist_current_index);
-
-	//Let's start by marking the branch statement
-	branch_statement->mark = TRUE;
-
-	//So long as the worklist isn't empty
-	while(IS_STACK_WORKLIST_EMPTY(worklist_current_index) == FALSE){
-		//Get an item off of the worklist
-		instruction_t* current = REMOVE_FROM_STACK_WORKLIST(worklist, worklist_current_index);
-
-		//Trace back to find where this value is assigned
-		switch(current->statement_type){
-			/**
-			 * Phi functions mean that stuff is coming from outside of the block, we will skip this as it's not important
-			 * to us at all for this case
-			 */
-			case THREE_ADDR_CODE_PHI_STMT:
-				break;
-
-			/**
-			 * If we have a function call, then everything is important
-			 */
-			case THREE_ADDR_CODE_FUNC_CALL:
-				//Run through them all and mark them
-				for(int32_t i = 0; i < current->parameter_results.current_index; i++){
-					//Get the result out
-					parameter_result_t* result = get_result_at_index(&(current->parameter_results), i);
-
-					//If it's a variable then add it
-					if(result->result_type == PARAM_RESULT_TYPE_VAR){
-						mark_and_add_definition_block_local(current, result->param_result.variable_result, worklist, &worklist_current_index);
-					}
-				}
-
-				break;
-
-			/**
-			 * An indirect function call behaves similarly to a function call, but we'll also
-			 * need to mark it's "op1" value as important. This is the value that stores
-			 * the memory address of the function that we're calling
-			 */
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
-				//Mark the op1 of this function as being important
-				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
-
-				//Run through them all and mark them
-				for(int32_t i = 0; i < current->parameter_results.current_index; i++){
-					//Get the result out
-					parameter_result_t* result = get_result_at_index(&(current->parameter_results), i);
-
-					//If it's a variable then add it
-					if(result->result_type == PARAM_RESULT_TYPE_VAR){
-						mark_and_add_definition_block_local(current, result->param_result.variable_result, worklist, &worklist_current_index);
-					}
-				}
-
-				break;
-
-			/**
-			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
-			 * so we'll need to mark that as well
-			 */
-			case THREE_ADDR_CODE_BRANCH_STMT:
-			case THREE_ADDR_CODE_SETNE_STMT:
-				mark_and_add_definition_block_local(current, current->relies_on, worklist, &worklist_current_index);
-				break;
-				
-			/**
-			 * Our default is marking all of the operands. It doesn't matter if they are NULL, the helper will account for that
-			 */
-			default:
-				mark_and_add_definition_block_local(current, current->operands.oir.operand1, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->operands.oir.operand2, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->operands.oir.address_operand1, worklist, &worklist_current_index);
-				mark_and_add_definition_block_local(current, current->operands.oir.address_operand2, worklist, &worklist_current_index);
-				break;
-		}
-	}
-}
-
-
-/**
- * Helper function to determine if a block is entirely a branch or not. To do this, 
- * we are going to first use the marker function to mark all statements that are
- * related to this block's branch statement. After that, we will go through
- * and see if everything is marked or not. If it is all marked, then we return
- * TRUE. If it is not, then we return false
- */
-static inline u_int8_t is_block_only_branch(basic_block_t* block){
-	//Do this first off
-	mark_all_branch_related_statements(block);
-
-	//Now let's crawl the block
-	instruction_t* cursor = block->leader_statement;
-
-	//Crawl every instruction 
-	while(cursor != NULL){
-		//One false destroys the whole thing
-		if(cursor->mark == FALSE){
-			return FALSE;
-		}
-
-		//Onto the next one
-		cursor = cursor->next_statement;
-	}
-
-	//If we get down here then it's true
-	return TRUE;
 }
 
 

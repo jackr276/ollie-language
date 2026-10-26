@@ -1344,18 +1344,6 @@ void delete_statement(instruction_t* stmt){
 	//Grab the block out
 	basic_block_t* block = stmt->block_contained_in;
 
-	/**
-	 * If we have a string constant and we're doing this, we'll need to decrement the reference
-	 * count by 1 because we are losing a reference to it. Any/all local constant values are always
-	 * stored inside of the second address register
-	 */
-	three_addr_var_t* local_constant_var = stmt->operands.oir.rip_offset_var;
-
-	//Knock one off of the reference count if it's valid
-	if(local_constant_var != NULL && local_constant_var->variable_type == VARIABLE_TYPE_LOCAL_CONSTANT){
-		local_constant_var->associated_memory_region.local_constant->reference_count--;
-	}
-
 	//No matter what, we are reducing the number of statements in this block
 	block->number_of_instructions--;
 
@@ -1485,6 +1473,16 @@ static void add_variable_to_use_set(three_addr_var_t* variable, basic_block_t* b
 
 	//If we make it all of the way down here, then we can add it
 	dynamic_array_add(use_set, variable);
+}
+
+
+/**
+ * This helper goes through and adds all applicable addressing expression
+ * values to the use set
+ */
+static inline void add_address_operands_to_use_set(addressing_operands_t* address_operands, basic_block_t* block){
+	add_variable_to_use_set(address_operands->address_operand1, block);
+	add_variable_to_use_set(address_operands->address_operand2, block);
 }
 
 
@@ -1666,24 +1664,60 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * properly
 				 */
 				case THREE_ADDR_CODE_INITIALIZER_STMT: {
-					//Initializers are addressing mode compatible
-					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
-					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
+					//Initializers are addressing mode compatible in the destination
+					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
 
 					add_initializer_members_to_use_set(cursor->operands.oir.initializer_operand, block);
 					break;
 				}
 
 				/**
+				 * Store statements will have a destination addressing mode and source operands
+				 */
+				case THREE_ADDR_CODE_STORE_STATEMENT: {
+					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
+
+					add_variable_to_use_set(cursor->operands.oir.operand1, block);
+					add_variable_to_use_set(cursor->operands.oir.operand2, block);
+					break;
+				}
+
+				/**
+				 * Load statements will have an assignee and a source addressing mode
+				 */
+				case THREE_ADDR_CODE_LOAD_STATEMENT: {
+					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
+					add_variable_to_def_set(cursor->operands.oir.assignee, block);
+					break;
+				}
+
+				/**
+				 * Like stores, leas have an assignee and a use set
+				 */
+				case THREE_ADDR_CODE_LEA_STMT: {
+					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
+					add_variable_to_def_set(cursor->operands.oir.assignee, block);
+					break;
+				}
+
+				/**
+				 * Memory copy statements have addressing operands in the source and destination
+				 * address expression areas. As such we'll mark both of their areas here
+				 */
+				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
+					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
+					break;
+				}
+
+				/**
 				 * In the default case, we just add the USE/DEF for each 
-				 * variable that we can see
+				 * variable that we can see and is not in an addressing mode
 				 */
 				default: {
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 					add_variable_to_use_set(cursor->operands.oir.operand2, block);
-					add_variable_to_use_set(cursor->operands.oir.address_operand1, block);
-					add_variable_to_use_set(cursor->operands.oir.address_operand2, block);
-					
+
 					//The assignee is in the def set
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
 					break;
@@ -2352,11 +2386,13 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			&& is_binary_operation(current_block->exit_statement)
 			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
 
-			//If we have a result type use that, otherwise take from op1
+			/**
+			 * If we have a result use that, otherwise use the assignee
+			 */
 			if(current_block->exit_statement->type_storage.result_type != NULL){
 				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
 			} else {
-				type_signed = is_type_signed(current_block->exit_statement->operands.oir.address_operand1->type);
+				type_signed = is_type_signed(current_block->exit_statement->operands.oir.assignee->type);
 			}
 
 		} else {
@@ -6491,7 +6527,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * to emit that now. The LHS variable is the memory address
 			 */
 			if(left_child->memory_access_required == TRUE){
-				instruction_t* store_instruction = emit_store_const_base_address_only(lhs_result_var, result_const, left_child->inferred_type, left_child->line_number);
+				instruction_t* store_instruction = emit_constant_store_base_address_only(lhs_result_var, result_const, left_child->inferred_type, left_child->line_number);
 				add_statement(current_block, store_instruction);
 
 			/**
@@ -6504,7 +6540,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 				three_addr_var_t* memory_address = emit_memory_address_var(lhs_result_var->linked_var);
 
 				//Emit and add the store
-				instruction_t* store_instruction = emit_store_const_base_address_only(memory_address, result_const, lhs_result_var->type, parent_node->line_number);
+				instruction_t* store_instruction = emit_constant_store_base_address_only(memory_address, result_const, lhs_result_var->type, parent_node->line_number);
 				add_statement(current_block, store_instruction);
 
 			/**
@@ -12716,6 +12752,24 @@ static three_addr_const_t* clone_constant(three_addr_const_t* constant){
 
 
 /**
+ * Clone everything inside of an addressing operands struct that requires cloning, package it up
+ * and return it in the form of a new address operand struct
+ */
+static addressing_operands_t clone_addressing_operands(addressing_operands_t* to_be_cloned, variable_map_t* map){
+	addressing_operands_t new_operands;
+
+	new_operands.address_operand1 = clone_variable(to_be_cloned->address_operand1, map);
+	new_operands.address_operand2 = clone_variable(to_be_cloned->address_operand2, map);
+	new_operands.rip_offset_var = clone_variable(to_be_cloned->rip_offset_var, map);
+	new_operands.address_offset = clone_constant(to_be_cloned->address_offset);
+	new_operands.address_multiplier = to_be_cloned->address_multiplier;
+	new_operands.addressing_mode = to_be_cloned->addressing_mode;
+
+	return new_operands;
+}
+
+
+/**
  * Clone the initializer over by cloning over every single variable/constant
  * in it using the apporopriate helpers
  */
@@ -12922,19 +12976,16 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 
 			//We need to copy/clone over all of this info
 			new_jump->statement_type = source_instruction->statement_type;
-			new_jump->addressing_mode = source_instruction->addressing_mode;
 			new_jump->line_number = source_instruction->line_number;
 
 			//Jump table reference
 			new_jump->if_block = cloning_into_block->jump_table; 
 
 			//Indirect jump statements have address operands and a multiplier
-			new_jump->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_jump->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
 			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map);
-			new_jump->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
-			new_jump->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
 
+			//Clone the addressing expression
+			new_jump->operands.oir.destination_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.destination_address_expression), variable_map);
 			add_statement(cloning_into_block, new_jump);
 			return;
 		}
@@ -13017,19 +13068,12 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 
 			//Copy all of the basic instruction info over as well
 			new_instruction->statement_type = source_instruction->statement_type;
-			new_instruction->addressing_mode = source_instruction->addressing_mode;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
 
-			//Clone all variables over
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
-			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
-			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
-
-			//First operand is the source so we'll need that
-			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			//Clone the destination and source addressing expressions
+			new_instruction->operands.oir.destination_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.destination_address_expression), variable_map);
+			new_instruction->operands.oir.source_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.source_address_expression), variable_map);
 
 			//We need to know how much copying must be done
 			new_instruction->optional_storage.byte_amount_to_copy = source_instruction->optional_storage.byte_amount_to_copy;
@@ -13040,31 +13084,25 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 		}
 
 		/**
-		 * Load and store statements touch memory so we'll need
-		 * to clone over the memory read/write type specifically
+		 * Load statments always have a source memory address that
+		 * we'll need to clone over
 		 */
-		case THREE_ADDR_CODE_LOAD_STATEMENT:
-		case THREE_ADDR_CODE_STORE_STATEMENT: {
+		case THREE_ADDR_CODE_LOAD_STATEMENT: {
 			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
 
 			/**
-			 * First clone every single variable using our mapping strategy
+			 * First clone the source addressing mode expression
+			 */
+			new_instruction->operands.oir.source_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.source_address_expression), variable_map);
+
+			/**
+			 * Then clone all normal variables/constants
 			 */
 			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
-			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
-			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
-
-			/**
-			 * Then clone all of the constants - there's no mapping for this we just do a complete
-			 * memory copy for all of them
-			 */
 			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
-			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
-			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
 			 * Clone over all of the instruction types, addressing modes, etc.
@@ -13072,7 +13110,80 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 * and function references
 			 */
 			new_instruction->statement_type = source_instruction->statement_type;
-			new_instruction->addressing_mode = source_instruction->addressing_mode;
+			new_instruction->memory_access_type = source_instruction->memory_access_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			//We specifically need this type
+			new_instruction->type_storage.memory_read_write_type = source_instruction->type_storage.memory_read_write_type;
+
+			//Add it in and get out
+			add_statement(cloning_into_block, new_instruction);
+
+			return;
+		}
+
+		/**
+		 * lea statments always have a addressing expression that
+		 * we'll need to clone over
+		 */
+		case THREE_ADDR_CODE_LEA_STMT: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			/**
+			 * First clone the source addressing mode expression
+			 */
+			new_instruction->operands.oir.source_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.source_address_expression), variable_map);
+
+			/**
+			 * Then clone all normal variables/constants
+			 */
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
+			new_instruction->line_number = source_instruction->line_number;
+
+			//Add it in and get out
+			add_statement(cloning_into_block, new_instruction);
+
+			return;
+		}
+												   
+		/**
+		 * Store statements always have a destination address that we'll need to
+		 * clone over
+		 */
+		case THREE_ADDR_CODE_STORE_STATEMENT: {
+			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
+
+			/**
+			 * First clone the destination memory address expression
+			 */
+			new_instruction->operands.oir.destination_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.destination_address_expression), variable_map);
+
+			/**
+			 * Then clone all normal variables/constants
+			 */
+			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
+			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
+			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
+			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
+
+			/**
+			 * Clone over all of the instruction types, addressing modes, etc.
+			 * that are needed in the new instruction. Leave behind all old block
+			 * and function references
+			 */
+			new_instruction->statement_type = source_instruction->statement_type;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
 
@@ -13127,12 +13238,13 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
 
 			/**
-			 * Clone over all of the addressing variables as we don't know which are populated and which aren't
+			 * First clone the destination addressing expression
 			 */
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
-			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
+			new_instruction->operands.oir.destination_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.destination_address_expression), variable_map);
+
+			/**
+			 * Then all normal variables
+			 */
 			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
@@ -13141,7 +13253,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 * and function references
 			 */
 			new_instruction->statement_type = source_instruction->statement_type;
-			new_instruction->addressing_mode = source_instruction->addressing_mode;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
 
@@ -13166,10 +13277,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 */
 			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 			new_instruction->operands.oir.operand2 = clone_variable(source_instruction->operands.oir.operand2, variable_map);
-			new_instruction->operands.oir.address_operand1 = clone_variable(source_instruction->operands.oir.address_operand1, variable_map);
-			new_instruction->operands.oir.address_operand2 = clone_variable(source_instruction->operands.oir.address_operand2, variable_map);
 			new_instruction->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_instruction->operands.oir.rip_offset_var = clone_variable(source_instruction->operands.oir.rip_offset_var, variable_map);
 			new_instruction->relies_on = clone_variable(source_instruction->relies_on, variable_map);
 
 			/**
@@ -13177,8 +13285,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 * memory copy for all of them
 			 */
 			new_instruction->operands.oir.constant_operand = clone_constant(source_instruction->operands.oir.constant_operand);
-			new_instruction->operands.oir.address_offset = clone_constant(source_instruction->operands.oir.address_offset);
-			new_instruction->operands.oir.address_multiplier = source_instruction->operands.oir.address_multiplier;
 
 			/**
 			 * Clone over all of the instruction types, addressing modes, etc.
@@ -13187,7 +13293,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 */
 			new_instruction->statement_type = source_instruction->statement_type;
 			new_instruction->op = source_instruction->op;
-			new_instruction->addressing_mode = source_instruction->addressing_mode;
 			new_instruction->branch_type = source_instruction->branch_type;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;

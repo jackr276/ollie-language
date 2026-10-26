@@ -45,6 +45,11 @@ struct addressing_operands_t {
 
 
 /**
+ * Utility to initialize NULL addressing operands
+ */
+#define INITIALIZE_NULL_ADDRESS_OPERANDS (addressing_operands_t){NULL, NULL, NULL, 0, NULL, ADDRESSING_MODE_NONE}
+
+/**
  * Are we forcing something to be signed or unsigned
  * regardless of the assignee type? This is mainly used
  * for shift operations but I can see it potentially
@@ -68,8 +73,6 @@ struct instruction_t{
 	instruction_stmt_type_t statement_type;
 	//What is the x86-64 instruction
 	instruction_type_t instruction_type;
-	//What kind of memory addressing mode do we have?
-	memory_addressing_mode_t addressing_mode;
 	//What is the operator for the instruction?
 	ollie_token_t op;
 	/**
@@ -89,29 +92,22 @@ struct instruction_t{
 			three_addr_var_t* operand2;
 			//Constant operand if need be
 			three_addr_const_t* constant_operand;
-			//Assignee
+			//Assignee for the expression
 			three_addr_var_t* assignee;
+
 			/**
-			 * We maintain separate variable storage for lea/address
-			 * calculation statements. Reminder that these statements
-			 * go like(at their maximum): offset(operand1, operand2, multiplier)
+			 * Since we can have OIR expressions with a memory
+			 * source(lea(kindof), and load), and we can have expressions
+			 * with a memory destination(store), and we can have expressions
+			 * with a memory source and destination(memory copy), we have 
+			 * room for both in here
 			 */
-			three_addr_const_t* address_offset;
-			three_addr_var_t* address_operand1;
-			three_addr_var_t* address_operand2;
-
-			//This can never be anything besides a 64 bit integer
-			u_int64_t address_multiplier;
+			addressing_operands_t source_address_expression;
+			addressing_operands_t destination_address_expression;
 
 			/**
-			 * Some variables are represented as RIP offsets. We will use a special
-			 * space here so that they are excluded from the register allocator's
-			 * processing
-			 */
-			three_addr_var_t* rip_offset_var;
-
-			/**
-			 * TODO FLESH THIS OUT MORE
+			 * We are able to initialize from an initializer into a destination memory 
+			 * area. This initializer operand supports that
 			 */
 			three_addr_initializer_t* initializer_operand;
 		} oir; 
@@ -153,15 +149,14 @@ struct instruction_t{
 			 * processing
 			 */
 			three_addr_var_t* rip_offset_var;
-
+			//Separate memory addressing mode for the x86 values
+			memory_addressing_mode_t addressing_mode;
 		} x86;
 	} operands;
 
 	/**
 	 * We may have parameters for phi functions/mature function calls or parameter results
 	 * for immature ones
-	 *
-	 * TODO PARAMETER RESULTS CAN CONTAIN INITIALIZERS
 	 */
 	dynamic_array_t parameters;
 	parameter_results_array_t parameter_results;
