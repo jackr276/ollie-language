@@ -91,6 +91,16 @@ typedef enum {
 	INSERTION_ORDER_AFTER
 } insertion_order_t ;
 
+/**
+ * What side are our addressing operands in question on? Is it on the source side
+ * or the destination side. This is used to make our combiner functions reusable
+ */
+typedef enum {
+	ADDRESSING_OPERANDS_SIDE_SOURCE,
+	ADDRESSING_OPERANDS_SIDE_DEST,
+} addressing_operands_side_t;
+
+
 //Define the instructions per window
 #define INSTRUCTIONS_PER_WINDOW 3
 
@@ -202,6 +212,41 @@ static void print_instruction_window(instruction_window_t* window){
 	}
 
 	printf("-------------------------------------------\n");
+}
+
+
+/**
+ * Get the side for the addressing operands(source or dest) based on the type of statement. By
+ * the time that we're calling this, this should all be mutually exclusive, so nothing like a memory
+ * copy where both source and dest are addressing modes should be happening here
+ */
+static inline addressing_operands_side_t get_addressing_operand_side_for_statement(instruction_t* statement){
+	switch(statement->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_LEA_STMT:
+		case THREE_ADDR_CODE_LOAD_STATEMENT:
+			return ADDRESSING_OPERANDS_SIDE_SOURCE;
+
+		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_INITIALIZER_STMT:
+			return ADDRESSING_OPERANDS_SIDE_DEST;
+		
+		default:
+			trigger_ice_panic("Invalid operand side request for given statement type");
+			return ADDRESSING_OPERANDS_SIDE_DEST;
+	}
+}
+
+
+/**
+ * Get a pointer to the addressing operands for our given statement
+ */
+static inline addressing_operands_t* get_addressing_operands_for_statement(instruction_t* statement){
+	if(get_addressing_operand_side_for_statement(statement) == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		return &(statement->operands.oir.source_address_expression);
+	} else {
+		return &(statement->operands.oir.destination_address_expression);
+	}
 }
 
 
@@ -454,12 +499,10 @@ static inline u_int8_t is_memory_movement_operation(instruction_t* instruction){
 
 
 /**
- * Does the given operation make use of an addressing mode expression?
- * There are only certain operations that are at all eligible for this,
- * and this rule will help us determine if they are. It also
- * does a quick NULL check
+ * Does the given statement use a source addressing operation? Statements like lea's,
+ * loads and memory copies do
  */
-static inline u_int8_t does_operation_use_addressing_mode(instruction_t* instruction){
+static inline u_int8_t does_statement_use_source_addressing_operation(instruction_t* instruction){
 	if(instruction == NULL){
 		return FALSE;
 	}
@@ -468,12 +511,52 @@ static inline u_int8_t does_operation_use_addressing_mode(instruction_t* instruc
 	 * If we use any addressing mode at all, then this counts as an addressing mode
 	 * instruction
 	 */
-	if(instruction->addressing_mode != ADDRESSING_MODE_NONE){
+	if(instruction->operands.oir.source_address_expression.addressing_mode != ADDRESSING_MODE_NONE){
 		return TRUE;
 	} else {
 		return FALSE;
 	}
 }
+
+
+/**
+ * Does the given statement use a destination addressing operation? Statements like stores,
+ * initializers and memory copies do
+ */
+static inline u_int8_t does_statement_use_destination_addressing_operation(instruction_t* instruction){
+	if(instruction == NULL){
+		return FALSE;
+	}
+
+	/**
+	 * If we use any addressing mode at all, then this counts as an addressing mode
+	 * instruction
+	 */
+	if(instruction->operands.oir.destination_address_expression.addressing_mode != ADDRESSING_MODE_NONE){
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+
+/**
+ * Is the given variable a single use temp var variable?
+ */
+static inline u_int8_t is_variable_single_use_temp_var(three_addr_var_t* variable){
+	if(variable == NULL){
+		return FALSE;
+	}
+
+	//Must be a temp var specifically
+	if(variable->variable_type != VARIABLE_TYPE_TEMP){
+		return FALSE;
+	}
+
+	//We only want variables that are used exactly once
+	return get_use_count_by_id(&use_count_tracker, variable->variable_id) <= 1 ? TRUE : FALSE;
+}
+
 
 
 /**
@@ -564,21 +647,6 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 		default:
 			return FALSE;
 	}
-}
-
-
-/**
- * Is the given load instruction going to require any kind of converting move between the 
- * memory read/write type and the destination type? If so, we cannot use it for any
- * kind of binary operation condensation optimization
- */
-static inline u_int8_t does_load_operation_require_converting_move(instruction_t* instruction){
-	//Extract the region/destination type
-	generic_type_t* memory_region_type = instruction->type_storage.memory_read_write_type;
-	generic_type_t* destination_type = instruction->operands.oir.address_operand2->type;
-
-	//Give back whether or not the converting move is needed
-	return is_converting_move_required(destination_type, memory_region_type);
 }
 
 
@@ -2065,8 +2133,10 @@ static inline void populate_use_counts_for_function(dynamic_array_t* function_bl
 
 			increment_use_count_for_variable(instruction_cursor->operands.oir.operand1);
 			increment_use_count_for_variable(instruction_cursor->operands.oir.operand2);
-			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand1);
-			increment_use_count_for_variable(instruction_cursor->operands.oir.address_operand2);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.source_address_expression.address_operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.source_address_expression.address_operand2);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.destination_address_expression.address_operand1);
+			increment_use_count_for_variable(instruction_cursor->operands.oir.destination_address_expression.address_operand2);
 			increment_use_count_for_variable(instruction_cursor->relies_on);
 
 			//If we have an initializer we'll increment it's use count as well
@@ -2097,7 +2167,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 	if(instruction->statement_type != THREE_ADDR_CODE_LEA_STMT){
 		memory_address_operand = instruction->operands.oir.operand1;
 	} else {
-		memory_address_operand = instruction->operands.oir.address_operand1;
+		memory_address_operand = instruction->operands.oir.source_address_expression.address_operand1;
 	}
 
 	symtab_variable_record_t* associated_variable = memory_address_operand->linked_var;
@@ -2204,21 +2274,20 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					case THREE_ADDR_CODE_LEA_STMT: {
 						//Let the helper emit the statement
-						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), instruction->operands.oir.address_operand1, instruction_pointer_variable, instruction->line_number);
+						instruction_t* address_instruction = emit_global_variable_address_calculation_oir(emit_temp_var(u64), memory_address_operand, instruction_pointer_variable, instruction->line_number);
 
 						//Put this right before the store
 						insert_instruction_before_given(address_instruction, instruction);
 
 						//The assignee here now is our first address operand variable
-						instruction->operands.oir.address_operand1 = address_instruction->operands.oir.assignee;
+						instruction->operands.oir.source_address_expression.address_operand1 = address_instruction->operands.oir.assignee;
 						
 						break;
 					}
 
 					//This should never happen
 					default: {
-						printf("Fatal internal compiler error: unreachable path hit in global/static variable memory address remediation\n");
-						exit(1);
+						trigger_ice_panic("Unreachable path hit in global/static variable memory address remediation\n");
 					}
 				}
 
@@ -2266,18 +2335,11 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * straight assignment depending on the offset
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT: {
-					//Make into a lea statement
+					//Make into a lea statement we OFFSET_ONLY operands
 					if(stack_offset != 0){
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-						//For a lea we use address operands
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
-
-						//And op1_const is our offset
-						instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(stack_offset, u64);
-
-						//This is a lea with an offset only
-						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+						three_addr_const_t* stack_offset_const = emit_direct_integer_or_char_constant(stack_offset, u64);
+						instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, NULL, stack_offset_const, 0, NULL, ADDRESSING_MODE_OFFSET_ONLY};
 
 					/**
 					 * Otherwise, we'll just swap the var out with the stack pointer since
@@ -2341,14 +2403,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							case PLUS: {
 								add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
-								//Make this into a full-fledged lea
-								instruction->op = BLANK;
-								instruction->operands.oir.address_operand1 = stack_pointer_variable;
-								instruction->operands.oir.address_offset = stack_offset_constant;
+								//Convert this to a lea
 								instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-								instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+								instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																												NULL,
+																												stack_offset_constant,
+																												0,
+																												NULL,
+																												ADDRESSING_MODE_OFFSET_ONLY};
 
-								//Remove any remnants of what it was
+								//Wipe out what made this a bin op expression
+								instruction->op = BLANK;
 								instruction->operands.oir.operand1 = NULL;
 								instruction->operands.oir.constant_operand = NULL;
 								break;
@@ -2357,14 +2422,17 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							case MINUS: {
 								subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
-								//Make this into a full-fledged lea
-								instruction->op = BLANK;
-								instruction->operands.oir.address_operand1 = stack_pointer_variable;
-								instruction->operands.oir.address_offset = stack_offset_constant;
+								//Convert this to a LEA
 								instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-								instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+								instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																												NULL,
+																												stack_offset_constant,
+																												0,
+																												NULL,
+																												ADDRESSING_MODE_OFFSET_ONLY};
 
-								//Remove any remnants of what it was
+								//Wipe out what made this a bin op expression
+								instruction->op = BLANK;
 								instruction->operands.oir.operand1 = NULL;
 								instruction->operands.oir.constant_operand = NULL;
 								break;
@@ -2399,19 +2467,19 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						 * If we have a PLUS, we can make this into a lea
 						 */
 						if(instruction->op == PLUS){
+							//Convert this to a LEA
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											NULL,
+																											instruction->operands.oir.constant_operand,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_OFFSET_ONLY};
 
-							//Update the offset and address op
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_offset = instruction->operands.oir.constant_operand;
-
-							//Wipe these out for any future reference
+							//Wipe out what made this a BIN_OP
 							instruction->operands.oir.constant_operand = NULL;
 							instruction->operands.oir.operand1 = NULL;
-							
-							//Make this a lea with a given addressing mode
 							instruction->op = BLANK;
-							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 						/**
 						 * Otherwise it's not LEA eligible so we'll have to leave it as a binary
@@ -2440,19 +2508,19 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						 * registers and an offset
 						 */
 						if(instruction->op == PLUS){
-							//Populate the lea fields
-							instruction->operands.oir.address_offset = stack_offset_constant;
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+							//Convert this to a LEA
+							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											instruction->operands.oir.operand2,
+																											stack_offset_constant,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 
 							//Wipe out the old fields
 							instruction->op = BLANK;
 							instruction->operands.oir.operand1 = NULL;
 							instruction->operands.oir.operand2 = NULL;
-
-							//Flag this as a lea now
-							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 						/**
 						 * Any operator besides plus is not compatible with a lea, so we'll need to emit the 
@@ -2476,11 +2544,14 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 */
 					} else {
 						if(instruction->op == PLUS){
-							//Set the new operands and make it a lea
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+							//Convert this to a LEA
 							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											instruction->operands.oir.operand2,
+																											NULL,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_ONLY};
 
 							//Wipe out all of the old fields
 							instruction->op = BLANK;
@@ -2509,10 +2580,10 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 						insert_instruction_before_given(above_lea, instruction);
 
 						//Replace the address operand
-						instruction->operands.oir.address_operand1 = above_lea->operands.oir.assignee;
+						instruction->operands.oir.source_address_expression.address_operand1 = above_lea->operands.oir.assignee;
 
 					} else {
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
+						instruction->operands.oir.source_address_expression.address_operand1 = stack_pointer_variable;
 					}
 
 					break;
@@ -2520,8 +2591,7 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 
 				//This should never happen
 				default: {
-					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-					exit(1);
+					trigger_ice_panic("Unreachable path hit in  memory address remediation\n");
 				}
 			}
 
@@ -2548,21 +2618,22 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT: {
-					//Convert this into our lea offest
-					instruction->operands.oir.address_offset = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
-
-					//Add the additional offset in as an adjustment(it's usually 0)
-					instruction->operands.oir.address_offset->constant_adjustment = additional_offset;
+					/**
+					 * Emit a fresh stack passed parameter offset for this region. Attach the additional offset 
+					 * so that, if we're using a memory address after say a function call stack allocation, we
+					 * can adjust it accordingly
+					 */
+					three_addr_const_t* new_address_offset = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
+					new_address_offset->constant_adjustment = additional_offset;
 
 					//Turn it into a LEA
 					instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-					//First register is the stack pointer
-					instruction->operands.oir.address_operand1 = stack_pointer_variable;
-
-					//This is a lea with an offset only
-					instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
+					instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																									NULL,
+																									new_address_offset,
+																									0,
+																									NULL,
+																									ADDRESSING_MODE_OFFSET_ONLY};
 					break;
 				}
 
@@ -2573,10 +2644,12 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 * the offset from %rsp is 0 because that will never happen
 				 */
 				case THREE_ADDR_CODE_STORE_STATEMENT: {
-					//Emit the special stack constant
+					/**
+					 * Emit a fresh stack passed parameter offset for this region. Attach the additional offset 
+					 * so that, if we're using a memory address after say a function call stack allocation, we
+					 * can adjust it accordingly
+					 */
 					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
-
-					//Store the additional offset here as well
 					stack_offset_constant->constant_adjustment = additional_offset;
 
 					//Now emit the address calculation
@@ -2604,10 +2677,12 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 				 *  expression and then use that result in place of the old operand1
 				 */
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-					//Emit the constant
+					/**
+					 * Emit a fresh stack passed parameter offset for this region. Attach the additional offset 
+					 * so that, if we're using a memory address after say a function call stack allocation, we
+					 * can adjust it accordingly
+					 */
 					three_addr_const_t* stack_offset_constant = emit_stack_passed_parameter_offset_constant(memory_address_operand->associated_memory_region.stack_region, u64);
-
-					//Add the additional offset in as an adjustment(it's usually 0)
 					stack_offset_constant->constant_adjustment = additional_offset;
 
 					/**
@@ -2620,11 +2695,13 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							add_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
 							//Convert this into a lea
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_offset = stack_offset_constant;
 							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											NULL,
+																											stack_offset_constant,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_OFFSET_ONLY};
 							//Wipe out the old fields
 							instruction->op = BLANK;
 							instruction->operands.oir.operand1 = NULL;
@@ -2637,17 +2714,18 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 							subtract_constants(stack_offset_constant, instruction->operands.oir.constant_operand);
 
 							//Convert this into a lea
-							instruction->operands.oir.address_operand1 = stack_pointer_variable;
-							instruction->operands.oir.address_offset = stack_offset_constant;
 							instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
+							instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																											NULL,
+																											stack_offset_constant,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_OFFSET_ONLY};
 							//Wipe out the old fields
 							instruction->op = BLANK;
 							instruction->operands.oir.operand1 = NULL;
 							instruction->operands.oir.constant_operand = NULL;
 							break;
-
 						}
 
 						/**
@@ -2688,17 +2766,18 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					 * registers and an offset
 					 */
 					if(instruction->op == PLUS){
-						//Populate the LEA statement
-						instruction->operands.oir.address_offset = stack_offset_constant;
-						instruction->operands.oir.address_operand1 = stack_pointer_variable;
-						instruction->operands.oir.address_operand2 = instruction->operands.oir.operand2;
+						//Convert this into a lea
 						instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-						//Wipe out the old values
+						instruction->operands.oir.source_address_expression = (addressing_operands_t){stack_pointer_variable, 
+																										instruction->operands.oir.operand2,
+																										stack_offset_constant,
+																										0,
+																										NULL,
+																										ADDRESSING_MODE_REGISTERS_AND_OFFSET};
+						//Wipe out the old fields
 						instruction->op = BLANK;
 						instruction->operands.oir.operand1 = NULL;
-						instruction->operands.oir.operand2 = NULL;
+						instruction->operands.oir.constant_operand = NULL;
 
 					/**
 					 * Otherwise we'll need to do an address calculation first and then use the result
@@ -2734,213 +2813,21 @@ static void remediate_memory_address_variable_in_non_access_context(instruction_
 					insert_instruction_before_given(lea_statement, instruction);
 
 					//Update the first address operand
-					instruction->operands.oir.address_operand1 = lea_statement->operands.oir.assignee;
-
+					instruction->operands.oir.source_address_expression.address_operand1 = lea_statement->operands.oir.assignee;
 					break;
 				}
 				
-				//This should never happen
 				default:
-					printf("Fatal internal compiler error: unreachable path hit in memory address remediation\n");
-					exit(1);
+					trigger_ice_panic("Unreachable path hit in memory address remediation");
 				}
 
 			break;
 		}
 
-		//This should be impossible
 		default: {
-			printf("Fatal internal compiler error: invalid variable membership found in memory address remediator\n");
-			exit(1);
+			trigger_ice_panic("Ivalid variable membership found in memory address remediator");
 		}	
 	}
-}
-
-
-/**
- * Generate an OIR store instruction using the addressing mode operands given *and* accounting
- * for the given additional offset. 
- *
- * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
- * result that is an actual initializer here. This is just for variables and constants
- */
-static instruction_t* generate_store_instruction_from_addressing_operands(addressing_operands_t* base_address, int32_t additional_offset,
-																			three_addr_var_t* storee, generic_type_t* memory_write_type){
-	//Allocate and populate with what we need generically
-	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
-	store_instruction->memory_access_type = WRITE_TO_MEMORY;
-	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-	store_instruction->type_storage.memory_read_write_type = memory_write_type;
-
-	/**
-	 * Based on the addressing mode *and8 the value of the additional offset
-	 * we may have an addressing mode that varies slightly from the one
-	 * that was provided. It's only going to really vary though if said additional
-	 * offset is not 0. If it is 0, then we can just copy everything over 
-	 * literally
-	 *
-	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
-	 */
-	if(additional_offset != 0){
-		/**
-		 * Remember that ending up in here means that the constant is specifically
-		 * nonzero so we're going to need to change addressing modes that don't have
-		 * constants to ones that do
-		 */
-		switch(base_address->addressing_mode){
-			/**
-			 * We'll end up with something like store 4(x_0) <- 5
-			 */
-			case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-				break;
-			}
-
-			/**
-			 * With this if we have an additional offset of 4 and already
-			 * have something like store 4(x_0) <- 5 we'll just add to it
-			 * to get store 8(x_0) <- 5
-			 */
-			case ADDRESSING_MODE_OFFSET_ONLY: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * Going to end up with something like store 4(x_0, y_0) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_ONLY: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-				break;
-			}
-
-			/**
-			 * We're going to end up with something like store 4 + 8(x_0, y_0) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4(, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_INDEX_AND_SCALE: {
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4 + 8(, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-		 	}
-
-			/**
-			 * We'll get something like store 4(x_0, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+8(x_0, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+x_0(%rip) <- 5
-			 */
-			case ADDRESSING_MODE_RIP_RELATIVE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+8+x_0(%rip) <- 5
-			 */
-			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			default: {
-				fprintf(stderr, "Invalid addressing mode detected");
-				exit(1);
-		 	}
-		}
-
-	/**
-	 * Additional offset is 0 so we don't need to do anything besides copy over all of the addressing
-	 * mode operands from the given base address pointer
-	 */
-	} else {
-		store_instruction->addressing_mode = base_address->addressing_mode;
-		store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-		store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-		store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-		store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-
-		//Because of the potential for address offset manipulation we need this to be distinct
-		if(base_address->address_offset != NULL){
-			store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-		}
-	}
-
-	//Populate the storee and exit
-	store_instruction->operands.oir.operand1 = storee;
-	return store_instruction;
 }
 
 
@@ -3273,21 +3160,33 @@ static void convert_elaborative_param_offset_to_constant_assignment(instruction_
  *
  * It can be assumed that the first instruction is the assignment, and the second
  * is the addressing operation
+ *
+ * The operand side tells us whether we should be using the source or destination memory
+ * address operands for this
  */
-static inline void combine_assignment_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_assignment_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	instruction_t* assignment = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-	//Copy it over
-	addressing_operation->operands.oir.address_operand1 = assignment->operands.oir.operand1;
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
+
+	//Copy this over to do the combination
+	operands_to_combine->address_operand1 = assignment->operands.oir.operand1;
 
 	//Scrap the first statement
 	delete_statement(assignment);
 
-	//Rebuilt the window around the addressing operation
+	//Rebuild around the addressing operation
 	reconstruct_window(window, addressing_operation);
-
-	//Flag that there was a change
 	*changed = TRUE;
 }
 
@@ -3298,13 +3197,27 @@ static inline void combine_assignment_with_address_operand1(instruction_window_t
  *
  * It can be assumed that the first instruction is the constant assignment, and the second
  * is the addressing operation
+ *
+ * The operand side tells us whether we should be using the source or destination memory
+ * address operands for this
  */
-static inline void combine_constant_assignment_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_constant_assignment_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract these for convenience
 	instruction_t* constant_assignment = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-	switch(addressing_operation->addressing_mode){
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
+
+	switch(operands_to_combine->addressing_mode){
 		/**
 		 * LEA ONLY
 		 *
@@ -3314,21 +3227,21 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * t5 <- 8
 		 */
-		case ADDRESSING_MODE_OFFSET_ONLY:
+		case ADDRESSING_MODE_OFFSET_ONLY: {
 			//Skip if it is not a lea
 			if(addressing_operation->statement_type != THREE_ADDR_CODE_LEA_STMT){
 				break;
 			}
 
 			//Add the two constants together
-			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+			add_constants(operands_to_combine->address_offset, constant_assignment->operands.oir.constant_operand);
 
 			//Move the address offset over, NULL out the old address operand
-			addressing_operation->operands.oir.constant_operand = addressing_operation->operands.oir.address_offset;
-			addressing_operation->operands.oir.operand1 = addressing_operation->operands.oir.address_operand1;
+			addressing_operation->operands.oir.constant_operand = operands_to_combine->address_offset;
+			addressing_operation->operands.oir.operand1 = operands_to_combine->address_operand1;
 
-			//Wipe away the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_NONE;
+			//Completely NULL out all of these operands now
+			*operands_to_combine = (addressing_operands_t){NULL, NULL, NULL, 0, NULL, ADDRESSING_MODE_NONE};
 
 			//This is now an assign const statement
 			addressing_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
@@ -3338,9 +3251,9 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
@@ -3350,25 +3263,23 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * leaq 4(t5), t6
 		 */
-		case ADDRESSING_MODE_REGISTERS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
 			//Copy the constant over
-			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
+			operands_to_combine->address_offset = constant_assignment->operands.oir.constant_operand;
 
 			//Move the address operand over, NULL out the second one
-			addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
-			addressing_operation->operands.oir.address_operand2 = NULL;
-
-			//Update the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			operands_to_combine->address_operand1 = operands_to_combine->address_operand2;
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Delete the first statement
 			delete_statement(constant_assignment);
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
@@ -3378,25 +3289,23 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * leaq 504(t5), t6
 		 */
-		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 			//First add the constant with our existing offset
-			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+			add_constants(operands_to_combine->address_offset, constant_assignment->operands.oir.constant_operand);
 
 			//Move the address operand over, NULL out the second one
-			addressing_operation->operands.oir.address_operand1 = addressing_operation->operands.oir.address_operand2;
-			addressing_operation->operands.oir.address_operand2 = NULL;
-
-			//Update the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			operands_to_combine->address_operand1 = operands_to_combine->address_operand2;
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Remove the first statement
 			delete_statement(constant_assignment);
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
@@ -3406,24 +3315,22 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * leaq 4(, t5, 8), t6
 		 */
-		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 			//Move the constant over
-			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
+			operands_to_combine->address_offset = constant_assignment->operands.oir.constant_operand;
 
-			//NULL out the first address operand
-			addressing_operation->operands.oir.address_operand1 = NULL;
-
-			//Update the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+			//NULL out the first address operand and update the addressing mode
+			operands_to_combine->address_operand1 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 			//Delete the first statement
 			delete_statement(constant_assignment);
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Scenario
@@ -3433,30 +3340,29 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
 		 * Can become
 		 * leaq 504(, t5, 8), t6
 		 */
-		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 			//Add the first constant with the existing offset constant
-			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+			add_constants(operands_to_combine->address_offset, constant_assignment->operands.oir.constant_operand);
 
-			//NULL out the first address operand
-			addressing_operation->operands.oir.address_operand1 = NULL;
-
-			//Update the addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+			//NULL out the first address operand and flip the addressing mode
+			operands_to_combine->address_operand1 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 			//Now delete the first statement
 			delete_statement(constant_assignment);
 
 			//Rebuild around the second
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Generic unsupported case - we ignore this and keep going
 		 */
-		default:
+		default: {
 			break;
+		}
 	}
 }
 
@@ -3467,11 +3373,25 @@ static inline void combine_constant_assignment_with_address_operand1(instruction
  *
  * It can be assumed that the first instruction is the binary operation, and the second
  * is the addressing operation
+ *
+ * The operand side tells us whether we should be using the source or destination memory
+ * address operands for this
  */
-static inline void combine_binary_operation_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_binary_operation_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* binary_operation = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
+
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
 
 	/**
 	 * We are only able to do this *if* we have an addition binary operation.
@@ -3482,7 +3402,7 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
 		return;
 	}
 
-	switch(addressing_operation->addressing_mode){
+	switch(operands_to_combine->addressing_mode){
 		/**
 		 * Combine:
 		 * 	t5 <- t6 + t7
@@ -3491,22 +3411,20 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
 		 * Into
 		 * store (t6, t7) <- 8
 		 */
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-			//Copy the two operands over
-			addressing_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-			addressing_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-
-			//This is now a REGISTERS_ONLY addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+			//Copy the two operands over and flip this to REGISTERS_ONLY
+			operands_to_combine->address_operand1 = binary_operation->operands.oir.operand1;
+			operands_to_combine->address_operand2 = binary_operation->operands.oir.operand2;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 
 			//Scrap the old binary operation
 			delete_statement(binary_operation);
 
 			//Rebuilt around addressing operation
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Combine:
@@ -3516,26 +3434,25 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
 		 * Into
 		 * store 4(t6, t7) <- 8
 		 */
-		case ADDRESSING_MODE_OFFSET_ONLY:
-			//Copy the two operands over
-			addressing_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-			addressing_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-
-			//This is now a REGISTERS_AND_OFFSET addressing mode
-			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+		case ADDRESSING_MODE_OFFSET_ONLY: {
+			//Copy the two operands over and flip this to REGISTERS_AND_OFFSET
+			operands_to_combine->address_operand1 = binary_operation->operands.oir.operand1;
+			operands_to_combine->address_operand2 = binary_operation->operands.oir.operand2;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			//Scrap the old binary operation
 			delete_statement(binary_operation);
 
 			//Rebuilt around addressing operation
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		//Unsupported - do nothing
-		default:
+		default: {
 			break;
+		}
 	}
 }
 
@@ -3546,11 +3463,25 @@ static inline void combine_binary_operation_with_address_operand1(instruction_wi
  *
  * It can be assumed that the first instruction is the constant binary operation, and the second
  * is the addressing operation
+ *
+ * The operand side tells us whether we should be using the source or destination memory
+ * address operands for this
  */
-static inline void combine_constant_binary_operation_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_constant_binary_operation_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* constant_binary_operation = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;	
+
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
 
 	/**
 	 * We are only able to do this *if* we have an addition/subtraction binary operation.
@@ -3558,8 +3489,8 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 	 * compression
 	 */
 	switch(constant_binary_operation->op){
-		case PLUS:
-			switch(addressing_operation->addressing_mode){
+		case PLUS: {
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t5 <- t6 + 4 
@@ -3568,22 +3499,20 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4(t6) <- 8
 				 */
-				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-					//Copy the operands over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+					//Copy the operands over and flip the mode to OFFSET_ONLY
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3593,21 +3522,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 12(t6) <- 8
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//Add the new constant to the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3617,21 +3546,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 12(t6, t7) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 					//Add the first instruction's constant to the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//No mode changes, just delete the old bin op
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3641,22 +3570,20 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4+x1(t6) <- 8
 				 */
-				case ADDRESSING_MODE_RIP_RELATIVE:
-					//Copy the offset and operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//This is now RIP-relative with an offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				case ADDRESSING_MODE_RIP_RELATIVE: {
+					//Copy the offset and operand over and flip the mode
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3666,21 +3593,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 12+x1(t6) <- 8
 				 */
-				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 					//Add the first instruction's constant to the existing operand
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3690,21 +3617,21 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store 8(t6, t7, 8) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 					//Add the first instruction's constant to the existing operand
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3714,24 +3641,20 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store 4(t6, t7) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//First copy the constant over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Now copy over the addrss operand
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset so update the mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Copy over the constant, first address operand and flip the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3741,34 +3664,32 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store 4(t6, t7, 8) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-					//First copy the constant over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Now copy over the addrss operand
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset so update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+					//Copy over the constant, first address operand and flip the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation 
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				//Unsupported - just do nothing
-				default:
+				default: {
 					break;
+				}
 			}
 
 			break;
+		}
 
-		case MINUS:
-			switch(addressing_operation->addressing_mode){
+		case MINUS: {
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t5 <- t6 - 4 
@@ -3777,26 +3698,24 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store -4(t6) <- 8
 				 */
-				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+				case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
 					//Make sure that constant can be signed(i64) and then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
-					//Copy the operands over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+					//Copy the first operand, constant and flip the mode
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation 
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3806,24 +3725,22 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4(t6) <- 8
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
-					//Make sure that we can go negative here if need be by forcing to an i64
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
-
-					//Subtract from the existing offset
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+				case ADDRESSING_MODE_OFFSET_ONLY: {
+					//Make sure that we can go negative here if need be by forcing to an i64, then subtract the other constant from it
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3833,24 +3750,22 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4(t6, t7) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-					//Make sure that we can go negative here if need be by forcing to an i64
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
-
-					//Add the first instruction's constant to the existing offset
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+					//Make sure that we can go negative here if need be by forcing to an i64, then subtract the other constant from it
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//No mode changes, just delete the old bin op
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3860,26 +3775,24 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store -4+x1(t6) <- 8
 				 */
-				case ADDRESSING_MODE_RIP_RELATIVE:
+				case ADDRESSING_MODE_RIP_RELATIVE: {
 					//Convert this constant to an i64 and negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
-					//Copy the offset and operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//This is now RIP-relative with an offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+					//Copy the offset and operand over and flip the mode
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3889,24 +3802,22 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * store 4+x1(t6) <- 8
 				 */
-				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-					//Convert the existing offset to an i64 so that we can go negative if need be
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
-
-					//Subtract the first instruction's constant from the existing operand
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
+					//Convert the existing offset to an i64 so that we can go negative if need be, then subtract the other constant from it
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3916,24 +3827,22 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store 4(t6, t7, 8) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-					//Convert this to an i64 so that we can go negative if need be
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
-
-					//Subtrace the first instruction's constant from the existing operand
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+					//Convert this to an i64 so that we can go negative if need be, then subtract the other constant from it
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3943,30 +3852,24 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store -4(t6, t7) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//Convert this to an i64 so that we know for sure we can negate
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Convert this to an i64 so that we know for sure we can negate and then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					
-					//No we can negate
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
-					//First copy the constant over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Now copy over the addrss operand
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset so update the mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+					//Copy over the contsant, first operand and flip the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -3976,43 +3879,40 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 * Into
 				 * 	store -4(t6, t7, 8) <- 8
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-					//Convert this to an i64 so that we know for sure we can negate
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+					//Convert this to an i64 so that we know for sure we can negate, then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					
-					//No we can negate
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
-					//First copy the constant over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Now copy over the addrss operand
-					addressing_operation->operands.oir.address_operand1 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset so update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					//Copy over the contsant, first operand and flip the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand1 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//Scrap the old binary operation
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation 
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				//Unsupported - just do nothing
-				default:
+				default: {
 					break;
+				}
 			}
 
 			break;
+		}
 
 		/**
 		 * Something unsupported so we skip it
 		 */
-		default:
+		default: {
 			break;
+		}
 	}
 }
 
@@ -4024,12 +3924,26 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
  * It can be assumed that the first instruction is the lea operation, and the second
  * is the addressing operation
  */
-static inline void combine_lea_with_address_operand1(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_lea_with_address_operand1(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* lea_statement = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-	switch(addressing_operation->addressing_mode){
+	//Get a pointer to this for ease of access
+	addressing_operands_t* lea_operands = &(lea_statement->operands.oir.source_address_expression);
+
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
+
+	switch(operands_to_combine->addressing_mode){
 		/**
 		 * Combine:
 		 * 	t5 <- 4(t4)
@@ -4043,22 +3957,19 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 */
 		case ADDRESSING_MODE_REGISTERS_ONLY: {
 			//Only valid combo is an offset only addressing mode
-			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+			if(lea_operands->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
 				break;
 			}
 
-			//Copy over the address offset and first address operand
-			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
-			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
-
-			//Update the addressing mode to reflect the offset
-			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+			//Copy over the address offset and first address operand, and the addressing mode
+			operands_to_combine->address_operand1 = lea_operands->address_operand1;
+			operands_to_combine->address_offset = lea_operands->address_offset;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 			//We can now delete the lea and rebuild the window
 			delete_statement(lea_statement);
-			reconstruct_window(window, addressing_operation);
 
-			//This does count as a change
+			reconstruct_window(window, addressing_operation);
 			*changed = TRUE;
 			break;
 		}
@@ -4074,22 +3985,19 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 */
 		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 			//Only valid option is the offset only addressing mode
-			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+			if(lea_operands->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
 				break;
 			}
 
-			//Copy over the address operand and the offset
-			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
-			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
-
-			//Update the mode to reflect this
-			addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+			//Copy over the address operand and the offset, and change the mode
+			operands_to_combine->address_operand1 = lea_operands->address_operand1;
+			operands_to_combine->address_offset = lea_operands->address_offset;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 			//We can now delete the lea and rebuild the window
 			delete_statement(lea_statement);
-			reconstruct_window(window, addressing_operation);
 
-			//This does count as a change
+			reconstruct_window(window, addressing_operation);
 			*changed = TRUE;
 			break;
 		}
@@ -4104,25 +4012,23 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 */
 		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 			//Only valid option is the offset only addressing mode
-			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+			if(lea_operands->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
 				break;
 			}
 
-			//Add the two constants - result is in the lea
-			add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+			//Add the two constants - result is in the first one
+			add_constants(operands_to_combine->address_offset, lea_operands->address_offset);
 
 			//Copy over the first address operand
-			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			operands_to_combine->address_operand1 = lea_operands->address_operand1;
 
 			//We can now delete the lea and rebuild the window
 			delete_statement(lea_statement);
-			reconstruct_window(window, addressing_operation);
 
-			//This does count as a change
+			reconstruct_window(window, addressing_operation);
 			*changed = TRUE;
 			break;
 		}
-
 
 		/**
 		 * Combine:
@@ -4137,21 +4043,20 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 */
 		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 			//Only valid combo is an offset only addressing mode
-			if(lea_statement->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+			if(lea_operands->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
 				break;
 			}
 
 			//Copy over the first address operand
-			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
+			operands_to_combine->address_operand1 = lea_operands->address_operand1;
 
 			//Add the two offsets together
-			add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+			add_constants(operands_to_combine->address_offset, lea_operands->address_offset);
 
 			//We can now delete the lea and rebuild the window
 			delete_statement(lea_statement);
-			reconstruct_window(window, addressing_operation);
 
-			//This does count as a change
+			reconstruct_window(window, addressing_operation);
 			*changed = TRUE;
 			break;
 		}
@@ -4168,22 +4073,13 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 * completely along with all of it's data
 		 */
 		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
-			//Copy all operands over
-			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
-			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
-			addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
-			addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
-			addressing_operation->operands.oir.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
-
-			//Now the addressing mode
-			addressing_operation->addressing_mode = lea_statement->addressing_mode;
+			//Copy all of the operands over
+			*operands_to_combine = *lea_operands;
 
 			//Delete the redundant statement
 			delete_statement(lea_statement);
 
-			//Rebuild around the second instruction
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
 		}
@@ -4201,15 +4097,12 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 		 * to add the offset constant *if* one of them exists
 		 */
 		case ADDRESSING_MODE_OFFSET_ONLY: {
-			//If we have an offset then add it. Make sure that the result is in the *first* instruction's offset
-			if(does_addressing_mode_use_offset_constant(lea_statement->addressing_mode) == TRUE){
-				add_constants(lea_statement->operands.oir.address_offset, addressing_operation->operands.oir.address_offset);
+			//If we have an offset in the lea then add it to our given one
+			if(does_addressing_mode_use_offset_constant(lea_operands->addressing_mode) == TRUE){
+				add_constants(operands_to_combine->address_offset, lea_operands->address_offset);
 
 				//Copy the addressing mode over
-				addressing_operation->addressing_mode = lea_statement->addressing_mode;
-
-				//Copy this values offset over
-				addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
+				operands_to_combine->addressing_mode = lea_operands->addressing_mode;
 			
 			/**
 			 * If we get here, then the combined value does *not* use the addressing mode, but we know that our
@@ -4217,31 +4110,28 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 			 * an offset
 			 */
 			} else {
-				switch(lea_statement->addressing_mode){
+				switch(lea_operands->addressing_mode){
 					case ADDRESSING_MODE_INDEX_AND_SCALE:
-						addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE; 
+						operands_to_combine->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE; 
 						break;
 
 					case ADDRESSING_MODE_REGISTERS_ONLY:
-						addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET; 
+						operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET; 
 						break;
 
 					case ADDRESSING_MODE_RIP_RELATIVE:
-						addressing_operation->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET; 
-
-						//Copy this over since we need the rip offset var for this to work
-						addressing_operation->operands.oir.rip_offset_var = lea_statement->operands.oir.rip_offset_var;
+						operands_to_combine->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET; 
 						break;
 
 					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-						addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+						operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
 						break;
 
 					/**
 					 * By default just copy the type over
 					 */
 					default:
-						addressing_operation->addressing_mode = lea_statement->addressing_mode;
+						operands_to_combine->addressing_mode = lea_operands->addressing_mode;
 						break;
 				}
 
@@ -4251,16 +4141,15 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
 			 * Copy everything *except* the offset, that should have been handled above to avoid incorrect
 			 * NULL values where they should not be
 			 */
-			addressing_operation->operands.oir.address_operand1 = lea_statement->operands.oir.address_operand1;
-			addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
-			addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
+			operands_to_combine->address_operand1 = lea_operands->address_operand1;
+			operands_to_combine->address_operand2 = lea_operands->address_operand2;
+			operands_to_combine->rip_offset_var = lea_operands->rip_offset_var;
+			operands_to_combine->address_multiplier = lea_operands->address_multiplier;
 
 			//Delete the redundant statement
 			delete_statement(lea_statement);
 
-			//Rebuild around the second instruction
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
 		}
@@ -4281,21 +4170,30 @@ static inline void combine_lea_with_address_operand1(instruction_window_t* windo
  * It can be assumed that the first instruction is the assignment, and the second
  * is the addressing operation
  */
-static inline void combine_assignment_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_assignment_with_address_operand2(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* assignment = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
+
 	//Copy it over
-	addressing_operation->operands.oir.address_operand2 = assignment->operands.oir.operand1;
+	operands_to_combine->address_operand2 = assignment->operands.oir.operand1;
 
 	//Scrap the first statement
 	delete_statement(assignment);
 
 	//Rebuilt the window around the addressing operation
 	reconstruct_window(window, addressing_operation);
-
-	//Flag that there was a change
 	*changed = TRUE;
 }
 
@@ -4307,12 +4205,23 @@ static inline void combine_assignment_with_address_operand2(instruction_window_t
  * It can be assumed that the first instruction is the constant assignment, and the second
  * is the addressing operation
  */
-static inline void combine_constant_assignment_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_constant_assignment_with_address_operand2(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* constant_assignment = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
 
-	switch(addressing_operation->addressing_mode){
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
+
+	switch(operands_to_combine->addressing_mode){
 		/**
 		 * Going from:
 		 * 	t4 <- 2
@@ -4321,24 +4230,22 @@ static inline void combine_constant_assignment_with_address_operand2(instruction
 		 * To 
 		 *  store 6(t5) <- x1
 		 */
-		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 			//Add the two constants(result in the first operand)
-			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+			add_constants(operands_to_combine->address_offset, constant_assignment->operands.oir.constant_operand);
 
-			//NULL out the old second operand
-			addressing_operation->operands.oir.address_operand2 = NULL;
-
-			//Memory mode is now just an offset
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			//NULL out the old second operand, and update the mode to be OFFSET_ONLY
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Delete the first statement
 			delete_statement(constant_assignment);
 
 			//Rebuilt around the addressing operation
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Going from:
@@ -4348,27 +4255,25 @@ static inline void combine_constant_assignment_with_address_operand2(instruction
 		 * To 
 		 *  store 20(t5) <- x1
 		 */
-		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-			//Step 1: multiple the assigned constant with the multiplicand
-			multiply_constant_by_raw_int64_value(constant_assignment->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+			//Step 1: multiply the assigned constant with the multiplicand
+			multiply_constant_by_raw_int64_value(constant_assignment->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
 			//Now add it with the actual offset
-			add_constants(addressing_operation->operands.oir.address_offset, constant_assignment->operands.oir.constant_operand);
+			add_constants(operands_to_combine->address_offset, constant_assignment->operands.oir.constant_operand);
 
-			//Memory mode is now just an offset
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-			//NULL out the old second operand
-			addressing_operation->operands.oir.address_operand2 = NULL;
+			//NULL out the second operand and update the mode
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Delete the constant assignment
 			delete_statement(constant_assignment);
 
 			//Rebuilt around the addressing operation
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Going from:
@@ -4378,24 +4283,20 @@ static inline void combine_constant_assignment_with_address_operand2(instruction
 		 * To 
 		 *  store 2(t5) <- x1
 		 */
-		case ADDRESSING_MODE_REGISTERS_ONLY:
-			//Copy the offset over
-			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
-
-			//Change the addressing mode to OFFSET_ONLY
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-			//NULL out the old second operand
-			addressing_operation->operands.oir.address_operand2 = NULL;
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
+			//Copy over the offset, NULL out the second address, and update the mode
+			operands_to_combine->address_offset = constant_assignment->operands.oir.constant_operand;
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Delete the constant assignment
 			delete_statement(constant_assignment);
 
 			//Rebuilt around the addressing operation
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 
 		/**
 		 * Going from:
@@ -4405,27 +4306,23 @@ static inline void combine_constant_assignment_with_address_operand2(instruction
 		 * To 
 		 *  store 16(t5) <- x1
 		 */
-		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-			//First multipliy the constant
-			multiply_constant_by_raw_int64_value(constant_assignment->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+			//First multiply the constant
+			multiply_constant_by_raw_int64_value(constant_assignment->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
-			//Then bring it over as the address offset
-			addressing_operation->operands.oir.address_offset = constant_assignment->operands.oir.constant_operand;
-
-			//NULL out the old second operand
-			addressing_operation->operands.oir.address_operand2 = NULL;
-
-			//Change the addressing mode to OFFSET_ONLY
-			addressing_operation->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+			//Copy over the offset, NULL out the second operand and change the mode
+			operands_to_combine->address_offset = constant_assignment->operands.oir.constant_operand;
+			operands_to_combine->address_operand2 = NULL;
+			operands_to_combine->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 
 			//Delete the constant assignment
 			delete_statement(constant_assignment);
 
 			//Rebuilt around the addressing operation
 			reconstruct_window(window, addressing_operation);
-
 			*changed = TRUE;
 			break;
+		}
 		
 		//Unsupported case - do nothing
 		default:
@@ -4441,10 +4338,21 @@ static inline void combine_constant_assignment_with_address_operand2(instruction
  * It can be assumed that the first instruction is the constant binary operation, and the second
  * is the addressing operation
  */
-static inline void combine_constant_binary_operation_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_constant_binary_operation_with_address_operand2(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* constant_binary_operation = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
+
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
 
 	/**
 	 * Handle cases where the second addressing operand
@@ -4457,7 +4365,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 	 * of 2 are addressing mode compatible and account for that in our selection
 	 */
 	switch(constant_binary_operation->op){
-		case STAR:
+		case STAR: {
 			/**
 			 * For STAR, it has to be a lea compatible power of 2. If it is not then we leave now
 			 */
@@ -4465,7 +4373,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				break;
 			}
 
-			switch(addressing_operation->addressing_mode){
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Case where we have:
 				 * 	t4 <- t3 * 8
@@ -4474,24 +4382,20 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 8(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-					//Copy the mulitplier over
-					addressing_operation->operands.oir.address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
-
-					//Copy over the second address operand as well
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset and a scale
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+					//Copy over the multiplier, second operand and update the mode
+					operands_to_combine->address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//We no longer need the first statement
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4501,24 +4405,20 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store (t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//Copy the mulitplier over
-					addressing_operation->operands.oir.address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
-
-					//Copy over the second address operand as well
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//This now has an offset and a scale
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Copy over the multiplier, second operand and update the mode
+					operands_to_combine->address_multiplier = constant_binary_operation->operands.oir.constant_operand->constant_value.signed_long_constant;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 
 					//We no longer need the first statement
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Anything else that *already* has an existing scale would not be worth it for this
@@ -4541,9 +4441,10 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 			}
 
 			break;
+		}
 
-		case PLUS:
-			switch(addressing_operation->addressing_mode){
+		case PLUS: {
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Case where we have:
 				 * 	t4 <- t3 + 8
@@ -4552,22 +4453,20 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 8(t2, t3) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
-					//Copy the constant and address register over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
+					//Copy over the address offset, second operand and update the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4577,21 +4476,21 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 16(t2, t3) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 					//Add the first operation's constant to the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4607,24 +4506,24 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 72(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
 					//Now sum it into the existing offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4640,27 +4539,23 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 64(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
-					//This now has an offset
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					//Add the offset, update the second operand and change the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4676,27 +4571,23 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	leaq 64(, t4, 8), t7 
 				 */
-				case ADDRESSING_MODE_INDEX_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
-					//This now has an offset
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+					//Add the offset, update the second operand and change the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4712,24 +4603,24 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	leaq 136(, t4, 8), t7 
 				 */
-				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 					
 					//Now add the result to the existing address offset
-					add_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					add_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				//Anything else we don't support so leave it as-is
 				default:
@@ -4737,9 +4628,10 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 			}
 
 			break;
+		}
 
-		case MINUS:
-			switch(addressing_operation->addressing_mode){
+		case MINUS: {
+			switch(operands_to_combine->addressing_mode){
 				/**
 				 * Case where we have:
 				 * 	t4 <- t3 - 8
@@ -4748,26 +4640,24 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store -8(t2, t3) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_ONLY:
+				case ADDRESSING_MODE_REGISTERS_ONLY: {
 					//Force this constant to be an i64 and then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
-					//Copy the constant and address register over
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+					//Copy the constant and second operand and update the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4777,24 +4667,22 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 8(t2, t3) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-					//Convert the existing offset to an i64 so that it can go negative
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
-
-					//Subtrace the first operation's constant from the existing offset
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+					//Convert the existing offset to an i64 so that it can go negative, then subtract the other constant from it
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4810,28 +4698,26 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 56(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 					//Convert both of these constants to i64's so that they can go negative
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
 
-					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
-
-					//Now subtract from the existing offset
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					//Multiply the existing constant by the address multiplier, then subtract it from our given offset
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4847,31 +4733,27 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	store 64(t2, t3, 8) <- 5
 				 */
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 					//Convert the constant first and then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
-					//This now has an offset
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					//Add the offset, copy the second operand, and update the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4887,31 +4769,27 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	leaq 64(, t4, 8), t7 
 				 */
-				case ADDRESSING_MODE_INDEX_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_AND_SCALE: {
 					//Convert the constant first and then negate it
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
 
-					//This now has an offset
-					addressing_operation->operands.oir.address_offset = constant_binary_operation->operands.oir.constant_operand;
-
-					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+					//Copy over the given offset, second operand and update the mode
+					operands_to_combine->address_offset = constant_binary_operation->operands.oir.constant_operand;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Case where we have:
@@ -4927,28 +4805,26 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 * 	Can become
 				 * 	leaq 136(, t4, 8), t7 
 				 */
-				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 					//First force these both to i64's
 					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					convert_constant_to_i64(addressing_operation->operands.oir.address_offset, i64);
+					convert_constant_to_i64(operands_to_combine->address_offset, i64);
 
-					//Multiply the existing constant by the address multiplier
-					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, addressing_operation->operands.oir.address_multiplier);
-					
-					//Now subtract the result from the existing offset
-					subtract_constants(addressing_operation->operands.oir.address_offset, constant_binary_operation->operands.oir.constant_operand);
+					//Multiply the existing constant by the address multiplier, then subtract the given constant from it
+					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
+					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
-					addressing_operation->operands.oir.address_operand2 = constant_binary_operation->operands.oir.operand1;
+					operands_to_combine->address_operand2 = constant_binary_operation->operands.oir.operand1;
 
 					//The first statement is now useless
 					delete_statement(constant_binary_operation);
 
 					//Rebuilt the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				//Anything else we don't support so leave it as-is
 				default:
@@ -4956,6 +4832,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 			}
 
 			break;
+		}
 
 		/**
 		 * Anything else is an unsupported operation so we will not bother with it
@@ -4973,19 +4850,33 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
  * It can be assumed that the first instruction is the lea, and the second
  * is the addressing operation
  */
-static inline void combine_lea_with_address_operand2(instruction_window_t* window, u_int8_t* changed){
+static inline void combine_lea_with_address_operand2(instruction_window_t* window, addressing_operands_side_t operand_side, u_int8_t* changed){
 	//Extract for convenience
 	instruction_t* lea_statement = window->instruction1;
 	instruction_t* addressing_operation = window->instruction2;
+
+	//Extract this for convenience
+	addressing_operands_t* lea_operands = &(lea_statement->operands.oir.source_address_expression);
+
+	/**
+	 * Based on the side that's passed along to us, we'll either be using the
+	 * source or destination operands
+	 */
+	addressing_operands_t* operands_to_combine = NULL;
+	if(operand_side == ADDRESSING_OPERANDS_SIDE_SOURCE){
+		operands_to_combine = &(addressing_operation->operands.oir.source_address_expression);
+	} else {
+		operands_to_combine = &(addressing_operation->operands.oir.destination_address_expression);
+	}
 
 	/**
 	 * Go based on the addressing mode of the original addressing statement. Remember
 	 * that everything we go on here is based on the above lea having it's assignee
 	 * equal to the second address operand, which does limit our scope in ways
 	 */
-	switch(addressing_operation->addressing_mode){
-		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-			switch(lea_statement->addressing_mode){
+	switch(operands_to_combine->addressing_mode){
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
+			switch(lea_operands->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t4 <- 5(t8)
@@ -4994,21 +4885,21 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 * Into 
 				 * 	store 15(t5, t8) <- 5
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//Add the two offsets together
-					add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+					add_constants(operands_to_combine->address_offset, lea_operands->address_offset);
 
 					//Replace the second address operand
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand1;
+					operands_to_combine->address_operand2 = lea_operands->address_operand2;
 
 					//We can now scrap the lea
 					delete_statement(lea_statement);
 
 					//Rebuild around the addressing mode
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -5018,22 +4909,20 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 * Into 
 				 * 	store 10(t5, t8, 8) <- 5
 				 */
-				case ADDRESSING_MODE_INDEX_AND_SCALE:
-					//Copy over the address multiplier and the second operand
-					addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
-					
-					//Update the addressing mode to reflect these changes
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				case ADDRESSING_MODE_INDEX_AND_SCALE: {
+					//Copy over the address multiplier and the second operand, and update the addressing mode
+					operands_to_combine->address_multiplier = lea_operands->address_multiplier;
+					operands_to_combine->address_operand2 = lea_operands->address_operand2;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 					
 					//Scrap the old lea
 					delete_statement(lea_statement);
 
 					//Rebuild the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 					
 				/**
 				 * Combine:
@@ -5043,25 +4932,23 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 * Into 
 				 * 	store 16(t5, t8, 8) <- 5
 				 */
-				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 					//Add the two offsets together
-					add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+					add_constants(operands_to_combine->address_offset, lea_operands->address_offset);
 
 					//Copy over the address multiplier and the second operand
-					addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
-
-					//This now has both registers, an offset and a scale
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					operands_to_combine->address_multiplier = lea_operands->address_multiplier;
+					operands_to_combine->address_operand2 = lea_operands->address_operand2;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//Scrap the old lea
 					delete_statement(lea_statement);
 
 					//Rebuild the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Anything else is unsupported so move along
@@ -5071,9 +4958,10 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 			}
 
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_ONLY:
-			switch(lea_statement->addressing_mode){
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
+			switch(lea_operands->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t5 <- 4(t4)
@@ -5082,22 +4970,20 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 * Into
 				 * 	store 4(t3, t4) <- 5
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
-					//Copy over the offset and the operand
-					addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+				case ADDRESSING_MODE_OFFSET_ONLY: {
+					//Copy over the operands and update the addressing mode
+					operands_to_combine->address_offset = lea_operands->address_offset;
+					operands_to_combine->address_operand2 = lea_operands->address_operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 
 					//Scrap the old lea
 					delete_statement(lea_statement);
 
 					//Rebuilt around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -5107,22 +4993,20 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 * Into:
 				 * 	store (t2, t4, 8) <- 5
 				 */
-				case ADDRESSING_MODE_INDEX_AND_SCALE:
-					//Copy over the address multiplier and the second operand
-					addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
-					
-					//Update the addressing mode to reflect these changes
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+				case ADDRESSING_MODE_INDEX_AND_SCALE: {
+					//Copy over the address multiplier and the second operand, and update the addressing mode
+					operands_to_combine->address_multiplier = lea_operands->address_multiplier;
+					operands_to_combine->address_operand2 = lea_operands->address_operand2;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
 					
 					//Scrap the old lea
 					delete_statement(lea_statement);
 
 					//Rebuild the window around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Combine:
@@ -5132,23 +5016,21 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 * Into:
 				 * 	store 4(t2, t4, 8) <- 5
 				 */
-				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-					//Copy over the offset, multiplier and second operand
-					addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
-					addressing_operation->operands.oir.address_multiplier = lea_statement->operands.oir.address_multiplier;
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand2;
-
-					//Update the addressing mode to reflect the change
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+					//Copy over the offset, multiplier and second operand, and update the mode
+					operands_to_combine->address_offset = lea_operands->address_offset;
+					operands_to_combine->address_multiplier = lea_operands->address_multiplier;
+					operands_to_combine->address_operand2 = lea_operands->address_operand2;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//The old lea is now useless
 					delete_statement(lea_statement);
 
 					//Rebuild around the second addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 				
 				/**
 				 * Anything else is unsupported so move along
@@ -5158,9 +5040,10 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 			}
 
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-			switch(lea_statement->addressing_mode){
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+			switch(lea_operands->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t4 <- 5(t8)
@@ -5174,24 +5057,24 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 *
 				 * 	store 50(t3, t8, 8) <- 5
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//First multiply the old offset constant by the multiplier
-					multiply_constant_by_raw_int64_value(lea_statement->operands.oir.address_offset, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(lea_operands->address_offset, i64, operands_to_combine->address_multiplier);
 
 					//Now add the two values together
-					add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+					add_constants(operands_to_combine->address_offset, lea_operands->address_offset);
 
 					//Copy over the second address operand
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand1;
+					operands_to_combine->address_operand2 = lea_operands->address_operand1;
 
 					//Delete the lea now
 					delete_statement(lea_statement);
 
 					//Rebuild around the address op
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Anything else is unsupported so move along
@@ -5201,9 +5084,10 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 			}
 
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-			switch(lea_statement->addressing_mode){
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+			switch(lea_operands->addressing_mode){
 				/**
 				 * Combine
 				 * 	t5 <- 4(t4)
@@ -5217,27 +5101,23 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 *
 				 * store 32(t3, t4, 8)
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//First multiply the existing offset by the multiplier
-					multiply_constant_by_raw_int64_value(lea_statement->operands.oir.address_offset, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(lea_operands->address_offset, i64, operands_to_combine->address_multiplier);
 
-					//Now move this value over
-					addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
-
-					//Copy the lea's first address operand over
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
+					//Copy over the address offset and second operand, and update the addressing mode
+					operands_to_combine->address_offset = lea_operands->address_offset;
+					operands_to_combine->address_operand2 = lea_operands->address_operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 
 					//Scrap the old lea
 					delete_statement(lea_statement);
 
 					//Rebuild around the addressing mode operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Anything else is unsupported so move along
@@ -5247,9 +5127,10 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 			}
 
 			break;
+		}
 
-		case ADDRESSING_MODE_INDEX_AND_SCALE:
-			switch(lea_statement->addressing_mode){
+		case ADDRESSING_MODE_INDEX_AND_SCALE: {
+			switch(lea_operands->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t5 <- 4(t4)
@@ -5262,25 +5143,23 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 *
 				 * 	store 32(, t4, 8)
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//First thing that we need to do is multiply the existing constant by the multiplier
-					multiply_constant_by_raw_int64_value(lea_statement->operands.oir.address_offset, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(lea_operands->address_offset, i64, operands_to_combine->address_multiplier);
 
-					//Now copy over the offset and replace the addressing mode's second operand
-					addressing_operation->operands.oir.address_offset = lea_statement->operands.oir.address_offset;
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand1;
-
-					//Update the addressing mode to reflect the offset
-					addressing_operation->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
+					//Now copy over the offset and replace the addressing mode's second operand, and update the mode
+					operands_to_combine->address_offset = lea_operands->address_offset;
+					operands_to_combine->address_operand2 = lea_operands->address_operand1;
+					operands_to_combine->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 
 					//Scrap the lea now
 					delete_statement(lea_statement);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Anything else is unsupported so move along
@@ -5290,9 +5169,10 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 			}
 
 			break;
+		}
 
-		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-			switch(lea_statement->addressing_mode){
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+			switch(lea_operands->addressing_mode){
 				/**
 				 * Combine:
 				 * 	t5 <- 4(t4)
@@ -5305,24 +5185,24 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 				 *
 				 * 	store 32(, t4, 8)
 				 */
-				case ADDRESSING_MODE_OFFSET_ONLY:
+				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//First thing that we need to do is multiply the existing constant by the multiplier
-					multiply_constant_by_raw_int64_value(lea_statement->operands.oir.address_offset, i64, addressing_operation->operands.oir.address_multiplier);
+					multiply_constant_by_raw_int64_value(lea_operands->address_offset, i64, operands_to_combine->address_multiplier);
 
 					//Add the now multiplied lea statement offset to the existing offset in the addressing operation
-					add_constants(addressing_operation->operands.oir.address_offset, lea_statement->operands.oir.address_offset);
+					add_constants(operands_to_combine->address_offset, lea_operands->address_offset);
 
 					//Replace the second address operand
-					addressing_operation->operands.oir.address_operand2 = lea_statement->operands.oir.address_operand1;
+					operands_to_combine->address_operand2 = lea_operands->address_operand1;
 
 					//Scrap the lea now
 					delete_statement(lea_statement);
 
 					//Rebuild around the addressing operation
 					reconstruct_window(window, addressing_operation);
-
 					*changed = TRUE;
 					break;
+				}
 
 				/**
 				 * Anything else is unsupported so move along
@@ -5332,6 +5212,7 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 			}
 
 			break;
+		}
 			
 		/**
 		 * Everything else is unsupported so we will just skip it
@@ -5359,7 +5240,7 @@ static void perform_memory_address_remediations(instruction_window_t* window, in
 		case THREE_ADDR_CODE_ASSN_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT:
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-		case THREE_ADDR_CODE_STORE_STATEMENT:
+		case THREE_ADDR_CODE_STORE_STATEMENT: {
 			/**
 			 * If have a value in operand1 *and* it's a memory address,
 			 * we will need to remediate it
@@ -5379,14 +5260,18 @@ static void perform_memory_address_remediations(instruction_window_t* window, in
 			}
 			
 			break;
+		}
 
 		/**
 		 * It is possible for a lea statement to have its address operand1
 		 * be a memory address. If this is the case then we need to remediate it now
 		 */
-		case THREE_ADDR_CODE_LEA_STMT:
-			if(instruction->operands.oir.address_operand1 != NULL){
-				switch(instruction->operands.oir.address_operand1->variable_type){
+		case THREE_ADDR_CODE_LEA_STMT: {
+			//Get a pointer to these for convenience
+			addressing_operands_t* lea_operands = &(instruction->operands.oir.source_address_expression);
+
+			if(lea_operands->address_operand1 != NULL){
+				switch(lea_operands->address_operand1->variable_type){
 					case VARIABLE_TYPE_MEMORY_ADDRESS:
 					case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
 						remediate_memory_address_variable_in_non_access_context(window, instruction);
@@ -5394,21 +5279,23 @@ static void perform_memory_address_remediations(instruction_window_t* window, in
 						break;
 
 					default:
-					break;
+						break;
 				}
 			}
 
 			break;
+		}
 
 		/**
 		 * If we have an elaborative param offset calculation, now is the time
 		 * where we will convert it into a constant assignment
 		 */
-		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET:
+		case THREE_ADDR_CODE_ELABORATIVE_PARAM_OFFSET: {
 			convert_elaborative_param_offset_to_constant_assignment(instruction);
 
 			*changed = TRUE;
 			break;
+		}
 
 		//By default do nothing
 		default:
@@ -5526,15 +5413,9 @@ static inline void combine_binary_operation_with_source_operand_load(instruction
 
 	/**
 	 * Step 1: Copy over all of the addressing information from the load
-	 * operation over into the binary operation. We will also
-	 * need to copy over the addressing mode itself
+	 * operation over into the binary operation. 
 	 */
-	binary_operation->operands.oir.address_multiplier = load_operation->operands.oir.address_multiplier;
-	binary_operation->operands.oir.address_offset = load_operation->operands.oir.address_offset;
-	binary_operation->operands.oir.address_operand1 = load_operation->operands.oir.address_operand1;
-	binary_operation->operands.oir.address_operand2 = load_operation->operands.oir.address_operand2;
-	binary_operation->operands.oir.rip_offset_var = load_operation->operands.oir.rip_offset_var;
-	binary_operation->addressing_mode = load_operation->addressing_mode;
+	binary_operation->operands.oir.source_address_expression = load_operation->operands.oir.source_address_expression;
 
 	/**
 	 * Step 2: NULL out the old operand2 as it is no longer in use
@@ -6759,17 +6640,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * one lea with an offset and two registers
 		 */
 		if(is_type_lea_compatible(result_type) == TRUE){
-			//We'll work on the second one
+			//Convert this into a LEA using the addressing operands
 			constant_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-
-			//This is a register and offset lea type
-			constant_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-			//Copy over both operands from here
-			constant_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-			constant_operation->operands.oir.address_operand2 = binary_operation->operands.oir.operand2;
-			constant_operation->operands.oir.address_offset = constant_operation->operands.oir.constant_operand;
-
+			constant_operation->operands.oir.source_address_expression = (addressing_operands_t){binary_operation->operands.oir.operand1,
+																									binary_operation->operands.oir.operand2,
+																									constant_operation->operands.oir.constant_operand,
+																									0,
+																									NULL,
+																									ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 			/**
 			 * Since this is now a lea operands 1 and 2 do not exist, we'll
 			 * NULL them out to reflect this
@@ -6827,17 +6705,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 *
 				 * 	t22 <- 8(t19, t20)
 				 */
-				case PLUS:
+				case PLUS: {
 					//Convert instruction2 into a lea
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-					binary_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-					//Translate the operands & constants
-					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_offset = bin_operation_with_const->operands.oir.constant_operand;
-					
-
+					binary_operation->operands.oir.source_address_expression = (addressing_operands_t){binary_operation->operands.oir.operand1,
+																											bin_operation_with_const->operands.oir.operand1,
+																											bin_operation_with_const->operands.oir.constant_operand,
+																											0,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_AND_OFFSET};
 					/**
 					 * Since this is now a lea operands 1 and 2 do not exist, we'll
 					 * NULL them out to reflect this
@@ -6850,10 +6726,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
-
-					//This is a change
 					changed = TRUE;
 					break;
+				}
 
 				/**
 				 * For the case of a *:
@@ -6862,7 +6737,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				 *
 				 * 	t22 <- (t19, t20, 8)
 				 */
-				case STAR:
+				case STAR: {
 					//We need to make sure that we have a compatible power of 2, otherwise this will all break down
 					if(is_constant_lea_compatible_power_of_2(bin_operation_with_const->operands.oir.constant_operand) == FALSE){
 						break;
@@ -6870,13 +6745,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Convert instruction2 into a lea
 					binary_operation->statement_type = THREE_ADDR_CODE_LEA_STMT;
-					binary_operation->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
-
-					//Convert to LEA form
-					binary_operation->operands.oir.address_operand1 = binary_operation->operands.oir.operand1;
-					binary_operation->operands.oir.address_operand2 = bin_operation_with_const->operands.oir.operand1;
-					binary_operation->operands.oir.address_multiplier = bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant;
-
+					binary_operation->operands.oir.source_address_expression = (addressing_operands_t){binary_operation->operands.oir.operand1,
+																											bin_operation_with_const->operands.oir.operand1,
+																											NULL,
+																											bin_operation_with_const->operands.oir.constant_operand->constant_value.signed_long_constant,
+																											NULL,
+																											ADDRESSING_MODE_REGISTERS_AND_SCALE};
 					/**
 					 * Since this is now a lea operands 1 and 2 do not exist, we'll
 					 * NULL them out to reflect this
@@ -6889,11 +6763,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//Rebuild the window around the binary operation
 					reconstruct_window(window, binary_operation);
-
-					//This is a change
 					changed = TRUE;
-
 					break;
+				}
 
 				//By default do nothing
 				default:
@@ -6932,9 +6804,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		//Grab these for convenience
 		instruction_t* first_lea = window->instruction1;
 		instruction_t* second_bin_op = window->instruction2;
+		addressing_operands_t* lea_operands = &(first_lea->operands.oir.source_address_expression);
 
-		//Go based on what kind of lea we have
-		switch(first_lea->addressing_mode){
+		switch(lea_operands->addressing_mode){
 			/**
 			 * 	 t45 <- global_var(t3)
 			 * 	 t46 <- t45 + 12
@@ -6942,24 +6814,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	 Turns into:
 			 * 	 	t46 <- 12+global_var(t3)
 			 */
-			case ADDRESSING_MODE_RIP_RELATIVE:
+			case ADDRESSING_MODE_RIP_RELATIVE: {
 				//Back-copy the assignee and op1_const
 				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
-				first_lea->operands.oir.address_offset = second_bin_op->operands.oir.constant_operand;
 
-				//Change the lea type to be rip relative but with an offset
-				first_lea->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+				//Change the address offset and addressing mode for the lea operands
+				lea_operands->address_offset = second_bin_op->operands.oir.constant_operand;
+				lea_operands->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 				//The second instruction is now useless
 				delete_statement(second_bin_op);
 
 				//And we will rebuild around the first instruction
 				reconstruct_window(window, first_lea);
-
-				//This counts as a change
 				changed = TRUE;
-				
 				break;
+			}
 
 			/**
 			 * 	t45 <- 12+global_var(t3)
@@ -6968,22 +6838,21 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * 	Turns into:
 			 * 		t46 <- 18+global_var(t3)
 			 */
-			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 				//Back-copy the assignee
 				first_lea->operands.oir.assignee = second_bin_op->operands.oir.assignee;
 
 				//Add the 2 constants together, the result will be in the first one's constant
-				add_constants(first_lea->operands.oir.address_offset, second_bin_op->operands.oir.constant_operand);
+				add_constants(lea_operands->address_offset, second_bin_op->operands.oir.constant_operand);
 
 				//The second instruction is now useless
 				delete_statement(second_bin_op);
 
 				//And we will rebuild around the first instruction
 				reconstruct_window(window, first_lea);
-
-				//This counts as a change
 				changed = TRUE;
 				break;
+			}
 
 			//By default do nothing
 			default:
@@ -6991,28 +6860,22 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
 	/**
-	 * ====================== Combining loads/stores and operations =============
-	 * If we have a memory movement operation preceeded by any kind of operation
-	 * that is resulting in a temp assignment(think binary operation, lea, constant assignment, etc.), then
-	 * we will look to see if we are able to combine anything here. There are instances where we are able
-	 * to smash two instructions into one big addressing mode expression, which is a win for us in terms
-	 * of overall complexity and instruction count
+	 * ====================== Combining source address operands and operations =============
 	 *
-	 * Special note: we will always skip indirect jump statements. It is never correct for us to try
-	 * and combine these due to the unqiue way they are handled, even though they do use addressing
-	 * modes
+	 * If we have an operation that uses a source memory address, preceeded by any
+	 * kind of operation that is resulting in a temp assignment(think binary operation, lea, constant
+	 * assignment, etc.), then we will look to see if we are able to combine the first operation
+	 * with the addressing expression. There are instances where we are able to smash mulitple
+	 * expressions into one big addressing mode expression, which is always a win for us when
+	 * it comes to instruction complexity
 	 */
-	if(does_operation_use_addressing_mode(window->instruction2) == TRUE
-		&& window->instruction2->statement_type != THREE_ADDR_CODE_INDIRECT_JUMP_STMT
-		&& window->instruction1->operands.oir.assignee != NULL
-		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
-		&& get_use_count_for_variable(window->instruction1->operands.oir.assignee) <= 1){
-
-		//Extract the two instructions for convenience
+	if(does_statement_use_source_addressing_operation(window->instruction2) == TRUE
+		&& is_variable_single_use_temp_var(window->instruction1->operands.oir.assignee) == TRUE){
+		//Extract these values for convenience
 		instruction_t* to_be_combined = window->instruction1;
 		instruction_t* addressing_operation = window->instruction2;
+		addressing_operands_t* address_operands = &(addressing_operation->operands.oir.source_address_expression);
 
 		/**
 		 * There are now two paths that we have. We could have the temp
@@ -7022,30 +6885,30 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * path. These paths are *mutually exclusive*. In the rare event that they
 		 * do match, it will be picked up in the next go around
 		 */
-		if(does_addressing_mode_use_address_operand1(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
+		if(does_addressing_mode_use_address_operand1(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
 				case THREE_ADDR_CODE_ASSN_STMT:
-					combine_assignment_with_address_operand1(window, &changed);
+					combine_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 					
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					combine_constant_assignment_with_address_operand1(window, &changed);
+					combine_constant_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
 				case THREE_ADDR_CODE_BIN_OP_STMT:
-					combine_binary_operation_with_address_operand1(window, &changed);
+					combine_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					combine_constant_binary_operation_with_address_operand1(window, &changed);
+					combine_constant_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
-					combine_lea_with_address_operand1(window, &changed);
+					combine_lea_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
 				/**
@@ -7055,177 +6918,378 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					break;
 			}
 
-		} else if(does_addressing_mode_use_address_operand2(addressing_operation->addressing_mode) == TRUE
-			&& variables_equal(addressing_operation->operands.oir.address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
+		} else if(does_addressing_mode_use_address_operand2(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
 			/**
 			 * Go based on what kind of statement we have as the first way to split
 			 */
 			switch(to_be_combined->statement_type){
 				case THREE_ADDR_CODE_ASSN_STMT:
-					combine_assignment_with_address_operand2(window, &changed);
+					combine_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
 				case THREE_ADDR_CODE_ASSN_CONST_STMT:
-					combine_constant_assignment_with_address_operand2(window, &changed);
+					combine_constant_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
 				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-					combine_constant_binary_operation_with_address_operand2(window, &changed);
+					combine_constant_binary_operation_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
 				case THREE_ADDR_CODE_LEA_STMT:
-					combine_lea_with_address_operand2(window, &changed);
+					combine_lea_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_SOURCE, &changed);
 					break;
 
-				//Unsupported statement combo - just leave
+				/**
+				 * Anything else we don't support so we just leave
+				 */
 				default:
 					break;
 			}
 		}
 	}
 
+	/**
+	 * ====================== Combining destination address operands and operations =============
+	 *
+	 * If we have an operation that uses a destination memory address, preceeded by any
+	 * kind of operation that is resulting in a temp assignment(think binary operation, lea, constant
+	 * assignment, etc.), then we will look to see if we are able to combine the first operation
+	 * with the addressing expression. There are instances where we are able to smash mulitple
+	 * expressions into one big addressing mode expression, which is always a win for us when
+	 * it comes to instruction complexity
+	 *
+	 * NOTE: we specifically skip indirect jump statements here as this does not apply to them
+	 */
+	if(does_statement_use_destination_addressing_operation(window->instruction2) == TRUE
+		&& window->instruction2->statement_type != THREE_ADDR_CODE_INDIRECT_JUMP_STMT
+		&& is_variable_single_use_temp_var(window->instruction1->operands.oir.assignee) == TRUE){
+		//Extract these values for convenience
+		instruction_t* to_be_combined = window->instruction1;
+		instruction_t* addressing_operation = window->instruction2;
+		addressing_operands_t* address_operands = &(addressing_operation->operands.oir.destination_address_expression);
+
+		/**
+		 * There are now two paths that we have. We could have the temp
+		 * assignee as being equal to the very first address operand, which
+		 * will take use down one simplification path. The other option is that
+		 * the second address operand is equal to the assignee, which is a different
+		 * path. These paths are *mutually exclusive*. In the rare event that they
+		 * do match, it will be picked up in the next go around
+		 */
+		if(does_addressing_mode_use_address_operand1(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand1, to_be_combined->operands.oir.assignee) == TRUE){
+			/**
+			 * Go based on what kind of statement we have as the first way to split
+			 */
+			switch(to_be_combined->statement_type){
+				case THREE_ADDR_CODE_ASSN_STMT:
+					combine_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+					
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					combine_constant_assignment_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				case THREE_ADDR_CODE_BIN_OP_STMT:
+					combine_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					combine_constant_binary_operation_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				case THREE_ADDR_CODE_LEA_STMT:
+					combine_lea_with_address_operand1(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				/**
+				 * Anything else we don't support so we just leave
+				 */
+				default:
+					break;
+			}
+
+		} else if(does_addressing_mode_use_address_operand2(address_operands->addressing_mode) == TRUE
+			&& variables_equal(address_operands->address_operand2, to_be_combined->operands.oir.assignee) == TRUE){
+			/**
+			 * Go based on what kind of statement we have as the first way to split
+			 */
+			switch(to_be_combined->statement_type){
+				case THREE_ADDR_CODE_ASSN_STMT:
+					combine_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				case THREE_ADDR_CODE_ASSN_CONST_STMT:
+					combine_constant_assignment_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+					combine_constant_binary_operation_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				case THREE_ADDR_CODE_LEA_STMT:
+					combine_lea_with_address_operand2(window, ADDRESSING_OPERANDS_SIDE_DEST, &changed);
+					break;
+
+				/**
+				 * Anything else we don't support so we just leave
+				 */
+				default:
+					break;
+			}
+		}
+	}
 
 	/**
-	 * ====================== Simplifying addressing modes internally =======================
+	 * ====================== Simplifying source addressing expressions internally =======================
 	 * We may end up with cases where addressing have multipliers that are 1, or 
 	 * where their offsets end up become 0. If this is the case, we'll want to remediate those
 	 * here. We do this directly after the addressing mode simplifier to catch those
-	 * cases quickly
+	 * cases quickly. This is the specific region where we do this for the source
+	 * addressing expressions
 	 */
-	if(does_addressing_mode_use_multiplier(window->instruction1->addressing_mode) == TRUE
-		&& window->instruction1->operands.oir.address_multiplier == 1){
-		//Extract this for our convenience
-		instruction_t* addressing_mode_statement = window->instruction1;
-
-		//Before we go on we can knock the address multiplier itself out
-		addressing_mode_statement->operands.oir.address_multiplier = 0;
-
-		switch(addressing_mode_statement->addressing_mode){
-			/**
-			 * We have something like: 
-			 * 	t3 <- lea (, x, 1)
-			 *
-			 * 	We just convert it into t3 <- x
-			 *
-			 * We should already be set here with the assignee and all
-			 */
-			case ADDRESSING_MODE_INDEX_AND_SCALE:
-				//Convert it over
-				addressing_mode_statement->statement_type = THREE_ADDR_CODE_ASSN_STMT;
-
-				//Clear it out
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_NONE;
-
-				//Move thte scale to where it needs to be
-				addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
-
-				changed = TRUE;
-				break;
-
-			/**
-			 * We have something like
-			 * 	t3 <- lea 4(, x, 1)
-			 *
-			 * 	We can convert it into t3 <- x + 4
-			 */
-			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-				//No more addressing mode
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_NONE;
-
-				//Convert it here
-				addressing_mode_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
-
-				//Flag that this is addition
-				addressing_mode_statement->op = PLUS;
-
-				//Convert the operands into where they need to go
-				addressing_mode_statement->operands.oir.operand1 = addressing_mode_statement->operands.oir.address_operand2;
-				addressing_mode_statement->operands.oir.constant_operand = addressing_mode_statement->operands.oir.address_offset;
-
-				changed = TRUE;
-				break;
-
-			/**
-			 * We have something like
-			 * 	t3 <- lea (x, y, 1)
-			 *
-			 * 	Just turn it into 
-			 * 	t3 <- lea (x, y)
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-				
-				changed = TRUE;
-				break;
-
-			/**
-			 * We have something like
-			 * 	t3 <- lea 4(x, y, 1)
-			 *
-			 * 	Just turn it into 
-			 * 	t3 <- lea 4(x, y)
-			 */
-			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-				addressing_mode_statement->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-				changed = TRUE;
-				break;
-
-			//This should be impossible to reach, the default just makes the compiler happy
-			default:
-				fprintf(stderr, "Fatal internal compiler error: unreachable addressing mode hit in mulitplier simplifier\n");
-				exit(1);
-		}
-	}
-
-
-	/**
-	 * ======================= Addressing mode offset constant simplification =================================
-	 * Optimize addressing modes that use the offset constant if the given offset
-	 * is 0. If we find an instruction with an addressing mode that uses the offset
-	 * constant, it is worth it to do a quick check and see if we can't eliminate
-	 * the offset here entirely
-	 */
-	if(does_addressing_mode_use_offset_constant(window->instruction1->addressing_mode) == TRUE
-		&& is_constant_value_zero(window->instruction1->operands.oir.address_offset) == TRUE){
-		//Extract this for ease of use
-		instruction_t* target = window->instruction1;
-
-		//NULL out the offset constant
-		target->operands.oir.address_offset = NULL;
+	if(does_statement_use_source_addressing_operation(window->instruction1) == TRUE) {
+		instruction_t* addressing_statement = window->instruction1;
+		addressing_operands_t* address_operands = &(addressing_statement->operands.oir.source_address_expression);
 
 		/**
-		 * Run through all of the addressing modes and convert
-		 * them appropriately
+		 * First case: if the address multiplier is somehow 1, then it is useless
+		 * and we can fold this into a different and simpler addressing expression
 		 */
-		switch(target->addressing_mode){
-			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
-				target->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
-				break;
+		if(address_operands->address_multiplier == 1){
+			//First off 0 this out so we don't hit it again
+			address_operands->address_multiplier = 0;
 
-			case ADDRESSING_MODE_OFFSET_ONLY:
-				target->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
-				break;
+			switch(address_operands->addressing_mode){
+				/**
+				 * NOTE: this only works for leas
+				 *
+				 * We have something like: 
+				 * 	t3 <- lea (, x, 1)
+				 *
+				 * We just convert it into t3 <- x
+				 *
+				 * We should already be set here with the assignee and all
+				 */
+				case ADDRESSING_MODE_INDEX_AND_SCALE: {
+					//Only works for leas
+					if(addressing_statement->statement_type != THREE_ADDR_CODE_LEA_STMT){
+						break;
+					}
 
-			case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
-				target->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
-				break;
+					//Convert thsi to an assignment statement
+					addressing_statement->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+					addressing_statement->operands.oir.operand1 = address_operands->address_operand2;
 
-			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-				target->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
-				break;
+					//Completely wipe these out
+					*address_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
 
-			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
-				target->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-				break;
+					changed = TRUE;
+					break;
+				}
 
-			//Should be impossible but just in case
-			default:
-				fprintf(stderr, "Fatal internal compiler error: Unreachable addressing mode hit in 0 simplifier\n");
-				exit(1);
+				/**
+				 * NOTE: this only works for leas
+				 *
+				 * We have something like
+				 * 	t3 <- lea 4(, x, 1)
+				 *
+				 * 	We can convert it into t3 <- x + 4
+				 */
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
+					//Only works for leas
+					if(addressing_statement->statement_type != THREE_ADDR_CODE_LEA_STMT){
+						break;
+					}
+
+					//Convert this to a BIN OP WITH CONST
+					addressing_statement->statement_type = THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT;
+					addressing_statement->op = PLUS;
+					addressing_statement->operands.oir.operand1 = address_operands->address_operand2;
+					addressing_statement->operands.oir.constant_operand = address_operands->address_offset;
+
+					//Completely wipe these out
+					*address_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * We have something like
+				 * 	t3 <- lea (x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea (x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * We have something like
+				 * 	t3 <- lea 4(x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea 4(x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * This should be impossible to reach, the default just makes the compiler happy
+				 */
+				default:
+					trigger_ice_panic("Unreachable addressing mode hit in mulitplier simplifier");
+			}
+		}
+
+		/**
+		 * Second case: if the address offset is somehow 0, then we can simplify this addressing
+		 * mode to no longer use an offset constant at all
+		 */
+		if(does_addressing_mode_use_offset_constant(address_operands->addressing_mode)
+			&& is_constant_value_zero(address_operands->address_offset) == TRUE){
+			//NULL it out
+			address_operands->address_offset = NULL;
+
+			/**
+			 * Run through all of the addressing modes and convert
+			 * them appropriately
+			 */
+			switch(address_operands->addressing_mode){
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+					address_operands->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
+					break;
+
+				case ADDRESSING_MODE_OFFSET_ONLY:
+					address_operands->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+					break;
+
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+					break;
+
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+					break;
+
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+					address_operands->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+					break;
+
+				/**
+				 * Should be impossible but just in case
+				 */
+				default:
+					trigger_ice_panic("Unreachable addressing mode hit in 0 simplifier");
+			}
 		}
 	}
 
+	/**
+	 * ====================== Simplifying destination addressing expressions internally =======================
+	 * We may end up with cases where addressing have multipliers that are 1, or 
+	 * where their offsets end up become 0. If this is the case, we'll want to remediate those
+	 * here. We do this directly after the addressing mode simplifier to catch those
+	 * cases quickly. This is the specific region where we do this for the source
+	 * addressing expressions
+	 */
+	if(does_statement_use_destination_addressing_operation(window->instruction1) == TRUE) {
+		instruction_t* addressing_statement = window->instruction1;
+		addressing_operands_t* address_operands = &(addressing_statement->operands.oir.destination_address_expression);
+
+		/**
+		 * First case: if the address multiplier is somehow 1, then it is useless
+		 * and we can fold this into a different and simpler addressing expression
+		 */
+		if(address_operands->address_multiplier == 1){
+			//First off 0 this out so we don't hit it again
+			address_operands->address_multiplier = 0;
+
+			switch(address_operands->addressing_mode){
+				/**
+				 * We have something like
+				 * 	t3 <- lea (x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea (x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * We have something like
+				 * 	t3 <- lea 4(x, y, 1)
+				 *
+				 * 	Just turn it into 
+				 * 	t3 <- lea 4(x, y)
+				 */
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+					changed = TRUE;
+					break;
+				}
+
+				/**
+				 * This should be impossible to reach, the default just makes the compiler happy
+				 */
+				default:
+					trigger_ice_panic("Unreachable addressing mode hit in mulitplier simplifier");
+			}
+		}
+
+		/**
+		 * Second case: if the address offset is somehow 0, then we can simplify this addressing
+		 * mode to no longer use an offset constant at all
+		 */
+		if(does_addressing_mode_use_offset_constant(address_operands->addressing_mode)
+			&& is_constant_value_zero(address_operands->address_offset) == TRUE){
+			//NULL it out
+			address_operands->address_offset = NULL;
+
+			/**
+			 * Run through all of the addressing modes and convert
+			 * them appropriately
+			 */
+			switch(address_operands->addressing_mode){
+				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
+					address_operands->addressing_mode = ADDRESSING_MODE_INDEX_AND_SCALE;
+					break;
+
+				case ADDRESSING_MODE_OFFSET_ONLY:
+					address_operands->addressing_mode = ADDRESSING_MODE_BASE_ADDRESS_ONLY;
+					break;
+
+				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+					break;
+
+				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
+					address_operands->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_SCALE;
+					break;
+
+				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
+					address_operands->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+					break;
+
+				/**
+				 * Should be impossible but just in case
+				 */
+				default:
+					trigger_ice_panic("Unreachable addressing mode hit in 0 simplifier");
+			}
+		}
+	}
 
 	/**
 	 * ==================== On-the-fly logical and/or ========================
@@ -7295,7 +7359,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * It is safe to assume that a logical and binary operation with constant is always
 			 * simplifiable
 			 */
-			case DOUBLE_AND:
+			case DOUBLE_AND: {
 				//First option - the value is 0
 				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
 					//It's now just an assign statement
@@ -7330,6 +7394,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//We changed something
 				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * ======================= Logical OR operation simplifying ==========================
@@ -7339,7 +7404,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * It is safe to assume that a logical and binary operation with constant is always
 			 * simplifiable
 			 */
-			case DOUBLE_OR:
+			case DOUBLE_OR: {
 				//First option - the value is 0. If it is, then anything else is irrelevant
 				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
 					//First we add a test instruction
@@ -7377,6 +7442,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				//We changed something
 				changed = TRUE;
 				break;
+			}
 
 			//By default do nothing
 			default:
@@ -7426,7 +7492,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				case PLUS:
 				case MINUS:
 				case L_SHIFT:
-				case R_SHIFT:
+				case R_SHIFT: {
 					//We're just assigning here
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 					//Wipe the values out
@@ -7437,10 +7503,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//We changed something
 					changed = TRUE;
-
 					break;
+				}
 
-				case STAR:
+				case STAR: {
 					//Now we're assigning a const
 					first_instruction->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
 
@@ -7449,8 +7515,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 					//We changed something
 					changed = TRUE;
-
 					break;
+				}
 
 				//Just do nothing here
 				default:
@@ -7869,6 +7935,106 @@ static inline u_int8_t convert_phi_function_if_redundant(value_numbering_table_t
 
 
 /**
+ * Special helper that will generate the GVN key for an addressing operand set. This is standard
+ * across all expressions that use addressing operands
+ */
+static inline void generate_gvn_key_for_addressing_operands(addressing_operands_t* operands, dynamic_string_t* textual_key){
+	dynamic_string_add_char_to_back(textual_key, operands->addressing_mode);
+
+	//Based on the addressing mode these all get different names
+	switch(operands->addressing_mode){
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_INDEX_AND_SCALE:{
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_OFFSET_ONLY:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_integer_to_value_name_string(operands->address_multiplier, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->rip_offset_var, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_RIP_RELATIVE:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->rip_offset_var, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_ONLY:{
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			break;
+		}
+
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
+			concatenate_constant_value_name_string(operands->address_offset, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand1, textual_key);
+			dynamic_string_add_char_to_back(textual_key, '_');
+			concatenate_value_name_string(operands->address_operand2, textual_key);
+			break;
+		}
+
+		/**
+		 * Some invalid addressing mode here. Examples include "addressing mode none"
+		 */
+		default:{
+			fprintf(stderr, "Fatal internal compiler error: Invalid addressing mode %s in lea value numberer", addressing_mode_to_string(operands->addressing_mode));
+			exit(1);
+		}
+	}
+}
+
+
+/**
  * Generate the key for a given instruction. The key for a given
  * instruction consists of the instruction type converted to a char *and*
  * the variables that are inside of it. We are given an allocated
@@ -7899,6 +8065,10 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 		/**
 		 * For a bin op statement we'll have
 		 * value names like BINx_0+y_0
+		 *
+		 * NOTE: some binary operation statements can have addressing
+		 * modes in them. We will generate the GVN addressing mode key
+		 * instead of the second operand if this is the case
 		 */
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
 			//Starting key
@@ -7910,8 +8080,14 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 			//Actual opcode
 			dynamic_string_add_char_to_back(textual_key, instruction->op);
 
-			//Second op
-			concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
+			//Based on whether or not we have memory access do this
+			if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+				//Second op
+				concatenate_value_name_string(instruction->operands.oir.operand2, textual_key);
+			} else {
+				//Let the helper create the addressing expression key
+				generate_gvn_key_for_addressing_operands(&(instruction->operands.oir.source_address_expression), textual_key);
+			}
 
 			break;
 		}
@@ -7923,99 +8099,9 @@ static inline void generate_gvn_key_for_instruction(instruction_t* instruction, 
 		case THREE_ADDR_CODE_LEA_STMT: {
 			//Starting key that also include the addressing mode
 			dynamic_string_concatenate(textual_key, "LEA");
-			dynamic_string_add_char_to_back(textual_key, instruction->addressing_mode);
 
-			//Based on the addressing mode these all get different names
-			switch(instruction->addressing_mode){
-				case ADDRESSING_MODE_BASE_ADDRESS_ONLY:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_INDEX_AND_SCALE:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_OFFSET_ONLY:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_AND_SCALE:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_integer_to_value_name_string(instruction->operands.oir.address_multiplier, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_RIP_RELATIVE:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.rip_offset_var, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_ONLY:{
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					break;
-				}
-
-				case ADDRESSING_MODE_REGISTERS_AND_OFFSET:{
-					concatenate_constant_value_name_string(instruction->operands.oir.address_offset, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand1, textual_key);
-					dynamic_string_add_char_to_back(textual_key, '_');
-					concatenate_value_name_string(instruction->operands.oir.address_operand2, textual_key);
-					break;
-				}
-
-				/**
-				 * Some invalid addressing mode here. Examples include "addressing mode none"
-				 */
-				default:{
-					fprintf(stderr, "Fatal internal compiler error: Invalid addressing mode %s in lea value numberer", addressing_mode_to_string(instruction->addressing_mode));
-					exit(1);
-				}
-			}
-
+			//Let the helper create the addressing expression key
+			generate_gvn_key_for_addressing_operands(&(instruction->operands.oir.source_address_expression), textual_key);
 			break;
 		}
 			
@@ -8128,11 +8214,17 @@ static inline u_int8_t perform_gvn_variable_substitutions(value_numbering_table_
 	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.operand2);
 	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.operand2), gvn_equivalent);
 
-	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand1);
-	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand1), gvn_equivalent);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.source_address_expression.address_operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.source_address_expression.address_operand1), gvn_equivalent);
 
-	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.address_operand2);
-	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.address_operand2), gvn_equivalent);
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.source_address_expression.address_operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.source_address_expression.address_operand2), gvn_equivalent);
+
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.destination_address_expression.address_operand1);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.destination_address_expression.address_operand1), gvn_equivalent);
+
+	gvn_equivalent = get_gvn_equivalent_variable(table, instruction->operands.oir.destination_address_expression.address_operand2);
+	substitution_occured |= replace_rhs_variable(&(instruction->operands.oir.destination_address_expression.address_operand2), gvn_equivalent);
 
 	for(int32_t i = 0; i < instruction->parameters.current_index; i++){
 		three_addr_var_t* parameter = dynamic_array_get_at(&(instruction->parameters), i);
@@ -8274,10 +8366,8 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 
 				//Null out everything else just to be safe
 				cursor->operands.oir.operand2 = NULL;
-				cursor->operands.oir.address_operand1 = NULL;
-				cursor->operands.oir.address_operand2 = NULL;
-				cursor->operands.oir.address_offset = NULL;
-				cursor->operands.oir.address_multiplier = 0;
+				cursor->operands.oir.source_address_expression = INITIALIZE_NULL_ADDRESS_OPERANDS;
+				cursor->operands.oir.destination_address_expression = INITIALIZE_NULL_ADDRESS_OPERANDS;
 				cursor->operands.oir.constant_operand = NULL;
 				cursor->op = BLANK;
 
@@ -8780,6 +8870,15 @@ static void mark_initializer_values(three_addr_initializer_t* initializer, dynam
 
 
 /**
+ * Mark and add the definition for all of our given address operands
+ */
+static inline void mark_addressing_operands(dynamic_array_t* current_function_blocks, dynamic_array_t* worklist, addressing_operands_t* address_operands){
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand1, worklist);
+	mark_and_add_definition(current_function_blocks, address_operands->address_operand2, worklist);
+}
+
+
+/**
  * The mark algorithm will go through and mark every operation(three address code statement) as
  * critical or noncritical. We will then go back through and see which operations are setting
  * those critical values
@@ -8809,8 +8908,10 @@ static void mark(dynamic_array_t* function_blocks){
 
 	//Now we'll go through every single operation in every single block
 	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
+		//Grab the block we'll work on
 		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
 
+		//Grab a cursor to the current statement
 		instruction_t* current_stmt = current->leader_statement;
 
 		/**
@@ -8823,6 +8924,7 @@ static void mark(dynamic_array_t* function_blocks){
 		 * 		accessed outside of the procedure(i.e. a parameter that is a pointer)
 		 */
 		while(current_stmt != NULL){
+			//Clear it's mark
 			current_stmt->mark = FALSE;
 
 			/**
@@ -8905,20 +9007,20 @@ static void mark(dynamic_array_t* function_blocks){
 					break;
 
 				/**
-				 * Any/all memory copying statements are considered useful by the ollie
-				 * optimizer regardless of use count tracking
+				 * All initializers are basically like store statements. They are always considered
+				 * useful because we are writiing to memory
 				 */
-				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
+				case THREE_ADDR_CODE_INITIALIZER_STMT:
 					current_stmt->mark = TRUE;
 					dynamic_array_add(&worklist, current_stmt);
 					current->contains_mark = TRUE;
 					break;
 
 				/**
-				 * Initializers are always considered to be useful seeing
-				 * as they are in a way equivalent to stores
+				 * Any/all memory copying statements are considered useful by the ollie
+				 * optimizer regardless of use count tracking
 				 */
-				case THREE_ADDR_CODE_INITIALIZER_STMT:
+				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 					current_stmt->mark = TRUE;
 					dynamic_array_add(&worklist, current_stmt);
 					current->contains_mark = TRUE;
@@ -8946,106 +9048,165 @@ static void mark(dynamic_array_t* function_blocks){
 		}
 	}
 
-	/**
-	 * Now that we've marked everything that is initially critical, we'll go through and trace
-	 * these values back through the code
-	 */
+	//Now that we've marked everything that is initially critical, we'll go through and trace
+	//these values back through the code
 	while(dynamic_array_is_empty(&worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
 		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
-		//Generic array for holding parameters
-		dynamic_array_t params;
 
 		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
 			//If it's a phi function, now we need to go back and mark everything that it came from
-			case THREE_ADDR_CODE_PHI_STMT:
-				params = stmt->parameters;
-
-				//Add this in here
-				for(int32_t i = 0; i < params.current_index; i++){
-					//Grab the param out
-					three_addr_var_t* phi_func_param = dynamic_array_get_at(&params, i);
-
-					//Add the definitions in
-					mark_and_add_definition(function_blocks, phi_func_param, &worklist);
+			case THREE_ADDR_CODE_PHI_STMT: {
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+					mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
 				}
 
 				break;
+			}
 
-			//If we have a function call, everything in the function call is important
-			case THREE_ADDR_CODE_FUNC_CALL:
-				//Grab the parameters out
-				params = stmt->parameters;
-
-				//Run through them all and mark them
-				for(int32_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+			/**
+			 * If we have a function call then everything is important. Remember that by
+			 * now this has been converted away from parameter results to using the
+			 * regular parameter array
+			 */
+			case THREE_ADDR_CODE_FUNC_CALL: {
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(stmt->parameters), i);
+					mark_and_add_definition(function_blocks, parameter, &worklist);
 				}
 
 				break;
+			}
 
 			/**
 			 * An indirect function call behaves similarly to a function call, but we'll also
 			 * need to mark it's "op1" value as important. This is the value that stores
 			 * the memory address of the function that we're calling
 			 */
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
+			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				//Grab the parameters out
-				params = stmt->parameters;
-
-				//Run through them all and mark them
-				for(int32_t i = 0; i < params.current_index; i++){
-					mark_and_add_definition(function_blocks, dynamic_array_get_at(&params, i), &worklist);
+				/**
+				 * Remember that by now this has been converted away from parameter results to using the
+				 * regular parameter array
+				 */
+				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+					three_addr_var_t* parameter = dynamic_array_get_at(&(stmt->parameters), i);
+					mark_and_add_definition(function_blocks, parameter, &worklist);
 				}
 
 				break;
+			}
 
 			/**
 			 * For an initializer statement there are special steps that we 
 			 * need to take to work on the 
 			 */
-			case THREE_ADDR_CODE_INITIALIZER_STMT:
-				//The address that we're writing to will always be needed
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+			case THREE_ADDR_CODE_INITIALIZER_STMT:  {
+				//Mark the destination address
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
 
 				//Now let the recursive helper mark all of our initializer values
 				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
 				break;
+			}
+
+			/**
+			 * Leas have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LEA_STMT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Loads have a source address that needs to be marked
+			 */
+			case THREE_ADDR_CODE_LOAD_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Stores have a destination address that needs to be marked as well as the operands
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+		    }
+
+			/**
+			 * Memory copy statements use the source and destination addressing expressions
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				break;
+		    }
+
+			/**
+			 * Indirect jump statements do contain address operands but we will mark them differently
+			 */
+			case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
+				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
+				break;
+		    }
 
 			/**
 			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
 			 * so we'll need to mark that as well
 			 */
 			case THREE_ADDR_CODE_BRANCH_STMT:
-			case THREE_ADDR_CODE_SETNE_STMT:
+			case THREE_ADDR_CODE_SETNE_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				break;
+			}
 
 			/**
 			 * Conditional movement statements need their "relies on" tag included
 			 * as well as the two actual operands
 			 */
-			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT:
+			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
 				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
 				break;
+			}
 
-
-			//In all other cases, we'll just mark and add every operand
-			default:
-				//We need to mark the place where each definition is set
+			/**
+			 * These require special treatment due to the potential for addressing expressions inside
+			 * of them
+			 */
+			case THREE_ADDR_CODE_BIN_OP_STMT:
+			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:{
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.address_operand2, &worklist);
+
+				/**
+				 * Remember that when we combine binary operations with address expressions we may end
+				 * up with addressing operands, so we'll need to mark those too
+				 */
+				if(stmt->memory_access_type == READ_FROM_MEMORY){
+					mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				}
 
 				break;
+			}
+
+			/**
+			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
+			 * will ignore
+			 */
+			default: {
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+			}
 		}
 
 		//Grab this out for convenience
@@ -9063,22 +9224,27 @@ static void mark(dynamic_array_t* function_blocks){
 		 */
 		//If this block even has an RDF(it may now)
 		if(block->reverse_dominance_frontier.internal_array != NULL){
-			for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+			for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 				//Grab the block out of the RDF
 				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
 
 				//Grab out the exit statement
 				instruction_t* exit_statement = rdf_block->exit_statement;
 
+				//We'll now go based on what the exit statement is
 				switch(exit_statement->statement_type){
 					/**
 					 * An indirect jump means that we had some kind of switch statement. This
 					 * will be marked as important
 					 */
 					case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
+						//Avoids infinite loops
 						if(exit_statement->mark == FALSE){
+							//Mark it
 							exit_statement->mark = TRUE;
+							//Add it to the worklist
 							dynamic_array_add(&worklist, exit_statement);
+							//This now has a mark
 							rdf_block->contains_mark = TRUE;
 						}
 
@@ -9089,9 +9255,13 @@ static void mark(dynamic_array_t* function_blocks){
 					 * ends the predecessor
 					 */
 					case THREE_ADDR_CODE_BRANCH_STMT:
+						//Avoids infinite loops
 						if(exit_statement->mark == FALSE){
+							//Mark it
 							exit_statement->mark = TRUE;
+							//Add it to the worklist
 							dynamic_array_add(&worklist, exit_statement);
+							//This now has a mark
 							rdf_block->contains_mark = TRUE;
 						}
 
@@ -9105,6 +9275,7 @@ static void mark(dynamic_array_t* function_blocks){
 		}
 	}
 
+	//And get rid of the worklist
 	dynamic_array_dealloc(&worklist);
 }
 
@@ -9159,217 +9330,12 @@ static inline three_addr_const_t* emit_constant_copy_if_not_null(three_addr_cons
 
 
 /**
- * Generate an OIR store instruction using the addressing mode operands given *and* accounting
- * for the given additional offset. 
+ * Create a new addressing operands struct based on the original one that was given to us
  *
- * NOTE: even though we are passed an initializer_result_t pointer, we should *NEVER* see a
- * result that is an actual initializer here. This is just for variables and constants
+ * NOTE: we will also create a straight duplicate of the constant so that we avoid any collisions
+ * in the future. Constant values are expected to be mutated
  */
-static instruction_t* generate_OIR_store_with_additional_offset(addressing_operands_t* base_address, int32_t additional_offset,
-																initializer_result_t* result_to_store, generic_type_t* memory_write_type){
-	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
-
-	/**
-	 * If we have a type that is not assigned by copy we will need
-	 * a store statement. Otherwise if we have a type that is assigned by copy
-	 * we will need a memory copy statement
-	 */
-	if(is_type_assigned_by_copy(memory_write_type) == FALSE){
-		store_instruction->memory_access_type = WRITE_TO_MEMORY;
-		store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
-		store_instruction->type_storage.memory_read_write_type = memory_write_type;
-	} else {
-		store_instruction->memory_access_type = WRITE_TO_MEMORY;
-		store_instruction->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
-		store_instruction->type_storage.memory_read_write_type = memory_write_type;
-		store_instruction->optional_storage.byte_amount_to_copy = memory_write_type->type_size;
-	}
-
-
-	/**
-	 * Based on the addressing mode *and8 the value of the additional offset
-	 * we may have an addressing mode that varies slightly from the one
-	 * that was provided. It's only going to really vary though if said additional
-	 * offset is not 0. If it is 0, then we can just copy everything over 
-	 * literally
-	 *
-	 * NOTE: ANY CONSTANT THAT WAS GIVEN MUST BE COPIED ENTIRELY
-	 */
-	if(additional_offset != 0){
-		/**
-		 * Remember that ending up in here means that the constant is specifically
-		 * nonzero so we're going to need to change addressing modes that don't have
-		 * constants to ones that do
-		 */
-		switch(base_address->addressing_mode){
-			/**
-			 * We'll end up with something like store 4(x_0) <- 5
-			 */
-			case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-				break;
-			}
-
-			/**
-			 * With this if we have an additional offset of 4 and already
-			 * have something like store 4(x_0) <- 5 we'll just add to it
-			 * to get store 8(x_0) <- 5
-			 */
-			case ADDRESSING_MODE_OFFSET_ONLY: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * Going to end up with something like store 4(x_0, y_0) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_ONLY: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-				break;
-			}
-
-			/**
-			 * We're going to end up with something like store 4 + 8(x_0, y_0) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4(, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_INDEX_AND_SCALE: {
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4 + 8(, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-		 	}
-
-			/**
-			 * We'll get something like store 4(x_0, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+8(x_0, y_0, 8) <- 5
-			 */
-			case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-				store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+x_0(%rip) <- 5
-			 */
-			case ADDRESSING_MODE_RIP_RELATIVE: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = emit_direct_integer_or_char_constant(additional_offset, i64);
-				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-				break;
-			}
-
-			/**
-			 * We'll get something like store 4+8+x_0(%rip) <- 5
-			 */
-			case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
-				store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-				store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-				store_instruction->operands.oir.address_offset = emit_constant_copy(base_address->address_offset);
-				store_instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
-
-				//Add this additional offset in
-				sum_constant_with_raw_int64_value(store_instruction->operands.oir.address_offset, i64, additional_offset);
-				break;
-			}
-
-			default: {
-				trigger_ice_panic("Invalid addressing mode detected");
-				break;
-		 	}
-		}
-
-	/**
-	 * Additional offset is 0 so we don't need to do anything besides copy over all of the addressing
-	 * mode operands from the given base address pointer
-	 */
-	} else {
-		store_instruction->addressing_mode = base_address->addressing_mode;
-		store_instruction->operands.oir.address_operand1 = base_address->address_operand1;
-		store_instruction->operands.oir.address_operand2 = base_address->address_operand2;
-		store_instruction->operands.oir.rip_offset_var = base_address->rip_offset_var;
-		store_instruction->operands.oir.address_multiplier = base_address->address_multiplier;
-
-		//Because of the potential for address offset manipulation we need this to be distinct
-		store_instruction->operands.oir.address_offset = emit_constant_copy_if_not_null(base_address->address_offset);
-	}
-
-	/**
-	 * Now that we're done emitting everything we can store the result in here
-	 */
-	if(result_to_store->result_type == INITIALIZER_RESULT_TYPE_CONSTANT){
-		store_instruction->operands.oir.constant_operand = result_to_store->value.constant_value;
-	} else {
-		store_instruction->operands.oir.operand1 = result_to_store->value.variable_value;
-	}
-
-	return store_instruction;
-}
-
-
-/**
- * Create a new addressing mode operands struct based on the original operands given, with an
- * additional offset added in. This is meant to be used for the recursive initializer rules
- * where we'll need to pass in the current base address with an additional offset accounted
- * for
- */
-static inline addressing_operands_t package_new_addressing_operands_with_additional_offset(addressing_operands_t* original_operands, int32_t offset){
+static addressing_operands_t generate_OIR_addressing_operands_with_additional_offset(addressing_operands_t* original_operands, int64_t offset){
 	//Get a direct copy of these operands
 	addressing_operands_t new_operands = *original_operands;
 
@@ -9377,30 +9343,35 @@ static inline addressing_operands_t package_new_addressing_operands_with_additio
 	new_operands.address_offset = emit_constant_copy_if_not_null(new_operands.address_offset);
 
 	switch(new_operands.addressing_mode){
-		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
+		case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
 			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
 			new_operands.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_ONLY:
+		case ADDRESSING_MODE_REGISTERS_ONLY: {
 			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
 			new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 			break;
+		}
 
-		case ADDRESSING_MODE_RIP_RELATIVE:
+		case ADDRESSING_MODE_RIP_RELATIVE: {
 			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
 			new_operands.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 			break;
+		}
 
-		case ADDRESSING_MODE_INDEX_AND_SCALE:
+		case ADDRESSING_MODE_INDEX_AND_SCALE: {
 			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
 			new_operands.addressing_mode = ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE;
 			break;
+		}
 
-		case ADDRESSING_MODE_REGISTERS_AND_SCALE:
+		case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 			new_operands.address_offset = emit_direct_integer_or_char_constant(offset, i64);
 			new_operands.addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE;
 			break;
+		}
 
 		/**
 		 * These all already have offsets, so we won't need to change the type at all,
@@ -9410,16 +9381,127 @@ static inline addressing_operands_t package_new_addressing_operands_with_additio
 		case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE:
 		case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET:
 		case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE:
-		case ADDRESSING_MODE_REGISTERS_AND_OFFSET:
+		case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 			sum_constant_with_raw_int64_value(new_operands.address_offset, i64, offset);
 			break;
+		}
 
-		default:
+		default: {
 			trigger_ice_panic("Invalid addressing mode detected");
 			break;
+		}
 	}
 
 	return new_operands;
+}
+
+
+/**
+ * Generate an OIR load statement from the given addressing operands, with the result being stored in the given assignee
+ */
+static instruction_t* generate_OIR_load_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee,
+																 generic_type_t* memory_write_type){
+	instruction_t* load_instruction = calloc(1, sizeof(instruction_t));
+
+	//Populate the access type, write type and copy all of the operands over
+	load_instruction->memory_access_type = READ_FROM_MEMORY;
+	load_instruction->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+	load_instruction->type_storage.memory_read_write_type = memory_write_type;
+	load_instruction->operands.oir.source_address_expression = *address_operands;
+
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	load_instruction->operands.oir.source_address_expression.address_offset = emit_constant_copy_if_not_null(address_operands->address_offset);
+
+	//Store the assignee
+	load_instruction->operands.oir.assignee = assignee;
+	return load_instruction;
+}
+
+
+/**
+ * Generate an OIR store statement for the given address operands, that stores the given result variable
+ * with the given memory write type
+ */
+static instruction_t* generate_OIR_store_variable_from_address_operands(addressing_operands_t* address_operands, three_addr_var_t* result_to_store,
+																		generic_type_t* memory_write_type){
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	//Populate the access type, write type and copy all of the operands over
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	store_instruction->operands.oir.destination_address_expression = *address_operands;
+
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	store_instruction->operands.oir.destination_address_expression.address_offset = emit_constant_copy_if_not_null(address_operands->address_offset);
+
+	//Storing variable goes in operand1
+	store_instruction->operands.oir.operand1 = result_to_store;
+	return store_instruction;
+}
+
+
+/**
+ * Generate an OIR store statement for the given address operands, that stores the given result variable
+ * with the given memory write type
+ */
+static instruction_t* generate_OIR_store_constant_from_address_operands(addressing_operands_t* address_operands, three_addr_const_t* result_to_store,
+																		generic_type_t* memory_write_type){
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	//Populate the access type, write type and copy all of the operands over
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_STORE_STATEMENT;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	store_instruction->operands.oir.destination_address_expression = *address_operands;
+
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	store_instruction->operands.oir.destination_address_expression.address_offset = emit_constant_copy_if_not_null(address_operands->address_offset);
+
+	//Put the storing constant in the constant operand
+	store_instruction->operands.oir.constant_operand = result_to_store;
+	return store_instruction;
+}
+
+
+/**
+ * Generate an OIR memory copy statement from the given address operands 
+ */
+static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_operands_t* destination_address, addressing_operands_t* source_address,
+																		generic_type_t* memory_write_type){
+	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
+
+	//Populate the access type, write type and copy all of the operands over
+	store_instruction->memory_access_type = WRITE_TO_MEMORY;
+	store_instruction->statement_type = THREE_ADDR_CODE_MEMORY_COPY_STATEMENT;
+	store_instruction->type_storage.memory_read_write_type = memory_write_type;
+	store_instruction->optional_storage.byte_amount_to_copy = memory_write_type->type_size;
+
+	//Copy the source and destination addressing expressions over
+	store_instruction->operands.oir.destination_address_expression = *destination_address;
+	store_instruction->operands.oir.source_address_expression = * source_address;
+
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	store_instruction->operands.oir.destination_address_expression.address_offset = emit_constant_copy_if_not_null(destination_address->address_offset);
+	store_instruction->operands.oir.source_address_expression.address_offset = emit_constant_copy_if_not_null(source_address->address_offset);
+
+	return store_instruction;
 }
 
 
@@ -9449,15 +9531,32 @@ static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* ba
 		//The current offset will always just be this struct offset
 		current_offset = struct_record->struct_offset;
 
+		/**
+		 * First we'll generate all of our new operands using the current base address and the new offset
+		 */
+		addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_offset);
+
 		switch(result->result_type){
 			/**
-			 * If we have variables or constant results then all we'll need to do is emit the equivalent
-			 * OIR store statement 
+			 * For a variable we could be doing a regular store or a memory copy. The type of
+			 * the struct record will determine this
 			 */
-			case INITIALIZER_RESULT_TYPE_VARIABLE:
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				if(is_type_assigned_by_copy(struct_record->type_defined_as) == FALSE){
+					instruction_t* result_storage = generate_OIR_store_variable_from_address_operands(&new_operands, result->value.variable_value, struct_record->type_defined_as);
+					insert_instruction_before_given(result_storage, original_instruction);
+				} else {
+					addressing_operands_t source_address = {result->value.variable_value, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
+					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, &(source_address), struct_record->type_defined_as);
+					insert_instruction_before_given(result_storage, original_instruction);
+				}
+
+				break;
+		    }
+
 			case INITIALIZER_RESULT_TYPE_CONSTANT:{
-				instruction_t* store_statement = generate_OIR_store_with_additional_offset(base_address, current_offset, result, struct_record->type_defined_as);
-				insert_instruction_before_given(store_statement, original_instruction);
+				instruction_t* result_storage = generate_OIR_store_constant_from_address_operands(&new_operands, result->value.constant_value, struct_record->type_defined_as);
+				insert_instruction_before_given(result_storage, original_instruction);
 				break;
 		 	}
 
@@ -9467,9 +9566,6 @@ static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* ba
 			 * create a new offset that accounts for the current offset
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				//Let the helper do all of our packaging
-				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_offset);
-
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
 				 * the appropriate emitter based on the initializer result
@@ -9515,18 +9611,36 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
 	 * the initializer could have a mismatch of variables and constants
 	 */
 	for(int32_t i = 0; i < array_initializer->results.results_current_index; i++){
+		/**
+		 * Extract the result and generate a new set of addressing operands with this
+		 * new offset
+		 */
 		initializer_result_t* result = get_intializer_result_at_index(array_initializer, i);
+		addressing_operands_t new_operands = generate_OIR_addressing_operands_with_additional_offset(base_address, current_array_offset);
 
 		switch(result->result_type){
 			/**
-			 * For variables and constants we will emit the store with the additional
-			 * offset using the helper. The helper itself will deal with cloning the constants
-			 * if needed for us
+			 * We may be doing a memory copy based on the type that we're storing, or a generic store. Split
+			 * based on the member type and emit appropriately
 			 */
-			case INITIALIZER_RESULT_TYPE_VARIABLE:
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				if(is_type_assigned_by_copy(member_type) == FALSE){
+					instruction_t* result_storage = generate_OIR_store_variable_from_address_operands(&new_operands, result->value.variable_value, member_type);
+					insert_instruction_before_given(result_storage, original_instruction);
+				} else {
+					addressing_operands_t source_address = {result->value.variable_value, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
+					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, &source_address, member_type);
+					insert_instruction_before_given(result_storage, original_instruction);
+				}
+
+				break;
+		    }
+
+			/**
+			 * For constant storage just emit the store constant instruction and insert before given
+			 */
 			case INITIALIZER_RESULT_TYPE_CONSTANT: {
-				//Emit and get this inserted right *BEFORE* the original
-				instruction_t* result_storage = generate_OIR_store_with_additional_offset(base_address, current_array_offset, result, member_type);
+				instruction_t* result_storage = generate_OIR_store_constant_from_address_operands(&new_operands, result->value.constant_value, member_type);
 				insert_instruction_before_given(result_storage, original_instruction);
 				break;
 			}
@@ -9537,8 +9651,6 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
 			 * create a new offset that accounts for the current offset
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-				//Let the helper do all of our packaging
-				addressing_operands_t new_operands = package_new_addressing_operands_with_additional_offset(base_address, current_array_offset);
 
 				/**
 				 * Now that we've packaged up the new operands, we can recursively call
@@ -9581,30 +9693,18 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
  * NOTE: this function will return the final created statement to the caller
  */
 static instruction_t* convert_initializer_statement_into_OIR_store_statements(instruction_t* initializer_statement){
-	/**
-	 * We will need to know the base address, so we'll pass around this instruction's
-	 * current base address inside of this specialized struct. We will want to make
-	 * copies of the variables in here when we actually use them, but this will
-	 * give us a jumping off point
-	 */
-	addressing_operands_t base_address = {
-											initializer_statement->operands.oir.address_operand1,
-											initializer_statement->operands.oir.address_operand2,
-											initializer_statement->operands.oir.address_offset,
-											initializer_statement->operands.oir.address_multiplier,
-											initializer_statement->operands.oir.rip_offset_var,
-											initializer_statement->addressing_mode
-										  };
+	//Grab a pointer to the base address to make this work
+	addressing_operands_t* base_address = &(initializer_statement->operands.oir.destination_address_expression);
 
 	//Extract the initializer and call out to the appropriate rule
 	three_addr_initializer_t* initializer = initializer_statement->operands.oir.initializer_operand;
 	switch(initializer->initializer_type){
 		case INITIALIZER_TYPE_ARRAY:
-			convert_array_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
+			convert_array_initializer_into_OIR_stores(base_address, initializer, initializer_statement);
 			break;
 
 		case INITIALIZER_TYPE_STRUCT:
-			convert_struct_initializer_into_OIR_stores(&base_address, initializer, initializer_statement);
+			convert_struct_initializer_into_OIR_stores(base_address, initializer, initializer_statement);
 			break;
 	}
 
@@ -9660,24 +9760,25 @@ static inline u_int8_t lower_all_initializer_statements(dynamic_array_t* functio
  * movdqu instruction when it eventually gets selected later on down the road and will use the specialied
  * F128 basic type to represent the 16 byte copy
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_16_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Double quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, double_quad_word);
 
-	//First load the 16 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, 0);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, double_quad_word);
+	/**
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, double_quad_word);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
@@ -9688,24 +9789,25 @@ static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* s
  * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
  * it gets instruction selected down the road
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_8_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_8_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, i64);
 
-	//First load the 8 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i64, 0);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i64);
+	/**
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i64);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
@@ -9716,24 +9818,25 @@ static inline instruction_copy_pair_t emit_8_byte_copy_pair(three_addr_var_t* so
  * Emit a 4 byte load/store copy instruction pair. This instruction will use a regular movl and an i32 when
  * it gets instruction selected down the road
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_4_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_4_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, i32);
 
-	//First load the 4 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i32, 0);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i32);
+	/**
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i32);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
@@ -9744,24 +9847,25 @@ static inline instruction_copy_pair_t emit_4_byte_copy_pair(three_addr_var_t* so
  * Emit a 2 byte load/store copy instruction pair. This instruction will use a regular movw and an i16 when
  * it gets instruction selected down the road
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_2_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, i16);
 
-	//First load the 2 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, i16, 0);
-
-	//Now emit the corresponding store to take that retrieved memory and put it into the destination
-	instruction_t* store_instruction = generate_store_instruction_from_addressing_operands(dest_memory_address, current_offset, temporary_storage_variable, i16);
+	/**
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
+	 */
+	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
+	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, i16);
 
 	//Package up and return the copy pair
 	return (instruction_copy_pair_t){load_instruction, store_instruction};
@@ -9781,7 +9885,7 @@ static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* so
  * 	2 instructions so we will end up producing at least 6 instructions to make
  * 	this happen
  *
- * 	memory copy MEM<x> <- MEM<y>
+ * 	memory copy (MEM<x>) <- (MEM<y>)
  * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
  *
  * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
@@ -9791,13 +9895,13 @@ static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* so
  * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
  * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
  * 	
- *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
- *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
- *	 movq/movl/movw etc.
+ *	Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
+ *	go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
+ *	movq/movl/movw etc.
  *
- *	 In order to simplify things, we will first be converting these all into load/store operations and will
- *	 allow the existing processes to convert from there inside of the instruction selector itself. This ensures
- *	 that we maintain all of the existing logic around memory address variables
+ *	In order to simplify things, we will first be converting these all into load/store operations and will
+ *	allow the existing processes to convert from there inside of the instruction selector itself. This ensures
+ *	that we maintain all of the existing logic around memory address variables
  *
  * NOTE: this will return a pointer to the last instruction that was emitted by this function
  */
@@ -9813,18 +9917,11 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	block->function_defined_in->requires_initial_alignment = TRUE;
 
 	/**
-	 * For memory copy statements, we copy *from* the first operand into
-	 * the addressing mode expression that is stored in the instruction
+	 * For memory copy statements we copy from the source memory
+	 * address into the destination memory address
 	 */
-	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.operand1;
-	addressing_operands_t destination_memory_address = {
-														memory_copy_statement->operands.oir.address_operand1,
-														memory_copy_statement->operands.oir.address_operand2,
-														memory_copy_statement->operands.oir.address_offset,
-														memory_copy_statement->operands.oir.address_multiplier,
-														memory_copy_statement->operands.oir.rip_offset_var,
-														memory_copy_statement->addressing_mode
-														};
+	addressing_operands_t* source_memory_address = &(memory_copy_statement->operands.oir.source_address_expression);
+	addressing_operands_t* destination_memory_address = &(memory_copy_statement->operands.oir.destination_address_expression);
 
 	//Maintain the current offset. This is going to be the same for the source and destination
 	u_int64_t current_offset = 0;
@@ -9832,9 +9929,12 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	/**
 	 * Due to unique situations that we may enounter(like pass by copy parameters), we may need
 	 * to adjust the memory address that the source has if we're copying after a new stack allocation
-	 * statement. We maintain a base adjustment amoutn just for this purpose
+	 * statement. We maintain a base adjustment amount just for this purpose. This would be in the
+	 * first address operand if it exists. Since the source memory address is a set of addressing operands,
+	 * and this adjustment is constant, we can go ahead and bake this into the source address now
 	 */
-	u_int64_t source_adjustment = source_memory_address_var->memory_address_base_adjustment;
+	u_int64_t source_adjustment = source_memory_address->address_operand1->memory_address_base_adjustment;
+	*source_memory_address = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, source_adjustment);
 
 	//We always use the dedicated field to determine how many bytes we should be copying
 	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
@@ -9850,7 +9950,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			copy_pair = emit_16_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_16_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
@@ -9862,7 +9962,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			copy_pair = emit_8_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_8_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
@@ -9874,7 +9974,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			copy_pair = emit_4_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_4_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
@@ -9886,7 +9986,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			copy_pair = emit_2_byte_copy_pair(source_memory_address_var, &destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_2_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
@@ -12082,11 +12182,12 @@ static three_addr_var_t* emit_byte_copy_of_variable(three_addr_var_t* source){
  * to
  */
 static inline void handle_base_address_and_addressing_mode_for_instruction(instruction_t* instruction){
-	//Needed declarations for later
-	int64_t stack_offset = 0;
-	three_addr_var_t* base_address;
-	symtab_variable_record_t* linked_var;
-	instruction_t* rip_offset_lea;
+	/**
+	 * Our instructions store their address operands in different areas based on if we
+	 * have the address as a source or destination. This helper will return a pointer
+	 * to the operands that we're after
+	 */
+	addressing_operands_t* operands = get_addressing_operands_for_statement(instruction);
 
 	/**
 	 * First standardize everyting by moving it all over into the x86 registers off
@@ -12098,19 +12199,21 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 	/**
 	 * Step 1: Extract all fields(E)
 	 */
-	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
-	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
-	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
-	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
-	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+	three_addr_var_t* address_register1 = operands->address_operand1;
+	three_addr_var_t* address_register2 = operands->address_operand2;
+	three_addr_var_t* rip_offset_var = operands->rip_offset_var;
+	three_addr_const_t* address_offset = operands->address_offset;
+	u_int64_t address_multiplier = operands->address_multiplier;
+
+	//Extract the addressing mode
+	memory_addressing_mode_t addressing_mode = operands->addressing_mode;
 
 	/**
 	 * Step 2: Transform the second address register if a type adjustment is needed(T)
 	 *
 	 * We are *always* using 64 bit registers for addressing operations in memory movements
 	 */
-	if(address_register1 != NULL
-		&& address_register2 != NULL
+	if(address_register1 != NULL && address_register2 != NULL
 		&& is_converting_move_required(u64, address_register2->type) == TRUE){
 
 		//Let the helper emit and insert the move
@@ -12132,9 +12235,9 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 	 * of the base address(address_register1) field. Let's first extract
 	 * the values that we have in there to process
 	 */
-	base_address = instruction->operands.x86.address_register1;
+	three_addr_var_t* base_address = address_register1;
 	//Remember there is a chance that this is NULL, it's not a guaranteed field
-	linked_var = base_address->linked_var;
+	symtab_variable_record_t* linked_var = base_address->linked_var;
 
 	/**
 	 * Go based on the variable type of the base address itself to make determinations
@@ -12155,8 +12258,8 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 					 * Global or static variable, we will need to load these as rip-relative
 					 */
 					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						switch(instruction->addressing_mode){
+					case STATIC_VARIABLE: {
+						switch(addressing_mode){
 							/**
 							 * Going from
 							 * 	store (t4) <- 5
@@ -12164,15 +12267,15 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 * To 
 							 * 	store <var>(%rip) <- 5
 							 */
-							case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
+							case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
+								//Flip the addressing mode
+								addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 
 								//Update the two operands
 								instruction->operands.x86.rip_offset_var = base_address;
 								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-								
 								break;
+							}
 
 							/**
 							 * Going from
@@ -12181,15 +12284,14 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 * To 
 							 * 	store 4+<var>(%rip) <- 5
 							 */
-							case ADDRESSING_MODE_OFFSET_ONLY:
-								//Update the mode
-								instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+							case ADDRESSING_MODE_OFFSET_ONLY: {
+								addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 
 								//Update the two operands
 								instruction->operands.x86.rip_offset_var = base_address;
 								instruction->operands.x86.address_register1 = instruction_pointer_variable;
-
 								break;
+							}
 
 							/**
 							 * For every other kind of addressing mode with the rip offset variable, we are actually
@@ -12197,32 +12299,33 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							 * the rip offset variable beforehand in a lea and then substitute that variable in for the 
 							 * base address
 							 */
-							default:
+							default: {
 								//Emit the rip offset address calculation here
-								rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64, instruction->line_number);
+								instruction_t* rip_offset_lea = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64, instruction->line_number);
 
 								//Insert this right before our instruction
 								insert_instruction_before_given(rip_offset_lea, instruction);
 
 								//The base address now becomes this value
 								instruction->operands.x86.address_register1 = rip_offset_lea->operands.x86.destination_register;
-
 								break;
+							}
 						}
 						
 						break;
+					}
 
 					/**
 					 * We have a non global memory address variable. Any/all changes here are going to 
 					 * hinge around whether or not there is a present stack offset for us to consider. 
 					 * This will only change the addressing mode if we were not using the offset before
 					 */
-					default:
+					default: {
 						//No matter what the address register is now the stack pointer
 						instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 						//Get the stack offset
-						stack_offset = linked_var->stack_region->function_local_base_address;
+						int64_t stack_offset = linked_var->stack_region->function_local_base_address;
 
 						/**
 						 * Early exit - if we don't have a stack offset to worry
@@ -12237,7 +12340,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 						 * the offset value with what we've already got. Otherwise, we'll need
 						 * to create a fresh offset and update the addressing mode
 						 */
-						if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+						if(does_addressing_mode_use_offset_constant(addressing_mode) == TRUE){
 							//Let the helper sum with the existing offset value
 							sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
 
@@ -12248,21 +12351,21 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 							//Store the offset in the operands
 							instruction->operands.x86.address_offset = offset;
 
-							switch(instruction->addressing_mode){
+							switch(addressing_mode){
 								case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-									instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+									addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 									break;
 
 								case ADDRESSING_MODE_REGISTERS_ONLY:
-									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+									addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 									break;
 
 								case ADDRESSING_MODE_RIP_RELATIVE:
-									instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+									addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 									break;
 
 								case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-									instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+									addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
 									break;
 
 								/**
@@ -12270,12 +12373,13 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 								 */
 								default:
 									fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-				 							addressing_mode_to_string(instruction->addressing_mode));
+				 							addressing_mode_to_string(addressing_mode));
 									exit(1);
 							}
 						}
 
 						break;
+					}
 				}
 
 			/**
@@ -12287,7 +12391,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 				instruction->operands.x86.address_register1 = stack_pointer_variable;
 
 				//Get the stack offset
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
+				int64_t stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
 
 				/**
 				 * Early exit - if we don't have a stack offset to worry
@@ -12302,7 +12406,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 				 * the offset value with what we've already got. Otherwise, we'll need
 				 * to create a fresh offset and update the addressing mode
 				 */
-				if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+				if(does_addressing_mode_use_offset_constant(addressing_mode) == TRUE){
 					//Let the helper sum with the existing offset value
 					sum_constant_with_raw_int64_value(instruction->operands.x86.address_offset, i64, stack_offset);
 
@@ -12313,21 +12417,21 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 					//Store the offset in the operands
 					instruction->operands.x86.address_offset = offset;
 
-					switch(instruction->addressing_mode){
+					switch(addressing_mode){
 						case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-							instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+							addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 							break;
 
 						case ADDRESSING_MODE_REGISTERS_ONLY:
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+							addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 							break;
 
 						case ADDRESSING_MODE_RIP_RELATIVE:
-							instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+							addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 							break;
 
 						case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-							instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+							addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
 							break;
 
 						/**
@@ -12335,7 +12439,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 						 */
 						default:
 							fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-									addressing_mode_to_string(instruction->addressing_mode));
+									addressing_mode_to_string(addressing_mode));
 							exit(1);
 					}
 				}
@@ -12348,7 +12452,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 		 * and it will never be 0. We need to emit a special kind of constant here to represent
 		 * what this is
 		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
+		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS: {
 			//No matter what this always becomes the stack pointer variable
 			instruction->operands.x86.address_register1 = stack_pointer_variable;
 
@@ -12360,7 +12464,7 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 			 * the offset value with what we've already got. Otherwise, we'll need
 			 * to create a fresh offset and update the addressing mode
 			 */
-			if(does_addressing_mode_use_offset_constant(instruction->addressing_mode) == TRUE){
+			if(does_addressing_mode_use_offset_constant(addressing_mode) == TRUE){
 				//Add the two constants, store the result in the paraemeter constant
 				add_constants(stack_passed_parameter_offset, instruction->operands.x86.address_offset);
 
@@ -12372,21 +12476,21 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 				instruction->operands.x86.address_offset = stack_passed_parameter_offset;
 
 				//Now update the addressing mode to reflect that we have an offset
-				switch(instruction->addressing_mode){
+				switch(addressing_mode){
 					case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
-						instruction->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+						addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 						break;
 
 					case ADDRESSING_MODE_REGISTERS_ONLY:
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
+						addressing_mode = ADDRESSING_MODE_REGISTERS_AND_OFFSET;
 						break;
 
 					case ADDRESSING_MODE_RIP_RELATIVE:
-						instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
+						addressing_mode = ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET;
 						break;
 
 					case ADDRESSING_MODE_REGISTERS_AND_SCALE:
-						instruction->addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
+						addressing_mode = ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE; 
 						break;
 
 					/**
@@ -12394,12 +12498,13 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 					 */
 					default:
 						fprintf(stderr, "Fatal internal compiler error: invalid addressing mode %s hit\n",
-								addressing_mode_to_string(instruction->addressing_mode));
+								addressing_mode_to_string(addressing_mode));
 						exit(1);
 				}
 			}
 
 			break;
+		}
 			
 		/**
 		 * Nothing to do here. We will keep whatever addressing mode we entered into this instruction with
@@ -12408,6 +12513,12 @@ static inline void handle_base_address_and_addressing_mode_for_instruction(instr
 		default:
 			break;
 	}
+
+	/**
+	 * Once we're at the very end, copy over the addressing mode that we've been
+	 * updated all through this into the x86 region
+	 */
+	instruction->operands.x86.addressing_mode = addressing_mode;
 }
 
 
@@ -13286,12 +13397,8 @@ static inline void handle_signed_modulus(instruction_window_t* window, generic_t
 		division = emit_div_instruction(result_type, NULL, dividend, higher_order_dividend_bits, TRUE);
 
 		//Copy over all of the addressing mode operands
-		division->operands.oir.address_multiplier = modulus_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = modulus_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = modulus_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = modulus_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = modulus_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = modulus_instruction->addressing_mode;
 
 		//Let the dedicated helper rule convert from OIR to x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
@@ -13406,12 +13513,8 @@ static inline void handle_unsigned_modulus(instruction_window_t* window, generic
 		division = emit_div_instruction(result_type, NULL, dividend, cleared_rdx, FALSE);
 
 		//Copy over all of the addressing mode operands
-		division->operands.oir.address_multiplier = modulus_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = modulus_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = modulus_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = modulus_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = modulus_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = modulus_instruction->addressing_mode;
 
 		//Let the dedicated helper rule convert from OIR to x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
@@ -14039,13 +14142,9 @@ static void handle_signed_division(instruction_window_t* window, generic_type_t*
 		division = emit_div_instruction(destination_type, NULL, dividend, higher_order_dividend_bits, TRUE);
 
 		//Copy all of the addressing info over
-		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = original_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = original_instruction->addressing_mode;
-
+		
 		//Now invoke the helper to translate from OIR into x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
 	}
@@ -14169,12 +14268,8 @@ static void handle_unsigned_division(instruction_window_t* window, generic_type_
 		division = emit_div_instruction(destination_type, NULL, dividend, cleared_rdx, FALSE);
 
 		//Copy all of the addressing info over
-		division->operands.oir.address_multiplier = original_instruction->operands.oir.address_multiplier;
-		division->operands.oir.address_offset = original_instruction->operands.oir.address_offset;
-		division->operands.oir.address_operand1 = original_instruction->operands.oir.address_operand1;
-		division->operands.oir.address_operand2 = original_instruction->operands.oir.address_operand2;
+		division->operands.oir.source_address_expression = original_instruction->operands.oir.source_address_expression;
 		division->memory_access_type = READ_FROM_MEMORY;
-		division->addressing_mode = original_instruction->addressing_mode;
 
 		//Now invoke the helper to translate from OIR into x86
 		handle_base_address_and_addressing_mode_for_instruction(division);
@@ -14891,11 +14986,11 @@ static void handle_addition_instruction(instruction_window_t* window){
 			
 			//Based on the constant status we do it one way or the other
 			if(original_addition->statement_type == THREE_ADDR_CODE_BIN_OP_STMT){
-				original_addition->addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
+				original_addition->operands.x86.addressing_mode = ADDRESSING_MODE_REGISTERS_ONLY;
 				original_addition->operands.x86.address_register2 = original_addition->operands.oir.operand2;
 
 			} else {
-				original_addition->addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
+				original_addition->operands.x86.addressing_mode = ADDRESSING_MODE_OFFSET_ONLY;
 				original_addition->operands.x86.address_offset = original_addition->operands.oir.constant_operand;
 			}
 
@@ -16106,6 +16201,9 @@ static void handle_lea_statement(instruction_t* instruction){
 			break;
 	}
 
+	//Get a pointer to this for convenience
+	addressing_operands_t* operands = &(instruction->operands.oir.source_address_expression);
+
 	/**
 	 * Since the addressing mode is always the same here, we don't need to do any splitting
 	 * out by address register. In theory, everything that we have don't want should be NULL
@@ -16118,17 +16216,18 @@ static void handle_lea_statement(instruction_t* instruction){
 	 * Step 1: Extract all fields(E)
 	 */
 	three_addr_var_t* destination_register = instruction->operands.oir.assignee;
-	three_addr_var_t* address_register1 = instruction->operands.oir.address_operand1;
-	three_addr_var_t* address_register2 = instruction->operands.oir.address_operand2;
-	three_addr_var_t* rip_offset_var = instruction->operands.oir.rip_offset_var;
-	three_addr_const_t* address_offset = instruction->operands.oir.address_offset;
-	u_int64_t address_multiplier = instruction->operands.oir.address_multiplier;
+	three_addr_var_t* address_register1 = operands->address_operand1;
+	three_addr_var_t* address_register2 = operands->address_operand2;
+	three_addr_var_t* rip_offset_var = operands->rip_offset_var;
+	three_addr_const_t* address_offset = operands->address_offset;
+	u_int64_t address_multiplier = operands->address_multiplier;
+	memory_addressing_mode_t addressing_mode = operands->addressing_mode;
+
 
 	/**
 	 * Step 2: Transform the second address register if a type adjustment is needed(T) 
 	 */
-	if(address_register1 != NULL
-		&& address_register2 != NULL
+	if(address_register1 != NULL && address_register2 != NULL
 		&& is_converting_move_required(address_register1->type, address_register2->type) == TRUE){
 
 		//Let the helper emit and insert the move
@@ -16144,6 +16243,7 @@ static void handle_lea_statement(instruction_t* instruction){
 	instruction->operands.x86.rip_offset_var = rip_offset_var;
 	instruction->operands.x86.address_offset = address_offset;
 	instruction->operands.x86.address_multiplier = address_multiplier;
+	instruction->operands.x86.addressing_mode = addressing_mode;
 }
 
 
@@ -16768,9 +16868,7 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 	instruction->operands.x86.destination_register = destination_variable;
 
 	//This will be a rip-relative address calculation
-	instruction->addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
-
-	//This is a read from memory movement
+	instruction->operands.x86.addressing_mode = ADDRESSING_MODE_RIP_RELATIVE;
 	instruction->memory_access_type = READ_FROM_MEMORY;
 
 	//The first address calc will be the instruction pointer
@@ -17016,123 +17114,13 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 
 
 /**
- * Handle the base address for a load statement in all of its forms. This includes
- * global variables, stack variables, and plain variables as well. This is meant to
- * be used by the lea combiner rule. It will *not* modify addressing modes and it should
- * not be expected to give a full and complete result back. It will only modify
- * address calc reg1 and the offset if appropriate
- */
-static inline void handle_load_instruction_base_address(instruction_t* load_statement){
-	int64_t stack_offset;
-	instruction_t* address_calculation;
-
-	//Extract the base address and the linked variable
-	three_addr_var_t* base_address = load_statement->operands.oir.address_operand1;
-	symtab_variable_record_t* linked_var = base_address->linked_var;
-
-	/**
-	 * Go based on the kind of variable that we have here
-	 */
-	switch(base_address->variable_type){
-		/**
-		 * We have a regular memory address variable(super common). We'll handle this
-		 * here
-		 */
-		case VARIABLE_TYPE_MEMORY_ADDRESS:
-			if(linked_var != NULL){
-				switch(linked_var->membership){
-					/**
-					 * We are loading a global/static variable(same thing) with a subsequent offset. We will need to first
-					 * load the address of said global variable, and then use that with an address calculation. We 
-					 * are not able to combine the 2 in such a way
-					 */
-					case GLOBAL_VARIABLE:
-					case STATIC_VARIABLE:
-						//Let the helper do the work
-						address_calculation = emit_global_variable_address_calculation_x86(base_address, instruction_pointer_variable, u64, load_statement->line_number);
-
-						//Now insert this before the given instruction
-						insert_instruction_before_given(address_calculation, load_statement);
-
-						/**
-						 * The destination of the global variable address will be our new address calc reg 1. 
-						 * We already have the offset loaded in, so that remains unchanged
-						 */
-						load_statement->operands.x86.address_register1 = address_calculation->operands.x86.destination_register;
-
-						break;
-
-					/**
-					 * Otherwise we're here with a non global/static variable so we do the normal procedure
-					 */
-					default:
-						//This is our stack offset, it will be needed going forward
-						stack_offset = linked_var->stack_region->function_local_base_address;
-
-						//If we actually have a stack offset to deal with. We'll store the offset constant and first operand
-						if(stack_offset != 0){
-							//Emit the offset
-							load_statement->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-							//This will be the stack pointer
-							load_statement->operands.x86.address_register1 = stack_pointer_variable;
-
-						//Otherwise there's no stack offset, so we'll just have the stack pointer
-						} else {
-							load_statement->operands.x86.address_register1 = stack_pointer_variable;
-						}
-
-						break;
-				}
-
-			} else {
-				//This is our stack offset, it will be needed going forward
-				stack_offset = base_address->associated_memory_region.stack_region->function_local_base_address;
-
-				//If we actually have a stack offset to deal with. We'll store the offset constant and first operand
-				if(stack_offset != 0){
-					//Emit the offset
-					load_statement->operands.x86.address_offset = emit_direct_integer_or_char_constant(stack_offset, i64);
-
-					//This will be the stack pointer
-					load_statement->operands.x86.address_register1 = stack_pointer_variable;
-
-				//Otherwise there's no stack offset, so we'll just have the stack pointer
-				} else {
-					load_statement->operands.x86.address_register1 = stack_pointer_variable;
-				}
-			}
-
-			break;
-
-		/**
-		 * Unlike a regular memory address, a stack passed parameter address is going to come
-		 * with a few caveats. First, it will never be 0 due to the way that function calling works,
-		 * and second, it will never be global, so we can have some simpler processing here
-		 */
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			//Emit the offset
-			load_statement->operands.x86.address_offset = emit_stack_passed_parameter_offset_constant(base_address->associated_memory_region.stack_region, u64);
-
-			//This will be the stack pointer
-			load_statement->operands.x86.address_register1 = stack_pointer_variable;
-
-			break;
-
-		default:
-			//Assign over like such
-			load_statement->operands.x86.address_register1 = base_address;
-			break;
-	}
-}
-
-
-/**
  * Combine an indirect jump address calculation with the indirect jump itself to 
  * minimize the instruction footprint. This is most often used with switch/raise
  * statements
  *
  * NOTE: we assume that the indirect jump is always the first statement
+ *
+ * NOTE: indirect jumps always have their address operands as the destination operands
  */
 static inline void handle_indirect_jump(instruction_window_t* window){
 	//Extract it
@@ -17142,7 +17130,7 @@ static inline void handle_indirect_jump(instruction_window_t* window){
 	indirect_jump_statement->instruction_type = INDIRECT_JMP;
 
 	//By default the true source is this, but we may need to emit a converting move
-	three_addr_var_t* true_source = indirect_jump_statement->operands.oir.address_operand2;
+	three_addr_var_t* true_source = indirect_jump_statement->operands.oir.destination_address_expression.address_operand2;
 
 	//Extract the type
 	generic_type_t* source_type = true_source->type;
@@ -17169,7 +17157,7 @@ static inline void handle_indirect_jump(instruction_window_t* window){
 
 	//The index register goes in the second address register
 	indirect_jump_statement->operands.x86.address_register2 = true_source;
-	indirect_jump_statement->operands.x86.address_multiplier = indirect_jump_statement->operands.oir.address_multiplier;
+	indirect_jump_statement->operands.x86.address_multiplier = indirect_jump_statement->operands.oir.destination_address_expression.address_multiplier;
 
 	//Reconstruct the window with the indirect jump as the start
 	reconstruct_window(window, indirect_jump_statement);
@@ -17184,7 +17172,7 @@ static inline void handle_indirect_jump(instruction_window_t* window){
  * we have from there
  */
 static inline alignment_type_t is_alignment_guaranteed_for_memory_operation(instruction_t* instruction){
-	switch(instruction->addressing_mode){
+	switch(instruction->operands.x86.addressing_mode){
 		case ADDRESSING_MODE_BASE_ADDRESS_ONLY:
 			//If this is the stack pointer then we can guarantee alignment
 			if(instruction->operands.x86.address_register1 == stack_pointer_variable){

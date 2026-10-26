@@ -45,6 +45,11 @@ struct addressing_operands_t {
 
 
 /**
+ * Utility to initialize NULL addressing operands
+ */
+#define INITIALIZE_NULL_ADDRESS_OPERANDS (addressing_operands_t){NULL, NULL, NULL, 0, NULL, ADDRESSING_MODE_NONE}
+
+/**
  * Are we forcing something to be signed or unsigned
  * regardless of the assignee type? This is mainly used
  * for shift operations but I can see it potentially
@@ -144,15 +149,14 @@ struct instruction_t{
 			 * processing
 			 */
 			three_addr_var_t* rip_offset_var;
-
+			//Separate memory addressing mode for the x86 values
+			memory_addressing_mode_t addressing_mode;
 		} x86;
 	} operands;
 
 	/**
 	 * We may have parameters for phi functions/mature function calls or parameter results
 	 * for immature ones
-	 *
-	 * TODO PARAMETER RESULTS CAN CONTAIN INITIALIZERS
 	 */
 	dynamic_array_t parameters;
 	parameter_results_array_t parameter_results;

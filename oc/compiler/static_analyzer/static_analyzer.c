@@ -1241,6 +1241,22 @@ static void rename_intitializer_members(three_addr_initializer_t* initializer){
 
 
 /**
+ * Rename all address operands in an addressing operands struct. Since these are
+ * exclusively uses, we only ever to RHS new name on them
+ */
+static inline void rename_addressing_operands(addressing_operands_t* operands){
+	if(is_variable_ssa_eligible(operands->address_operand1) == TRUE){
+		rhs_new_name(operands->address_operand1);
+	}
+
+	if(is_variable_ssa_eligible(operands->address_operand2) == TRUE){
+		rhs_new_name(operands->address_operand2);
+	}
+}
+
+
+
+/**
  * Rename all variables to be in SSA form. This is the final step in our conversion
  *
  * Algorithm:
@@ -1368,17 +1384,79 @@ static void rename_block(basic_block_t* entry){
 			 * handling for these instructinos
 			 */
 			case THREE_ADDR_CODE_INITIALIZER_STMT: {
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand1) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand1);
-				}
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand2);
-				}
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.destination_address_expression));
 
 				//Call out to the helper for this renaming
 				rename_intitializer_members(cursor->operands.oir.initializer_operand);
 
+				break;
+			}
+
+			/**
+			 * Stores specifically have addressing operands in the destination only, so we
+			 * can ignore the source operands. Stores should also never have an assignee
+			 */
+			case THREE_ADDR_CODE_STORE_STATEMENT: {
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.destination_address_expression));
+
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand1);
+				}
+
+				if(is_variable_ssa_eligible(cursor->operands.oir.operand2) == TRUE){
+					rhs_new_name(cursor->operands.oir.operand2);
+				}
+
+				break;
+			}
+
+			/**
+			 * Loads have addressing operands as the source. They can have an assignee
+			 * so we will handle that here
+			 */
+			case THREE_ADDR_CODE_LOAD_STATEMENT: {
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.source_address_expression));
+
+				/**
+				 * After we rename the RHS, we need to rename the left hand variable if
+				 * it itself is eligible
+				 */
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
+				}
+
+				break;
+			}
+
+			/**
+			 * Leas have addressing operands as the source. They can have an assignee
+			 * so we will handle that here
+			 */
+			case THREE_ADDR_CODE_LEA_STMT: {
+				//First rename the addressing operands
+				rename_addressing_operands(&(cursor->operands.oir.source_address_expression));
+
+				/**
+				 * After we rename the RHS, we need to rename the left hand variable if
+				 * it itself is eligible
+				 */
+				if(is_variable_ssa_eligible(cursor->operands.oir.assignee) == TRUE){
+					lhs_new_name(cursor->operands.oir.assignee);
+				}
+
+				break;
+			}
+
+			/**
+			 * Memory copy statements use the source and destination address expressions. They are
+			 * both considered to be on the RHS so we'll rename them both with the helper
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+				rename_addressing_operands(&(cursor->operands.oir.destination_address_expression));
+				rename_addressing_operands(&(cursor->operands.oir.source_address_expression));
 				break;
 			}
 
@@ -1392,14 +1470,6 @@ static void rename_block(basic_block_t* entry){
 
 				if(is_variable_ssa_eligible(cursor->operands.oir.operand2) == TRUE){
 					rhs_new_name(cursor->operands.oir.operand2);
-				}
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand1) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand1);
-				}
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.address_operand2) == TRUE){
-					rhs_new_name(cursor->operands.oir.address_operand2);
 				}
 
 				/**
@@ -1926,6 +1996,20 @@ static u_int8_t check_initializer_for_definite_assignment(instruction_t* instruc
 
 
 /**
+ * Check variable addressing mode operands for definite assignment
+ */
+static inline u_int8_t check_addressing_operands_for_definite_assignment(instruction_t* instruction, addressing_operands_t* operands){
+	u_int8_t overall_result = SUCCESS;
+
+	//Only the two variables need to be checked
+	overall_result &= check_variable_for_definite_assignment(instruction, operands->address_operand1);
+	overall_result &= check_variable_for_definite_assignment(instruction, operands->address_operand2);
+
+	return overall_result;
+}
+
+
+/**
  * Does the given instruction comply with the definite assignment rules? We will check 
  * every single eligible variable for compliance. If one variable fails, the whole thing
  * fails out
@@ -1947,8 +2031,8 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	 */
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand1);
 	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.operand2);
-	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand1);
-	overall_result &= check_variable_for_definite_assignment(instruction, instruction->operands.oir.address_operand2);
+	overall_result &= check_addressing_operands_for_definite_assignment(instruction, &(instruction->operands.oir.destination_address_expression));
+	overall_result &= check_addressing_operands_for_definite_assignment(instruction, &(instruction->operands.oir.source_address_expression));
 
 	//If we have an initializer then we'll check that(null check is in the helper)
 	overall_result &= check_initializer_for_definite_assignment(instruction, instruction->operands.oir.initializer_operand);
