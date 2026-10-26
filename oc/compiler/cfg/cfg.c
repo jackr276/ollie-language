@@ -11931,12 +11931,13 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 
 	switch(type->type_class){
 		/**
-		 * Struct, union and array types will always necessitate the creation of their own memory
-		 * regions, so we will take care of that now
+		 * Array, structures and unions are all stored on the stack. So, when
+		 * we see one, we need to make sure that we are acutally allocating the 
+		 * stack space for it
 		 */
-		case TYPE_CLASS_STRUCT: 
-		case TYPE_CLASS_UNION:
-		case TYPE_CLASS_ARRAY: {
+		case TYPE_CLASS_ARRAY: 
+		case TYPE_CLASS_STRUCT:
+		case TYPE_CLASS_UNION: {
 			//Create a stack region for this variable and store it in the associated region
 			variable->stack_region = create_stack_region_for_type(&(current_function->local_stack), type);
 
@@ -11984,7 +11985,6 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	 * this is determining several optimizations
 	 */
 	current_block = let_initializer_results.final_block;
-	instruction_t* last_rhs_statement = current_block->exit_statement;
 
 	switch(let_initializer_results.type){
 		case CFG_RESULT_TYPE_VAR:{
