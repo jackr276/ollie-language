@@ -2685,19 +2685,14 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 * Specialized memory copy statement. This exists for deep
 		 * copies from struct to struct or union to union
 		 *
-		 * Memory copies store the destination address as an OIR addressing
-		 * mode instruction while they store the source as a singular operand in op1
-		 *
-		 *
-		 * TODO THIS WILL BE UPDATED TO HAVE BOTH MEMORY DESTINATIONS
-		 *
-		 *
+		 * Memory copy instructions store the source and destination as
+		 * addressing expresions. They are unique among statements in this way
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
 			fprintf(fl, "memory copy %ld bytes ", stmt->optional_storage.byte_amount_to_copy);
 			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.destination_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, " <- ");
-			print_variable(fl, stmt->operands.oir.operand1, PRINTING_VAR_INLINE);
+			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.source_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
 
@@ -5989,14 +5984,12 @@ instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee
 	return stmt;
 }
 
+
 /**
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
- *
- *
- * TODO WILL NEED AN UPDATE
  */
-instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number){
+instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_address, addressing_operands_t* source_address, u_int64_t byte_amount_to_copy, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Flag as a memory copy statement
@@ -6005,15 +5998,13 @@ instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_a
 	//Flag that this is a write to memory and store how much we need to copy
 	stmt->memory_access_type = WRITE_TO_MEMORY;
 	stmt->optional_storage.byte_amount_to_copy = byte_amount_to_copy;
-
+	
 	/**
-	 * The destination is always represented as an addressing mode expression itself,
-	 * while the source is in the form of a single variable in op1
+	 * The destination and source are always represented as addressing
+	 * mode expressions
 	 */
 	stmt->operands.oir.destination_address_expression = *destination_address;
-
-	//Store the source as our op1
-	stmt->operands.oir.operand1 = source_memory_region;
+	stmt->operands.oir.source_address_expression = *source_address;
 
 	stmt->line_number = line_number;
 	return stmt;
@@ -6027,7 +6018,7 @@ instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_a
  * This variation is meant for the most common use case where the destination is
  * just a base address
  */
-instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number){
+instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* destination_address, three_addr_var_t* source_address, u_int64_t byte_amount_to_copy, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//Flag as a memory copy statement
@@ -6038,17 +6029,13 @@ instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* 
 	stmt->optional_storage.byte_amount_to_copy = byte_amount_to_copy;
 
 	/**
-	 * In this case we know that we just have a destination address so
-	 * throw it in address op1
+	 * The source and destination address expression in this instance are both just BASE_ADDRESS_ONLY
 	 */
 	stmt->operands.oir.destination_address_expression = (addressing_operands_t){destination_address, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
-
-	//Store the source as our op1
-	stmt->operands.oir.operand1 = source_memory_region;
+	stmt->operands.oir.source_address_expression = (addressing_operands_t){source_address, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
 
 	stmt->line_number = line_number;
 	return stmt;
-
 }
 
 
