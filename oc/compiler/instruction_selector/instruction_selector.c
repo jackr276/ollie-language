@@ -9867,7 +9867,7 @@ static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* so
  * 	2 instructions so we will end up producing at least 6 instructions to make
  * 	this happen
  *
- * 	memory copy MEM<x> <- MEM<y>
+ * 	memory copy (MEM<x>) <- (MEM<y>)
  * 	Assume that x and y are 40 byte structs. y starts at stack address 0, x will start at address 48(padding)
  *
  * 	 movdqu (%rsp), %xmm2  	 <--- Load 16 byte chunk #1
@@ -9877,18 +9877,15 @@ static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* so
  * 	 movq 32(%rsp), %rax  	 <--- Load 8 byte chunk #3
  * 	 movq %rax, 80(%rsp)  <--- Store 8 byte chunk #3
  * 	
- *	 Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
- *	 go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
- *	 movq/movl/movw etc.
+ *	Note that we need to to use SSE registers and the special "movdqu"(move unaligned double quadword) to just
+ *	go about copying here when we have 16 byte chunks. Anything 8 bytes and below we will just be using
+ *	movq/movl/movw etc.
  *
- *	 In order to simplify things, we will first be converting these all into load/store operations and will
- *	 allow the existing processes to convert from there inside of the instruction selector itself. This ensures
- *	 that we maintain all of the existing logic around memory address variables
+ *	In order to simplify things, we will first be converting these all into load/store operations and will
+ *	allow the existing processes to convert from there inside of the instruction selector itself. This ensures
+ *	that we maintain all of the existing logic around memory address variables
  *
  * NOTE: this will return a pointer to the last instruction that was emitted by this function
- *
- *
- * TODO THIS WILL NEED TO BE FIXED
  */
 static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instruction_t* memory_copy_statement){
 	/**
@@ -9902,10 +9899,10 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	block->function_defined_in->requires_initial_alignment = TRUE;
 
 	/**
-	 * For memory copy statements, we copy *from* the first operand into
-	 * the addressing mode expression that is stored in the instruction
+	 * For memory copy statements we copy from the source memory
+	 * address into the destination memory address
 	 */
-	three_addr_var_t* source_memory_address_var = memory_copy_statement->operands.oir.operand1;
+	addressing_operands_t* source_memory_address = &(memory_copy_statement->operands.oir.source_address_expression);
 	addressing_operands_t* destination_memory_address = &(memory_copy_statement->operands.oir.destination_address_expression);
 
 	//Maintain the current offset. This is going to be the same for the source and destination
@@ -9914,9 +9911,10 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	/**
 	 * Due to unique situations that we may enounter(like pass by copy parameters), we may need
 	 * to adjust the memory address that the source has if we're copying after a new stack allocation
-	 * statement. We maintain a base adjustment amoutn just for this purpose
+	 * statement. We maintain a base adjustment amount just for this purpose. This would be in the
+	 * first address operand if it exists
 	 */
-	u_int64_t source_adjustment = source_memory_address_var->memory_address_base_adjustment;
+	u_int64_t source_adjustment = source_memory_address->address_operand1->memory_address_base_adjustment;
 
 	//We always use the dedicated field to determine how many bytes we should be copying
 	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
@@ -9932,7 +9930,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			copy_pair = emit_16_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_16_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
@@ -9944,7 +9942,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			copy_pair = emit_8_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_8_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
@@ -9956,7 +9954,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			copy_pair = emit_4_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_4_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
@@ -9968,7 +9966,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			copy_pair = emit_2_byte_copy_pair(source_memory_address_var, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_2_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
