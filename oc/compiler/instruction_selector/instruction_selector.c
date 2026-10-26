@@ -1350,8 +1350,44 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 }
 
 
+/**
+ * We know that, if we have a return by copy function call, we must be doing a memory
+ * copy either in the original block or in some successor(immediate or distant). What's
+ * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
+ * in the end to the region that we're after, which we can use to our advantage
+ *
+ * Below is a rough draft of the algorithm that we will use to find what we're after:
+ *
+ * TODO FINALIZE THIS
+ *
+ * algorithm find_final_memory_copy(call_statement)
+ * 	return_by_copy_addr <- call statement's assignee
+ *	
+ *	search_block(block, call_statement, return_by_copy_addr)
+ *
+ * algorithm search_block(block, starting_instruction, source_variable):
+ * 	if block is visited:
+ * 		return
+ *
+ * 	flag cursor as visited
+ *
+ * 	cursor <- starting_instruction
+ *
+ * 	while cursor is not null:
+ * 		if cursor is assignment and source is the source_variable:
+ * 			source_variable <- assignment's assignee // There's been a reassignment so change what we're after
+ *
+ * 		else if cursor is memory copy and the source address operand 1 is the variable:
+ * 			return memory copy instruction // FOUND IT!
+ *
+ *
+ * 		cursor = cursor->next
+ *
+ *
+ * 	for each successor s of cursor:
+ * 		search_block(s, s's starting statement, source_variable)
+ */
 static instruction_t* get_final_memory_copy_for_function(instruction_t* call_statement){
-	//TODO THIS MUST BE IN EITHER THIS BLOCK OR A BLOCK THAT IT DOMINATES
 
 	basic_block_t* call_block = call_statement->block_contained_in;
 
