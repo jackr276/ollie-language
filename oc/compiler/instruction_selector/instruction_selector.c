@@ -1355,39 +1355,50 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
  * it is guaranteed to survive after the function that we're calling returns. This helper also handles all
  * of the needed updates to the various trackers around memory addresses, parameter order, etc.
+ *
+ * TODO DOCUMENT RRF
  */
 static inline void handle_return_by_copy_parameter(instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order,
 												   	dynamic_array_t* memory_addresses_to_adjust){
-	if(call_statement->is_rrf_eligible == TRUE){
-		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
-	}
-
-
-	//Create a stack region inside of this function that represents it
-	stack_region_t* return_by_copy_region = create_stack_region_for_type(caller_stack_frame, return_type);
+	//The final address of the return by copy region
+	three_addr_var_t* return_by_copy_region_address = NULL;
 
 	/**
-	 * We can mark this now because we know that it's going to be used. Function calls may
-	 * never be optimized away
+	 * Case 1: we are not eligible for return region forwarding. In this case, we'll need to emit a fresh
+	 * region to copy into and pass that into the %rdi parameter
 	 */
-	return_by_copy_region->mark = TRUE;
+	if(call_statement->is_rrf_eligible == FALSE){
+		/**
+		 * Create a stack region inside of this function that represents a new return by copy region. We can
+		 * also mark it immediately because we know that it will always be used
+		 */
+		stack_region_t* return_by_copy_region = create_stack_region_for_type(caller_stack_frame, return_type);
+		return_by_copy_region->mark = TRUE;
+		
+		//Emit the special memory address temp var for this
+		return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
 
-	//Emit the special memory address temp var for this
-	three_addr_var_t* region_memory_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
+	} else {
+		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
 
-	//We'll assign to this so give it the GP parameter order
+	/**
+	 * Create a temp var that will actually represent the region
+	 * address being assigned to %RDI. It will need a GP parameter
+	 * order of 1
+	 */
 	three_addr_var_t* region_variable = emit_temp_var(return_type);
-
-	//Give it the GP order and then bump it for next time
 	region_variable->class_relative_parameter_order = *gp_parameter_order;
 	(*gp_parameter_order)++;
 
 	//Emit the assignment and add it before the call statement
-	instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, region_memory_address, call_statement->line_number);
+	instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, call_statement->line_number);
 	insert_instruction_before_given(parameter_assignment, call_statement);
 
-	//Add this into the parameter array
+	//Add the temp var into the parameter array
 	dynamic_array_add(&(call_statement->parameters), region_variable);
 
 	/**
@@ -1395,7 +1406,7 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 * are stack params. The caller has allocated this dynamic array if there
 	 * are stack params, so we can use that as our test
 	 */
-	dynamic_array_add_if_allocated(memory_addresses_to_adjust, region_memory_address);
+	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 }
 
 
@@ -1922,7 +1933,6 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * handle anything else
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
-		//TODO IT WOULD BE HERE
 		handle_return_by_copy_parameter(call_statement, &(function->local_stack), called_function_signature->return_type,
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
