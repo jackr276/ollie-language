@@ -9397,6 +9397,32 @@ static addressing_operands_t generate_OIR_addressing_operands_with_additional_of
 
 
 /**
+ * Generate an OIR load statement from the given addressing operands, with the result being stored in the given assignee
+ */
+static instruction_t* generate_OIR_load_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee,
+																 generic_type_t* memory_write_type){
+	instruction_t* load_instruction = calloc(1, sizeof(instruction_t));
+
+	//Populate the access type, write type and copy all of the operands over
+	load_instruction->memory_access_type = READ_FROM_MEMORY;
+	load_instruction->statement_type = THREE_ADDR_CODE_LOAD_STATEMENT;
+	load_instruction->type_storage.memory_read_write_type = memory_write_type;
+	load_instruction->operands.oir.source_address_expression = *address_operands;
+
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	load_instruction->operands.oir.source_address_expression.address_offset = emit_constant_copy_if_not_null(address_operands->address_offset);
+
+	//Store the assignee
+	load_instruction->operands.oir.assignee = assignee;
+	return load_instruction;
+}
+
+
+/**
  * Generate an OIR store statement for the given address operands, that stores the given result variable
  * with the given memory write type
  */
@@ -9734,13 +9760,11 @@ static inline u_int8_t lower_all_initializer_statements(dynamic_array_t* functio
  * movdqu instruction when it eventually gets selected later on down the road and will use the specialied
  * F128 basic type to represent the 16 byte copy
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_16_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
 
@@ -9765,13 +9789,11 @@ static inline instruction_copy_pair_t emit_16_byte_copy_pair(three_addr_var_t* s
  * Emit an 8 byte load/store copy instruction pair. This instruction will use a regular movq and an i64 when
  * it gets instruction selected down the road
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_8_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_8_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
@@ -9796,13 +9818,11 @@ static inline instruction_copy_pair_t emit_8_byte_copy_pair(three_addr_var_t* so
  * Emit a 4 byte load/store copy instruction pair. This instruction will use a regular movl and an i32 when
  * it gets instruction selected down the road
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_4_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_4_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
@@ -9827,13 +9847,11 @@ static inline instruction_copy_pair_t emit_4_byte_copy_pair(three_addr_var_t* so
  * Emit a 2 byte load/store copy instruction pair. This instruction will use a regular movw and an i16 when
  * it gets instruction selected down the road
  *
- * The source variable is given to us as a regular variable, while the destination is provided as a set of
- * addressing operands for us to use directly. This allows us to emit an instruction that is basically
- * fully simplified off the bat
+ * Both source and destination will always be given to us as addressing mode expressions
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_2_byte_copy_pair(three_addr_var_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_2_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
 	//Word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
