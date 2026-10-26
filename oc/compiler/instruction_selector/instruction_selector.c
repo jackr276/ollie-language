@@ -9140,12 +9140,11 @@ static void mark(dynamic_array_t* function_blocks){
 		    }
 
 			/**
-			 * TODO UPDATE THIS
+			 * Memory copy statements use the source and destination addressing expressions
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
 				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
 				break;
 		    }
 
@@ -9453,12 +9452,9 @@ static instruction_t* generate_OIR_store_constant_from_address_operands(addressi
 
 /**
  * Generate an OIR memory copy statement from the given address operands 
- *
- * TODO WILL CHANGE
  */
-static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_operands_t* destination_address, three_addr_var_t* source_address,
+static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_operands_t* destination_address, addressing_operands_t* source_address,
 																		generic_type_t* memory_write_type){
-
 	instruction_t* store_instruction = calloc(1, sizeof(instruction_t));
 
 	//Populate the access type, write type and copy all of the operands over
@@ -9467,7 +9463,9 @@ static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_
 	store_instruction->type_storage.memory_read_write_type = memory_write_type;
 	store_instruction->optional_storage.byte_amount_to_copy = memory_write_type->type_size;
 
+	//Copy the source and destination addressing expressions over
 	store_instruction->operands.oir.destination_address_expression = *destination_address;
+	store_instruction->operands.oir.source_address_expression = * source_address;
 
 	/**
 	 * One special caveat - we always want to have a completely distinct address offset from the
@@ -9475,9 +9473,8 @@ static instruction_t* generate_OIR_memory_copy_from_address_operands(addressing_
 	 * addressing operation must have a unique one
 	 */
 	store_instruction->operands.oir.destination_address_expression.address_offset = emit_constant_copy_if_not_null(destination_address->address_offset);
+	store_instruction->operands.oir.source_address_expression.address_offset = emit_constant_copy_if_not_null(source_address->address_offset);
 
-	//Put the storing constant in the constant operand
-	store_instruction->operands.oir.operand1 = source_address;
 	return store_instruction;
 }
 
@@ -9523,7 +9520,8 @@ static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* ba
 					instruction_t* result_storage = generate_OIR_store_variable_from_address_operands(&new_operands, result->value.variable_value, struct_record->type_defined_as);
 					insert_instruction_before_given(result_storage, original_instruction);
 				} else {
-					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, result->value.variable_value, struct_record->type_defined_as);
+					addressing_operands_t source_address = {result->value.variable_value, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
+					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, &(source_address), struct_record->type_defined_as);
 					insert_instruction_before_given(result_storage, original_instruction);
 				}
 
@@ -9604,7 +9602,8 @@ static void convert_array_initializer_into_OIR_stores(addressing_operands_t* bas
 					instruction_t* result_storage = generate_OIR_store_variable_from_address_operands(&new_operands, result->value.variable_value, member_type);
 					insert_instruction_before_given(result_storage, original_instruction);
 				} else {
-					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, result->value.variable_value, member_type);
+					addressing_operands_t source_address = {result->value.variable_value, NULL, NULL, 0, NULL, ADDRESSING_MODE_BASE_ADDRESS_ONLY};
+					instruction_t* result_storage = generate_OIR_memory_copy_from_address_operands(&new_operands, &source_address, member_type);
 					insert_instruction_before_given(result_storage, original_instruction);
 				}
 
