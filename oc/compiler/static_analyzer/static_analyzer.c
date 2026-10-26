@@ -1451,20 +1451,12 @@ static void rename_block(basic_block_t* entry){
 			}
 
 			/**
-			 * TODO UPDATE AS WE CHANGE MEMORY COPY
+			 * Memory copy statements use the source and destination address expressions. They are
+			 * both considered to be on the RHS so we'll rename them both with the helper
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
-				//First rename the addressing operands
 				rename_addressing_operands(&(cursor->operands.oir.destination_address_expression));
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.operand1) == TRUE){
-					rhs_new_name(cursor->operands.oir.operand1);
-				}
-
-				if(is_variable_ssa_eligible(cursor->operands.oir.operand2) == TRUE){
-					rhs_new_name(cursor->operands.oir.operand2);
-				}
-
+				rename_addressing_operands(&(cursor->operands.oir.source_address_expression));
 				break;
 			}
 
