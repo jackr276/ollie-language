@@ -705,12 +705,12 @@ static void mark(dynamic_array_t* function_blocks){
 		    }
 
 			/**
-			 * TODO UPDATE THIS
+			 * Memory copy statements have addressing operands in the source and destination, so we'll need to mark
+			 * both sets of those addressing operands
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
 				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
 				break;
 		    }
 
