@@ -1359,6 +1359,11 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 static inline void handle_return_by_copy_parameter(instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order,
 												   	dynamic_array_t* memory_addresses_to_adjust){
+	if(call_statement->is_rrf_eligible == TRUE){
+		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
+	}
+
+
 	//Create a stack region inside of this function that represents it
 	stack_region_t* return_by_copy_region = create_stack_region_for_type(caller_stack_frame, return_type);
 
