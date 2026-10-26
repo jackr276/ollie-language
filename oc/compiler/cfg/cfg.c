@@ -1701,15 +1701,12 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				}
 
 				/**
-				 * TODO REFACTOR
+				 * Memory copy statements have addressing operands in the source and destination
+				 * address expression areas. As such we'll mark both of their areas here
 				 */
 				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
-					add_variable_to_use_set(cursor->operands.oir.operand1, block);
-					add_variable_to_use_set(cursor->operands.oir.operand2, block);
-
-					//We could have source or destination address expressions, or both
-					//TODO REFACTOR TO ONLY BE DOING THIS WHEN APPROPRIATE
 					add_address_operands_to_use_set(&(cursor->operands.oir.destination_address_expression), block);
+					add_address_operands_to_use_set(&(cursor->operands.oir.source_address_expression), block);
 					break;
 				}
 
@@ -13065,8 +13062,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 		 * Memory copy statements touch memory so we'll
 		 * need to clone over the memory read/write type
 		 * and the byte amount that we need to copy
-		 *
-		 * TODO WE'LL NEED TO UPDATE THIS
 		 */
 		case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:{
 			instruction_t* new_instruction = calloc(1, sizeof(instruction_t));
@@ -13076,11 +13071,9 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
 
-			//Clone the destination addressing expression
+			//Clone the destination and source addressing expressions
 			new_instruction->operands.oir.destination_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.destination_address_expression), variable_map);
-
-			//First operand is the source so we'll need that
-			new_instruction->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
+			new_instruction->operands.oir.source_address_expression = clone_addressing_operands(&(source_instruction->operands.oir.source_address_expression), variable_map);
 
 			//We need to know how much copying must be done
 			new_instruction->optional_storage.byte_amount_to_copy = source_instruction->optional_storage.byte_amount_to_copy;
