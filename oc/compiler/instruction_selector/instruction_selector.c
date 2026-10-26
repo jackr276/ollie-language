@@ -9764,18 +9764,18 @@ static inline u_int8_t lower_all_initializer_statements(dynamic_array_t* functio
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_16_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_16_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Double quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(double_quad_word);
 
-	//We will need both a source and destination offset constant to work with. They *must* be separate for future optimizations
-	three_addr_const_t* source_offset_constant = emit_direct_integer_or_char_constant(current_offset + source_adjustment, i64);
-
-	//First load the 16 bytes out of memory
-	instruction_t* load_instruction = emit_load_base_address_and_constant_offset(temporary_storage_variable, source_memory_address, source_offset_constant, double_quad_word, 0);
+	/**
+	 * Generate the source operands with the additional offset and create an OIR load from them
+	 */
+	addressing_operands_t source_operands = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, current_offset);
+	instruction_t* load_instruction = generate_OIR_load_from_addressing_operands(&source_operands, temporary_storage_variable, double_quad_word);
 
 	/**
-	 * Generate the destination operands with the additional offset, then repackage them into an OIR store
+	 * Then generate the destination operands with the additional offset, then repackage them into an OIR store
 	 */
 	addressing_operands_t destination_operands = generate_OIR_addressing_operands_with_additional_offset(dest_memory_address, current_offset);
 	instruction_t* store_instruction = generate_OIR_store_variable_from_address_operands(&destination_operands, temporary_storage_variable, double_quad_word);
@@ -9793,7 +9793,7 @@ static inline instruction_copy_pair_t emit_16_byte_copy_pair(addressing_operands
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_8_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_8_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Quad word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i64);
 
@@ -9822,7 +9822,7 @@ static inline instruction_copy_pair_t emit_8_byte_copy_pair(addressing_operands_
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_4_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_4_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Double word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i32);
 
@@ -9851,7 +9851,7 @@ static inline instruction_copy_pair_t emit_4_byte_copy_pair(addressing_operands_
  *
  * This helper will return a copy pair struct that contains the load and store instructions
  */
-static inline instruction_copy_pair_t emit_2_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset, u_int64_t source_adjustment){
+static inline instruction_copy_pair_t emit_2_byte_copy_pair(addressing_operands_t* source_memory_address, addressing_operands_t* dest_memory_address, u_int64_t current_offset){
 	//Word storage variable here
 	three_addr_var_t* temporary_storage_variable = emit_temp_var(i16);
 
@@ -9930,9 +9930,11 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 	 * Due to unique situations that we may enounter(like pass by copy parameters), we may need
 	 * to adjust the memory address that the source has if we're copying after a new stack allocation
 	 * statement. We maintain a base adjustment amount just for this purpose. This would be in the
-	 * first address operand if it exists
+	 * first address operand if it exists. Since the source memory address is a set of addressing operands,
+	 * and this adjustment is constant, we can go ahead and bake this into the source address now
 	 */
 	u_int64_t source_adjustment = source_memory_address->address_operand1->memory_address_base_adjustment;
+	*source_memory_address = generate_OIR_addressing_operands_with_additional_offset(source_memory_address, source_adjustment);
 
 	//We always use the dedicated field to determine how many bytes we should be copying
 	u_int64_t remaining_copy_amount = memory_copy_statement->optional_storage.byte_amount_to_copy;
@@ -9948,7 +9950,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * byte copy
 		 */
 		if(remaining_copy_amount >= 16) {
-			copy_pair = emit_16_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_16_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 16 so we knock down how much we have left
 			remaining_copy_amount -= 16;
@@ -9960,7 +9962,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 8 but less than 16, we will use a regular movq for this
 		 */
 		} else if(remaining_copy_amount >= 8) {
-			copy_pair = emit_8_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_8_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 8 so we knock down how much we have left
 			remaining_copy_amount -= 8;
@@ -9972,7 +9974,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 4 but less than 8, we will use a movl for this
 		 */
 		} else if(remaining_copy_amount >= 4) {
-			copy_pair = emit_4_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_4_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 4 so we knock down how much we have left
 			remaining_copy_amount -= 4;
@@ -9984,7 +9986,7 @@ static instruction_t* convert_memory_copy_statement_into_loads_and_stores(instru
 		 * More than 2 but less than 4 - copy 2 at a time
 		 */
 		} else if(remaining_copy_amount >= 2) {
-			copy_pair = emit_2_byte_copy_pair(source_memory_address, destination_memory_address, current_offset, source_adjustment);
+			copy_pair = emit_2_byte_copy_pair(source_memory_address, destination_memory_address, current_offset);
 
 			//We copied 2 so we knock down how much we have left
 			remaining_copy_amount -= 2;
