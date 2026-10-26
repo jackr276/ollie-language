@@ -1917,6 +1917,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * handle anything else
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
+		//TODO IT WOULD BE HERE
 		handle_return_by_copy_parameter(call_statement, &(function->local_stack), called_function_signature->return_type,
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}

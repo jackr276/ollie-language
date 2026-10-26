@@ -7353,6 +7353,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		}
 	}
 
+	/**
+	 * IMPORTANT - if the parser has flagged that this function call instruction may be return
+	 * region forwarding eligible, then we need to flag the statement here as being return
+	 * region forwarding eligible. Though this will have no effect right now, it will later
+	 * on in the instruction selector
+	 */
+	function_call_statement->is_rrf_eligible = function_call_node->is_return_region_forwarding_eligible;
+
 	//If we have parameters allocate the array now
 	if(signature->function_parameters.current_index != 0){
 		function_call_statement->parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
@@ -11935,7 +11943,7 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 		 * we see one, we need to make sure that we are acutally allocating the 
 		 * stack space for it
 		 */
-		case TYPE_CLASS_ARRAY: 
+		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
 		case TYPE_CLASS_UNION: {
 			//Create a stack region for this variable and store it in the associated region
@@ -11995,34 +12003,6 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * Case 1: Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
-			 *
-			 *
-			 * TODO HERE IS WHAT WE DO KNOW - we are always going to have the address returned inside
-			 * of %rax for return by copy functions. That will never change. Now what that address is may
-			 * very well change. For return region forwarding, our goal is going to be to pass in the memory
-			 * region that we are memory copying into from %rax in as the %rdi parameter. This will require
-			 * some nuances as we can't pass partial addresses, so if we're only copying part of %rax
-			 * then this just won't work, but that will be determined as we go
-			 *
-			 * TODO HERE
-			 *
-			 * <expr>
-			 * <expr>
-			 * <expr>
-			 * call fn()
-			 * may have a bunch of handles junk
-			 *
-			 * final_result_var
-			 *
-			 * memory copy (<rrf address>) <- final_result_var
-			 *
-			 * We basically need to have this RRF address available before
-			 * the function call ever even takes place and that's the entire
-			 * challenge with this
-			 *
-			 * We may be able to think of some special exceptions as to how
-			 * this is working. Off the bat I'm thinking of a memory address
-			 * that relies on a variable that the function mutates(pass by reference)
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
@@ -13031,6 +13011,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			new_call->statement_type = source_instruction->statement_type;
 			new_call->is_inlined_call = source_instruction->is_inlined_call;
 			new_call->line_number = source_instruction->line_number;
+			new_call->is_rrf_eligible = source_instruction->is_rrf_eligible;
 
 			//Clone our assignee and error assignee over
 			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
@@ -13525,7 +13506,6 @@ static inline void handle_inlined_elaborative_param_setup(symtab_function_record
 			add_statement(function_entry, initialization_statement);
 
 		} else {
-			//TODO MAYBE HERE RETURN REGION FORWARDING???
 			//This is as easy as memory copying and adding it in
 			instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(emit_memory_address_var(temp_var),
 																						result->param_result.variable_result,
@@ -13734,8 +13714,6 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
 			/**
 			 * Once we've initialized we can do the memory copy. Note that this is always
 			 * going to be a variable so we don't need to worry about constants
-			 *
-			 * TODO MAYBE HERE RETURN REGION FORWARDING?
 			 */
 			instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(emit_memory_address_var(cloned_parameter),
 															 							result->param_result.variable_result, 
