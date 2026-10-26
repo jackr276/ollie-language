@@ -12,7 +12,6 @@
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
 #include <assert.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -407,6 +406,10 @@ static inline u_int8_t is_node_rrf_eligible_function_call(generic_ast_node_t* no
 		return FALSE;
 	}
 
+	/**
+	 * If the called function signature returns by copy, then we consider this to be a return-region forwarding
+	 * eligible function call
+	 */
 	function_type_t* called_function_signature = node->optional_storage.callee_signature;
 	return is_type_returned_by_copy(called_function_signature->return_type);
 }
@@ -2744,9 +2747,7 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				 * return by copy region. This step just flags nodes as eligible
 				 * for this process
 				 */
-				if(is_node_rrf_eligible_function_call(current_param) == TRUE){
-					current_param->is_return_region_forwarding_eligible = TRUE;
-				}
+				current_param->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(current_param);
 			}
 
 			/**
@@ -3115,9 +3116,7 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				 * return by copy region. This step just flags nodes as eligible
 				 * for this process
 				 */
-				if(is_node_rrf_eligible_function_call(current_param) == TRUE){
-					current_param->is_return_region_forwarding_eligible = TRUE;
-				}
+				current_param->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(current_param);
 			}
 
 			/**
@@ -4081,7 +4080,6 @@ static u_int8_t perform_mutability_checking(generic_ast_node_t* left_hand_expres
  * 									   | <unary-expression> |= <initializer-expression>
  * 									   | <unary-expression> &= <initializer-expression>
  * 									   | <unary-expression> ^= <initializer-expression>
- *
  */
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
 	//Hang onto the current line number for later
@@ -4191,7 +4189,15 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 			 */
 			current_function->requires_initial_alignment = TRUE;
 
-			//TODO MEMORY INVESTIGATION HERE FOR LHS UNARY
+			/**
+			 * If we are calling a return-by-copy function and planning
+			 * on immediately memory copying the result into a different
+			 * memory region, we may be able to skip the copy altogether
+			 * by passing the eventual destination memory region in as the
+			 * return by copy region. This step just flags nodes as eligible
+			 * for this process
+			 */
+			right_hand_expression->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(right_hand_expression);
 		}
 
 		/**
@@ -4207,7 +4213,6 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		 * from the left hand unary(if there is any)
 		 */
 		assignment_expression_node->inferred_type = final_type;
-		assignment_expression_node->optional_storage.bytes_to_copy = final_type->type_size;
 		assignment_expression_node->is_assignable = FALSE;
 		assignment_expression_node->variable = left_hand_expression->variable;
 		assignment_expression_node->line_number = current_line;
@@ -13359,7 +13364,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 			 * expression(our "root" in this case) or nothing. This is important because we cannot
 			 * be dereferencing if we need to perform a copy assignment
 			 */
-		propogate_no_memory_access_required_flag(initializer_node);
+			propogate_no_memory_access_required_flag(initializer_node);
 
 			/**
 			 * Since we are performing a memory copy instruction, this function
@@ -13377,9 +13382,7 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 			 * return by copy region. This step just flags nodes as eligible
 			 * for this process
 			 */
-			if(is_node_rrf_eligible_function_call(initializer_node) == TRUE){
-				initializer_node->is_return_region_forwarding_eligible = TRUE;
-			}
+			initializer_node->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(initializer_node);
 		}
 	}
 

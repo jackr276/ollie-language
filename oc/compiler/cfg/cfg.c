@@ -6573,7 +6573,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * always emit a copy assignment in this case
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
-				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(lhs_result_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(lhs_result_var, result_var, parent_node->inferred_type->type_size, parent_node->line_number);
 				add_statement(current_block, copy_statement);
 
 			/**
@@ -11995,6 +11995,14 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 * Case 1: Is a copy assignment required between the two variables? This will only
 			 * occur if we have a struct to struct or union to union assignment but if we do,
 			 * we'll need some special handling for it
+			 *
+			 *
+			 * TODO HERE IS WHAT WE DO KNOW - we are always going to have the address returned inside
+			 * of %rax for return by copy functions. That will never change. Now what that address is may
+			 * very well change. For return region forwarding, our goal is going to be to pass in the memory
+			 * region that we are memory copying into from %rax in as the %rdi parameter. This will require
+			 * some nuances as we can't pass partial addresses, so if we're only copying part of %rax
+			 * then this just won't work, but that will be determined as we go
 			 *
 			 * TODO HERE
 			 *
