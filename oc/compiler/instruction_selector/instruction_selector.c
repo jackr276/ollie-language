@@ -1350,6 +1350,48 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 }
 
 
+static instruction_t* get_final_memory_copy_for_function(instruction_t* call_statement){
+	//TODO THIS MUST BE IN EITHER THIS BLOCK OR A BLOCK THAT IT DOMINATES
+
+	basic_block_t* call_block = call_statement->block_contained_in;
+
+
+
+	//This is the source that we're after
+	three_addr_var_t* searching_for_source = call_statement->operands.oir.assignee;
+	printf("LOOKING FOR:");
+	print_variable(stdout, searching_for_source, PRINTING_VAR_INLINE);
+
+	instruction_t* cursor = call_statement;
+	while(cursor != NULL){
+		printf("LOOKING FOR:");
+		print_variable(stdout, searching_for_source, PRINTING_VAR_INLINE);
+
+		printf("NOW LOOKING AT:\n");
+		print_three_addr_code_stmt(stdout, cursor);
+		printf("\n");
+
+
+		if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+			if(variables_equal(cursor->operands.oir.operand1, searching_for_source) == TRUE){
+				searching_for_source = cursor->operands.oir.assignee;
+			}
+		} else if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
+			if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, searching_for_source) == TRUE){
+				printf("FOUND IT\n\n");
+				print_three_addr_code_stmt(stdout, cursor);
+				return cursor;
+			}
+		}
+
+		cursor = cursor->next_statement;
+	}
+
+	return NULL;;
+}
+
+
+
 /**
  * Handle a return-by-copy parameter by allocating a special parameter that goes into %rdi which contains
  * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
@@ -1380,6 +1422,8 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 		return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
 
 	} else {
+		get_final_memory_copy_for_function(call_statement);
+
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
