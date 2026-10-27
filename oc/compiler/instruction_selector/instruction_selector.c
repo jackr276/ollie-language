@@ -1394,24 +1394,51 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  * NOTE: this is a recursive function
  */
 static instruction_t* search_block(basic_block_t* block, instruction_t* starting_point, three_addr_var_t** searching_for){
-	//We've already visited so get out
+	/**
+	 * We've already visited so get out
+	 */
 	if(block->visited == TRUE){
 		return NULL;
 	}
 
-	//This is the source that we're after
-	three_addr_var_t* searching_for_source = call_statement->operands.oir.assignee;
-	printf("LOOKING FOR:");
-	print_variable(stdout, searching_for_source, PRINTING_VAR_INLINE);
+	/**
+	 * Now flag that we've visited this specific block
+	 */
+	block->visited = TRUE;
 
-	instruction_t* cursor = call_statement;
+	/**
+	 * Start at the given "starting point" for the block and crawl down
+	 * the block, applying the search rules as needed
+	 */
+	instruction_t* cursor = starting_point;
 	while(cursor != NULL){
 		printf("LOOKING FOR:");
-		print_variable(stdout, searching_for_source, PRINTING_VAR_INLINE);
+		print_variable(stdout, *searching_for, PRINTING_VAR_INLINE);
+		printf("\n");
 
 		printf("NOW LOOKING AT:\n");
 		print_three_addr_code_stmt(stdout, cursor);
 		printf("\n");
+
+		/**
+		 * Case 1: we will often times reassign the given source variable. If
+		 * that's the case, then we need to *update* the source variable that we're
+		 * searching for to be the one that was just assigned
+		 *
+		 * t17 <- call func()
+		 * t18 <- 17  <-- we should update our search to be after t18
+		 */
+		if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+			if(variables_equal(cursor->operands.oir.operand1, *searching_for) == TRUE){
+				*searching_for = cursor->operands.oir.assignee;
+			}
+
+		/**
+		 * Case 2: 
+		 */
+		} else if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
+
+		}
 
 
 		if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
@@ -1458,8 +1485,12 @@ static instruction_t* get_final_memory_copy_for_function(dynamic_array_t* functi
 	basic_block_t* call_block = call_statement->block_contained_in;
 	three_addr_var_t* searching_for_variable = call_statement->operands.oir.assignee;
 
-	//Let the helper do all of our searching recursively
-	instruction_t* memory_copy = search_block(call_block, call_statement, &searching_for_variable);
+	/**
+	 * Let the helper do all of our searching recursively. In theory we should always return an
+	 * answer here. If we don't, then that's some kind of error. We always start searching the
+	 * original block at the statement immediately after the call statement
+	 */
+	instruction_t* memory_copy = search_block(call_block, call_statement->next_statement, &searching_for_variable);
 
 	if(memory_copy == NULL){
 		printf("ITS NULL\n");
