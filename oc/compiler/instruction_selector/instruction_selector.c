@@ -1351,20 +1351,6 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 
 
 /**
- * We know that, if we have a return by copy function call, we must be doing a memory
- * copy either in the original block or in some successor(immediate or distant). What's
- * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
- * in the end to the region that we're after, which we can use to our advantage
- *
- * Below is a rough draft of the algorithm that we will use to find what we're after:
- *
- * TODO FINALIZE THIS
- *
- * algorithm find_final_memory_copy(call_statement)
- * 	return_by_copy_addr <- call statement's assignee
- *	
- *	search_block(block, call_statement, return_by_copy_addr)
- *
  * algorithm search_block(block, starting_instruction, source_variable):
  * 	if block is visited:
  * 		return
@@ -1386,10 +1372,39 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  *
  * 	for each successor s of cursor:
  * 		search_block(s, s's starting statement, source_variable)
+ *
+ */
+static instruction_t* search_block(basic_block_t* block, instruction_t* starting_point, three_addr_var_t** searching_for){
+	//We've already visited so get out
+	if(block->visited == TRUE){
+		return NULL;
+	}
+
+}
+
+
+
+
+/**
+ * We know that, if we have a return by copy function call, we must be doing a memory
+ * copy either in the original block or in some successor(immediate or distant). What's
+ * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
+ * in the end to the region that we're after, which we can use to our advantage
+ *
+ *
+ * TODO you need to seriously think through how this may work for function parameters as well, I think
+ * that there may actually be some potential there
  */
 static instruction_t* get_final_memory_copy_for_function(instruction_t* call_statement){
-
+	/**
+	 * Get the block and the instruction that we're looking for. Remember that we'll
+	 * be after the addressing mode expression where the assignee is the source's first
+	 * address operand. It should always work out this way. Of course there will be
+	 * assignments along the way that change exactly what we're after, but this is the
+	 * real gist of it
+	 */
 	basic_block_t* call_block = call_statement->block_contained_in;
+	three_addr_var_t* searching_for_variable = call_statement->operands.oir.assignee;
 
 
 
