@@ -122,6 +122,7 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
 static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+static instruction_t* generate_OIR_lea_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee);
 
 
 /**
@@ -1614,6 +1615,12 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		 * copy statement. We will be assigning these over to our "region variable" in the end
 		 */
 		addressing_operands_t* rrf_operands = &(rrf_memory_copy->operands.oir.destination_address_expression);
+
+		if(rrf_operands->addressing_mode == ADDRESSING_MODE_OFFSET_ONLY){
+
+		} else {
+
+		}
 
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
@@ -9631,6 +9638,30 @@ static instruction_t* generate_OIR_load_from_addressing_operands(addressing_oper
 	//Store the assignee
 	load_instruction->operands.oir.assignee = assignee;
 	return load_instruction;
+}
+
+
+/**
+ * Generate an OIR lea statement from the given addressing operands, with the assignee being the given assignee
+ */
+static instruction_t* generate_OIR_lea_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee){
+	instruction_t* lea_instruction = calloc(1, sizeof(instruction_t));
+
+	//Populate the access type, write type and copy all of the operands over
+	lea_instruction->statement_type = THREE_ADDR_CODE_LEA_STMT;
+	lea_instruction->memory_access_type = NO_MEMORY_ACCESS;
+	lea_instruction->operands.oir.source_address_expression = *address_operands;
+
+	/**
+	 * One special caveat - we always want to have a completely distinct address offset from the
+	 * original constant operands. It is expected that this address offset can be changed, so every
+	 * addressing operation must have a unique one
+	 */
+	lea_instruction->operands.oir.source_address_expression.address_offset = emit_constant_copy_if_not_null(address_operands->address_offset);
+
+	//Store the assignee
+	lea_instruction->operands.oir.assignee = assignee;
+	return lea_instruction;
 }
 
 
