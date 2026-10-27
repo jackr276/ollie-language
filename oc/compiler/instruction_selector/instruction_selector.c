@@ -1559,6 +1559,8 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  */
 static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+	u_int32_t line_number = call_statement->line_number;
+
 	/**
 	 * Case 1: we are not eligible for return region forwarding. In this case, we'll need to emit a fresh
 	 * region to copy into and pass that into the %rdi parameter
@@ -1611,15 +1613,40 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		}
 
 		/**
+		 * Create a temp var that will actually represent the region
+		 * address being assigned to %RDI. It will need a GP parameter
+		 * order of 1
+		 */
+		three_addr_var_t* region_variable = emit_temp_var(return_type);
+		region_variable->class_relative_parameter_order = *gp_parameter_order;
+		(*gp_parameter_order)++;
+
+		/**
 		 * The operands that we are going to forward should always be the destination of this given memory
 		 * copy statement. We will be assigning these over to our "region variable" in the end
 		 */
 		addressing_operands_t* rrf_operands = &(rrf_memory_copy->operands.oir.destination_address_expression);
 
-		if(rrf_operands->addressing_mode == ADDRESSING_MODE_OFFSET_ONLY){
+		/**
+		 * If we have an OFFSET_ONLY addressing mode then we'll need to make this a plain
+		 * assignment statement. Otherwise, we'll convert it to a lea using the given addressing
+		 * operands
+		 */
+		if(rrf_operands->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+
+			//TODO MEMORY ADDRESS TO ADJUST
 
 		} else {
+			instruction_t* assignment_instruction = emit_assignment_instruction(region_variable, rrf_operands->address_operand1, line_number);
+			insert_instruction_before_given(assignment_instruction, call_statement);
 
+
+			//TODO MEMORY ADDRESS TO ADJUST
+		}
+
+		//TODO DOC THIS
+		if(is_memory_address_variable(rrf_operands->address_operand1) == TRUE){
+			dynamic_array_add_if_allocated(memory_addresses_to_adjust, rrf_operands->address_operand1);
 		}
 
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
