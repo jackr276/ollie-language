@@ -1402,7 +1402,7 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  *
  * NOTE: this is a recursive function
  */
-static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, instruction_t* starting_point, three_addr_var_t** searching_for){
+static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, instruction_t* starting_point, three_addr_var_t* searching_for){
 	/**
 	 * We've already visited so get out
 	 */
@@ -1435,8 +1435,8 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 			 * t18 <- 17  <-- we should update our search to be after t18
 			 */
 			case THREE_ADDR_CODE_ASSN_STMT: {
-				if(variables_equal(cursor->operands.oir.operand1, *searching_for) == TRUE){
-					*searching_for = cursor->operands.oir.assignee;
+				if(variables_equal(cursor->operands.oir.operand1, searching_for) == TRUE){
+					searching_for = cursor->operands.oir.assignee;
 				}
 
 				break;
@@ -1458,8 +1458,8 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 				for(int32_t i = 0; i < cursor->parameters.current_index; i++){
 					three_addr_var_t* phi_parameter = dynamic_array_get_at(&(cursor->parameters), i);
 
-					if(variables_equal(phi_parameter, *searching_for) == TRUE){
-						*searching_for = cursor->operands.oir.assignee;
+					if(variables_equal(phi_parameter, searching_for) == TRUE){
+						searching_for = cursor->operands.oir.assignee;
 						//No point in searching further
 						break;
 					}
@@ -1475,7 +1475,7 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 			 * function will propogate it up the chain
 			 */
 			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
-				if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, *searching_for) == TRUE){
+				if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, searching_for) == TRUE){
 					return cursor;
 				}
 
@@ -1544,7 +1544,7 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
 	 * answer here. If we don't, then that's some kind of error. We always start searching the
 	 * original block at the statement immediately after the call statement
 	 */
-	return search_block_for_rrf_memory_copy(call_block, call_statement->next_statement, &searching_for_variable);
+	return search_block_for_rrf_memory_copy(call_block, call_statement->next_statement, searching_for_variable);
 }
 
 
@@ -1577,8 +1577,18 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		//Emit the special memory address temp var for this
 		return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
 
+	/**
+	 * Case 2: we are eligible for return region forwarding .. TODO DOC
+	 */
 	} else {
+		/**
+		 * First let the recursive helper find the memory copy statement that is RRF eligible for us. We'll maintain
+		 * a sanity check and panic if this is ever not NULL
+		 */
 		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(function_blocks, call_statement);
+		if(rrf_memory_copy == NULL){
+			trigger_ice_panic("Function call was marked as RRF eligible but no RRF eligible memory copy could be found");
+		}
 
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
