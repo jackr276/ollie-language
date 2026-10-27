@@ -1554,8 +1554,6 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
  * it is guaranteed to survive after the function that we're calling returns. This helper also handles all
  * of the needed updates to the various trackers around memory addresses, parameter order, etc.
- *
- * TODO DOCUMENT RRF
  */
 static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
@@ -1602,7 +1600,13 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 
 	/**
-	 * Case 2: we are eligible for return region forwarding .. TODO DOC
+	 * Case 2: we are eligible for return region forwarding. The process goes as follows:
+	 * 	1.) Find the end result memory copy statement. The destination of this memory copy statement
+	 * 		is the return region that we are going to forward
+	 * 	2.) Emit the appropriate assignment of this destination memory address to our new parameter
+	 * 		variable. This parameter variable is what will eventually end up in %rdi
+	 * 	3.) Delete the old memory copy statement. We will no longer need it, so there's no point in
+	 * 		keeping it around
 	 */
 	} else {
 		/**
