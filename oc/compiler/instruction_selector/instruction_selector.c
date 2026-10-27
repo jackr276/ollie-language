@@ -1461,7 +1461,7 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 
 					if(variables_equal(phi_parameter, searching_for) == TRUE){
 						searching_for = cursor->operands.oir.assignee;
-						//No point in searching further
+						//No point in searching the phi operands further
 						break;
 					}
 				}
@@ -1587,7 +1587,7 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		(*gp_parameter_order)++;
 
 		//Emit the assignment and add it before the call statement
-		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, call_statement->line_number);
+		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, line_number);
 		insert_instruction_before_given(parameter_assignment, call_statement);
 
 		/**
