@@ -13338,7 +13338,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  * with our memory address variable to avoid the need for extra interference
  */
 static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
-															variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
 	//Extract the cloning signature from the function
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 
@@ -13741,14 +13741,16 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
  *
  * We also pass in a list of all of our parameter results from the given function call so that we can manage them
  */
-static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, symtab_function_record_t* function_to_clone,
-											   	basic_block_t** function_entry, basic_block_t** function_exit,
+static void clone_entire_function_for_inlining(instruction_t* original_call_statement, basic_block_t* block_inlined_in,
+												basic_block_t** function_entry, basic_block_t** function_exit,
 												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
-											   	parameter_results_array_t* parameter_results, variable_map_t* variable_map){
-
-	//Grab this for ease of use
+												parameter_results_array_t* parameter_results, variable_map_t* variable_map){
+	/**
+	 * Extract the function that we want to clone, it's signature and the execution
+	 * frequency of what we're inlining
+	 */
+	symtab_function_record_t* function_to_clone = original_call_statement->called_function;
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
-	//Store the estimated execution frequency of the block that we've inlined in
 	int32_t inlined_in_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
 	/**
@@ -13955,9 +13957,8 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	 */
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
-	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(block_inlined_in,
-										inlined_function,
+	clone_entire_function_for_inlining(call_to_inline,
+										block_inlined_in,
 										&inlined_function_entry,
 										&inlined_function_exit,
 										symtab_return_variable,

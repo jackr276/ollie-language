@@ -1554,6 +1554,9 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
  * it is guaranteed to survive after the function that we're calling returns. This helper also handles all
  * of the needed updates to the various trackers around memory addresses, parameter order, etc.
+ *
+ * This helper also deals with all logic for Ollie's built in "Return Region Forwarding" optimization, if this 
+ * call statement has been deemed fit for it
  */
 static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
