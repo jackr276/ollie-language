@@ -1434,27 +1434,40 @@ static instruction_t* search_block(basic_block_t* block, instruction_t* starting
 			}
 
 		/**
-		 * Case 2: 
+		 * Case 2: if we have a memory copy statement *and* the source address region's
+		 * base address is equal to the variable that we're after, then we have what
+		 * we're looking for. We'll return a reference to this entire thing and the
+		 * function will propogate it up the chain
 		 */
 		} else if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
-
-		}
-
-
-		if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-			if(variables_equal(cursor->operands.oir.operand1, searching_for_source) == TRUE){
-				searching_for_source = cursor->operands.oir.assignee;
-			}
-		} else if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
-			if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, searching_for_source) == TRUE){
-				printf("FOUND IT\n\n");
-				print_three_addr_code_stmt(stdout, cursor);
+			if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, *searching_for) == TRUE){
 				return cursor;
 			}
 		}
 
+		//Found nothing - bump this up to the next statement
 		cursor = cursor->next_statement;
 	}
+
+	/**
+	 * If we get here, then we've exhausted the entire block. We will continue
+	 * the search throughout the rest of the function using this block's successors
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+
+		/**
+		 * Search the successor. If at any point we have a non-null return, that means that
+		 * we found something. In that case we will stop processing and return up the chain
+		 */
+		instruction_t* found = search_block(successor, successor->leader_statement, searching_for);
+		if(found != NULL){
+			return found;
+		}
+	}
+
+	//Nothing found in this block or any successors, return NULL
+	return NULL;
 }
 
 
@@ -1463,10 +1476,6 @@ static instruction_t* search_block(basic_block_t* block, instruction_t* starting
  * copy either in the original block or in some successor(immediate or distant). What's
  * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
  * in the end to the region that we're after, which we can use to our advantage
- *
- *
- * TODO you need to seriously think through how this may work for function parameters as well, I think
- * that there may actually be some potential there
  */
 static instruction_t* get_final_memory_copy_for_function(dynamic_array_t* function_blocks, instruction_t* call_statement){
 	/**
@@ -1513,9 +1522,8 @@ static instruction_t* get_final_memory_copy_for_function(dynamic_array_t* functi
  *
  * TODO DOCUMENT RRF
  */
-static inline void handle_return_by_copy_parameter(instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
-													generic_type_t* return_type, int32_t* gp_parameter_order,
-												   	dynamic_array_t* memory_addresses_to_adjust){
+static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
+													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	//The final address of the return by copy region
 	three_addr_var_t* return_by_copy_region_address = NULL;
 
@@ -1535,7 +1543,7 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 		return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
 
 	} else {
-		get_final_memory_copy_for_function(call_statement);
+		get_final_memory_copy_for_function(function_blocks, call_statement);
 
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
@@ -2024,8 +2032,9 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
  * 		allocation
  */
 static void lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
-	//Extract the block
+	//Extract the block and function blocks
 	basic_block_t* block_contained_in = call_statement->block_contained_in;
+	dynamic_array_t* function_blocks = &(function->function_blocks);
 
 	//Counters for the function parameter order
 	int32_t current_gp_parameter_order = 1;
@@ -2090,7 +2099,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * handle anything else
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
-		handle_return_by_copy_parameter(call_statement, &(function->local_stack), called_function_signature->return_type,
+		handle_return_by_copy_parameter(function_blocks, call_statement, &(function->local_stack), called_function_signature->return_type,
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
 
