@@ -216,6 +216,23 @@ static void print_instruction_window(instruction_window_t* window){
 
 
 /**
+ * Run through an entire array of function blocks and reset the status for
+ * every single one. We assume that the caller knows what they are doing, and
+ * that the blocks inside of the array are really the correct blocks
+ */
+static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
+	//Run through all of the blocks
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		//Extract the current block
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+
+		//Flag it as false
+		current->visited = FALSE;
+	}
+}
+
+
+/**
  * Get the side for the addressing operands(source or dest) based on the type of statement. By
  * the time that we're calling this, this should all be mutually exclusive, so nothing like a memory
  * copy where both source and dest are addressing modes should be happening here
@@ -1373,40 +1390,14 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  * 	for each successor s of cursor:
  * 		search_block(s, s's starting statement, source_variable)
  *
+ *
+ * NOTE: this is a recursive function
  */
 static instruction_t* search_block(basic_block_t* block, instruction_t* starting_point, three_addr_var_t** searching_for){
 	//We've already visited so get out
 	if(block->visited == TRUE){
 		return NULL;
 	}
-
-}
-
-
-
-
-/**
- * We know that, if we have a return by copy function call, we must be doing a memory
- * copy either in the original block or in some successor(immediate or distant). What's
- * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
- * in the end to the region that we're after, which we can use to our advantage
- *
- *
- * TODO you need to seriously think through how this may work for function parameters as well, I think
- * that there may actually be some potential there
- */
-static instruction_t* get_final_memory_copy_for_function(instruction_t* call_statement){
-	/**
-	 * Get the block and the instruction that we're looking for. Remember that we'll
-	 * be after the addressing mode expression where the assignee is the source's first
-	 * address operand. It should always work out this way. Of course there will be
-	 * assignments along the way that change exactly what we're after, but this is the
-	 * real gist of it
-	 */
-	basic_block_t* call_block = call_statement->block_contained_in;
-	three_addr_var_t* searching_for_variable = call_statement->operands.oir.assignee;
-
-
 
 	//This is the source that we're after
 	three_addr_var_t* searching_for_source = call_statement->operands.oir.assignee;
@@ -1437,6 +1428,46 @@ static instruction_t* get_final_memory_copy_for_function(instruction_t* call_sta
 
 		cursor = cursor->next_statement;
 	}
+}
+
+
+/**
+ * We know that, if we have a return by copy function call, we must be doing a memory
+ * copy either in the original block or in some successor(immediate or distant). What's
+ * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
+ * in the end to the region that we're after, which we can use to our advantage
+ *
+ *
+ * TODO you need to seriously think through how this may work for function parameters as well, I think
+ * that there may actually be some potential there
+ */
+static instruction_t* get_final_memory_copy_for_function(dynamic_array_t* function_blocks, instruction_t* call_statement){
+	/**
+	 * First reset the visited status for all of our blocks so that we can flag
+	 * blocks as visited as we go
+	 */
+	reset_visited_status_for_function(function_blocks);
+
+	/**
+	 * Get the block and the instruction that we're looking for. Remember that we'll
+	 * be after the addressing mode expression where the assignee is the source's first
+	 * address operand. It should always work out this way. Of course there will be
+	 * assignments along the way that change exactly what we're after, but this is the
+	 * real gist of it
+	 */
+	basic_block_t* call_block = call_statement->block_contained_in;
+	three_addr_var_t* searching_for_variable = call_statement->operands.oir.assignee;
+
+	//Let the helper do all of our searching recursively
+	instruction_t* memory_copy = search_block(call_block, call_statement, &searching_for_variable);
+
+	if(memory_copy == NULL){
+		printf("ITS NULL\n");
+		exit(1);
+	}
+
+	printf("FOUND IT\n");
+	print_three_addr_code_stmt(stdout, memory_copy);
 
 	return NULL;;
 }
@@ -8650,23 +8681,6 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 
 	//Give back whether or not we did anything
 	return simplification_occured;
-}
-
-
-/**
- * Run through an entire array of function blocks and reset the status for
- * every single one. We assume that the caller knows what they are doing, and
- * that the blocks inside of the array are really the correct blocks
- */
-static inline void reset_visited_status_for_function(dynamic_array_t* function_blocks){
-	//Run through all of the blocks
-	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		//Extract the current block
-		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
-
-		//Flag it as false
-		current->visited = FALSE;
-	}
 }
 
 
