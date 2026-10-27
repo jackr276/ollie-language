@@ -1548,7 +1548,6 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
 }
 
 
-
 /**
  * Handle a return-by-copy parameter by allocating a special parameter that goes into %rdi which contains
  * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
@@ -1559,9 +1558,6 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  */
 static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
-	//The final address of the return by copy region
-	three_addr_var_t* return_by_copy_region_address = NULL;
-
 	/**
 	 * Case 1: we are not eligible for return region forwarding. In this case, we'll need to emit a fresh
 	 * region to copy into and pass that into the %rdi parameter
@@ -1575,7 +1571,30 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		return_by_copy_region->mark = TRUE;
 		
 		//Emit the special memory address temp var for this
-		return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
+		three_addr_var_t* return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
+
+		/**
+		 * Create a temp var that will actually represent the region
+		 * address being assigned to %RDI. It will need a GP parameter
+		 * order of 1
+		 */
+		three_addr_var_t* region_variable = emit_temp_var(return_type);
+		region_variable->class_relative_parameter_order = *gp_parameter_order;
+		(*gp_parameter_order)++;
+
+		//Emit the assignment and add it before the call statement
+		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, call_statement->line_number);
+		insert_instruction_before_given(parameter_assignment, call_statement);
+
+		//Add the temp var into the parameter array
+		dynamic_array_add(&(call_statement->parameters), region_variable);
+
+		/**
+		 * This is a memory address variable so we'll need to adjust it if there
+		 * are stack params. The caller has allocated this dynamic array if there
+		 * are stack params, so we can use that as our test
+		 */
+		dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 
 	/**
 	 * Case 2: we are eligible for return region forwarding .. TODO DOC
@@ -1590,33 +1609,16 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 			trigger_ice_panic("Function call was marked as RRF eligible but no RRF eligible memory copy could be found");
 		}
 
+		/**
+		 * The operands that we are going to forward should always be the destination of this given memory
+		 * copy statement. We will be assigning these over to our "region variable" in the end
+		 */
+		addressing_operands_t* rrf_operands = &(rrf_memory_copy->operands.oir.destination_address_expression);
+
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(0);
 	}
-
-	/**
-	 * Create a temp var that will actually represent the region
-	 * address being assigned to %RDI. It will need a GP parameter
-	 * order of 1
-	 */
-	three_addr_var_t* region_variable = emit_temp_var(return_type);
-	region_variable->class_relative_parameter_order = *gp_parameter_order;
-	(*gp_parameter_order)++;
-
-	//Emit the assignment and add it before the call statement
-	instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, call_statement->line_number);
-	insert_instruction_before_given(parameter_assignment, call_statement);
-
-	//Add the temp var into the parameter array
-	dynamic_array_add(&(call_statement->parameters), region_variable);
-
-	/**
-	 * This is a memory address variable so we'll need to adjust it if there
-	 * are stack params. The caller has allocated this dynamic array if there
-	 * are stack params, so we can use that as our test
-	 */
-	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 }
 
 
