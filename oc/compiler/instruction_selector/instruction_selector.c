@@ -1421,27 +1421,50 @@ static instruction_t* search_block(basic_block_t* block, instruction_t* starting
 		printf("\n");
 
 		/**
-		 * Case 1: we will often times reassign the given source variable. If
-		 * that's the case, then we need to *update* the source variable that we're
-		 * searching for to be the one that was just assigned
-		 *
-		 * t17 <- call func()
-		 * t18 <- 17  <-- we should update our search to be after t18
+		 * Based on the type of instruction we'll either update the variable
+		 * that we're after or have our end condition
 		 */
-		if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-			if(variables_equal(cursor->operands.oir.operand1, *searching_for) == TRUE){
-				*searching_for = cursor->operands.oir.assignee;
+		switch(cursor->statement_type){
+			/**
+			 * Case 1: we will often times reassign the given source variable. If
+			 * that's the case, then we need to *update* the source variable that we're
+			 * searching for to be the one that was just assigned
+			 *
+			 * t17 <- call func()
+			 * t18 <- 17  <-- we should update our search to be after t18
+			 */
+			case THREE_ADDR_CODE_ASSN_STMT: {
+				if(variables_equal(cursor->operands.oir.operand1, *searching_for) == TRUE){
+					*searching_for = cursor->operands.oir.assignee;
+				}
+
+				break;
 			}
 
-		/**
-		 * Case 2: if we have a memory copy statement *and* the source address region's
-		 * base address is equal to the variable that we're after, then we have what
-		 * we're looking for. We'll return a reference to this entire thing and the
-		 * function will propogate it up the chain
-		 */
-		} else if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT){
-			if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, *searching_for) == TRUE){
-				return cursor;
+			case THREE_ADDR_CODE_PHI_STMT: {
+
+				break;
+			}
+
+			/**
+			 * Case 3: if we have a memory copy statement *and* the source address region's
+			 * base address is equal to the variable that we're after, then we have what
+			 * we're looking for. We'll return a reference to this entire thing and the
+			 * function will propogate it up the chain
+			 */
+			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
+				if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, *searching_for) == TRUE){
+					return cursor;
+				}
+
+				break;
+			}
+
+			/**
+			 * Otherwise it's not of any interest so skip it
+			 */
+			default: {
+				break;
 			}
 		}
 
