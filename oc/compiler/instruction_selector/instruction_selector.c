@@ -1589,7 +1589,9 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, call_statement->line_number);
 		insert_instruction_before_given(parameter_assignment, call_statement);
 
-		//Add the temp var into the parameter array
+		/**
+		 * The region variable goes into the parameter array
+		 */
 		dynamic_array_add(&(call_statement->parameters), region_variable);
 
 		/**
@@ -1622,17 +1624,22 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		(*gp_parameter_order)++;
 
 		/**
+		 * The region variable goes into the parameter array
+		 */
+		dynamic_array_add(&(call_statement->parameters), region_variable);
+
+		/**
 		 * The operands that we are going to forward should always be the destination of this given memory
 		 * copy statement. We will be assigning these over to our "region variable" in the end
 		 */
 		addressing_operands_t* rrf_operands = &(rrf_memory_copy->operands.oir.destination_address_expression);
 
 		/**
-		 * If we have an OFFSET_ONLY addressing mode then we'll need to make this a plain
+		 * If we have a BASE_ADDRESS_ONLY addressing mode then we'll need to make this a plain
 		 * assignment statement. Otherwise, we'll convert it to a lea using the given addressing
 		 * operands
 		 */
-		if(rrf_operands->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
+		if(rrf_operands->addressing_mode != ADDRESSING_MODE_BASE_ADDRESS_ONLY){
 			instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(rrf_operands, region_variable);
 			insert_instruction_before_given(lea_statement, call_statement);
 		} else {
@@ -1650,12 +1657,11 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		}
 
 		/**
-		 * Now that the return region forwarding is complete, the 
+		 * Now that the return region forwarding is complete, the original memory copy statement is of
+		 * no use anymore. We will delete it, and following that mark and sweep will take care
+		 * of the orphaned operations
 		 */
-
-		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(0);
+		delete_statement(rrf_memory_copy);
 	}
 }
 
