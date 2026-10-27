@@ -499,9 +499,8 @@ static inline u_int8_t is_type_stack_passed_by_copy(generic_type_t* type){
 
 
 /**
- * Is a type returned via the stack using a copy? Structs and union 
- * types are always returned by copy whilst everything else is by reference
- * (unless it's a primitive type of course)
+ * Is the given type returned by copy from a function? Stack and union
+ * types are eligible for this
  */
 static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 	switch(type->type_class){
@@ -6574,7 +6573,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
 			 * always emit a copy assignment in this case
 			 */
 			if(is_copy_assignment_required(left_child->inferred_type, right_child->inferred_type) == TRUE){
-				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(lhs_result_var, result_var, parent_node->optional_storage.bytes_to_copy, parent_node->line_number);
+				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(lhs_result_var, result_var, parent_node->inferred_type->type_size, parent_node->line_number);
 				add_statement(current_block, copy_statement);
 
 			/**
@@ -7349,10 +7348,18 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		//This should be unreachable but just to be sure
 		default: {
-			fprintf(stderr, "Fatal internal compiler error. Incompatible node type found in function call handler\n");
-			exit(1);
+			trigger_ice_panic("Incompatible node type found in function call handler");
+			break;
 		}
 	}
+
+	/**
+	 * IMPORTANT - if the parser has flagged that this function call instruction may be return
+	 * region forwarding eligible, then we need to flag the statement here as being return
+	 * region forwarding eligible. Though this will have no effect right now, it will later
+	 * on in the instruction selector
+	 */
+	function_call_statement->is_rrf_eligible = function_call_node->is_return_region_forwarding_eligible;
 
 	//If we have parameters allocate the array now
 	if(signature->function_parameters.current_index != 0){
@@ -7429,12 +7436,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			 * allocation to avoid interference
 			 */
 			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
+			add_statement(current_block, assignment);
 
 			//Reassign this value
 			function_assignee = assignment->operands.oir.assignee;
-
-			//Add it in
-			add_statement(current_block, assignment);
 		}
 
 		/**
@@ -11935,7 +11940,8 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	switch(type->type_class){
 		/**
 		 * Array, structures and unions are all stored on the stack. So, when
-		 * we see one, we need to make sure that we are actually allocating the stack space for it
+		 * we see one, we need to make sure that we are acutally allocating the 
+		 * stack space for it
 		 */
 		case TYPE_CLASS_ARRAY:
 		case TYPE_CLASS_STRUCT:
@@ -11982,7 +11988,10 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 	generic_ast_node_t* expression_node = node->first_child;
 	cfg_result_package_t let_initializer_results = emit_expression(current_block, expression_node);
 
-	//Update the current block
+	/**
+	 * Update the current block and get a pointer to the last RHS statemenet - we'll use
+	 * this is determining several optimizations
+	 */
 	current_block = let_initializer_results.final_block;
 
 	switch(let_initializer_results.type){
@@ -11997,8 +12006,6 @@ static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, g
 			 */
 			if(is_copy_assignment_required(assignee->type, expression_node->inferred_type) == TRUE){
 				instruction_t* copy_statement = emit_memory_copy_instruction_base_address_only(assignee, let_result_var, assignee->type->type_size, expression_node->line_number);
-
-				//Get it into the block
 				add_statement(current_block, copy_statement);
 
 			/**
@@ -13004,6 +13011,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			new_call->statement_type = source_instruction->statement_type;
 			new_call->is_inlined_call = source_instruction->is_inlined_call;
 			new_call->line_number = source_instruction->line_number;
+			new_call->is_rrf_eligible = source_instruction->is_rrf_eligible;
 
 			//Clone our assignee and error assignee over
 			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
@@ -13330,7 +13338,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  * with our memory address variable to avoid the need for extra interference
  */
 static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
-															variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
 	//Extract the cloning signature from the function
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 
@@ -13733,14 +13741,16 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
  *
  * We also pass in a list of all of our parameter results from the given function call so that we can manage them
  */
-static void clone_entire_function_for_inlining(basic_block_t* block_inlined_in, symtab_function_record_t* function_to_clone,
-											   	basic_block_t** function_entry, basic_block_t** function_exit,
+static void clone_entire_function_for_inlining(instruction_t* original_call_statement, basic_block_t* block_inlined_in,
+												basic_block_t** function_entry, basic_block_t** function_exit,
 												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
-											   	parameter_results_array_t* parameter_results, variable_map_t* variable_map){
-
-	//Grab this for ease of use
+												parameter_results_array_t* parameter_results, variable_map_t* variable_map){
+	/**
+	 * Extract the function that we want to clone, it's signature and the execution
+	 * frequency of what we're inlining
+	 */
+	symtab_function_record_t* function_to_clone = original_call_statement->called_function;
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
-	//Store the estimated execution frequency of the block that we've inlined in
 	int32_t inlined_in_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
 	/**
@@ -13947,9 +13957,8 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	 */
 	basic_block_t* inlined_function_entry = NULL;
 	basic_block_t* inlined_function_exit = NULL;
-	symtab_function_record_t* inlined_function = call_to_inline->called_function;
-	clone_entire_function_for_inlining(block_inlined_in,
-										inlined_function,
+	clone_entire_function_for_inlining(call_to_inline,
+										block_inlined_in,
 										&inlined_function_entry,
 										&inlined_function_exit,
 										symtab_return_variable,

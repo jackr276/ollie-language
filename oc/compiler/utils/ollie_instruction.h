@@ -239,6 +239,8 @@ struct instruction_t{
 	u_int8_t is_callee_saving_instruction;
 	//Is this an inlined function call or not?
 	u_int8_t is_inlined_call;
+	//Is this function call eligible for return region forwarding?
+	u_int8_t is_rrf_eligible;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//The conditional movement type that we have

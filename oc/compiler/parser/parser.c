@@ -12,7 +12,6 @@
  * NEXT IN LINE: Control Flow Graph, OIR constructor, SSA form implementation
 */
 #include <assert.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -396,6 +395,23 @@ static inline u_int8_t is_type_returned_by_copy(generic_type_t* type){
 		default:
 			return FALSE;
 	}
+}
+
+
+/**
+ * Is the given node a return region forwarding eligible function call?
+ */
+static inline u_int8_t is_node_rrf_eligible_function_call(generic_ast_node_t* node){
+	if(node->ast_node_type != AST_NODE_TYPE_INDIRECT_FUNCTION_CALL && node->ast_node_type != AST_NODE_TYPE_FUNCTION_CALL){
+		return FALSE;
+	}
+
+	/**
+	 * If the called function signature returns by copy, then we consider this to be a return-region forwarding
+	 * eligible function call
+	 */
+	function_type_t* called_function_signature = node->optional_storage.callee_signature;
+	return is_type_returned_by_copy(called_function_signature->return_type);
 }
 
 
@@ -2161,127 +2177,6 @@ static inline generic_ast_node_t* create_empty_elaborative_param(generic_type_t*
 
 
 /**
- * Ollie allows for elaborative params that have either 0 or many
- * of a compatible type. We will have a special rule that accounts 
- * for this here as well as a special type of node to allow the
- * CFG translator to take care of it
- *
- * NOTE: the elaborative param parser is invoked whenever we have a param
- * that is elaborative. Remember that since we are technically
- * allowed to see nothing here, we may very well have elaborative
- * params that are just empty
- *
- * Remember that the elaborative param must always be the very last parameter in a function,
- * so to parse it we're just taking everything from the starting point until we see an R_PAREN
- *
- * If we get to this rule, then we know that the elaborative param itself is not empty so we
- * don't need to worry about that case
- */
-static inline generic_ast_node_t* handle_elaborative_param_parsing(ollie_token_stream_t* token_stream, generic_type_t* elaborative_param_type, side_type_t side){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//Allocate it
-	generic_ast_node_t* elaborative_param_node = ast_node_alloc(AST_NODE_TYPE_ELABORATIVE_PARAM_STMT, side);
-
-	//Extract the elaborated type - this is what we'll be comparing to
-	generic_type_t* type_being_elaborated = elaborative_param_type->internal_types.elaborates;
-
-	//Get the first lookahead - we need to test if we have an empty elaborative param here
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//We don't have an empty elaborated param here - so we will process everything that we see
-	if(lookahead.tok != R_PAREN){
-		//Push this token back for processing
-		push_back_token(token_stream, &parser_line_num);
-
-		//Keep track of how many we've got in here
-		u_int32_t elaborated_param_count = 0;
-
-		//Forever loop until we hit the R_PAREN
-		do {
-			//Handle the actual parameter
-			generic_ast_node_t* elaborated_param = initializer_expression(token_stream, side);
-
-			//It failed so we just get out here
-			if(elaborated_param->ast_node_type == AST_NODE_TYPE_ERR_NODE){
-				return print_and_return_error("Invalid parameter expression in elaborative param handler", parser_line_num);
-			}
-
-			//Let's see if we're even able to assign this here. This rule hanldes all coercion if need be
-			generic_type_t* final_type = is_ast_node_assignable_to_destination_type(type_being_elaborated, elaborated_param);
-
-			//If this is null, it means that our check failed
-			if(final_type == NULL){
-				//Following that we'll generate another error message to make it more clear
-				sprintf(info, "Function call expects an input of type \"%s\", but was given an incompatible input of type \"%s\".",
-						get_full_type_name_from_type(type_being_elaborated),
-						get_full_type_name_from_ast_node(elaborated_param));
-
-				return print_and_return_error(info, parser_line_num);
-			}
-
-			/**
-			 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
-			 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
-			 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
-			 * doing an address calculation.
-			 */
-			if(is_copy_assignment_required(type_being_elaborated, elaborated_param->inferred_type) == TRUE){
-				/**
-				 * If the right hand expression is a postfix expression *and* we are looking
-				 * to perform a memory copy assignment here, we need to flag that 
-				 * we do *not* require a dereference to make this work
-				 */
-				propogate_no_memory_access_required_flag(elaborated_param);
-			}
-
-			//This counts as one more elaborated param
-			elaborated_param_count++;
-
-			//Add this in as a child to the parent elaborated param node
-			add_child_node(elaborative_param_node, elaborated_param);
-			
-			//Grab the lookahead token
-			lookahead = get_next_token(token_stream, &parser_line_num);
-			
-			//Comma - keep going to the next param
-			if(lookahead.tok == COMMA){
-				continue;
-
-			//Termination condition
-			} else if(lookahead.tok == R_PAREN){
-				//This will be handled by the helper rule
-				push_back_token(token_stream, &parser_line_num);
-
-				//Get out of here now
-				break;
-
-			//Otherwise we have some issue here
-			} else {
-				sprintf(info, "Commas are required between elaborative function parameters in function call");
-				return print_and_return_error(info, parser_line_num);
-			}
-
-		} while(TRUE);
-
-	/**
-	 * Otherwise we have an entirely empty elaborative param here. We'll just use the helper
-	 * to create an empty one and that'll be all. Note that we do still have to push back the R_PAREN
-	 * because we need to process it later
-	 */
-	} else {
-		push_back_token(token_stream, &parser_line_num);
-
-		elaborative_param_node = create_empty_elaborative_param(elaborative_param_type);
-	}
-
-	//Give back the elaboarative param in the end
-	return elaborative_param_node;
-}
-
-
-/**
  * Is the given namespace a descendant of the predecessor? We maintain a "parent" pointer in all namespaces,
  * so we'll just use that to crawl up the tree and see if we can find the predecessor
  */
@@ -2722,6 +2617,12 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 				 * we do *not* require a dereference to make this work
 				 */
 				propogate_no_memory_access_required_flag(current_param);
+
+				/**
+				 * NOTE: Ollie does not currently support return region forwarding into 
+				 * pass by copy function parameters, so this is always FALSE
+				 */
+				current_param->is_return_region_forwarding_eligible = FALSE;
 			}
 
 			/**
@@ -2799,6 +2700,12 @@ static inline generic_ast_node_t* direct_function_call(ollie_token_stream_t* tok
 						 * we do *not* require a dereference to make this work
 						 */
 						propogate_no_memory_access_required_flag(param_expression);
+
+						/**
+						 * NOTE: Ollie does not currently support return region forwarding into 
+						 * pass by copy function parameters, so this is always FALSE
+						 */
+						param_expression->is_return_region_forwarding_eligible = FALSE;
 					}
 
 					//Add this to the overarching elaborative param node
@@ -3081,6 +2988,12 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 				 * we do *not* require a dereference to make this work
 				 */
 				propogate_no_memory_access_required_flag(current_param);
+
+				/**
+				 * NOTE: Ollie does not currently support return region forwarding into 
+				 * pass by copy function parameters, so this is always FALSE
+				 */
+				current_param->is_return_region_forwarding_eligible = FALSE;
 			}
 
 			/**
@@ -3157,6 +3070,12 @@ static inline generic_ast_node_t* indirect_function_call(ollie_token_stream_t* t
 						 * we do *not* require a dereference to make this work
 						 */
 						propogate_no_memory_access_required_flag(param_expression);
+
+						/**
+						 * NOTE: Ollie does not currently support return region forwarding into 
+						 * pass by copy function parameters, so this is always FALSE
+						 */
+						param_expression->is_return_region_forwarding_eligible = FALSE;
 					}
 
 					//Add this to the overarching elaborative param node
@@ -4044,7 +3963,6 @@ static u_int8_t perform_mutability_checking(generic_ast_node_t* left_hand_expres
  * 									   | <unary-expression> |= <initializer-expression>
  * 									   | <unary-expression> &= <initializer-expression>
  * 									   | <unary-expression> ^= <initializer-expression>
- *
  */
 static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_stream){
 	//Hang onto the current line number for later
@@ -4153,6 +4071,16 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 			 * SIMD instructions
 			 */
 			current_function->requires_initial_alignment = TRUE;
+
+			/**
+			 * If we are calling a return-by-copy function and planning
+			 * on immediately memory copying the result into a different
+			 * memory region, we may be able to skip the copy altogether
+			 * by passing the eventual destination memory region in as the
+			 * return by copy region. This step just flags nodes as eligible
+			 * for this process
+			 */
+			right_hand_expression->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(right_hand_expression);
 		}
 
 		/**
@@ -4168,7 +4096,6 @@ static generic_ast_node_t* assignment_expression(ollie_token_stream_t* token_str
 		 * from the left hand unary(if there is any)
 		 */
 		assignment_expression_node->inferred_type = final_type;
-		assignment_expression_node->optional_storage.bytes_to_copy = final_type->type_size;
 		assignment_expression_node->is_assignable = FALSE;
 		assignment_expression_node->variable = left_hand_expression->variable;
 		assignment_expression_node->line_number = current_line;
@@ -13304,30 +13231,42 @@ static generic_ast_node_t* let_statement(ollie_token_stream_t* token_stream, u_i
 	let_stmt_node->inferred_type = return_type;
 
 	/**
-	 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
-	 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
-	 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
-	 * doing an address calculation.
+	 * There are some specific conditions that can happen when we have non-initializer nodes, specifically
+	 * around copying that we'll handle now
 	 */
-	if(is_initializer_node(initializer_node) == FALSE
-		&& is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+	if(is_initializer_node(initializer_node) == FALSE){
 		/**
-		 * Propogate the dereference needed flag down recursively until we hit a postfix
-		 * expression(our "root" in this case) or nothing. This is important because we cannot
-		 * be dereferencing if we need to perform a copy assignment
+		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+		 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+		 * doing an address calculation. 
 		 */
-		propogate_no_memory_access_required_flag(initializer_node);
+		if(is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+			/**
+			 * Propogate the dereference needed flag down recursively until we hit a postfix
+			 * expression(our "root" in this case) or nothing. This is important because we cannot
+			 * be dereferencing if we need to perform a copy assignment
+			 */
+			propogate_no_memory_access_required_flag(initializer_node);
 
-		//Store the bytes that we need to copy here
-		let_stmt_node->optional_storage.bytes_to_copy = type_spec->type_size; 
+			/**
+			 * Since we are performing a memory copy instruction, this function
+			 * is required to perform an initial alignment when we enter it. If we did
+			 * not align this way, then we would get segmentation faults when trying to execute
+			 * SIMD instructions
+			 */
+			current_function->requires_initial_alignment = TRUE;
 
-		/**
-		 * Since we are performing a memory copy instruction, this function
-		 * is required to perform an initial alignment when we enter it. If we did
-		 * not align this way, then we would get segmentation faults when trying to execute
-		 * SIMD instructions
-		 */
-		current_function->requires_initial_alignment = TRUE;
+			/**
+			 * If we are calling a return-by-copy function and planning
+			 * on immediately memory copying the result into a different
+			 * memory region, we may be able to skip the copy altogether
+			 * by passing the eventual destination memory region in as the
+			 * return by copy region. This step just flags nodes as eligible
+			 * for this process
+			 */
+			initializer_node->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(initializer_node);
+		}
 	}
 
 	//Otherwise it worked, so we'll add it in as a child
