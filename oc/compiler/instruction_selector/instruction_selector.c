@@ -1368,6 +1368,10 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 
 
 /**
+ * Recursively search a block and all of its successors for memory copy instruction where the source
+ * variable is the source base address. We will update the variable along the way in an SSA compliant
+ * way if there are updates to it
+ *
  * algorithm search_block(block, starting_instruction, source_variable):
  * 	if block is visited:
  * 		return
@@ -1379,6 +1383,8 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  * 	while cursor is not null:
  * 		if cursor is assignment and source is the source_variable:
  * 			source_variable <- assignment's assignee // There's been a reassignment so change what we're after
+ *
+ * 		TODO PHI
  *
  * 		else if cursor is memory copy and the source address operand 1 is the variable:
  * 			return memory copy instruction // FOUND IT!
@@ -1412,14 +1418,6 @@ static instruction_t* search_block(basic_block_t* block, instruction_t* starting
 	 */
 	instruction_t* cursor = starting_point;
 	while(cursor != NULL){
-		printf("LOOKING FOR:");
-		print_variable(stdout, *searching_for, PRINTING_VAR_INLINE);
-		printf("\n");
-
-		printf("NOW LOOKING AT:\n");
-		print_three_addr_code_stmt(stdout, cursor);
-		printf("\n");
-
 		/**
 		 * Based on the type of instruction we'll either update the variable
 		 * that we're after or have our end condition
@@ -1441,7 +1439,28 @@ static instruction_t* search_block(basic_block_t* block, instruction_t* starting
 				break;
 			}
 
+			/**
+			 * Case 2: if we have a phi function(join node) that involves our variable then we'll
+			 * need to assign our variable to be that. This will happen when we're dealing with
+			 * handles statements
+			 *
+			 * ^t32_2 <- PHI(^t32_1, ^t32_3, ^t32_4) <-- should be searching for ^t32_2
+			 */
 			case THREE_ADDR_CODE_PHI_STMT: {
+				/**
+				 * Crawl through all of the phi parameters and see if we have anything that's
+				 * equal to our current "searching_for". If we do, then we can reassign "searching_for"
+				 * to be the assignee
+				 */
+				for(int32_t i = 0; i < cursor->parameters.current_index; i++){
+					three_addr_var_t* phi_parameter = dynamic_array_get_at(&(cursor->parameters), i);
+
+					if(variables_equal(phi_parameter, *searching_for) == TRUE){
+						*searching_for = cursor->operands.oir.assignee;
+						//No point in searching further
+						break;
+					}
+				}
 
 				break;
 			}
@@ -1570,7 +1589,7 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
+		exit(0);
 	}
 
 	/**
