@@ -1633,21 +1633,25 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		 * operands
 		 */
 		if(rrf_operands->addressing_mode != ADDRESSING_MODE_OFFSET_ONLY){
-
-			//TODO MEMORY ADDRESS TO ADJUST
-
+			instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(rrf_operands, region_variable);
+			insert_instruction_before_given(lea_statement, call_statement);
 		} else {
 			instruction_t* assignment_instruction = emit_assignment_instruction(region_variable, rrf_operands->address_operand1, line_number);
 			insert_instruction_before_given(assignment_instruction, call_statement);
-
-
-			//TODO MEMORY ADDRESS TO ADJUST
 		}
 
-		//TODO DOC THIS
+		/**
+		 * There is a chance that the first address operand is a memory address variable. If it is,
+		 * and we have stack parameters, then we're going to need to throw this is as one of our "memory
+		 * addresses to adjust" so that we add the needed offset to it
+		 */
 		if(is_memory_address_variable(rrf_operands->address_operand1) == TRUE){
 			dynamic_array_add_if_allocated(memory_addresses_to_adjust, rrf_operands->address_operand1);
 		}
+
+		/**
+		 * Now that the return region forwarding is complete, the 
+		 */
 
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
