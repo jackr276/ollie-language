@@ -1370,7 +1370,7 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 /**
  * Recursively search a block and all of its successors for memory copy instruction where the source
  * variable is the source base address. We will update the variable along the way in an SSA compliant
- * way if there are updates to it
+ * way if there are updates to it. Below is a generalized algorithm that describes what we're doing
  *
  * algorithm search_block(block, starting_instruction, source_variable):
  * 	if block is visited:
@@ -1384,22 +1384,25 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  * 		if cursor is assignment and source is the source_variable:
  * 			source_variable <- assignment's assignee // There's been a reassignment so change what we're after
  *
- * 		TODO PHI
+ * 		else if cursor is phi function and source is in the phi parameters
+ * 			source_variable = phi's assignee
  *
  * 		else if cursor is memory copy and the source address operand 1 is the variable:
  * 			return memory copy instruction // FOUND IT!
  *
- *
  * 		cursor = cursor->next
  *
- *
  * 	for each successor s of cursor:
- * 		search_block(s, s's starting statement, source_variable)
+ * 		successor_result <- search_block(s, s's starting statement, source_variable)
  *
+ * 		if(successor_result is not null):
+ * 			return successor result
+ *
+ *  return NULL
  *
  * NOTE: this is a recursive function
  */
-static instruction_t* search_block(basic_block_t* block, instruction_t* starting_point, three_addr_var_t** searching_for){
+static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, instruction_t* starting_point, three_addr_var_t** searching_for){
 	/**
 	 * We've already visited so get out
 	 */
@@ -1502,7 +1505,7 @@ static instruction_t* search_block(basic_block_t* block, instruction_t* starting
 		 * Search the successor. If at any point we have a non-null return, that means that
 		 * we found something. In that case we will stop processing and return up the chain
 		 */
-		instruction_t* found = search_block(successor, successor->leader_statement, searching_for);
+		instruction_t* found = search_block_for_rrf_memory_copy(successor, successor->leader_statement, searching_for);
 		if(found != NULL){
 			return found;
 		}
@@ -1519,7 +1522,7 @@ static instruction_t* search_block(basic_block_t* block, instruction_t* starting
  * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
  * in the end to the region that we're after, which we can use to our advantage
  */
-static instruction_t* get_final_memory_copy_for_function(dynamic_array_t* function_blocks, instruction_t* call_statement){
+static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array_t* function_blocks, instruction_t* call_statement){
 	/**
 	 * First reset the visited status for all of our blocks so that we can flag
 	 * blocks as visited as we go
@@ -1541,17 +1544,7 @@ static instruction_t* get_final_memory_copy_for_function(dynamic_array_t* functi
 	 * answer here. If we don't, then that's some kind of error. We always start searching the
 	 * original block at the statement immediately after the call statement
 	 */
-	instruction_t* memory_copy = search_block(call_block, call_statement->next_statement, &searching_for_variable);
-
-	if(memory_copy == NULL){
-		printf("ITS NULL\n");
-		exit(1);
-	}
-
-	printf("FOUND IT\n");
-	print_three_addr_code_stmt(stdout, memory_copy);
-
-	return NULL;;
+	return search_block_for_rrf_memory_copy(call_block, call_statement->next_statement, &searching_for_variable);
 }
 
 
@@ -1585,7 +1578,7 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 		return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
 
 	} else {
-		get_final_memory_copy_for_function(function_blocks, call_statement);
+		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(function_blocks, call_statement);
 
 		printf("RETURN REGION FORWARDING ELIGIBLE STATEMENT FOUND\n\n\n");
 		printf("TODO NOT IMPLEMENTED\n");
