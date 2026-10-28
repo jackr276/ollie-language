@@ -1881,7 +1881,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 
 	//Few options here
 	switch(lookahead.tok){
-		case RETURN:
+		case RETURN: {
 			//Use the specialized return rule for this
 			result_node = return_statement_in_handle_clause(token_stream);
 
@@ -1891,8 +1891,9 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			}
 
 			break;
+		}
 			
-		case RAISE:
+		case RAISE: {
 			//Let the specialized rule deal with this
 			result_node = raise_statement_in_handle_clause(token_stream);
 
@@ -1902,13 +1903,14 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			}
 
 			break;
+		}
 
 		/**
 		 * Ollie allows you to simply ignore the result of an error. This is how you effectively
 		 * swallow an error. It will get it's own special kind of error. Note that we're only allowed
 		 * to use ignore statements if the function itself returns void
 		 */
-		case IGNORE:
+		case IGNORE: {
 			//If it's not void-returning it is invalid
 			if(IS_VOID_TYPE(called_function_signature->return_type) == FALSE){
 				sprintf(info, "Function signature \"%s\" returns a non-void type of %s. Ignore statements cannot be used here.",
@@ -1920,8 +1922,9 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			//Otherwise we're fine so make it
 			result_node = ast_node_alloc(AST_NODE_TYPE_IGNORE_STMT, SIDE_TYPE_RIGHT);
 			break;
+		}
 
-		default:
+		default: {
 			/**
 			 * If we have a void return type, it's not possible to assign anything
 			 * out of this function. As such, the only valid options are raise or return
@@ -1973,6 +1976,7 @@ static generic_ast_node_t* error_handle_statement(ollie_token_stream_t* token_st
 			}
 
 			break;
+		}
 	}
 
 	//If we make it down here we're good
