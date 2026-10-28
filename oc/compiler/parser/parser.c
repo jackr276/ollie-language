@@ -11102,11 +11102,10 @@ static generic_ast_node_t* break_statement(ollie_token_stream_t* token_stream){
  * BNF Rule: <return-statement> ::= ret {<ternary-epxression>}?;
  */
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
-	//Lookahead token
-	lexitem_t lookahead;
-
-	//Do we contain a defer at any point in here? If so, that is invalid because we already
-	//have a return. If this happens, we'll need to reject it
+	/**
+	 * Do we contain a defer at any point in here? If so, that is invalid because we already
+	 * have a return. If this happens, we'll need to reject it
+	 */
 	if(nesting_stack_contains_level(&nesting_stack, NESTING_DEFER_STATEMENT) == TRUE){
 		return print_and_return_error("Ret statements cannot be placed inside of defer blocks", parser_line_num);
 	}
@@ -11114,10 +11113,11 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	//We can create the node now
 	generic_ast_node_t* return_stmt = ast_node_alloc(AST_NODE_TYPE_RET_STMT, SIDE_TYPE_LEFT);
 
-	//Now we can optionally see the semicolon immediately. Let's check if we have that
-	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//If we see a semicolon, we can just leave
+	/**
+	 * Now we can optionally see the semicolon immediately. Let's check if we have that
+	 * and if it's appropriate in the case that we do
+	 */
+	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok == SEMICOLON){
 		//If this is the case, the return type had better be void
 		if(current_function_signature->returns_void == FALSE){
@@ -11182,6 +11182,48 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 						get_full_type_name_from_type(current_function_signature->return_type));
 		return print_and_return_error(info, parser_line_num);
 	}
+
+
+	/**
+	 * There are some specific conditions that can happen when we have non-initializer nodes, specifically
+	 * around copying that we'll handle now
+	 */
+	if(is_initializer_node(expr_node) == FALSE){
+		/**
+		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
+		 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
+		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
+		 * doing an address calculation. 
+		 */
+		if(is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+			/**
+			 * Propogate the dereference needed flag down recursively until we hit a postfix
+			 * expression(our "root" in this case) or nothing. This is important because we cannot
+			 * be dereferencing if we need to perform a copy assignment
+			 */
+			propogate_no_memory_access_required_flag(initializer_node);
+
+			/**
+			 * Since we are performing a memory copy instruction, this function
+			 * is required to perform an initial alignment when we enter it. If we did
+			 * not align this way, then we would get segmentation faults when trying to execute
+			 * SIMD instructions
+			 */
+			current_function->requires_initial_alignment = TRUE;
+
+			/**
+			 * If we are calling a return-by-copy function and planning
+			 * on immediately memory copying the result into a different
+			 * memory region, we may be able to skip the copy altogether
+			 * by passing the eventual destination memory region in as the
+			 * return by copy region. This step just flags nodes as eligible
+			 * for this process
+			 */
+			initializer_node->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(initializer_node);
+		}
+	}
+
+
 
 	/**
 	 * If we are having a copy assignment, we need to propogate down the chain in the expression
