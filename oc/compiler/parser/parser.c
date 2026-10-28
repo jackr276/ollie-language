@@ -11172,7 +11172,7 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
 		  		current_function->func_name.string,
 				get_full_type_name_from_type(current_function_signature->return_type),
-				get_full_type_name_from_ast_node(expr_node));
+				get_full_type_name_from_ast_node(returned_expression));
 		print_function_name_to_buffer(info, current_function);
 		return print_and_return_error(info, parser_line_num);
 	}
@@ -11230,10 +11230,6 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		}
 	}
 
-	//Otherwise it worked, so we'll add it as a child of the other node
-	add_child_node(return_stmt, expr_node);
-
-	//
 	/**
 	 * Validate that we see our final semicolon after all of this
 	 */
@@ -11242,25 +11238,28 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error("Semicolon expected after return statement", parser_line_num);
 	}
 
-	//Add in the line number
+	/**
+	 * Package up the final return node
+	 */
+	add_child_node(return_stmt, returned_expression);
 	return_stmt->line_number = parser_line_num;
-
-	//This is *always* the function's return type
 	return_stmt->inferred_type = final_type;
 	
-	//If we have deferred statements
-	if(deferred_stmts_node != NULL){
-		//Then we'll duplicate
-		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node, deferred_stmts_node->side);
-
-		//This node will now come before the ret statement
-		deferred_stmts->next_sibling = return_stmt;
-
-		//We'll give this back instead
-		return deferred_stmts;
-	} else {
-		//If we get here we're all good, just return the parent
+	/**
+	 * If we have deferred statements, we'll need to tack the return on right before them. If we
+	 * do not have any deferred statements then we can just return the return node
+	 */
+	if(deferred_stmts_node == NULL){
 		return return_stmt;
+
+	} else {
+		/**
+		 * Duplicate the deferred statements, add the return to the very end, and give back the entire
+		 * subtree
+		 */
+		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node, deferred_stmts_node->side);
+		deferred_stmts->next_sibling = return_stmt;
+		return deferred_stmts;
 	}
 }
 

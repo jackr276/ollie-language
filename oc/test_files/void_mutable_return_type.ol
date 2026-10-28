@@ -19,5 +19,6 @@ pub fn bad_func() -> mut void {
 pub fn main() -> i32 {
 	declare str:mut bad_struct;
 	
+	OUNIT: [fail_to_compile]
 	ret 0;
 }
