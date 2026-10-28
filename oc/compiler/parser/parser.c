@@ -1581,6 +1581,8 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
  * than a regular return statement because we are not going to have a semicolon to anchor us,
  * so some of our validations will be entirely different. The decision was made to split
  * this into two separate rules instead of trying to do some boolean flag in the existing rule
+ *
+ * TODO HERE TOO
  */
 static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_t* token_stream){
 	//Lookahead token
@@ -11103,6 +11105,11 @@ static generic_ast_node_t* break_statement(ollie_token_stream_t* token_stream){
  */
 static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	/**
+	 * Hang onto this for convenience
+	 */
+	generic_type_t* return_type = current_function_signature->return_type;
+
+	/**
 	 * Do we contain a defer at any point in here? If so, that is invalid because we already
 	 * have a return. If this happens, we'll need to reject it
 	 */
@@ -11119,11 +11126,14 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 	 */
 	lexitem_t lookahead = get_next_token(token_stream, &parser_line_num);
 	if(lookahead.tok == SEMICOLON){
-		//If this is the case, the return type had better be void
+		/**
+		 * If we're trying to return like this, then we must be in a function that returns
+		 * void. If we're not then this is an error
+		 */
 		if(current_function_signature->returns_void == FALSE){
 			sprintf(info, "Function \"%s\" expects a return type of \"%s\", not \"void\". Empty ret statements not allowed",
 					current_function->func_name.string,
-					get_full_type_name_from_type(current_function_signature->return_type));
+					get_full_type_name_from_type(return_type));
 			print_function_name_to_buffer(info, current_function);
 			return print_and_return_error(info, parser_line_num);
 		}
@@ -11132,37 +11142,33 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		return return_stmt;
 
 	} else {
-		//If we get here, but we do expect a void return, then this is an issue
+		/**
+		 * Otherwise we do have something that we're returning, but is that proper? If we are not a void
+		 * returning function then it is not
+		 */
 		if(current_function_signature->returns_void == TRUE){
 			sprintf(info, "Function \"%s\" expects a return type of \"void\". Use \"ret;\" for return statements in this function", current_function->func_name.string);
 			print_function_name_to_buffer(info, current_function);
 			return print_and_return_error(info, parser_line_num);
 		}
-		//Put it back if no
+
+		//Push back for future processing
 		push_back_token(token_stream, &parser_line_num);
 	}
 
 	/**
 	 * For return statements we could see an intializer or an expression
 	 */
-	generic_ast_node_t* expr_node = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
-
-	//If this is bad, we fail out
-	if(expr_node->ast_node_type == AST_NODE_TYPE_ERR_NODE){
+	generic_ast_node_t* returned_expression = initializer_expression(token_stream, SIDE_TYPE_RIGHT);
+	if(returned_expression->ast_node_type == AST_NODE_TYPE_ERR_NODE){
 		return print_and_return_error("Invalid expression given to return statement", parser_line_num);
 	}
 
-	//Let's do some type checking here
-	if(current_function == NULL){
-		return print_and_return_error("Fatal internal compiler error. Saw a return statement while current function is null", parser_line_num);
-	}
-
-	//Figure out what the final type is here
-	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(current_function_signature->return_type, expr_node);
-
-	//If the current function's return type is not compatible with the return type here, we'll bail out
+	/**
+	 * Figure out if the types are assignable. If not then this is a failure point
+	 */
+	generic_type_t* final_type = is_ast_node_assignable_to_destination_type(current_function_signature->return_type, returned_expression);
 	if(final_type == NULL){
-		//Following that we'll generate another error message to make it more clear
 		sprintf(info, "Function \"%s\" expects a return type of \"%s\", but was given an incompatible type \"%s\"",
 		  		current_function->func_name.string,
 				get_full_type_name_from_type(current_function_signature->return_type),
@@ -11171,37 +11177,25 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 		return print_and_return_error(info, parser_line_num);
 	}
 
-	/**
-	 * If we get here and we have an initializer, we need to be very careful about what
-	 * we allow. The only things that we "return by copy" are unions and structs. Initializers
-	 * work great for those because we have a region to initialize into. Arrays and strings however
-	 * we never return by copy, so an initializer fundamentally will never work
-	 */
-	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
-		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
-						get_full_type_name_from_type(current_function_signature->return_type));
-		return print_and_return_error(info, parser_line_num);
-	}
-
 
 	/**
 	 * There are some specific conditions that can happen when we have non-initializer nodes, specifically
 	 * around copying that we'll handle now
 	 */
-	if(is_initializer_node(expr_node) == FALSE){
+	if(is_initializer_node(returned_expression) == FALSE){
 		/**
 		 * If these types require a copy assignment(think struct to struct, union to union), *and* we have
 		 * a postfix expression as part of the right hand ternary, then we need to ensure that we are requesting
 		 * no dereference from said expression. Dereferencing would mess up the memory copying, we should just be
 		 * doing an address calculation. 
 		 */
-		if(is_copy_assignment_required(type_spec, initializer_node->inferred_type) == TRUE){
+		if(is_copy_assignment_required(return_type, returned_expression->inferred_type) == TRUE){
 			/**
 			 * Propogate the dereference needed flag down recursively until we hit a postfix
 			 * expression(our "root" in this case) or nothing. This is important because we cannot
 			 * be dereferencing if we need to perform a copy assignment
 			 */
-			propogate_no_memory_access_required_flag(initializer_node);
+			propogate_no_memory_access_required_flag(returned_expression);
 
 			/**
 			 * Since we are performing a memory copy instruction, this function
@@ -11219,28 +11213,31 @@ static generic_ast_node_t* return_statement(ollie_token_stream_t* token_stream){
 			 * return by copy region. This step just flags nodes as eligible
 			 * for this process
 			 */
-			initializer_node->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(initializer_node);
+			returned_expression->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(returned_expression);
 		}
-	}
-
-
 
 	/**
-	 * If we are having a copy assignment, we need to propogate down the chain in the expression
-	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
-	 * the value, we do not accidentally copy from already dereferenced memory
+	 * If we get here and we have an initializer, we need to be very careful about what
+	 * we allow. The only things that we "return by copy" are unions and structs. Initializers
+	 * work great for those because we have a region to initialize into. Arrays and strings however
+	 * we never return by copy, so an initializer fundamentally will never work
 	 */
-	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
-		propogate_no_memory_access_required_flag(expr_node);
+	} else {
+		if(is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
+			sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+							get_full_type_name_from_type(current_function_signature->return_type));
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
 
-	//After the conditional, we just need to see a semicolon
+	//
+	/**
+	 * Validate that we see our final semicolon after all of this
+	 */
 	lookahead = get_next_token(token_stream, &parser_line_num);
-
-	//Fail case
 	if(lookahead.tok != SEMICOLON){
 		return print_and_return_error("Semicolon expected after return statement", parser_line_num);
 	}
