@@ -47,7 +47,7 @@ pub fn main() -> i32 {
 	let y:i32 = 6;
 
 	//These are always going to hit the error case
-	let result1:struct my_struct = @level1(x, y);
+	let result1:struct my_struct = @level2(x, y);
 	let result2:struct my_struct = @level2(x + 5, y - 3);
 
 	//Should return 5 + 6 + 5 + 10 + 3 + 10 = 39

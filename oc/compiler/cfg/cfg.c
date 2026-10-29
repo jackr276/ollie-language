@@ -7035,6 +7035,10 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		//Grab the error id out of here
 		u_int32_t error_handle_value = error_handle_cursor->optional_storage.error_type->internal_types.error_type_id;
 
+		if(handle_results.starting_block == NULL){
+			printf("ITS NULL\n");
+		}
+
 		//Add this into the jump table
 		add_jump_table_entry(jump_calculation_block->jump_table, error_handle_value, handle_results.starting_block);
 
@@ -7288,6 +7292,7 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
 	//Blank return package for now
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
+	result_package.starting_block = basic_block;
 
 	//Keep track of the current block
 	basic_block_t* current_block = basic_block;
@@ -7416,14 +7421,25 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		//This is stored in the optional second assignee slot
 		function_call_statement->optional_storage.call_storage.error_assignee = error_assignee;
 
-		//Now we'll have a move statement just for register allocation reasons
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
+		/**
+		 * Now we'll have a move statement just for register allocation reasons
+		 *
+		 * This now is our error assignee that will be used in the CFG
+		 */
+		instruction_t* error_assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
+		add_statement(current_block, error_assignment);
+		error_assignee = error_assignment->operands.oir.assignee;
 
-		//Add it into the block
-		add_statement(current_block, assignment);
+		/**
+		 * We'll also insert a move statement for our function assignee. We do this to have a place to save it
+		 * in case future function calls in the handles statement clober it
+		 *
+		 * TODO HERE
+		 */
+		instruction_t* return_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
+		add_statement(current_block, return_assignment);
+		function_assignee = return_assignment->operands.oir.assignee;
 
-		//This now is our error assignee that will be used in the CFG
-		error_assignee = assignment->operands.oir.assignee;
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
 		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
