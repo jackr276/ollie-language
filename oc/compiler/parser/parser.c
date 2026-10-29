@@ -1581,8 +1581,6 @@ static generic_ast_node_t* constant(ollie_token_stream_t* token_stream, side_typ
  * than a regular return statement because we are not going to have a semicolon to anchor us,
  * so some of our validations will be entirely different. The decision was made to split
  * this into two separate rules instead of trying to do some boolean flag in the existing rule
- *
- * TODO HERE TOO
  */
 static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_t* token_stream){
 	//Extract for convenience
@@ -1719,29 +1717,23 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		}
 	}
 
-
-
-	//Otherwise it worked, so we'll add it as a child of the other node
-	add_child_node(return_stmt, expr_node);
-
-	//Add in the line number
+	/**
+	 * Package up the return statement node and add the return expression
+	 * in as its child
+	 */
 	return_stmt->line_number = parser_line_num;
-
-	//This is *always* the function's return type
 	return_stmt->inferred_type = final_type;
-	
-	//If we have deferred statements
+	add_child_node(return_stmt, return_expression);
+
+	/**
+	 * If we have deferred statements, then we'll need to duplicate them and attach
+	 * this to the back of it. Otherwise, we'll just return the return stmt node itself
+	 */
 	if(deferred_stmts_node != NULL){
-		//Then we'll duplicate
 		generic_ast_node_t* deferred_stmts = duplicate_subtree(deferred_stmts_node, deferred_stmts_node->side);
-
-		//This node will now come before the ret statement
 		deferred_stmts->next_sibling = return_stmt;
-
-		//We'll give this back instead
 		return deferred_stmts;
 	} else {
-		//If we get here we're all good, just return the parent
 		return return_stmt;
 	}
 }
