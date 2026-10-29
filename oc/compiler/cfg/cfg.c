@@ -13517,21 +13517,29 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  * Since we're replacing parameters and parameter aliases with memory address variables, we are
  * able to replace both the original return by copy variable and the variable that aliases it
  * with our memory address variable to avoid the need for extra interference
+ *
+ * TODO DOC RRF
  */
-static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call,
-														 basic_block_t* function_entry, variable_map_t* variable_map,
-														 int32_t* current_gp_parameter_order){
-	//The function that we're cloning is the original call's called function
+static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, basic_block_t* function_entry,
+														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+	/**
+	 * Extract the function that we're cloning, it's signature, and the return by copy
+	 * variable/alias of the return by copy variable. Remember that this return
+	 * by copy variable exists *inside* of the function we're cloning. Our job here is to create
+	 * an association between that variable and the memory address that we want to copy
+	 * into
+	 */
 	symtab_function_record_t* function_to_clone = original_function_call->called_function;
-
-	//Extract the cloning signature from the function
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
-
-	//Get both the original return by copy variable and the alias variable
 	symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
 	symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
 
-
+	/**
+	 * Case 1: we are *NOT* eligible for return region forwarding with this *INLINED* function call. In
+	 * this case, we'll need to setup a new stack region that we'll use for the return by copy procedure
+	 * itself, and then create an association between that new region and the function that we're
+	 * cloning's return by copy variable
+	 */
 	if(original_function_call->is_rrf_eligible == FALSE){
 		/**
 		 * Create a variable that is SSA compatible - it does not specifically need to be
