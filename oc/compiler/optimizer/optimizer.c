@@ -620,8 +620,8 @@ static void mark(dynamic_array_t* function_blocks){
 
 			//If we have a function call, everything in the function call is important
 			case THREE_ADDR_CODE_FUNC_CALL: {
-				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
+				for(int32_t i = 0; i < stmt->call_storage.parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->call_storage.parameter_results), i);
 
 					switch(result->result_type){
 						case PARAM_RESULT_TYPE_VAR:
@@ -647,8 +647,8 @@ static void mark(dynamic_array_t* function_blocks){
 				//Mark the op1 of this function as being important
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				for(int32_t i = 0; i < stmt->parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->parameter_results), i);
+				for(int32_t i = 0; i < stmt->call_storage.parameter_results.current_index; i++){
+					parameter_result_t* result = get_result_at_index(&(stmt->call_storage.parameter_results), i);
 
 					switch(result->result_type){
 						case PARAM_RESULT_TYPE_VAR:

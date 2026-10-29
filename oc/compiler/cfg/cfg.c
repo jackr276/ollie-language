@@ -1605,8 +1605,8 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL: {
-					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
-						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
+					for(int32_t j = 0; j  < cursor->call_storage.parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->call_storage.parameter_results), j);
 
 						switch(result->result_type){
 							case PARAM_RESULT_TYPE_VAR:
@@ -1622,7 +1622,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
+					add_variable_to_def_set(cursor->call_storage.error_assignee, block);
 					break;
 				}
 
@@ -1635,8 +1635,8 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
-					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
-						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
+					for(int32_t j = 0; j  < cursor->call_storage.parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->call_storage.parameter_results), j);
 
 						switch(result->result_type){
 							case PARAM_RESULT_TYPE_VAR:
@@ -1652,7 +1652,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
+					add_variable_to_def_set(cursor->call_storage.error_assignee, block);
 					break;
 				}
 
@@ -7342,7 +7342,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 */
 		case AST_NODE_TYPE_FUNCTION_CALL: { 
 			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
-			function_call_statement->is_inlined_call = signature->is_inlined;
+			function_call_statement->call_storage.is_inlined_call = signature->is_inlined;
 
 			break;
 		}
@@ -7360,11 +7360,11 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * region forwarding eligible. Though this will have no effect right now, it will later
 	 * on in the instruction selector
 	 */
-	function_call_statement->is_rrf_eligible = function_call_node->is_return_region_forwarding_eligible;
+	function_call_statement->call_storage.is_rrf_eligible = function_call_node->is_return_region_forwarding_eligible;
 
 	//If we have parameters allocate the array now
 	if(signature->function_parameters.current_index != 0){
-		function_call_statement->parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
+		function_call_statement->call_storage.parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
 	}
 
 	/**
@@ -7379,7 +7379,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle it internally to this function
 		 */
 		if(cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
-			parameter_results = emit_parameter_expression(current_block, cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_parameter_expression(current_block, cursor, &(function_call_statement->call_storage.parameter_results));
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -7388,7 +7388,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle the stack management later
 		 */
 		} else {
-			parameter_results = emit_elaborative_param_expressions(current_block, cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_elaborative_param_expressions(current_block, cursor, &(function_call_statement->call_storage.parameter_results));
 		}
 
 		//Bump the final block and move up
@@ -7427,7 +7427,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
 
 		//This is stored in the optional second assignee slot
-		function_call_statement->optional_storage.call_storage.error_assignee = error_assignee;
+		function_call_statement->call_storage.error_assignee = error_assignee;
 
 		/**
 		 * Now we'll have a move statement just for register allocation reasons
@@ -13031,34 +13031,37 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			//Create our new instruction
 			instruction_t* new_call = calloc(1, sizeof(instruction_t));
 
+
+			//TODO REVAMP ALL OF THIS
+
 			//Clone over all of this information
 			new_call->statement_type = source_instruction->statement_type;
-			new_call->is_inlined_call = source_instruction->is_inlined_call;
+			new_call->call_storage.is_inlined_call = source_instruction->call_storage.is_inlined_call;
 			new_call->line_number = source_instruction->line_number;
-			new_call->is_rrf_eligible = source_instruction->is_rrf_eligible;
+			new_call->call_storage.is_rrf_eligible = source_instruction->call_storage.is_rrf_eligible;
 
 			//Clone our assignee and error assignee over
 			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_call->optional_storage.call_storage.error_assignee = clone_variable(source_instruction->optional_storage.call_storage.error_assignee, variable_map);
+			new_call->call_storage.error_assignee = clone_variable(source_instruction->call_storage.error_assignee, variable_map);
 
 			/**
 			 * Remember that indirect calls use operand1 and direct calls use
 			 * the called function slot, either or is fine here we'll copy 
 			 * them both
 			 */
-			new_call->called_function = source_instruction->called_function;
+			new_call->call_storage.called_function = source_instruction->call_storage.called_function;
 			new_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 
 			//Allocate a fresh parameter results array so that we can clone over the parameters
-			new_call->parameter_results = parameter_results_array_alloc(source_instruction->parameter_results.current_index);
+			new_call->call_storage.parameter_results = parameter_results_array_alloc(source_instruction->call_storage.parameter_results.current_index);
 
 			/**
 			 * Now we're going to run through and clone all of the parameter results over one
 			 * by one in the same order
 			 */
-			for(int32_t i = 0; i < source_instruction->parameter_results.current_index; i++){
+			for(int32_t i = 0; i < source_instruction->call_storage.parameter_results.current_index; i++){
 				//Get the source result
-				parameter_result_t* source_result = get_result_at_index(&(source_instruction->parameter_results), i);
+				parameter_result_t* source_result = get_result_at_index(&(source_instruction->call_storage.parameter_results), i);
 
 				/**
 				 * Clone over by type. Note that we do need to clone even for constants because we need distinct
@@ -13067,19 +13070,19 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 				switch(source_result->result_type){
 					case PARAM_RESULT_TYPE_CONST:{
 						three_addr_const_t* cloned_constant = clone_constant(source_result->param_result.constant_result);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
+						add_parameter_result_to_results_array(&(new_call->call_storage.parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_VAR:{
 						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
+						add_parameter_result_to_results_array(&(new_call->call_storage.parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_INITIALIZER: {
 						three_addr_initializer_t* cloned_initializer = clone_initializer(source_result->param_result.initializer_result, variable_map);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_initializer, PARAM_RESULT_TYPE_INITIALIZER);
+						add_parameter_result_to_results_array(&(new_call->call_storage.parameter_results), cloned_initializer, PARAM_RESULT_TYPE_INITIALIZER);
 						break;
 					}
 				}
@@ -13537,7 +13540,7 @@ static inline void setup_return_by_copy_for_inlined_call(basic_block_t* after_in
 	 * an association between that variable and the memory address that we want to copy
 	 * into
 	 */
-	symtab_function_record_t* function_to_clone = original_function_call->called_function;
+	symtab_function_record_t* function_to_clone = original_function_call->call_storage.called_function;
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 	symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
 	symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
@@ -13948,7 +13951,7 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	 * Extract the function that we want to clone, it's signature and the execution
 	 * frequency of what we're inlining
 	 */
-	symtab_function_record_t* function_to_clone = original_call_statement->called_function;
+	symtab_function_record_t* function_to_clone = original_call_statement->call_storage.called_function;
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 	int32_t inlined_in_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
@@ -14111,7 +14114,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	begin_new_inline_call(variable_map);
 
 	//Extract the signature of the function that we're calling
-	function_type_t* inlined_function_signature = call_to_inline->called_function->signature->internal_types.function_type;
+	function_type_t* inlined_function_signature = call_to_inline->call_storage.called_function->signature->internal_types.function_type;
 
 	//Get the block where this function call is currently
 	basic_block_t* block_inlined_in = call_to_inline->block_contained_in;
@@ -14166,7 +14169,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 										after_inline_block,
 										symtab_return_variable,
 										symtab_raise_variable,
-										&(call_to_inline->parameter_results),
+										&(call_to_inline->call_storage.parameter_results),
 										variable_map);
 
 	/**
@@ -14189,7 +14192,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	 * Same deal if we had errors that we raise
 	 */
 	if(inlined_function_signature->raises_errors == TRUE){
-		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
+		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
 		add_statement(inlined_function_exit, raised_variable_assignment);
 	}
 
@@ -14242,7 +14245,7 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 			 * If we find a call that should be inlined we'll add it onto
 			 * our list
 			 */
-			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
+			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->call_storage.is_inlined_call == TRUE){
 				dynamic_array_add(calls_to_inline, cursor);
 			}
 

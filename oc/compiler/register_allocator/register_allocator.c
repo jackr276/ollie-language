@@ -3695,7 +3695,7 @@ static instruction_t* insert_caller_saved_logic_for_direct_call(symtab_function_
 	 * grab whatever it's calling out. We're able to do this for a direct call,
 	 * whereas in an indirect call we are not
 	 */
-	symtab_function_record_t* callee = function_call->called_function;
+	symtab_function_record_t* callee = function_call->call_storage.called_function;
 	function_type_t* callee_signature = callee->signature->internal_types.function_type;
 
 	/**

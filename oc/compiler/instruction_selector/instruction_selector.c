@@ -1571,7 +1571,7 @@ static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blo
 	 * Case 1: we are not eligible for return region forwarding. In this case, we'll need to emit a fresh
 	 * region to copy into and pass that into the %rdi parameter
 	 */
-	if(call_statement->is_rrf_eligible == FALSE){
+	if(call_statement->call_storage.is_rrf_eligible == FALSE){
 		/**
 		 * Create a stack region inside of this function that represents a new return by copy region. We can
 		 * also mark it immediately because we know that it will always be used
@@ -1735,7 +1735,7 @@ static inline void store_pass_by_initializer_parameter(instruction_t* call_state
 	three_addr_initializer_t* result_initializer = initializer_result->param_result.initializer_result;
 
 	//Create the pass-by-initializer region and create a memory address variable for it
-	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type); 
+	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type); 
 	three_addr_var_t* pass_by_initializer_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_initializer_region);
 
 	//Let the helper store any memory addresses that will need adjustment
@@ -1775,7 +1775,7 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
 	 * Let's now create the parameter stack region for this parameter to be copied
 	 * into. We'll allocate a memory address temp var for it as well
 	 */
-	stack_region_t* pass_by_copy_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+	stack_region_t* pass_by_copy_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 	three_addr_var_t* pass_by_copy_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_copy_region);
 
 	/**
@@ -1857,7 +1857,7 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 		}
 
 		//Create a stack region for this type and get a variable for it
-		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
 		switch(result->result_type){
@@ -1972,7 +1972,7 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 
 	} else {
 		//Create a stack region for this type and get a variable for it
-		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
 		switch(result->result_type){
@@ -2039,7 +2039,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 	 */
 	if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 		//Allocate a fresh region for this and get a variable for it
-		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
 
 		switch(result->result_type){
@@ -2083,7 +2083,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 		three_addr_initializer_t* initializer = result->param_result.initializer_result;
 
 		//Allocate a fresh region for this and get a variable for it
-		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* storing_into_region_address = emit_memory_address_temp_var(parameter_type, storing_into_region);
 		
 		//Let the helper deal with any memory addresses that require adjustment
@@ -2099,7 +2099,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 	 */
 	} else {
 		//Allocate a fresh region for this and get a variable for it
-		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
 
 		//Unpack the parameter result - it will always be a variable
@@ -2156,7 +2156,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	//Let's extract the signature of what it is that we're calling
 	function_type_t* called_function_signature;
 	if(call_statement->statement_type == THREE_ADDR_CODE_FUNC_CALL){
-		called_function_signature = call_statement->called_function->signature->internal_types.function_type;
+		called_function_signature = call_statement->call_storage.called_function->signature->internal_types.function_type;
 	} else {
 		called_function_signature = call_statement->operands.oir.operand1->type->internal_types.function_type;
 	}
@@ -2189,7 +2189,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * Step 1: if we have a function that has stack parameters, it is up to us to allocate
 	 * the stack data area for it now. We'll also grab a pointer to it for our convenience
 	 */
-	stack_data_area_t* stack_passed_param_region = &(call_statement->optional_storage.call_storage.stack_parameter_area);
+	stack_data_area_t* stack_passed_param_region = &(call_statement->call_storage.stack_parameter_area);
 	if(called_function_signature->contains_stack_params == TRUE){
 		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE);
 	}
@@ -2217,7 +2217,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * If all of our counting is correct then these should be lining up perfectly with result
 		 * to desired type
 		 */
-		parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
+		parameter_result_t* result = get_result_at_index(&(call_statement->call_storage.parameter_results), parameter_result_index);
 		generic_type_t* parameter_type = dynamic_array_get_at(&(called_function_signature->function_parameters), signature_params_index);
 
 		/**
@@ -2270,7 +2270,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		}
 
 		//The number is however many results we have left over. This is our "paramcount"
-		int32_t elaborative_paramcount = call_statement->parameter_results.current_index - parameter_result_index;
+		int32_t elaborative_paramcount = call_statement->call_storage.parameter_results.current_index - parameter_result_index;
 		three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(elaborative_paramcount, i32);
 
 		/**
@@ -2288,9 +2288,9 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * Now run through the remaining parameter results and store them to the stack region
 		 * after we've already added the paramcount
 		 */
-		for(; parameter_result_index < call_statement->parameter_results.current_index; parameter_result_index++){
+		for(; parameter_result_index < call_statement->call_storage.parameter_results.current_index; parameter_result_index++){
 			//Pass it along to the helper to process
-			parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
+			parameter_result_t* result = get_result_at_index(&(call_statement->call_storage.parameter_results), parameter_result_index);
 			store_elaborative_parameter_result(call_statement, elaborated_type, result, &memory_addresses_to_adjust);
 		}
 	}
@@ -2362,10 +2362,10 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 
 	//These are both no longer of use
 	dynamic_array_dealloc(&memory_addresses_to_adjust);
-	parameter_results_array_dealloc(&(call_statement->parameter_results));
+	parameter_results_array_dealloc(&(call_statement->call_storage.parameter_results));
 
 	//Once we've fully lowered this call statement flag it as fully lowered
-	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
+	call_statement->call_storage.has_been_lowered = TRUE;
 }
 
 
@@ -2388,7 +2388,7 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 			 * If we have a function call statement *AND* it has not already been lowered
 			 * by this process, we will invoke the helper to do all of this
 			 */
-			if(is_call_statement(instruction_cursor) && instruction_cursor->optional_storage.call_storage.has_been_lowered == FALSE){
+			if(is_call_statement(instruction_cursor) && instruction_cursor->call_storage.has_been_lowered == FALSE){
 				lower_call_statement(function, instruction_cursor);
 			}
 
@@ -16871,7 +16871,7 @@ static inline void handle_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.call_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->call_storage.error_assignee;
 }
 
 
@@ -16889,7 +16889,7 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.call_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->call_storage.error_assignee;
 }
 
 
