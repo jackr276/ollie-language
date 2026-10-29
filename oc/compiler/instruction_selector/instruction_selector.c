@@ -1559,6 +1559,9 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  * call statement has been deemed fit for it
  *
  * TODO NEEDS ENTIRE REVAMP
+ *
+ *
+ * TODO THERE IS NO MORE RRF LIKE HOW WE'RE DOING IT HERE
  */
 static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
