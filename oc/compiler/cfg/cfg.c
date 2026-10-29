@@ -7432,14 +7432,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 
 		/**
 		 * We'll also insert a move statement for our function assignee. We do this to have a place to save it
-		 * in case future function calls in the handles statement clober it
-		 *
-		 * TODO HERE
+		 * in case future function calls in the handles statement clober it. Of course, we'll only do this if
+		 * we don't return void
 		 */
-		instruction_t* return_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
-		add_statement(current_block, return_assignment);
-		function_assignee = return_assignment->operands.oir.assignee;
-
+		if(signature->returns_void == FALSE){
+			instruction_t* return_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
+			add_statement(current_block, return_assignment);
+			function_assignee = return_assignment->operands.oir.assignee;
+		}
 
 		//Let the helper do the rest. It will spit back the results of the final assignment for us
 		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
