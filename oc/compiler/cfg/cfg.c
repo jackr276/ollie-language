@@ -7355,6 +7355,16 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	/**
+	 * If this is a function that returns by copy, we will need to create the return
+	 * by copy region inside of the caller's stack frame now. We'll also maintain
+	 * a reference to this created region inside of the call statement itself
+	 */
+	if(signature->returns_by_copy == TRUE){
+		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+		function_call_statement->call_storage.return_by_copy_region = return_by_copy_region;
+	}
+
+	/**
 	 * IMPORTANT - if the parser has flagged that this function call instruction may be return
 	 * region forwarding eligible, then we need to flag the statement here as being return
 	 * region forwarding eligible. Though this will have no effect right now, it will later
@@ -7453,7 +7463,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
 
 	} else {
-		//If this is not a void return type, we'll need to emit this temp assignment
+		//TODO HERE - IF WE RETURN BY COPY, WHY ARE WE NOT JUST GIVING A MEMORY ADDRESS VARIABLE
+		//BACK AS THE RETURN VALUE???
+
+		/**
+		 * If this function does not return void, then we'll need to emit a temp assignment to help
+		 * with register clobbering in the register allocator. If this is a return by copy function, we
+		 * can skip the %rax temp assignment and instead emit a memory address variable instead
+		 */
 		if(signature->returns_void == FALSE){
 			/**
 			 * Emit an assignment instruction. This will become very important way down the line in register
@@ -13031,8 +13048,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			//Create our new instruction
 			instruction_t* new_call = calloc(1, sizeof(instruction_t));
 
-
-			//TODO REVAMP ALL OF THIS
+			//TODO LOOK AT HOW WE HAVE TO DO THE STACK REGION FOR RETURN BY COPY
 
 			//Clone over all of this information
 			new_call->statement_type = source_instruction->statement_type;

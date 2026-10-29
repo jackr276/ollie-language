@@ -182,6 +182,17 @@ struct instruction_t{
 		//Store the parameter results for a function call
 		parameter_results_array_t parameter_results;
 
+		/**
+		 * Function calls that call return-by-copy functions must have
+		 * a stack region created for them to copy into inside of the
+		 * callee's stack. This region is also what these functions will
+		 * return in the end(%rax is always the value from %rdi, which is
+		 * the return by copy region). We will create these return by
+		 * copy regions the instant that we see a function call that
+		 * has them, and we'll store a reference to it here
+		 */
+		stack_region_t* return_by_copy_region;
+
 		//The second error assignee for an errorable function
 		three_addr_var_t* error_assignee;
 
