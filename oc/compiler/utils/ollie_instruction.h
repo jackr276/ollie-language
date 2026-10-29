@@ -155,11 +155,10 @@ struct instruction_t{
 	} operands;
 
 	/**
-	 * We may have parameters for phi functions/mature function calls or parameter results
-	 * for immature ones
+	 * Parameters exist for phi functions and function calls. We'll just have one
+	 * area to store them for both kinds
 	 */
 	dynamic_array_t parameters;
-	parameter_results_array_t parameter_results;
 
 	//We have 2 ways to jump. The if jump is our affirmative jump, else is our alternative
 	void* if_block;
@@ -169,27 +168,42 @@ struct instruction_t{
 	three_addr_var_t* relies_on;
 
 	/**
+	 * Function calls are a special kind of instruction that will have
+	 * a lot of stuff hanging off of them. As such, we'll bundle it all
+	 * into one big struct for ease of use
+	 */
+	struct {
+		//The function that was called(this is for direct calls)
+		symtab_function_record_t* called_function;
+
+		//Some function calls require their own stack setup
+		stack_data_area_t stack_parameter_area;
+
+		//Store the parameter results for a function call
+		parameter_results_array_t parameter_results;
+
+		//The second error assignee for an errorable function
+		three_addr_var_t* error_assignee;
+
+		/**
+		 * Function calls exist in a weird hybrid state where they're
+		 * not lowered into their lowest OIR until the instruction selector's
+		 * simply stage. This flag will tell us what state they're in
+		 */
+		u_int8_t has_been_lowered;
+
+		//Is this an inlined function call or not?
+		u_int8_t is_inlined_call;
+
+		//Is this function call eligible for return region forwarding?
+		u_int8_t is_rrf_eligible;
+	} call_storage;
+
+	/**
 	 * Optional storage values that are not used enough to justify
 	 * their own dedicated field
 	 */
 	union {
-		/**
-		 * Function calls require an error assignee(for raising errors) and
-		 * some function calls require stack parameter setup
-		 */
-		struct {
-			//Some function calls require their own stack setup
-			stack_data_area_t stack_parameter_area;
-			//The second error assignee for an errorable function
-			three_addr_var_t* error_assignee;
-			/**
-			 * Function calls exist in a weird hybrid state where they're
-			 * not lowered into their lowest OIR until the instruction selector's
-			 * simply stage. This flag will tell us what state they're in
-			 */
-			u_int8_t has_been_lowered;
-		} call_storage;
-
 		//Store inlined assembly in a string
 		dynamic_string_t inlined_assembly;
 		//Store the byte amount that we want to copy by
@@ -217,8 +231,6 @@ struct instruction_t{
 		generic_type_t* result_type;
 	} type_storage;
 
-	//The function called
-	symtab_function_record_t* called_function;
 	//What block holds this?
 	void* block_contained_in;
 	//Instruction's line number
@@ -237,10 +249,6 @@ struct instruction_t{
 	u_int8_t cannot_be_combined;
 	//Does this instruction handle callee saving?
 	u_int8_t is_callee_saving_instruction;
-	//Is this an inlined function call or not?
-	u_int8_t is_inlined_call;
-	//Is this function call eligible for return region forwarding?
-	u_int8_t is_rrf_eligible;
 	//If it's a branch statment, then we'll use this
 	branch_type_t branch_type;
 	//The conditional movement type that we have

@@ -1557,10 +1557,15 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  *
  * This helper also deals with all logic for Ollie's built in "Return Region Forwarding" optimization, if this 
  * call statement has been deemed fit for it
+ *
+ * TODO NEEDS ENTIRE REVAMP
  */
 static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	u_int32_t line_number = call_statement->line_number;
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 
 	/**
 	 * Case 1: we are not eligible for return region forwarding. In this case, we'll need to emit a fresh

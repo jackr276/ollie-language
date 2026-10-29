@@ -7407,6 +7407,18 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * translate it into a switch statement. Our strategy here is to only emit
 	 * the final result assignment once we're inside of the handle statement itself
 	 */
+
+
+
+	//TODO NEEDS RETURN BY COPY IMPLEMENTATION
+
+
+
+
+
+
+
+
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		/**
 		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
@@ -13511,12 +13523,13 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  * Since we're replacing parameters and parameter aliases with memory address variables, we are
  * able to replace both the original return by copy variable and the variable that aliases it
  * with our memory address variable to avoid the need for extra interference
- *
- * TODO DOC RRF
  */
 static inline void setup_return_by_copy_for_inlined_call(basic_block_t* after_inline_block, instruction_t* original_function_call,
 														 basic_block_t* function_entry, variable_map_t* variable_map,
 														 int32_t* current_gp_parameter_order){
+	printf("TODO NOT IMPLEMENTED\n\n\n");
+	exit(1);
+
 	/**
 	 * Extract the function that we're cloning, it's signature, and the return by copy
 	 * variable/alias of the return by copy variable. Remember that this return
@@ -13560,36 +13573,6 @@ static inline void setup_return_by_copy_for_inlined_call(basic_block_t* after_in
 	 * to represent symbolically that we've added this
 	 */
 	(*current_gp_parameter_order)++;
-
-	/**
-	 * Case 1: we are *NOT* eligible for return region forwarding with this *INLINED* function call. In
-	 * this case, we'll need to setup a new stack region that we'll use for the return by copy procedure
-	 * itself, and then create an association between that new region and the function that we're
-	 * cloning's return by copy variable
-	if(original_function_call->is_rrf_eligible == FALSE){
-
-	 * Case 2: we *are* eligible for return region forwarding with this *INLINED* function call. This means that the parser
-	 * decided that, down the line, there is some region that the result of the function call would be memory copied into. 
-	 * Since this return by copy call already does a memory copy internally, we will "forward" the region that it would
-	 * return by copy into to the function to eliminate an unnecessary memory copy. This for the most part closely mirrors
-	 * the RRF implementation for regular function calls
-	} else {
-		 * We first need to determine where the original, final memory copy is for this function call. We will be using
-		 * the destination memory address of this statement as our forwarded return region
-		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(current_function_blocks, original_function_call, after_inline_block);
-		if(rrf_memory_copy == NULL){
-			trigger_ice_panic("Return Region Forwarding: could not find original memory copy statement");
-		}
-
-		printf("FOUND IT\n");
-		print_three_addr_code_stmt(stdout, rrf_memory_copy);
-
-
-
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
-	}
-	 */
 }
 
 
@@ -14030,6 +14013,9 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	 *
 	 * This has enough complexity to warrant a helper function, more documentation in that
 	 * function itself
+	 *
+	 *
+	 * TODO NEEDS GIGANTIC REVAMP
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
 		setup_return_by_copy_for_inlined_call(after_inline_block, original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
