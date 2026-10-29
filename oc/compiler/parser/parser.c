@@ -1682,26 +1682,30 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 		 * the value, we do not accidentally copy from already dereferenced memory
 		 */
 		if(is_copy_assignment_required(return_type, return_expression->inferred_type) == TRUE){
+			/**
+			 * Go down the subtree and flag that we do not require any memory access. This will
+			 * tell the CFG constructor to purely emit the address calculation
+			 */
 			propogate_no_memory_access_required_flag(return_expression);
+
+			/**
+			 * Since we are performing a memory copy instruction, this function
+			 * is required to perform an initial alignment when we enter it. If we did
+			 * not align this way, then we would get segmentation faults when trying to execute
+			 * SIMD instructions
+			 */
+			current_function->requires_initial_alignment = TRUE;
+
+			/**
+			 * If we are calling a return-by-copy function and planning
+			 * on immediately memory copying the result into a different
+			 * memory region, we may be able to skip the copy altogether
+			 * by passing the eventual destination memory region in as the
+			 * return by copy region. This step just flags nodes as eligible
+			 * for this process
+			 */
+			return_expression->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(return_expression);
 		}
-
-		/**
-		 * Since we are performing a memory copy instruction, this function
-		 * is required to perform an initial alignment when we enter it. If we did
-		 * not align this way, then we would get segmentation faults when trying to execute
-		 * SIMD instructions
-		 */
-		current_function->requires_initial_alignment = TRUE;
-
-		/**
-		 * If we are calling a return-by-copy function and planning
-		 * on immediately memory copying the result into a different
-		 * memory region, we may be able to skip the copy altogether
-		 * by passing the eventual destination memory region in as the
-		 * return by copy region. This step just flags nodes as eligible
-		 * for this process
-		 */
-		return_expression->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(return_expression);
 
 	} else {
 		/**
