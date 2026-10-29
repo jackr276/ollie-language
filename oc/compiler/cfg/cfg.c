@@ -13337,8 +13337,12 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  * able to replace both the original return by copy variable and the variable that aliases it
  * with our memory address variable to avoid the need for extra interference
  */
-static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
-														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call,
+														 basic_block_t* function_entry, variable_map_t* variable_map,
+														 int32_t* current_gp_parameter_order){
+	//The function that we're cloning is the original call's called function
+	symtab_function_record_t* function_to_clone = original_function_call->called_function;
+
 	//Extract the cloning signature from the function
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 
@@ -13346,35 +13350,42 @@ static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_
 	symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
 	symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
 
-	/**
-	 * Create a variable that is SSA compatible - it does not specifically need to be
-	 * return by copy because there are no register allocation rules here
-	 */
-	symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
 
-	//Create the stack region
-	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
+	if(original_function_call->is_rrf_eligible == FALSE){
+		/**
+		 * Create a variable that is SSA compatible - it does not specifically need to be
+		 * return by copy because there are no register allocation rules here
+		 */
+		symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
 
-	//Associate it with our return by copy variable
-	new_return_by_copy_variable->stack_region = return_by_copy_region;
+		//Create the stack region
+		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
 
-	//We will also need a synthetic initialization for this to not be flagged by the static analyzer
-	instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
-	add_statement(function_entry, initialization);
+		//Associate it with our return by copy variable
+		new_return_by_copy_variable->stack_region = return_by_copy_region;
 
-	/**
-	 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
-	 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
-	 * about register clobbering once we inline
-	 */
-	create_mapping_for_symtab_variable(variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
-	create_mapping_for_symtab_variable(variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
+		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
+		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
+		add_statement(function_entry, initialization);
 
-	/**
-	 * Since, for regular functions, this is passed in via %rdi, we will bump up the GP parameter order
-	 * to represent symbolically that we've added this
-	 */
-	(*current_gp_parameter_order)++;
+		/**
+		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
+		 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
+		 * about register clobbering once we inline
+		 */
+		create_mapping_for_symtab_variable(variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
+		create_mapping_for_symtab_variable(variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
+
+		/**
+		 * Since, for regular functions, this is passed in via %rdi, we will bump up the GP parameter order
+		 * to represent symbolically that we've added this
+		 */
+		(*current_gp_parameter_order)++;
+
+	} else {
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
 }
 
 
@@ -13810,13 +13821,13 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	}
 
 	/**
-	 * Step 2: return by copy handling
+	 * Step 2: return by copy and return region forwarding handling
 	 *
 	 * This has enough complexity to warrant a helper function, more documentation in that
 	 * function itself
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		setup_return_by_copy_for_inlined_call(function_to_clone, *function_entry, variable_map, &current_gp_parameter_order);
+		setup_return_by_copy_for_inlined_call(original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
