@@ -13544,21 +13544,23 @@ static inline void setup_return_by_copy_for_inlined_call(instruction_t* original
 		/**
 		 * Create a variable that is SSA compatible - it does not specifically need to be
 		 * return by copy because there are no register allocation rules here
+		 *
+		 * This variable will have a brand new stack region in the function that we're cloning
+		 * into's local stack
 		 */
 		symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
-
-		//Create the stack region
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
-
-		//Associate it with our return by copy variable
 		new_return_by_copy_variable->stack_region = return_by_copy_region;
 
-		//We will also need a synthetic initialization for this to not be flagged by the static analyzer
+		/**
+		 * Emit and add a synthetic memory initialization so that the static analyzer recognizes that this new region
+		 * is valid
+		 */
 		instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
 		add_statement(function_entry, initialization);
 
 		/**
-		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
+		 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and maps
 		 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
 		 * about register clobbering once we inline
 		 */
@@ -13571,6 +13573,13 @@ static inline void setup_return_by_copy_for_inlined_call(instruction_t* original
 		 */
 		(*current_gp_parameter_order)++;
 
+	/**
+	 * Case 2: we *are* eligible for return region forwarding with this *INLINED* function call. This means that the parser
+	 * decided that, down the line, there is some region that the result of the function call would be memory copied into. 
+	 * Since this return by copy call already does a memory copy internally, we will "forward" the region that it would
+	 * return by copy into to the function to eliminate an unnecessary memory copy. This for the most part closely mirrors
+	 * the RRF implementation for regular function calls
+	 */
 	} else {
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
