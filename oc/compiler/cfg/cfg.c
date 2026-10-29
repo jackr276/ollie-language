@@ -13384,6 +13384,10 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 		print_variable(stdout, searching_for, PRINTING_VAR_INLINE);
 		printf("\n");
 
+		printf("SEARCHING INSTRUCTION\n");
+		print_three_addr_code_stmt(stdout, cursor);
+
+
 		/**
 		 * Based on the type of instruction we'll either update the variable
 		 * that we're after or have our end condition
@@ -13436,6 +13440,7 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 	 * the search throughout the rest of the function using this block's successors
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
+		printf("HERE\n\n\n");
 		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
 
 		/**
@@ -13459,7 +13464,7 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
  * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
  * in the end to the region that we're after, which we can use to our advantage
  */
-static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array_t* function_blocks, instruction_t* call_statement){
+static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array_t* function_blocks, instruction_t* call_statement, basic_block_t* starting_block){
 	/**
 	 * First reset the visited status for all of our blocks so that we can flag
 	 * blocks as visited as we go
@@ -13473,15 +13478,13 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
 	 * assignments along the way that change exactly what we're after, but this is the
 	 * real gist of it
 	 */
-	basic_block_t* call_block = call_statement->block_contained_in;
 	three_addr_var_t* searching_for_variable = call_statement->operands.oir.assignee;
 
 	/**
-	 * Let the helper do all of our searching recursively. In theory we should always return an
-	 * answer here. If we don't, then that's some kind of error. We always start searching the
-	 * original block at the statement immediately after the call statement
+	 * The helper will recursively search the CFG to find where the final memory copy
+	 * statement itself is
 	 */
-	return search_block_for_rrf_memory_copy(call_block, call_statement->next_statement, searching_for_variable);
+	return search_block_for_rrf_memory_copy(starting_block, starting_block->leader_statement, searching_for_variable);
 }
 
 
@@ -13499,8 +13502,9 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  *
  * TODO DOC RRF
  */
-static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, basic_block_t* function_entry,
-														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+static inline void setup_return_by_copy_for_inlined_call(basic_block_t* after_inline_block, instruction_t* original_function_call,
+														 basic_block_t* function_entry, variable_map_t* variable_map,
+														 int32_t* current_gp_parameter_order){
 	/**
 	 * Extract the function that we're cloning, it's signature, and the return by copy
 	 * variable/alias of the return by copy variable. Remember that this return
@@ -13564,7 +13568,7 @@ static inline void setup_return_by_copy_for_inlined_call(instruction_t* original
 		 * We first need to determine where the original, final memory copy is for this function call. We will be using
 		 * the destination memory address of this statement as our forwarded return region
 		 */
-		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(current_function_blocks, original_function_call);
+		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(current_function_blocks, original_function_call, after_inline_block);
 		if(rrf_memory_copy == NULL){
 			trigger_ice_panic("Return Region Forwarding: could not find original memory copy statement");
 		}
@@ -13945,8 +13949,9 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
  */
 static void clone_entire_function_for_inlining(instruction_t* original_call_statement, basic_block_t* block_inlined_in,
 												basic_block_t** function_entry, basic_block_t** function_exit,
-												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
-												parameter_results_array_t* parameter_results, variable_map_t* variable_map){
+												basic_block_t* after_inline_block, symtab_variable_record_t* return_variable,
+												symtab_variable_record_t* raise_variable, parameter_results_array_t* parameter_results,
+												variable_map_t* variable_map){
 	/**
 	 * Extract the function that we want to clone, it's signature and the execution
 	 * frequency of what we're inlining
@@ -14018,7 +14023,7 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	 * function itself
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		setup_return_by_copy_for_inlined_call(original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
+		setup_return_by_copy_for_inlined_call(after_inline_block, original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
@@ -14163,6 +14168,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 										block_inlined_in,
 										&inlined_function_entry,
 										&inlined_function_exit,
+										after_inline_block,
 										symtab_return_variable,
 										symtab_raise_variable,
 										&(call_to_inline->parameter_results),
@@ -14349,8 +14355,6 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 * inlining or any dominance relations
 	 */
 	visit_prog_node(cfg, results->root);
-
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Invoke the helper to perform all function inlining if there are inlined
