@@ -1673,25 +1673,53 @@ static generic_ast_node_t* return_statement_in_handle_clause(ollie_token_stream_
 	}
 
 	/**
-	 * If we get here and we have an initializer, we need to be very careful about what
-	 * we allow. The only things that we "return by copy" are unions and structs. Initializers
-	 * work great for those because we have a region to initialize into. Arrays and strings however
-	 * we never return by copy, so an initializer fundamentally will never work
+	 * In the event that we do not have an initializer, we may have a memory copy statement
+	 * that is going to require us to proprogate certain info down the tree. We'll do
+	 * that here
 	 */
-	if(is_initializer_node(expr_node) == TRUE && is_type_returned_by_copy(current_function_signature->return_type) == FALSE){
-		sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
-						get_full_type_name_from_type(current_function_signature->return_type));
-		return print_and_return_error(info, parser_line_num);
+	if(is_initializer_node(return_expression) == FALSE){
+		/**
+		 * If we are having a copy assignment, we need to propogate down the chain in the expression
+		 * node that we should not be doing any dereferencing. We do this to ensure that when we return
+		 * the value, we do not accidentally copy from already dereferenced memory
+		 */
+		if(is_copy_assignment_required(return_type, return_expression->inferred_type) == TRUE){
+			propogate_no_memory_access_required_flag(return_expression);
+		}
+
+		/**
+		 * Since we are performing a memory copy instruction, this function
+		 * is required to perform an initial alignment when we enter it. If we did
+		 * not align this way, then we would get segmentation faults when trying to execute
+		 * SIMD instructions
+		 */
+		current_function->requires_initial_alignment = TRUE;
+
+		/**
+		 * If we are calling a return-by-copy function and planning
+		 * on immediately memory copying the result into a different
+		 * memory region, we may be able to skip the copy altogether
+		 * by passing the eventual destination memory region in as the
+		 * return by copy region. This step just flags nodes as eligible
+		 * for this process
+		 */
+		return_expression->is_return_region_forwarding_eligible = is_node_rrf_eligible_function_call(return_expression);
+
+	} else {
+		/**
+		 * If we get here and we have an initializer, we need to be very careful about what
+		 * we allow. The only things that we "return by copy" are unions and structs. Initializers
+		 * work great for those because we have a region to initialize into. Arrays and strings however
+		 * we never return by copy, so an initializer fundamentally will never work
+		 */
+		if(is_type_returned_by_copy(return_type) == FALSE){
+			sprintf(info, "Invalid attempt to initialize into a non return-by-copy type \"%s\". Only return by copy types can be initialized into",
+							get_full_type_name_from_type(current_function_signature->return_type));
+			return print_and_return_error(info, parser_line_num);
+		}
 	}
 
-	/**
-	 * If we are having a copy assignment, we need to propogate down the chain in the expression
-	 * node that we should not be doing any dereferencing. We do this to ensure that when we return
-	 * the value, we do not accidentally copy from already dereferenced memory
-	 */
-	if(is_copy_assignment_required(current_function_signature->return_type, expr_node->inferred_type) == TRUE){
-		propogate_no_memory_access_required_flag(expr_node);
-	}
+
 
 	//Otherwise it worked, so we'll add it as a child of the other node
 	add_child_node(return_stmt, expr_node);
