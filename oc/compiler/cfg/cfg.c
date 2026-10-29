@@ -13342,9 +13342,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  * 		if cursor is assignment and source is the source_variable:
  * 			source_variable <- assignment's assignee // There's been a reassignment so change what we're after
  *
- * 		else if cursor is phi function and source is in the phi parameters
- * 			source_variable = phi's assignee
- *
  * 		else if cursor is memory copy and the source address operand 1 is the variable:
  * 			return memory copy instruction // FOUND IT!
  *
@@ -13373,12 +13370,20 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 	 */
 	block->visited = TRUE;
 
+	printf("SEARCHING FOR\n");
+	print_variable(stdout, searching_for, PRINTING_VAR_INLINE);
+	printf("\n");
+
 	/**
 	 * Start at the given "starting point" for the block and crawl down
 	 * the block, applying the search rules as needed
 	 */
 	instruction_t* cursor = starting_point;
 	while(cursor != NULL){
+		printf("SEARCHING FOR\n");
+		print_variable(stdout, searching_for, PRINTING_VAR_INLINE);
+		printf("\n");
+
 		/**
 		 * Based on the type of instruction we'll either update the variable
 		 * that we're after or have our end condition
@@ -13401,33 +13406,7 @@ static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, ins
 			}
 
 			/**
-			 * Case 2: if we have a phi function(join node) that involves our variable then we'll
-			 * need to assign our variable to be that. This will happen when we're dealing with
-			 * handles statements
-			 *
-			 * ^t32_2 <- PHI(^t32_1, ^t32_3, ^t32_4) <-- should be searching for ^t32_2
-			 */
-			case THREE_ADDR_CODE_PHI_STMT: {
-				/**
-				 * Crawl through all of the phi parameters and see if we have anything that's
-				 * equal to our current "searching_for". If we do, then we can reassign "searching_for"
-				 * to be the assignee
-				 */
-				for(int32_t i = 0; i < cursor->parameters.current_index; i++){
-					three_addr_var_t* phi_parameter = dynamic_array_get_at(&(cursor->parameters), i);
-
-					if(variables_equal(phi_parameter, searching_for) == TRUE){
-						searching_for = cursor->operands.oir.assignee;
-						//No point in searching the phi operands further
-						break;
-					}
-				}
-
-				break;
-			}
-
-			/**
-			 * Case 3: if we have a memory copy statement *and* the source address region's
+			 * Case 2: if we have a memory copy statement *and* the source address region's
 			 * base address is equal to the variable that we're after, then we have what
 			 * we're looking for. We'll return a reference to this entire thing and the
 			 * function will propogate it up the chain
@@ -13581,6 +13560,20 @@ static inline void setup_return_by_copy_for_inlined_call(instruction_t* original
 	 * the RRF implementation for regular function calls
 	 */
 	} else {
+		/**
+		 * We first need to determine where the original, final memory copy is for this function call. We will be using
+		 * the destination memory address of this statement as our forwarded return region
+		 */
+		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(current_function_blocks, original_function_call);
+		if(rrf_memory_copy == NULL){
+			trigger_ice_panic("Return Region Forwarding: could not find original memory copy statement");
+		}
+
+		printf("FOUND IT\n");
+		print_three_addr_code_stmt(stdout, rrf_memory_copy);
+
+
+
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
 	}
@@ -14356,6 +14349,8 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 * inlining or any dominance relations
 	 */
 	visit_prog_node(cfg, results->root);
+
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Invoke the helper to perform all function inlining if there are inlined
