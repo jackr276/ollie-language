@@ -7425,11 +7425,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		/**
 		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
-		 * the result assignment that comes with it
+		 * the result assignment that comes with it. The error assignee is stored in the function call
+		 * statement itself
 		 */
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
-
-		//This is stored in the optional second assignee slot
 		function_call_statement->call_storage.error_assignee = error_assignee;
 
 		/**
@@ -7477,9 +7476,13 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 				function_assignee = assignment->operands.oir.assignee;
 
 			/**
+			 * Otherwise, we're returning by copy. Even though we are able to use %rax as our return-by-copy variable as guaranteed
+			 * by the System V ABI, it's much more convenient for us to just use the actual memory address variable of the region
+			 * that we know exists in the caller's stack frame. As such, the assignee that we *return* from this function will
+			 * be a memory address variable representing the return by copy region
 			 */
 			} else {
-
+				function_assignee = emit_memory_address_temp_var(signature->return_type, function_call_statement->call_storage.return_by_copy_region);
 			}
 		}
 

@@ -1549,6 +1549,14 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
 }
 
 
+
+static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks, instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
+													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+
+}
+
+
+
 /**
  * Handle a return-by-copy parameter by allocating a special parameter that goes into %rdi which contains
  * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
@@ -1563,8 +1571,9 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
  *
  * TODO THERE IS NO MORE RRF LIKE HOW WE'RE DOING IT HERE
  */
-static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
+static inline void handle_return_by_copy_parameter__OLD(dynamic_array_t* function_blocks, instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
 													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+	//Hang onto this for the time being
 	u_int32_t line_number = call_statement->line_number;
 
 	printf("TODO NOT IMPLEMENTED\n");
