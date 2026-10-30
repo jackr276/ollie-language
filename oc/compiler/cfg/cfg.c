@@ -6967,14 +6967,20 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
  *
  * TODO NEEDS FIX
  */
-static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
-	//Allocate the results
+static cfg_result_package_t emit_handle_statement(instruction_t* function_call_statement, basic_block_t* starting_block, generic_ast_node_t* handle_node,
+													three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
+	u_int32_t line_number = handle_node->line_number;
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We are going to use a pseudo temp var for our final result here. We will do this because we'll
 	 * need to assign to it over multiple blocks potentially. This is a temp var on the surface but
-	 * under the hood it is SSA compatible so phi-functions will be inserted as needed
+	 * under the hood it is SSA compatible so phi-functions will be inserted as needed. 
+	 *
+	 * This function result variable is important for register clobbering as well. We will always
+	 * have this function result variable around. However, in the event that we have a return-by-copy
+	 * function call, this function result variable will *NOT* be used as the memory address. We will
+	 * use the memory address directly for that
 	 */
 	symtab_variable_record_t* function_result_var = NULL;
 	if(function_assignee != NULL){
@@ -6987,10 +6993,11 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 */
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
 	basic_block_t* error_handling_ending_block = basic_block_alloc_and_estimate();
-	//Holder for the default block
 	basic_block_t* default_block = NULL;
 
-	//The lower bound is always 0, and the upper bound is determined by the parser
+	/**
+	 * The lower bound is always 0, and the upper bound is determined by the parser
+	 */
 	u_int32_t lower_bound = handle_node->optional_storage.switch_bounds.lower_bound;
 	u_int32_t upper_bound = handle_node->optional_storage.switch_bounds.upper_bound;
 
@@ -7008,9 +7015,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * or not
 	 */
 	basic_block_t* no_error_block;
-
 	if(function_assignee != NULL){
-		no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee, handle_node->line_number);
+		no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee, line_number);
 	} else {
 		no_error_block = emit_no_error_block_for_void_returning_handle();
 	}
@@ -7059,7 +7065,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 			switch(handle_results.type){
 				case CFG_RESULT_TYPE_CONST: {
-					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, line_number);
 					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
 				}
@@ -7074,17 +7080,30 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 					//Extract for our convenience
 					three_addr_var_t* result_var = handle_results.result_value.result_var;
 
+					/**
+					 * No return by copy so just assign this over to the function result variable and move along
+					 */
 					if(is_type_returned_by_copy(function_assignee->type) == FALSE){
-						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), result_var, handle_node->line_number);
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), result_var, line_number);
 						insert_instruction_before_given(result_assignment, last_instruction);
 
+					/**
+					 * For a return by copy, we'll use the known memory address of the return region directly to emit the return by copy. We will still
+					 * use the symbolic function assignee and copy it over to the result var to keep the static analyzer happy, but for all intents
+					 * and purposes we do not need it
+					 */
 					} else {
-						//First we copy into the return region
-						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(emit_var_copy(function_assignee), result_var, function_assignee->type->type_size, handle_node->line_number);
+						/**
+						 * Emit a fresh memory address variable for the return by copy region and copy the result over to it
+						 */
+						three_addr_var_t* return_by_copy_region_variable = emit_memory_address_temp_var(function_assignee->type, function_call_statement->call_storage.return_by_copy_region);
+						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(return_by_copy_region_variable, result_var, function_assignee->type->type_size, line_number);
 						insert_instruction_before_given(copy_to_ret_region, last_instruction);
 
-						//Then we come through and assign the function assignee to the result var, just to keep SSA happy
-						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), handle_node->line_number);
+						/**
+						 * Then we come through and assign the function assignee to the result var, just to keep SSA happy
+						 */
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), line_number);
 						insert_instruction_before_given(result_assignment, last_instruction);
 					}
 
@@ -7100,15 +7119,17 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 				 * any new memory regions
 				 */
 				case CFG_RESULT_TYPE_INITIALIZER: {
+					//TODO HERE AS WELL
+
 					//Get the result initializer out
 					three_addr_initializer_t* result_initializer = handle_results.result_value.result_initializer;
 
 					//First initialize right into the function assignee
-					instruction_t* initialization = emit_initialization_instruction(emit_var_copy(function_assignee), result_initializer, handle_node->line_number);
+					instruction_t* initialization = emit_initialization_instruction(emit_var_copy(function_assignee), result_initializer, line_number);
 					insert_instruction_before_given(initialization, last_instruction);
 
 					//Now assign the pointer represented by %rax over to our function result var, as it now contains our initializer
-					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, handle_node->line_number);
+					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, line_number);
 					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
 				}
@@ -7161,11 +7182,11 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * We will jump to the default error block if we are above this value. The branch will take this
 	 * all into account
 	 */
-	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant, handle_node->line_number);
+	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant, line_number);
 	//Add the comparsion
 	add_statement(starting_block, comparison);
 	//Get the branch out - this handles everything for us
-	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->operands.oir.assignee, handle_node->line_number);
+	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->operands.oir.assignee, line_number);
 
 	/**
 	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
@@ -7180,7 +7201,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * caller as the assignee
 	 */
 	if(function_result_var != NULL){
-		instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var), handle_node->line_number);
+		instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var), line_number);
 		add_statement(error_handling_ending_block, final_result_assingnment);
 
 		//This is the final assignee for the result package
@@ -7188,11 +7209,11 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 		result_package.result_value.result_var = final_result_assingnment->operands.oir.assignee;
 	}
 
-	//We can already fill in the result package
+	/**
+	 * Fill out and return the final result package here
+	 */
 	result_package.starting_block = starting_block;
 	result_package.final_block = error_handling_ending_block;
-
-	//Give back the final result package
 	return result_package;
 }
 
@@ -7432,30 +7453,19 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		function_call_statement->call_storage.error_assignee = error_assignee;
 
 		/**
-		 * Now we'll have a move statement just for register allocation reasons
-		 *
-		 * This now is our error assignee that will be used in the CFG
+		 * For register allocation reasons, we want to have extra assignments for these variables inserted in
+		 * just to avoid clobbering the %rdx register. This is universal for the error assignee so we'll emit
+		 * it now
 		 */
 		instruction_t* error_assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, line_number);
 		add_statement(current_block, error_assignment);
 		error_assignee = error_assignment->operands.oir.assignee;
 
 		/**
-		 * We'll also insert a move statement for our function assignee. We do this to have a place to save it
-		 * in case future function calls in the handles statement clobber it. Of course, we'll only do this if
-		 * we don't return void
-		 *
-		 *
-		 * TODO NEEDS HELP
+		 * Let the handle statement emitter handle the rest. It should emit everything that we need
+		 * for us including nuances with return-by-copy
 		 */
-		if(signature->returns_void == FALSE){
-			instruction_t* return_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
-			add_statement(current_block, return_assignment);
-			function_assignee = return_assignment->operands.oir.assignee;
-		}
-
-		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
+		result_package = emit_handle_statement(function_call_statement, current_block, cursor, function_assignee, error_assignee);
 
 	} else {
 		/**
