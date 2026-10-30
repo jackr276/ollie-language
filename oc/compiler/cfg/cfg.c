@@ -7111,25 +7111,25 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 				}
 
 				/**
-				 * If we have an initializer, we know that we are initializing into the return by copy memory region. Luckily
-				 * for us, we know that the function assignee(%rax register) when the function returns contains the address
-				 * of the return by copy parameter that we've created(%rdi param register). Because of this, we can emit
-				 * our initializer into the function assignee first and then assign that over to our "function result var"
-				 * so that it's carried through the rest of the handle statement. This allows us to avoid the creation of
-				 * any new memory regions
+				 * TODO REWRITE
 				 */
 				case CFG_RESULT_TYPE_INITIALIZER: {
-					//TODO HERE AS WELL
-
-					//Get the result initializer out
+					/**
+					 * Create a fresh return by copy variable and extract the initializer
+					 */
+					three_addr_var_t* return_by_copy_region_variable = emit_memory_address_temp_var(function_assignee->type, function_call_statement->call_storage.return_by_copy_region);
 					three_addr_initializer_t* result_initializer = handle_results.result_value.result_initializer;
 
-					//First initialize right into the function assignee
-					instruction_t* initialization = emit_initialization_instruction(emit_var_copy(function_assignee), result_initializer, line_number);
+					/**
+					 * Now initialize right into the known return by copy region
+					 */
+					instruction_t* initialization = emit_initialization_instruction(return_by_copy_region_variable, result_initializer, line_number);
 					insert_instruction_before_given(initialization, last_instruction);
 
-					//Now assign the pointer represented by %rax over to our function result var, as it now contains our initializer
-					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, line_number);
+					/**
+					 * Now assign the pointer represented by %rax over to our function result var, just to keep SSA happy
+					 */
+					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), line_number);
 					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
 				}
