@@ -7299,15 +7299,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	//We'll need to hold onto the statement itself and the assignee
 	instruction_t* function_call_statement = NULL;
 
-	/**
-	 * We may or may not have an actual function assignee variable here
-	 * based on whether or not we return void
-	 */
-	three_addr_var_t* function_assignee = NULL;
-	if(signature->returns_void == FALSE){
-		function_assignee = emit_temp_var(signature->return_type);
-	}
-
 	//We will also need a cursor to traverse the subtree
 	generic_ast_node_t* cursor = function_call_node->first_child;
 
@@ -7329,7 +7320,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, function_call_node->line_number);
 
 			//Now we can emit the indirect call statement
-			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, function_call_node->line_number);
+			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, NULL, function_call_node->line_number);
 
 			//Make sure that we advance the cursor up to be in the parameters
 			cursor = cursor->next_sibling;
@@ -7341,13 +7332,15 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * record that we are calling itself is stored inside of the func_record field
 		 */
 		case AST_NODE_TYPE_FUNCTION_CALL: { 
-			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
+			function_call_statement = emit_function_call_instruction(function_call_node->func_record, NULL, function_call_node->line_number);
 			function_call_statement->call_storage.is_inlined_call = signature->is_inlined;
 
 			break;
 		}
 
-		//This should be unreachable but just to be sure
+		/**
+		 * This should be unreachable but just to be sure
+		 */
 		default: {
 			trigger_ice_panic("Incompatible node type found in function call handler");
 			break;
@@ -7363,6 +7356,30 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
 		function_call_statement->call_storage.return_by_copy_region = return_by_copy_region;
 	}
+
+	/**
+	 * We may or may not have an actual function assignee variable here
+	 * based on whether or not we return void. Additionally, if we have
+	 * a return-by-copy
+	 */
+	three_addr_var_t* function_assignee = NULL;
+	if(signature->returns_void == FALSE){
+		/**
+		 * If we're not returning by copy then just emit a plain temporary variable
+		 * for the function assignee. This will be molded over into %rax at runtime
+		 */
+		if(signature->returns_by_copy == FALSE){
+			function_assignee = emit_temp_var(signature->return_type);
+		} else {
+
+		}
+
+	}
+
+	/**
+	 * Whether it's NULL or not, add the function assignee to the function call statement
+	 */
+	function_call_statement->operands.oir.assignee = function_assignee;
 
 	/**
 	 * IMPORTANT - if the parser has flagged that this function call instruction may be return
@@ -7463,15 +7480,16 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
 
 	} else {
-		//TODO HERE - IF WE RETURN BY COPY, WHY ARE WE NOT JUST GIVING A MEMORY ADDRESS VARIABLE
-		//BACK AS THE RETURN VALUE???
-
 		/**
 		 * If this function does not return void, then we'll need to emit a temp assignment to help
 		 * with register clobbering in the register allocator. If this is a return by copy function, we
 		 * can skip the %rax temp assignment and instead emit a memory address variable instead
 		 */
 		if(signature->returns_void == FALSE){
+			if(signature->returns_by_copy == FALSE){
+
+			}
+
 			/**
 			 * Emit an assignment instruction. This will become very important way down the line in register
 			 * allocation to avoid interference
