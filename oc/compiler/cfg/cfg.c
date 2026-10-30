@@ -7378,13 +7378,29 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	/**
-	 * If this is a function that returns by copy, we will need to create the return
-	 * by copy region inside of the caller's stack frame now. We'll also maintain
-	 * a reference to this created region inside of the call statement itself
+	 * If this function returns by copy, then we will maintain a special stack region and SSA
+	 * compatible temporary variable representing the return by copy region internally. This
+	 * will allow us to use the return region directly. Even though it is guaranteed to
+	 * be returned via %rax, using the local region opens up many more possibilities for us
+	 * in terms of optimizations
 	 */
 	if(signature->returns_by_copy == TRUE){
+		/**
+		 * Create the region, SSA compatible temp var, and create the association between the two
+		 */
 		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
-		function_call_statement->call_storage.return_by_copy_region = return_by_copy_region;
+		symtab_variable_record_t* return_by_copy_variable = create_ssa_compatible_temp_var(current_function,
+																							signature->return_type,
+																							variable_symtab,
+																							get_next_variable_id());
+		return_by_copy_variable->stack_region = return_by_copy_region;
+
+		/**
+		 * For SSA purposes, we need to emit a synthetic memory initialization statement to represent that this
+		 * was initialized and add it into the block
+		 */
+		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_memory_address_var(return_by_copy_variable), line_number);
+		add_statement(current_block, synthetic_initialization);
 	}
 
 	/**
@@ -7470,17 +7486,20 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	} else {
 		/**
 		 * If this function does not return void, then we'll need to emit a temp assignment to help
-		 * with register clobbering in the register allocator. If this is a return by copy function, we
-		 * can skip the %rax temp assignment and instead emit a memory address variable instead
+		 * with register clobbering in the register allocator. We always emit this, even if we have
+		 * a return by copy function, just to represent the %rax result existing
 		 */
 		if(signature->returns_void == FALSE){
+
+			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
+			add_statement(current_block, assignment);
+
+
 			/**
 			 * If we are *NOT* returning by copy, %rax is an important value for us. We'll as such need to come here
 			 * and emit a final temp assignment to reduce the register clobbering for %rax in the instruction selector
 			 */
 			if(signature->returns_by_copy == FALSE){
-				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
-				add_statement(current_block, assignment);
 
 				//Reassign this value
 				function_assignee = assignment->operands.oir.assignee;
