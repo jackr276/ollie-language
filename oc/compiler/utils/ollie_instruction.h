@@ -190,8 +190,14 @@ struct instruction_t{
 		 * the return by copy region). We will create these return by
 		 * copy regions the instant that we see a function call that
 		 * has them, and we'll store a reference to it here
+		 *
+		 * We will also maintain a symtab variable that represents a return
+		 * by copy variable. This allows us to have the same variable name
+		 * for every associated memory address region, which makes tracking much
+		 * easier for us
 		 */
 		stack_region_t* return_by_copy_region;
+		symtab_variable_record_t* return_by_copy_variable;
 
 		//The second error assignee for an errorable function
 		three_addr_var_t* error_assignee;
