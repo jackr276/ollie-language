@@ -6964,6 +6964,8 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
  * final_result_var = final_assignee
  *
  * The overall result of the function call itself will be stored in the final result var
+ *
+ * TODO NEEDS FIX
  */
 static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
 	//Allocate the results
@@ -7286,18 +7288,25 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * will hold all of them until we handle them in the instruction selection step
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
-	//Blank return package for now
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-	result_package.starting_block = basic_block;
+	u_int32_t line_number = function_call_node->line_number;
 
-	//Keep track of the current block
+	/**
+	 * Keep track of the current block and grab the signature
+	 */
 	basic_block_t* current_block = basic_block;
-
-	//Get the signature from the node itself
 	function_type_t* signature = function_call_node->optional_storage.callee_signature;
 
-	//We'll need to hold onto the statement itself and the assignee
-	instruction_t* function_call_statement = NULL;
+	/**
+	 * IMPORTANT - even if we have a return-by-copy function here, we still need a symbolic
+	 * function_assignee to represent us clobbering %rax. If we did not have this, the caller
+	 * may be mistaken in thinking that %rax was not clobbered by this function, while in reality
+	 * it always will be
+	 */
+	three_addr_var_t* function_assignee = NULL;
+	if(signature->returns_void == FALSE){
+		function_assignee = emit_temp_var(signature->return_type);
+	}
 
 	//We will also need a cursor to traverse the subtree
 	generic_ast_node_t* cursor = function_call_node->first_child;
@@ -7306,6 +7315,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * Any/all of our conditional processing will be done here. After this everything
 	 * needs to be agnostic to the node type
 	 */
+	instruction_t* function_call_statement = NULL;
 	switch(function_call_node->ast_node_type){
 		/**
 		 * For indirect function calls, the first child will always point to a unary
@@ -7317,10 +7327,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			current_block = unary_results.final_block;
 
 			//Our function pointer itself comes from whatever this result is
-			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, function_call_node->line_number);
+			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, line_number);
 
 			//Now we can emit the indirect call statement
-			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, NULL, function_call_node->line_number);
+			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, line_number);
 
 			//Make sure that we advance the cursor up to be in the parameters
 			cursor = cursor->next_sibling;
@@ -7332,9 +7342,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * record that we are calling itself is stored inside of the func_record field
 		 */
 		case AST_NODE_TYPE_FUNCTION_CALL: { 
-			function_call_statement = emit_function_call_instruction(function_call_node->func_record, NULL, function_call_node->line_number);
+			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, line_number);
 			function_call_statement->call_storage.is_inlined_call = signature->is_inlined;
-
 			break;
 		}
 
@@ -7358,30 +7367,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	}
 
 	/**
-	 * We may or may not have an actual function assignee variable here
-	 * based on whether or not we return void. Additionally, if we have
-	 * a return-by-copy
-	 */
-	three_addr_var_t* function_assignee = NULL;
-	if(signature->returns_void == FALSE){
-		/**
-		 * If we're not returning by copy then just emit a plain temporary variable
-		 * for the function assignee. This will be molded over into %rax at runtime
-		 */
-		if(signature->returns_by_copy == FALSE){
-			function_assignee = emit_temp_var(signature->return_type);
-		} else {
-
-		}
-
-	}
-
-	/**
-	 * Whether it's NULL or not, add the function assignee to the function call statement
-	 */
-	function_call_statement->operands.oir.assignee = function_assignee;
-
-	/**
 	 * IMPORTANT - if the parser has flagged that this function call instruction may be return
 	 * region forwarding eligible, then we need to flag the statement here as being return
 	 * region forwarding eligible. Though this will have no effect right now, it will later
@@ -7389,7 +7374,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 */
 	function_call_statement->call_storage.is_rrf_eligible = function_call_node->is_return_region_forwarding_eligible;
 
-	//If we have parameters allocate the array now
+	/**
+	 * If we do have function parameters, now is the time to allocate the storage for them inside
+	 * of the parameter results array
+	 */
 	if(signature->function_parameters.current_index != 0){
 		function_call_statement->call_storage.parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
 	}
@@ -7399,7 +7387,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * we're done once we either hit NULL or a handles statement
 	 */
 	while(cursor != NULL && cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
-		cfg_result_package_t parameter_results;
+		cfg_result_package_t parameter_results = INITIALIZE_BLANK_CFG_RESULT;
 
 		/**
 		 * For everything that is not an elaborative param statement, we'll
@@ -7434,18 +7422,6 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * translate it into a switch statement. Our strategy here is to only emit
 	 * the final result assignment once we're inside of the handle statement itself
 	 */
-
-
-
-	//TODO NEEDS RETURN BY COPY IMPLEMENTATION
-
-
-
-
-
-
-
-
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		/**
 		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
@@ -7461,7 +7437,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 *
 		 * This now is our error assignee that will be used in the CFG
 		 */
-		instruction_t* error_assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
+		instruction_t* error_assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, line_number);
 		add_statement(current_block, error_assignment);
 		error_assignee = error_assignment->operands.oir.assignee;
 
@@ -7469,9 +7445,12 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * We'll also insert a move statement for our function assignee. We do this to have a place to save it
 		 * in case future function calls in the handles statement clobber it. Of course, we'll only do this if
 		 * we don't return void
+		 *
+		 *
+		 * TODO NEEDS HELP
 		 */
 		if(signature->returns_void == FALSE){
-			instruction_t* return_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
+			instruction_t* return_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
 			add_statement(current_block, return_assignment);
 			function_assignee = return_assignment->operands.oir.assignee;
 		}
@@ -7486,19 +7465,22 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * can skip the %rax temp assignment and instead emit a memory address variable instead
 		 */
 		if(signature->returns_void == FALSE){
+			/**
+			 * If we are *NOT* returning by copy, %rax is an important value for us. We'll as such need to come here
+			 * and emit a final temp assignment to reduce the register clobbering for %rax in the instruction selector
+			 */
 			if(signature->returns_by_copy == FALSE){
+				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
+				add_statement(current_block, assignment);
 
-			}
+				//Reassign this value
+				function_assignee = assignment->operands.oir.assignee;
 
 			/**
-			 * Emit an assignment instruction. This will become very important way down the line in register
-			 * allocation to avoid interference
 			 */
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
-			add_statement(current_block, assignment);
+			} else {
 
-			//Reassign this value
-			function_assignee = assignment->operands.oir.assignee;
+			}
 		}
 
 		/**
@@ -7507,6 +7489,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 */
 		result_package.type = CFG_RESULT_TYPE_VAR;
 		result_package.result_value.result_var = function_assignee;
+		result_package.starting_block = basic_block;
 		result_package.final_block = current_block;
 	}
 
