@@ -7409,13 +7409,18 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 																							signature->return_type,
 																							variable_symtab,
 																							get_next_variable_id());
+		/**
+		 * Make the association between this new variable and the return by copy region. We will store
+		 * a reference to this variable inside of the call statement itself
+		 */
 		return_by_copy_variable->stack_region = return_by_copy_region;
+		function_call_statement->call_storage.return_by_copy_variable = return_by_copy_variable;
 
 		/**
 		 * For SSA purposes, we need to emit a synthetic memory initialization statement to represent that this
 		 * was initialized and add it into the block
 		 */
-		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_memory_address_var(return_by_copy_variable), line_number);
+		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(return_by_copy_variable), line_number);
 		add_statement(current_block, synthetic_initialization);
 	}
 
@@ -12594,6 +12599,9 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 }
 
 
+//TODO NEED UTIL TO FIRST TRY TO FIND MAPPING FOR SYMTAB VAR, AND TO THEN CREATE NEW ONE IF IT DOESNT EXIST
+
+
 /**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
@@ -13105,9 +13113,11 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			/**
 			 * Function calls that return by copy will have a return by copy stack region and memory address
 			 * variable created for them. When we clone the call, we will need to clone this variable as
-			 * well
+			 * well.
 			 */
-			new_call->call_storage.return_by_copy_variable = clone_symtab_variable(source_instruction->call_storage.return_by_copy_variable, variable_map);
+			if(source_instruction->call_storage.return_by_copy_variable != NULL){
+				new_call->call_storage.return_by_copy_variable = clone_symtab_variable(source_instruction->call_storage.return_by_copy_variable, variable_map);
+			}
 
 			//Clone our assignee and error assignee over
 			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
@@ -14375,6 +14385,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
