@@ -1550,9 +1550,46 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
 
 
 
-static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks, instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
-													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+/**
+ *
+ * TODO NEEDS RRF
+ */
+static inline void handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type,
+													int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+	u_int32_t line_number = call_statement->line_number;
 
+	//Always comes from the function call itself
+	stack_region_t* return_by_copy_region = call_statement->call_storage.return_by_copy_region;
+	three_addr_var_t* return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
+
+	/**
+	 * Create a temp var that will actually represent the region
+	 * address being assigned to %RDI. It will need a GP parameter
+	 * order of 1
+	 */
+	three_addr_var_t* region_variable = emit_temp_var(return_type);
+	region_variable->class_relative_parameter_order = *gp_parameter_order;
+	(*gp_parameter_order)++;
+
+	//Emit the assignment and add it before the call statement
+	instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, line_number);
+	insert_instruction_before_given(parameter_assignment, call_statement);
+
+	/**
+	 * The region variable goes into the parameter array
+	 */
+	dynamic_array_add(&(call_statement->parameters), region_variable);
+
+	/**
+	 * This is a memory address variable so we'll need to adjust it if there
+	 * are stack params. The caller has allocated this dynamic array if there
+	 * are stack params, so we can use that as our test
+	 */
+	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
+
+
+	//We've seen one more of these
+	(*gp_parameter_order)++;
 }
 
 
@@ -2214,7 +2251,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * handle anything else
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
-		handle_return_by_copy_parameter(function_blocks, call_statement, &(function->local_stack), called_function_signature->return_type,
+		handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
 
