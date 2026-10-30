@@ -13465,15 +13465,13 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  *
  * TODO RRF IMPLEMENTATION
  */
-static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, basic_block_t* function_entry,
-														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, variable_map_t* variable_map, int32_t* current_gp_parameter_order){
 	/**
 	 * Let's first extract the function to clone, it's signature, and the *CALLEE* side return by copy
 	 * variables(there's the original and an alias). These variables are meant to represent the parameter
 	 * in %RDI that the callee receives containing the return by copy region address
 	 */
 	symtab_function_record_t* function_to_clone = original_function_call->call_storage.called_function;
-	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 	symtab_variable_record_t* original_callee_return_by_copy_variable = function_to_clone->return_by_copy_variable;
 	symtab_variable_record_t* alias_of_callee_return_by_copy_variable = original_callee_return_by_copy_variable->alias;
 
@@ -13861,8 +13859,7 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
  * We also pass in a list of all of our parameter results from the given function call so that we can manage them
  */
 static void clone_entire_function_for_inlining(instruction_t* original_call_statement, basic_block_t* block_inlined_in,
-												basic_block_t** function_entry, basic_block_t** function_exit,
-												basic_block_t* after_inline_block, symtab_variable_record_t* return_variable,
+												basic_block_t** function_entry, basic_block_t** function_exit, symtab_variable_record_t* return_variable,
 												symtab_variable_record_t* raise_variable, parameter_results_array_t* parameter_results,
 												variable_map_t* variable_map){
 	/**
@@ -13936,7 +13933,7 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	 * function itself
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		setup_return_by_copy_for_inlined_call(original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
+		setup_return_by_copy_for_inlined_call(original_call_statement, variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
@@ -14081,7 +14078,6 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 										block_inlined_in,
 										&inlined_function_entry,
 										&inlined_function_exit,
-										after_inline_block,
 										symtab_return_variable,
 										symtab_raise_variable,
 										&(call_to_inline->call_storage.parameter_results),

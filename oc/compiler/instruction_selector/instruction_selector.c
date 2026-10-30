@@ -2049,7 +2049,7 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
  * 		used in the parameter storage to account for the extra offset made by said stack
  * 		allocation
  */
-static void lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+static void lower_call_statement(instruction_t* call_statement){
 	//Extract the block and function blocks
 	basic_block_t* block_contained_in = call_statement->block_contained_in;
 
@@ -2303,7 +2303,7 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 			 * by this process, we will invoke the helper to do all of this
 			 */
 			if(is_call_statement(instruction_cursor) && instruction_cursor->call_storage.has_been_lowered == FALSE){
-				lower_call_statement(function, instruction_cursor);
+				lower_call_statement(instruction_cursor);
 			}
 
 			//Bump up to the next statement
