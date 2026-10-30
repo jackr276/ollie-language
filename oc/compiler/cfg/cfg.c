@@ -6965,7 +6965,10 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
  *
  * The overall result of the function call itself will be stored in the final result var
  *
- * TODO NEEDS FIX
+ * A note on return by copy: Return by copy is a special case because, although we're always returning the result
+ * inside of %rax(this is guarnateed by the calling convention), it is much easier for us to instead use the return
+ * region variable/memory address itself. We will still carry through the "final assignee" to the end, but all of our
+ * memory copy expressions will be copied into the given memory address variable, not %rax, inside of each handle statement
  */
 static cfg_result_package_t emit_handle_statement(instruction_t* function_call_statement, basic_block_t* starting_block, generic_ast_node_t* handle_node,
 													three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
@@ -7180,12 +7183,10 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 
 	/**
 	 * We will jump to the default error block if we are above this value. The branch will take this
-	 * all into account
+	 * all into account. We use BRANCH_A because this is always unsigned
 	 */
 	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant, line_number);
-	//Add the comparsion
 	add_statement(starting_block, comparison);
-	//Get the branch out - this handles everything for us
 	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->operands.oir.assignee, line_number);
 
 	/**
@@ -7199,6 +7200,9 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 	 * The final thing that we need to do is emit one final assignment for the error result var
 	 * into some generic temporary holder. This is what we will give back to the
 	 * caller as the assignee
+	 *
+	 *
+	 * TODO FIX THIS
 	 */
 	if(function_result_var != NULL){
 		instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var), line_number);
@@ -13078,13 +13082,18 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			//Create our new instruction
 			instruction_t* new_call = calloc(1, sizeof(instruction_t));
 
-			//TODO LOOK AT HOW WE HAVE TO DO THE STACK REGION FOR RETURN BY COPY
-
 			//Clone over all of this information
 			new_call->statement_type = source_instruction->statement_type;
 			new_call->call_storage.is_inlined_call = source_instruction->call_storage.is_inlined_call;
 			new_call->line_number = source_instruction->line_number;
 			new_call->call_storage.is_rrf_eligible = source_instruction->call_storage.is_rrf_eligible;
+
+			/**
+			 * Function calls that return by copy will have a return by copy stack region and memory address
+			 * variable created for them. When we clone the call, we will need to clone this variable as
+			 * well
+			 */
+			new_call->call_storage.return_by_copy_variable = clone_symtab_variable(source_instruction->call_storage.return_by_copy_variable, variable_map);
 
 			//Clone our assignee and error assignee over
 			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
@@ -13412,6 +13421,11 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  */
 static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, basic_block_t* function_entry,
 														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+
+	//TODO NOT IMPLEMENTED
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
+
 	/**
 	 * Extract the function that we're cloning, it's signature, and the return by copy
 	 * variable/alias of the return by copy variable. Remember that this return
@@ -13428,7 +13442,7 @@ static inline void setup_return_by_copy_for_inlined_call(instruction_t* original
 	 * The region for this return by copy should have been cloned over from the original function's call
 	 * stack. As such, we can just grab what the original function call's value "maps to"
 	 */
-	stack_region_t* return_by_copy_region = original_function_call->call_storage.return_by_copy_region->maps_to;
+	//stack_region_t* return_by_copy_region = original_function_call->call_storage.return_by_copy_region->maps_to;
 
 	/**
 	 * Create a variable that is SSA compatible - it does not specifically need to be
@@ -13438,7 +13452,7 @@ static inline void setup_return_by_copy_for_inlined_call(instruction_t* original
 	 * into's local stack
 	 */
 	symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
-	new_return_by_copy_variable->stack_region = return_by_copy_region;
+	//new_return_by_copy_variable->stack_region = return_by_copy_region;
 
 	/**
 	 * Emit and add a synthetic memory initialization so that the static analyzer recognizes that this new region
@@ -13900,9 +13914,6 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	 *
 	 * This has enough complexity to warrant a helper function, more documentation in that
 	 * function itself
-	 *
-	 *
-	 * TODO NEEDS GIGANTIC REVAMP
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
 		setup_return_by_copy_for_inlined_call(original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
