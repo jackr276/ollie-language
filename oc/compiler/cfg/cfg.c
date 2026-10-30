@@ -12599,7 +12599,23 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 }
 
 
-//TODO NEED UTIL TO FIRST TRY TO FIND MAPPING FOR SYMTAB VAR, AND TO THEN CREATE NEW ONE IF IT DOESNT EXIST
+/**
+ * First, attempt to find a symtab variable that maps to this one inside of the variable map. If a mapping/clone already exists, then
+ * return it. If it does not, then create a mapping for it using the utility and return the clone
+ */
+static inline symtab_variable_record_t* get_or_clone_symtab_variable(symtab_variable_record_t* source_variable, variable_map_t* variable_map){
+	variable_mapping_t* existing_mapping = get_mapping_for_symtab_variable(variable_map, source_variable);
+
+	/**
+	 * If a mapping exists, then return the existing clone. Otherwise, create a new clone
+	 * and mapping and return that
+	 */
+	if(existing_mapping != NULL){
+		return existing_mapping->destination.symtab_variable;
+	} else {
+		return clone_symtab_variable(source_variable, variable_map);
+	}
+}
 
 
 /**
@@ -13116,7 +13132,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 * well.
 			 */
 			if(source_instruction->call_storage.return_by_copy_variable != NULL){
-				new_call->call_storage.return_by_copy_variable = clone_symtab_variable(source_instruction->call_storage.return_by_copy_variable, variable_map);
+				new_call->call_storage.return_by_copy_variable = get_or_clone_symtab_variable(source_instruction->call_storage.return_by_copy_variable, variable_map);
 			}
 
 			//Clone our assignee and error assignee over
