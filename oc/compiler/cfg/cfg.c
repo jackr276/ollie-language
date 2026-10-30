@@ -7099,8 +7099,8 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 						/**
 						 * Emit a fresh memory address variable for the return by copy region and copy the result over to it
 						 */
-						three_addr_var_t* return_by_copy_region_variable = emit_memory_address_temp_var(function_assignee->type, function_call_statement->call_storage.return_by_copy_region);
-						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(return_by_copy_region_variable, result_var, function_assignee->type->type_size, line_number);
+						three_addr_var_t* return_by_copy_var = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
+						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(return_by_copy_var, result_var, function_assignee->type->type_size, line_number);
 						insert_instruction_before_given(copy_to_ret_region, last_instruction);
 
 						/**
@@ -7114,19 +7114,21 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 				}
 
 				/**
-				 * TODO REWRITE
+				 * Initializer results will only exist *IF* we have a return by copy function call. As such, we treat this the exact same as we
+				 * do for our regular return by copy results. We will emit the memory address variable from the return by copy variable, initialize
+				 * into it, and then emit a symbolic assignment of our function assignee over to our function result var
 				 */
 				case CFG_RESULT_TYPE_INITIALIZER: {
 					/**
 					 * Create a fresh return by copy variable and extract the initializer
 					 */
-					three_addr_var_t* return_by_copy_region_variable = emit_memory_address_temp_var(function_assignee->type, function_call_statement->call_storage.return_by_copy_region);
+					three_addr_var_t* return_by_copy_var = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
 					three_addr_initializer_t* result_initializer = handle_results.result_value.result_initializer;
 
 					/**
 					 * Now initialize right into the known return by copy region
 					 */
-					instruction_t* initialization = emit_initialization_instruction(return_by_copy_region_variable, result_initializer, line_number);
+					instruction_t* initialization = emit_initialization_instruction(return_by_copy_var, result_initializer, line_number);
 					insert_instruction_before_given(initialization, last_instruction);
 
 					/**
@@ -7197,25 +7199,35 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 	add_statement(jump_calculation_block, indirect_jump);
 
 	/**
-	 * The final thing that we need to do is emit one final assignment for the error result var
-	 * into some generic temporary holder. This is what we will give back to the
-	 * caller as the assignee
-	 *
-	 *
-	 * TODO FIX THIS
+	 * If we have a result variable to give back, then we'll do an assignment with a new temporary variable here. We will
+	 * do this whether or not we are returning by copy. If we are returning by copy, the result package will have
+	 * the *memory address variable* as its result variable, not the new temp var. The new temp var may be cleaned
+	 * up by the optimizer's mark and sweep but that's ok
 	 */
+	three_addr_var_t* final_assignee = NULL;
 	if(function_result_var != NULL){
-		instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var), line_number);
-		add_statement(error_handling_ending_block, final_result_assingnment);
+		/**
+		 * Not returned by copy, emit the assignment to avoid register clobbering
+		 */
+		if(is_type_returned_by_copy(function_assignee->type) == FALSE){
+			instruction_t* final_result_assignment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var), line_number);
+			add_statement(error_handling_ending_block, final_result_assignment);
 
-		//This is the final assignee for the result package
-		result_package.type = CFG_RESULT_TYPE_VAR;
-		result_package.result_value.result_var = final_result_assingnment->operands.oir.assignee;
+			final_assignee = final_result_assignment->operands.oir.assignee;
+
+		/**
+		 * Returned by copy - the final assignee is the memory address of the return region
+		 */
+		} else {
+			final_assignee = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
+		}
 	}
 
 	/**
 	 * Fill out and return the final result package here
 	 */
+	result_package.result_value.result_var = final_assignee;
+	result_package.type = CFG_RESULT_TYPE_VAR;
 	result_package.starting_block = starting_block;
 	result_package.final_block = error_handling_ending_block;
 	return result_package;
@@ -7480,6 +7492,8 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		instruction_t* error_assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, line_number);
 		add_statement(current_block, error_assignment);
 		error_assignee = error_assignment->operands.oir.assignee;
+
+		//TODO DO WE NEED THE %RAX MOVE HERE??? YOU NEED TO TEST IT
 
 		/**
 		 * Let the handle statement emitter handle the rest. It should emit everything that we need
