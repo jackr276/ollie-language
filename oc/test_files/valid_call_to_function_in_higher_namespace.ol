@@ -31,7 +31,9 @@ namespace parent
 }
 
 
+
 //This should return 13 when all is said and done
 pub fn main() -> i32 {
+	OUNIT: [exit_status = 13]
 	ret @parent::child::add_numbers_dummy();
 }
