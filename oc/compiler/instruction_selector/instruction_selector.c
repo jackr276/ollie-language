@@ -1552,15 +1552,18 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
 
 /**
  *
- * TODO NEEDS RRF
+ *
+ * TODO NEEDS DOC
  */
 static inline void handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type,
 													int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	u_int32_t line_number = call_statement->line_number;
 
-	//Always comes from the function call itself
-	stack_region_t* return_by_copy_region = call_statement->call_storage.return_by_copy_region;
-	three_addr_var_t* return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
+	/**
+	 * Emit a fresh memory address variable using the symtab variable from the 
+	 * function call statement itself
+	 */
+	three_addr_var_t* return_by_copy_region_address = emit_memory_address_var(call_statement->call_storage.return_by_copy_variable);
 
 	/**
 	 * Create a temp var that will actually represent the region
@@ -1587,143 +1590,10 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 */
 	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 
-
-	//We've seen one more of these
+	/**
+	 * Bump the GP parameter order over by 1 as the return by copy region address is now in %RDI
+	 */
 	(*gp_parameter_order)++;
-}
-
-
-
-/**
- * Handle a return-by-copy parameter by allocating a special parameter that goes into %rdi which contains
- * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
- * it is guaranteed to survive after the function that we're calling returns. This helper also handles all
- * of the needed updates to the various trackers around memory addresses, parameter order, etc.
- *
- * This helper also deals with all logic for Ollie's built in "Return Region Forwarding" optimization, if this 
- * call statement has been deemed fit for it
- *
- * TODO NEEDS ENTIRE REVAMP
- *
- *
- * TODO THERE IS NO MORE RRF LIKE HOW WE'RE DOING IT HERE
- */
-static inline void handle_return_by_copy_parameter__OLD(dynamic_array_t* function_blocks, instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
-													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
-	//Hang onto this for the time being
-	u_int32_t line_number = call_statement->line_number;
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
-
-	/**
-	 * Case 1: we are not eligible for return region forwarding. In this case, we'll need to emit a fresh
-	 * region to copy into and pass that into the %rdi parameter
-	 */
-	if(call_statement->call_storage.is_rrf_eligible == FALSE){
-		/**
-		 * Create a stack region inside of this function that represents a new return by copy region. We can
-		 * also mark it immediately because we know that it will always be used
-		 */
-		stack_region_t* return_by_copy_region = create_stack_region_for_type(caller_stack_frame, return_type);
-		return_by_copy_region->mark = TRUE;
-		
-		//Emit the special memory address temp var for this
-		three_addr_var_t* return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
-
-		/**
-		 * Create a temp var that will actually represent the region
-		 * address being assigned to %RDI. It will need a GP parameter
-		 * order of 1
-		 */
-		three_addr_var_t* region_variable = emit_temp_var(return_type);
-		region_variable->class_relative_parameter_order = *gp_parameter_order;
-		(*gp_parameter_order)++;
-
-		//Emit the assignment and add it before the call statement
-		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, line_number);
-		insert_instruction_before_given(parameter_assignment, call_statement);
-
-		/**
-		 * The region variable goes into the parameter array
-		 */
-		dynamic_array_add(&(call_statement->parameters), region_variable);
-
-		/**
-		 * This is a memory address variable so we'll need to adjust it if there
-		 * are stack params. The caller has allocated this dynamic array if there
-		 * are stack params, so we can use that as our test
-		 */
-		dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
-
-	/**
-	 * Case 2: we are eligible for return region forwarding. The process goes as follows:
-	 * 	1.) Find the end result memory copy statement. The destination of this memory copy statement
-	 * 		is the return region that we are going to forward
-	 * 	2.) Emit the appropriate assignment of this destination memory address to our new parameter
-	 * 		variable. This parameter variable is what will eventually end up in %rdi
-	 * 	3.) Delete the old memory copy statement. We will no longer need it, so there's no point in
-	 * 		keeping it around
-	 */
-	} else {
-		/**
-		 * First let the recursive helper find the memory copy statement that is RRF eligible for us. We'll maintain
-		 * a sanity check and panic if this is ever not NULL
-		 */
-		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(function_blocks, call_statement);
-		if(rrf_memory_copy == NULL){
-			trigger_ice_panic("Function call was marked as RRF eligible but no RRF eligible memory copy could be found");
-		}
-
-		/**
-		 * Create a temp var that will actually represent the region
-		 * address being assigned to %RDI. It will need a GP parameter
-		 * order of 1
-		 */
-		three_addr_var_t* region_variable = emit_temp_var(return_type);
-		region_variable->class_relative_parameter_order = *gp_parameter_order;
-		(*gp_parameter_order)++;
-
-		/**
-		 * The region variable goes into the parameter array
-		 */
-		dynamic_array_add(&(call_statement->parameters), region_variable);
-
-		/**
-		 * The operands that we are going to forward should always be the destination of this given memory
-		 * copy statement. We will be assigning these over to our "region variable" in the end
-		 */
-		addressing_operands_t* rrf_operands = &(rrf_memory_copy->operands.oir.destination_address_expression);
-
-		/**
-		 * If we have a BASE_ADDRESS_ONLY addressing mode then we'll need to make this a plain
-		 * assignment statement. Otherwise, we'll convert it to a lea using the given addressing
-		 * operands
-		 */
-		if(rrf_operands->addressing_mode != ADDRESSING_MODE_BASE_ADDRESS_ONLY){
-			instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(rrf_operands, region_variable);
-			insert_instruction_before_given(lea_statement, call_statement);
-		} else {
-			instruction_t* assignment_instruction = emit_assignment_instruction(region_variable, rrf_operands->address_operand1, line_number);
-			insert_instruction_before_given(assignment_instruction, call_statement);
-		}
-
-		/**
-		 * There is a chance that the first address operand is a memory address variable. If it is,
-		 * and we have stack parameters, then we're going to need to throw this is as one of our "memory
-		 * addresses to adjust" so that we add the needed offset to it
-		 */
-		if(is_memory_address_variable(rrf_operands->address_operand1) == TRUE){
-			dynamic_array_add_if_allocated(memory_addresses_to_adjust, rrf_operands->address_operand1);
-		}
-
-		/**
-		 * Now that the return region forwarding is complete, the original memory copy statement is of
-		 * no use anymore. We will delete it, and following that mark and sweep will take care
-		 * of the orphaned operations
-		 */
-		delete_statement(rrf_memory_copy);
-	}
 }
 
 
@@ -2186,7 +2056,6 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 static void lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
 	//Extract the block and function blocks
 	basic_block_t* block_contained_in = call_statement->block_contained_in;
-	dynamic_array_t* function_blocks = &(function->function_blocks);
 
 	//Counters for the function parameter order
 	int32_t current_gp_parameter_order = 1;
