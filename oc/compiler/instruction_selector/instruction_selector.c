@@ -1568,7 +1568,8 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	/**
 	 * Create a temp var that will actually represent the region
 	 * address being assigned to %RDI. It will need a GP parameter
-	 * order of 1
+	 * order of 1. Following adding the GP parameter order in we'll
+	 * bump it up by 1 as well
 	 */
 	three_addr_var_t* region_variable = emit_temp_var(return_type);
 	region_variable->class_relative_parameter_order = *gp_parameter_order;
@@ -1589,11 +1590,6 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 * are stack params, so we can use that as our test
 	 */
 	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
-
-	/**
-	 * Bump the GP parameter order over by 1 as the return by copy region address is now in %RDI
-	 */
-	(*gp_parameter_order)++;
 }
 
 
