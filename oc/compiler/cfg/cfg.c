@@ -7486,20 +7486,17 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	} else {
 		/**
 		 * If this function does not return void, then we'll need to emit a temp assignment to help
-		 * with register clobbering in the register allocator. We always emit this, even if we have
-		 * a return by copy function, just to represent the %rax result existing
+		 * with register clobbering in the register allocator. The only exception is return by copy
+		 * functions, for which this is unneccessary because we aren't using the %rax value anyways
 		 */
 		if(signature->returns_void == FALSE){
-
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
-			add_statement(current_block, assignment);
-
-
 			/**
 			 * If we are *NOT* returning by copy, %rax is an important value for us. We'll as such need to come here
 			 * and emit a final temp assignment to reduce the register clobbering for %rax in the instruction selector
 			 */
 			if(signature->returns_by_copy == FALSE){
+				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
+				add_statement(current_block, assignment);
 
 				//Reassign this value
 				function_assignee = assignment->operands.oir.assignee;
@@ -7511,7 +7508,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			 * be a memory address variable representing the return by copy region
 			 */
 			} else {
-				function_assignee = emit_memory_address_temp_var(signature->return_type, function_call_statement->call_storage.return_by_copy_region);
+				function_assignee = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
 			}
 		}
 
