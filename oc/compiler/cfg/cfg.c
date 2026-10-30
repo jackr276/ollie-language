@@ -13394,12 +13394,8 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  * able to replace both the original return by copy variable and the variable that aliases it
  * with our memory address variable to avoid the need for extra interference
  */
-static inline void setup_return_by_copy_for_inlined_call(basic_block_t* after_inline_block, instruction_t* original_function_call,
-														 basic_block_t* function_entry, variable_map_t* variable_map,
-														 int32_t* current_gp_parameter_order){
-	printf("TODO NOT IMPLEMENTED\n\n\n");
-	exit(1);
-
+static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, basic_block_t* function_entry,
+														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
 	/**
 	 * Extract the function that we're cloning, it's signature, and the return by copy
 	 * variable/alias of the return by copy variable. Remember that this return
@@ -13413,6 +13409,12 @@ static inline void setup_return_by_copy_for_inlined_call(basic_block_t* after_in
 	symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
 
 	/**
+	 * The region for this return by copy should have been cloned over from the original function's call
+	 * stack. As such, we can just grab what the original function call's value "maps to"
+	 */
+	stack_region_t* return_by_copy_region = original_function_call->call_storage.return_by_copy_region->maps_to;
+
+	/**
 	 * Create a variable that is SSA compatible - it does not specifically need to be
 	 * return by copy because there are no register allocation rules here
 	 *
@@ -13420,7 +13422,6 @@ static inline void setup_return_by_copy_for_inlined_call(basic_block_t* after_in
 	 * into's local stack
 	 */
 	symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
-	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
 	new_return_by_copy_variable->stack_region = return_by_copy_region;
 
 	/**
@@ -13888,7 +13889,7 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	 * TODO NEEDS GIGANTIC REVAMP
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		setup_return_by_copy_for_inlined_call(after_inline_block, original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
+		setup_return_by_copy_for_inlined_call(original_call_statement, *function_entry, variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
