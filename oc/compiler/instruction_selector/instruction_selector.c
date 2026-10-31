@@ -5543,7 +5543,30 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
  * freely
  */
 static inline void convert_lea_statement_to_assignment_expression_if_appropriate(instruction_t* instruction, u_int8_t* changed){
+	/**
+	 * If it's NULL or not a lea then get out
+	 */
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_LEA_STMT){
+		return;
+	}
 
+	/**
+	 * If it's not a BASE_ADDRESS_ONLY addressing mode then it's also not of concern
+	 */
+	if(instruction->operands.oir.source_address_expression.addressing_mode != ADDRESSING_MODE_BASE_ADDRESS_ONLY){
+		return;
+	}
+
+	/**
+	 * Copy over the BASE_ADDRESS into the first operand, then wipe out the address operands and convert
+	 * this into an assignment expression 
+	 */
+	instruction->operands.oir.operand1 = instruction->operands.oir.source_address_expression.address_operand1;
+	instruction->operands.oir.source_address_expression = INITIALIZE_NULL_ADDRESS_OPERANDS;
+	instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+	//Flag as changed
+	*changed = TRUE;
 }
 
 
