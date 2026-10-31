@@ -1396,15 +1396,12 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 
 
 /**
- *
- *
- * TODO NEEDS DOC
+ * In order 
  *
  * NOTE: this function will return the parameter assignment expression that has the return by copy region as
  * the source. In the event of return region forwarding, this will be replaced with the forwarded region
  */
-static inline instruction_t* handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type,
-													int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+static inline instruction_t* handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type, int32_t* gp_parameter_order){
 	u_int32_t line_number = call_statement->line_number;
 
 	/**
@@ -1431,13 +1428,6 @@ static inline instruction_t* handle_return_by_copy_parameter(instruction_t* call
 	 * The region variable goes into the parameter array
 	 */
 	dynamic_array_add(&(call_statement->parameters), region_variable);
-
-	/**
-	 * This is a memory address variable so we'll need to adjust it if there
-	 * are stack params. The caller has allocated this dynamic array if there
-	 * are stack params, so we can use that as our test
-	 */
-	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 
 	/**
 	 * Give back the parameter assignment that has the return region memory address
@@ -1714,8 +1704,8 @@ static void replace_all_memory_region_references_with_addressing_expression(inst
 
 /**
  * Take a function call that is explicitly eligible for return region forwarding and perform the RRF here.
- * This function takes as parameters the original call statement, the original parameter assignment for the
- * return region memory address, and the dynamic array that contains the set of all memory addresses to adjust
+ * This function takes as parameters the original call statement and the original parameter assignment for the
+ * return region memory address.
  * 
  * This involves four steps:
  * 	1.) search all descendants of the call block to find the region where we memory copy from the return-by-copy
@@ -1788,8 +1778,7 @@ static void replace_all_memory_region_references_with_addressing_expression(inst
  * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
  * code that came as a part of this
  */
-static inline void handle_return_region_forwarding(instruction_t* call_statement, instruction_t* return_region_parameter_assignment,
-													dynamic_array_t* memory_addresses_to_adjust){
+static inline void handle_return_region_forwarding(instruction_t* call_statement, instruction_t* return_region_parameter_assignment){
 	/**
 	 * Get the block contained in and the function contained in for reference
 	 */
@@ -1837,23 +1826,6 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	delete_statement(return_region_parameter_assignment);
 
 	/**
-	 * Now that we've completely replaced our parameter assignment, we will need to *DELETE* the
-	 * old return region address from the "memory addresses to adjust" if it's in there, and
-	 * then we'll need to add any memory address variables in the forwarded return region
-	 * into the set of memory addresses to adjust
-	 */
-	if(memory_addresses_to_adjust->internal_array != NULL){
-		dynamic_array_delete(memory_addresses_to_adjust, return_region_memory_address);
-
-		/**
-		 * If the new one is a memory address variable then we'll need to add it in
-		 */
-		if(is_memory_address_variable(forwarded_return_region_clone.address_operand1) == TRUE){
-			dynamic_array_add(memory_addresses_to_adjust, forwarded_return_region_clone.address_operand1);
-		}
-	}
-
-	/**
 	 * Step 4: replace every other memory address variable or regular variable that mentions the original
 	 * return by copy variable with the addressing expression that we have for the new return region that
 	 * we're forwarding. 
@@ -1872,6 +1844,9 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
  * need to adjust their memory addresses with an offset of however much additional stack space we allocated for the 
  * function call stack passed parameters(see diagram in function call handler). This is the same for values in initializers.
  * This helper will go through and add all values in an initializer that need to be adjusted
+ *
+ *
+ * TODO MAYBE WITH THIS ONE
  */
 static void add_initializer_members_to_memory_address_adjustment_list(three_addr_initializer_t* initializer, dynamic_array_t* memory_addresses_to_adjust){
 	/**
@@ -1918,17 +1893,13 @@ static void add_initializer_members_to_memory_address_adjustment_list(three_addr
  * a memory region for this type and emit the proper initializations into it. We need to also make a close
  * note of any "memory addresses to adjust" that come from inside the initializer
  */
-static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
-														parameter_result_t* initializer_result, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* initializer_result){
 	//Extract this to have it on hand
 	three_addr_initializer_t* result_initializer = initializer_result->param_result.initializer_result;
 
 	//Create the pass-by-initializer region and create a memory address variable for it
 	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type); 
 	three_addr_var_t* pass_by_initializer_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_initializer_region);
-
-	//Let the helper store any memory addresses that will need adjustment
-	add_initializer_members_to_memory_address_adjustment_list(result_initializer, memory_addresses_to_adjust);
 
 	//Emit the initializer and insert it right before the call instruction
 	instruction_t* initializer_instruction = emit_initialization_instruction(pass_by_initializer_memory_address, result_initializer, call_statement->line_number);
@@ -1945,20 +1916,9 @@ static inline void store_pass_by_initializer_parameter(instruction_t* call_state
  * will be making a caller stack allocation that will mess up original address
  * variables
  */
-static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
-												parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result){
 	//This should always be a variable if we're copying
 	three_addr_var_t* copying_from_var = result->param_result.variable_result;
-	
-	/**
-	 * If this is a memory address variable(remember it could just be 
-	 * a pointer var), then we'll need to add it to the list of memory
-	 * addresses that need adjustment once we actually allocate the stack
-	 * regions
-	 */
-	if(is_memory_address_variable(copying_from_var) == TRUE){
-		dynamic_array_add_if_allocated(memory_addresses_to_adjust, copying_from_var);
-	}
 
 	/**
 	 * Let's now create the parameter stack region for this parameter to be copied
@@ -1981,8 +1941,7 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
  * Handle the storage of a general purpose register type parameter and everything that comes with it. This rule will
  * automatically decide whether or not a parameter needs to be stored on the stack based on the parameter order
  */
-static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-									  int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result, int32_t* gp_parameter_order){
 	/**
 	 * If we are at or under the max number of GP register passed parameters
 	 * we are not going to need a stack allocation in the parameter call stack.
@@ -1999,15 +1958,6 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				//Emit the assignment and insert it before the call statement
 				instruction_t* param_assignment = emit_assignment_instruction(parameter_variable, result_var, call_statement->line_number); 
@@ -2055,15 +2005,6 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 				three_addr_var_t* result_var = result->param_result.variable_result;
 
 				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
-
-				/**
 				 * Store this parameter result into the allocated region for it. Note we will
 				 * not be adding this to the list of parameters in the call itself because
 				 * it's stored in the stack
@@ -2104,9 +2045,7 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
  * Handle the storage of an SSE register type parameter and everything that comes with it. This rule will
  * automatically decide whether or not a parameter needs to be stored on the stack based on the parameter order
  */
-static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-									   int32_t* sse_parameter_order,dynamic_array_t* memory_addresses_to_adjust){
-
+static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result, int32_t* sse_parameter_order){
 	/**
 	 * If we are at or under the max number of SSE register passed parameters
 	 * we are not going to need a stack allocation in the parameter call stack.
@@ -2123,15 +2062,6 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				//Emit the assignment and insert it before the call statement
 				instruction_t* param_assignment = emit_assignment_instruction(parameter_variable, result_var, call_statement->line_number); 
@@ -2168,15 +2098,6 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				/**
 				 * Store this parameter result into the allocated region for it. Note we will
@@ -2219,8 +2140,7 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
  * Store an elaborative parameter result to the stack passed parameter region. We will have to create the region
  * for each parameter that we see. This rule takes care of memory copy parameters and regular parameter types
  */
-static inline void store_elaborative_parameter_result(instruction_t* call_statement, generic_type_t* parameter_type, 
-													  parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_elaborative_parameter_result(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result){
 	/**
 	 * Most common - we are not passing by copy so we'll have to break done by either constant or
 	 * variable result. There's no need to split along SSE/GP because we are always storing to
@@ -2235,11 +2155,6 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result var
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				//Bookkeeping: stash this if it's a memory address variable
-				if(is_memory_address_variable(result_var) == TRUE){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				//Emit and add the store for this variable parameter
 				instruction_t* store_statement = emit_store_base_address_only(region_variable, result_var, parameter_type, call_statement->line_number);
@@ -2275,9 +2190,6 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* storing_into_region_address = emit_memory_address_temp_var(parameter_type, storing_into_region);
 		
-		//Let the helper deal with any memory addresses that require adjustment
-		add_initializer_members_to_memory_address_adjustment_list(initializer, memory_addresses_to_adjust);
-
 		//Emit and insert this right before the call statement
 		instruction_t* initialization = emit_initialization_instruction(storing_into_region_address, initializer, call_statement->line_number);
 		insert_instruction_before_given(initialization, call_statement);
@@ -2293,11 +2205,6 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 
 		//Unpack the parameter result - it will always be a variable
 		three_addr_var_t* result_var = result->param_result.variable_result;
-
-		//Bookkeeping: stash this if it's a memory address variable
-		if(is_memory_address_variable(result_var) == TRUE){
-			dynamic_array_add(memory_addresses_to_adjust, result_var);
-		}
 
 		//Create the memory copy and throw it in before the call statement
 		instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
@@ -2355,17 +2262,6 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 	u_int8_t has_stack_params = called_function_signature->contains_stack_params;
 
 	/**
-	 * Maintain a dynamic array that contains all of the memory addresses that we need to adjust.
-	 * Whenever we stumble across a memory address var that's in the parameter result array,
-	 * we'll add it's stack region here as something that we need to adjust. See below for
-	 * more details
-	 */
-	dynamic_array_t memory_addresses_to_adjust = INITIALIZE_DYNAMIC_ARRAY;
-	if(has_stack_params == TRUE){
-		memory_addresses_to_adjust = dynamic_array_alloc();
-	}
-
-	/**
 	 * Functions that have more than one non-elaborative param *OR* return by copy
 	 * almost certainly have parameters(it could be all pass by copy but that's not worth
 	 * the hassle) so we can allocate now
@@ -2395,8 +2291,9 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		 * Let the helper take care of this. It will return the created return region
 		 * parameter assignment in the event that we need it for return region forwarding
 		 */
-		instruction_t* return_region_assignment = handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
-								  													&current_gp_parameter_order, &memory_addresses_to_adjust);
+		instruction_t* return_region_assignment = handle_return_by_copy_parameter(call_statement,
+																					called_function_signature->return_type,
+								  													&current_gp_parameter_order);
 
 		/**
 		 * Step 2.5: If the given function call is eligible for RRF, we will now go through and
@@ -2404,7 +2301,7 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		 * can be found at the comment above the helper function
 		 */
 		if(call_statement->call_storage.is_rrf_eligible == TRUE){
-			handle_return_region_forwarding(call_statement, return_region_assignment, &memory_addresses_to_adjust);
+			handle_return_region_forwarding(call_statement, return_region_assignment);
 		}
 	}
 
@@ -2432,9 +2329,9 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		 */
 		if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 			if(IS_FLOATING_POINT(parameter_type) == FALSE){
-				store_gp_parameter(call_statement, parameter_type, result, &current_gp_parameter_order, &memory_addresses_to_adjust);
+				store_gp_parameter(call_statement, parameter_type, result, &current_gp_parameter_order);
 			} else {
-				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
+				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order);
 			}
 
 		/**
@@ -2442,13 +2339,13 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		 * is going to require us to create a memory region and "initialize" into it
 		 */
 		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
-			store_pass_by_initializer_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
+			store_pass_by_initializer_parameter(call_statement, parameter_type, result);
 
 		/**
 		 * Final option is that we have a pure pass by copy parameter that is not using any initialization
 		 */
 		} else {
-			store_pass_by_copy_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
+			store_pass_by_copy_parameter(call_statement, parameter_type, result);
 		}
 	}
 
@@ -2493,7 +2390,7 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		for(; parameter_result_index < call_statement->call_storage.parameter_results.current_index; parameter_result_index++){
 			//Pass it along to the helper to process
 			parameter_result_t* result = get_result_at_index(&(call_statement->call_storage.parameter_results), parameter_result_index);
-			store_elaborative_parameter_result(call_statement, elaborated_type, result, &memory_addresses_to_adjust);
+			store_elaborative_parameter_result(call_statement, elaborated_type, result);
 		}
 	}
 
@@ -2527,6 +2424,10 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 			insert_instruction_before_given(stack_allocation, block_contained_in->leader_statement);
 		}
 
+		//TODO CRAWL FROM THE STACK ALLOCATION DOWN TO THE FUNCTION CALL FOR OUR MEMORY ADDRESSES
+
+
+
 		//Emit and insert our stack deallocation statement - this always goes immediately after the call
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
 		insert_instruction_after_given(stack_deallocation, call_statement);
@@ -2555,15 +2456,9 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		 * here we can go through and "adjust" their address by bumping the offset up by however
 		 * much we allocated
 		 */
-		for(int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
-			//Get the variable and add in the base adjustment
-			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
-			memory_address->memory_address_base_adjustment = stack_passed_param_region->total_size;
-		}
 	}
 
-	//These are both no longer of use
-	dynamic_array_dealloc(&memory_addresses_to_adjust);
+	//This is no longer of use
 	parameter_results_array_dealloc(&(call_statement->call_storage.parameter_results));
 
 	//Once we've fully lowered this call statement flag it as fully lowered

@@ -13466,10 +13466,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  * NOTE: due to this happening *BEFORE* SSA, we are unfortunately unable to implement return region forwarding
  * for inlined function calls. However, inlining a function does mean that all memory regions are together at
  * once, so it does expose additional opportunities for function internal memory optimizations
- *
- *
- *
- * TODO WHY CANT WE DO WHAT WE DID FOR THE REGULAR CALLS???
  */
 static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, variable_map_t* variable_map, int32_t* current_gp_parameter_order){
 	/**
