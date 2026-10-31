@@ -1641,8 +1641,10 @@ static inline void replace_reference_with_address_expression(instruction_t* inst
 
 
 /**
- * TODO DOC
- *
+ * Run through a block and replace all references to the "replaced" memory address that was eliminated by RRF with the
+ * new replacement address expression. Once all values in this block have been replaced, we will recursively go through
+ * all of this block's successor and do the same. We traverse the function CFG this way because we know for a fact that nothing
+ * before the function call could possibly reference the return by copy region.
  *
  * NOTE: this function is recursive
  */
@@ -1661,7 +1663,9 @@ static void replace_all_references_in_block(basic_block_t* block, instruction_t*
 	block->visited = TRUE;
 
 	/**
-	 * TODO DOC
+	 * Run through every single instruction starting at our designated beginning in this block
+	 * and invoke the helper to replace any/all references to the replaced region variable with
+	 * the new replacement addressing expression
 	 */
 	instruction_t* cursor = starting_instruction;
 	while(cursor != NULL){
