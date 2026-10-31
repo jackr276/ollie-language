@@ -1417,10 +1417,13 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 }
 
 
+
+
+
 /**
  * Take a function call that is explicitly eligible for return region forwarding and perform the RRF here.
  * 
- * This involves three steps:
+ * This involves four steps:
  * 	1.) search all descendants of the call block to find the region where we memory copy from the return-by-copy
  * 		region over into a new region(return by copy region is the source)
  * 	2.) Replace all references to the original return by copy region with the new return by copy region.
@@ -1490,7 +1493,8 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
  * code that came as a part of this
  */
-static inline void handle_return_region_forwarding(instruction_t* call_statement, dynamic_array_t* memory_addresses_to_adjust){
+static inline void handle_return_region_forwarding(instruction_t* call_statement, dynamic_array_t* function_blocks,
+													dynamic_array_t* memory_addresses_to_adjust){
 
 }
 
@@ -1945,13 +1949,14 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
  * are as follows:
  * 	1.) Create the function call stack region if appropriate
  * 	2.) Handle a return by copy parameter if one exists
- * 	3.) Handle any/all regular parameters(stack passed is included)
- * 	4.) Handle the elaborative parameter if one exists
- * 	5.) Allocate the function call stack region. If needed, adjust any memory addresses
+ * 	3.) Perform return region forwarding if applicable
+ * 	4.) Handle any/all regular parameters(stack passed is included)
+ * 	5.) Handle the elaborative parameter if one exists
+ * 	6.) Allocate the function call stack region. If needed, adjust any memory addresses
  * 		used in the parameter storage to account for the extra offset made by said stack
  * 		allocation
  */
-static void lower_call_statement(instruction_t* call_statement){
+static void lower_call_statement(instruction_t* call_statement, dynamic_array_t* function_blocks){
 	//Extract the block and function blocks
 	basic_block_t* block_contained_in = call_statement->block_contained_in;
 
@@ -2024,16 +2029,15 @@ static void lower_call_statement(instruction_t* call_statement){
 
 	/**
 	 * Step 3: If the given function call is eligible for RRF, we will now go through and
-	 * perform said return region forwarding
+	 * perform said return region forwarding. A detailed explanation of this process
+	 * can be found at the comment above the helper function
 	 */
 	if(call_statement->call_storage.is_rrf_eligible == TRUE){
-		handle_return_region_forwarding(call_statement, &memory_addresses_to_adjust);
+		handle_return_region_forwarding(call_statement, function_blocks,  &memory_addresses_to_adjust);
 	}
 
-
-	//TODO UPDATE STEPS
 	/**
-	 * Step 3: process the non-elaborative parameters at this stage. We will run
+	 * Step 4: process the non-elaborative parameters at this stage. We will run
 	 * through whatever our parameter result index is at until we hit the end of
 	 * the non-elaborative parameter count
 	 */
@@ -2077,7 +2081,7 @@ static void lower_call_statement(instruction_t* call_statement){
 	}
 
 	/**
-	 * Step 4: If we have an elaborative parameter, it will *always* come after all of the
+	 * Step 5: If we have an elaborative parameter, it will *always* come after all of the
 	 * regular ones. Note that we cannot just rely on whether or not we still
 	 * have parameters to process elaborative stack params have a special hidden
 	 * "paramcount" that always needs to be populated even if there are 0 parameters
@@ -2122,7 +2126,7 @@ static void lower_call_statement(instruction_t* call_statement){
 	}
 
 	/**
-	 * Step 5: Let's now handle everything that we need to do with the stack(if we're touching it at all)
+	 * Step 6: Let's now handle everything that we need to do with the stack(if we're touching it at all)
 	 *
 	 * If we have stack parameters, then we need to emit an allocation and deallocation statement. The
 	 * allocation has to go before all of the parameter assignments, and the deallocation must go immediately
@@ -2215,7 +2219,7 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 			 * by this process, we will invoke the helper to do all of this
 			 */
 			if(is_call_statement(instruction_cursor) && instruction_cursor->call_storage.has_been_lowered == FALSE){
-				lower_call_statement(instruction_cursor);
+				lower_call_statement(instruction_cursor, function_blocks);
 			}
 
 			//Bump up to the next statement
