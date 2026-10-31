@@ -13483,16 +13483,6 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
  * TODO REVAMP DESC
  *
  *
- * All functions that do return by copy already have a special return by copy variable created
- * for them to use internally. For our purposes, we can create a new dummy variable and then
- * create a one-to-one mapping of that variable to this new one with an allocated stack region
- * for this all to work
- *
- * Since we're replacing parameters and parameter aliases with memory address variables, we are
- * able to replace both the original return by copy variable and the variable that aliases it
- * with our memory address variable to avoid the need for extra interference
- *
- *
  * TODO RRF IMPLEMENTATION
  */
 static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, variable_map_t* variable_map, int32_t* current_gp_parameter_order){
