@@ -1468,12 +1468,6 @@ static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, 
 	 */
 	instruction_t* cursor = search_start;
 	while(cursor != NULL){
-		printf("CONSIDERING\n");
-		print_three_addr_code_stmt(stdout, cursor);
-		printf("LOOKING FOR VAR:");
-		print_variable(stdout, source_memory_address_var, PRINTING_VAR_INLINE);
-		printf("\n");
-
 		if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT 
 			&& cursor->operands.oir.source_address_expression.addressing_mode == ADDRESSING_MODE_BASE_ADDRESS_ONLY
 			&& variables_equal_no_ssa(cursor->operands.oir.source_address_expression.address_operand1, source_memory_address_var) == TRUE){
@@ -1546,6 +1540,25 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
 	//Give back what we found
 	return rrf_result_copy;
 }
+
+
+/**
+ *
+ *
+ */
+static void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
+																			addressing_operands_t* replacement_expression){
+	/**
+	 * Extract the block that the call statement begins in, the function that
+	 * we're in, and the set of all function blocks first
+	 */
+	basic_block_t* starting_block = call_statement->block_contained_in;
+	symtab_function_record_t* function_contained_in = starting_block->function_defined_in;
+	dynamic_array_t* function_blocks = &(function_contained_in->function_blocks);
+
+
+}
+
 
 
 /**
@@ -1622,6 +1635,9 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
  * 	
  * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
  * code that came as a part of this
+ *
+ * TODO HOW ARE WE GOING TO HANDLE GRABBING UNSIMPLIFIED MEMORY ADDRESSES FOR OUR MEMORY ADDRESSES TO ADJUST??? IS THAT EVEN POSSIBLE
+ * TO HAVE HAPPEN??
  */
 static inline void handle_return_region_forwarding(instruction_t* call_statement, three_addr_var_t* return_region_memory_address,
 													dynamic_array_t* memory_addresses_to_adjust){
@@ -1634,6 +1650,21 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	printf("FOUND IT\n");
 	print_three_addr_code_stmt(stdout, rrf_memory_copy);
 	printf("\n\n");
+
+	/**
+	 * Step 2: replace every single memory address variable or regular variable that mentions the original
+	 * return by copy variable with the addressing expression that we have for the new return region that
+	 * we're forwarding. 
+	 *
+	 * NOTE: this will only remove references that happen *AFTER* the call statement. The parameter assignment
+	 * in the call statement has been left intentionally to be processed in the next step
+	 *
+	 * TODO ALSO REMOVE IT FROM THE MEMORY ADDRESSES TO ADJUST
+	 */
+	addressing_operands_t* forwarded_return_region = &(rrf_memory_copy->operands.oir.source_address_expression);
+	replace_all_memory_region_references_with_addressing_expression(call_statement, return_region_memory_address, forwarded_return_region);
+
+
 
 
 	printf("TODO NOT IMPLEMENTED\n");
