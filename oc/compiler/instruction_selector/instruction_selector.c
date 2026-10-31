@@ -1570,6 +1570,85 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
 
 
 /**
+ * TODO DOC
+ *
+ */
+static inline void replace_reference_with_address_expression(instruction_t* instruction, three_addr_var_t* replaced_region_variable,
+																addressing_operands_t* replacement_address_expression){
+	/**
+	 * Case 1: the return region variable is equal to the first operand. We will emit a lea statement
+	 * using the replacement expression and replace operand1 with the result of the lea. Future 
+	 * simplifier steps will compress them as needed
+	 */
+	if(variables_equal_no_ssa(instruction->operands.oir.operand1, replaced_region_variable) == TRUE){
+		/**
+		 * First create a complete clone of the replacement operands to use
+		 */
+		addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+		clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
+
+		/**
+		 * Create a brand new assignee, emit a lea using the old operand1 and the addressing operands
+		 * and insert it before our given instruction, then replace the old operand1 with our new temp
+		 * assignee
+		 */
+		three_addr_var_t* new_assignee = emit_temp_var(instruction->operands.oir.operand1->type);
+		instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(&cloned_operands, new_assignee);
+		insert_instruction_before_given(lea_statement, instruction);
+		instruction->operands.oir.operand1 = new_assignee;
+	}
+
+	/**
+	 * Case 2: the return region variable is equal to the first address operand in the SOURCE addressing
+	 * mode expression. We will emit a lea statement using the replacement expression and replace
+	 * address_operand1 with the result of the lea. Future simplifier steps will compress them as needed
+	 */
+	if(variables_equal_no_ssa(instruction->operands.oir.source_address_expression.address_operand1, replaced_region_variable) == TRUE){
+		/**
+		 * First create a complete clone of the replacement operands to use
+		 */
+		addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+		clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
+
+		/**
+		 * Create a brand new assignee, emit a lea using the old address_operand1 and the addressing operands
+		 * and insert it before our given instruction, then replace the old address_operand1 with our new temp
+		 * assignee
+		 */
+		three_addr_var_t* new_assignee = emit_temp_var(instruction->operands.oir.source_address_expression.address_operand1->type);
+		instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(&cloned_operands, new_assignee);
+		insert_instruction_before_given(lea_statement, instruction);
+		instruction->operands.oir.source_address_expression.address_operand1 = new_assignee;
+	}
+
+	/**
+	 * Case 2: the return region variable is equal to the first address operand in the DEST addressing
+	 * mode expression. We will emit a lea statement using the replacement expression and replace
+	 * address_operand1 with the result of the lea. Future simplifier steps will compress them as needed
+	 */
+	if(variables_equal_no_ssa(instruction->operands.oir.destination_address_expression.address_operand1, replaced_region_variable) == TRUE){
+		/**
+		 * First create a complete clone of the replacement operands to use
+		 */
+		addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+		clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
+
+		/**
+		 * Create a brand new assignee, emit a lea using the old address_operand1 and the addressing operands
+		 * and insert it before our given instruction, then replace the old address_operand1 with our new temp
+		 * assignee
+		 */
+		three_addr_var_t* new_assignee = emit_temp_var(instruction->operands.oir.destination_address_expression.address_operand1->type);
+		instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(&cloned_operands, new_assignee);
+		insert_instruction_before_given(lea_statement, instruction);
+		instruction->operands.oir.destination_address_expression.address_operand1 = new_assignee;
+	}
+}
+
+
+/**
+ * TODO DOC
+ *
  *
  * NOTE: this function is recursive
  */
@@ -1605,7 +1684,7 @@ static void replace_all_references_in_block(basic_block_t* block, instruction_t*
 
 
 /**
- *
+ * TODO DOC
  *
  */
 static void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
