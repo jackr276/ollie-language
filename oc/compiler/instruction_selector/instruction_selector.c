@@ -1373,10 +1373,10 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  *
  * TODO NEEDS DOC
  *
- * NOTE: this function will return the created memory address variable for the return region, in the event that we
- * need it to do return region forwarding
+ * NOTE: this function will return the parameter assignment expression that has the return by copy region as
+ * the source. In the event of return region forwarding, this will be replaced with the forwarded region
  */
-static inline three_addr_var_t* handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type,
+static inline instruction_t* handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type,
 													int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	u_int32_t line_number = call_statement->line_number;
 
@@ -1413,9 +1413,9 @@ static inline three_addr_var_t* handle_return_by_copy_parameter(instruction_t* c
 	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 
 	/**
-	 * Give back the return by copy region memory address var
+	 * Give back the parameter assignment that has the return region memory address
 	 */
-	return return_by_copy_region_address;
+	return parameter_assignment;
 }
 
 
@@ -1547,7 +1547,7 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
  *
  */
 static void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
-																			addressing_operands_t* replacement_expression){
+																			addressing_operands_t* replacement_address_expression){
 	/**
 	 * Extract the block that the call statement begins in, the function that
 	 * we're in, and the set of all function blocks first
@@ -1556,22 +1556,26 @@ static void replace_all_memory_region_references_with_addressing_expression(inst
 	symtab_function_record_t* function_contained_in = starting_block->function_defined_in;
 	dynamic_array_t* function_blocks = &(function_contained_in->function_blocks);
 
+	/**
+	 * Wipe the visited status for this function clean first
+	 */
+
 
 }
 
 
-
 /**
  * Take a function call that is explicitly eligible for return region forwarding and perform the RRF here.
- * This function takes as parameters the original call statement, the original return by copy region memory address,
- * and the dynamic array that contains the set of all memory addresses to adjust
+ * This function takes as parameters the original call statement, the original parameter assignment for the
+ * return region memory address, and the dynamic array that contains the set of all memory addresses to adjust
  * 
  * This involves four steps:
  * 	1.) search all descendants of the call block to find the region where we memory copy from the return-by-copy
  * 		region over into a new region(return by copy region is the source)
- * 	2.) Replace all references to the original return by copy region with the new return by copy region.
- * 	3.) Delete the return by copy region from the stack
- * 	4.) Delete the final memory copy from the return by copy region over to the new region
+ * 	2.) Delete the final memory copy from the return by copy region over to the new region
+ * 	3.) Replace the original parameter assignment with the return region with the new forwarded address expression
+ * 	3.) Replace all other references to the original return by copy region with the new return by copy address expression(NOT just a region)
+ * 	5.) Delete the original return by copy region from the stack
  *
  * 	Below is an example:
  * 	^t30_1 <- initialize memory region <--- original ret by copy region
@@ -1639,20 +1643,39 @@ static void replace_all_memory_region_references_with_addressing_expression(inst
  * TODO HOW ARE WE GOING TO HANDLE GRABBING UNSIMPLIFIED MEMORY ADDRESSES FOR OUR MEMORY ADDRESSES TO ADJUST??? IS THAT EVEN POSSIBLE
  * TO HAVE HAPPEN??
  */
-static inline void handle_return_region_forwarding(instruction_t* call_statement, three_addr_var_t* return_region_memory_address,
+static inline void handle_return_region_forwarding(instruction_t* call_statement, instruction_t* return_region_parameter_assignment,
 													dynamic_array_t* memory_addresses_to_adjust){
 	/**
+	 * The original return region address always comes from the parameter assignment's source
+	 */
+	three_addr_var_t* return_region_memory_address = return_region_parameter_assignment->operands.oir.operand1;
+
+	/**
 	 * Step 1: use the helper function to search through and find the final memory copy 
-	 * from the return region address into what will be our forwarded return region
+	 * from the return region address into what will be our forwarded return region. We'll
+	 * grab a reference to the forwarded return region here as well
 	 */
 	instruction_t* rrf_memory_copy = find_rrf_result_copy(call_statement, return_region_memory_address);
+	addressing_operands_t* forwarded_return_region = &(rrf_memory_copy->operands.oir.destination_address_expression);
 
 	printf("FOUND IT\n");
 	print_three_addr_code_stmt(stdout, rrf_memory_copy);
 	printf("\n\n");
 
 	/**
-	 * Step 2: replace every single memory address variable or regular variable that mentions the original
+	 * Step 2: this memory copy statement is now entirely useless. We're going to delete it from the 
+	 * block to avoid accidentally reprocessing it down the road
+	 *
+	 * Remember that delete_statement just unlinks it in the block, no memory is released so all of
+	 * the data in here it still safe to use
+	 */
+	delete_statement(rrf_memory_copy);
+
+
+
+
+	/**
+	 * Step 4: replace every other memory address variable or regular variable that mentions the original
 	 * return by copy variable with the addressing expression that we have for the new return region that
 	 * we're forwarding. 
 	 *
@@ -1661,7 +1684,6 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	 *
 	 * TODO ALSO REMOVE IT FROM THE MEMORY ADDRESSES TO ADJUST
 	 */
-	addressing_operands_t* forwarded_return_region = &(rrf_memory_copy->operands.oir.source_address_expression);
 	replace_all_memory_region_references_with_addressing_expression(call_statement, return_region_memory_address, forwarded_return_region);
 
 
@@ -2197,10 +2219,10 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
 		/**
-		 * Let the helper take care of this. It will give back the return region memory address
-		 * var so that, in the event that we are RRF eligible, we can use it
+		 * Let the helper take care of this. It will return the created return region
+		 * parameter assignment in the event that we need it for return region forwarding
 		 */
-		three_addr_var_t* return_region_address = handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
+		instruction_t* return_region_assignment = handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
 								  													&current_gp_parameter_order, &memory_addresses_to_adjust);
 
 		/**
@@ -2209,7 +2231,7 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		 * can be found at the comment above the helper function
 		 */
 		if(call_statement->call_storage.is_rrf_eligible == TRUE){
-			handle_return_region_forwarding(call_statement, return_region_address, &memory_addresses_to_adjust);
+			handle_return_region_forwarding(call_statement, return_region_assignment, &memory_addresses_to_adjust);
 		}
 	}
 
