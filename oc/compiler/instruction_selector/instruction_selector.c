@@ -1516,7 +1516,9 @@ static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, 
 		}
 	}
 
-	//This block and all of it's descendants had nothing
+	/**
+	 * This block and all of it's descendants had nothing, so we return NULL
+	 */
 	return NULL;
 }
 
@@ -1554,7 +1556,9 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
 		trigger_ice_panic("Return region forwarding failed to find the final memory copy for the return region");
 	}
 
-	//Give back what we found
+	/**
+	 * Give back what we found
+	 */
 	return rrf_result_copy;
 }
 
@@ -1676,11 +1680,13 @@ static void replace_all_references_in_block(basic_block_t* block, instruction_t*
 
 
 /**
- * TODO DOC
- *
+ * Since we are planning on completely removing the "replaced region variable" as part of RRf, we need to go through
+ * and replace all references to it that arise with the replace address expression. Note that this is an addressing
+ * expression, *NOT* just a simple memory address. The Ollie compiler supports return region forwarding even for complex
+ * regions, so we need to "replace" our old memory address variable with the entire replacement expression
  */
 static inline void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
-																			addressing_operands_t* replacement_address_expression){
+																					addressing_operands_t* replacement_address_expression){
 	/**
 	 * Extract the block that the call statement begins in, the function that
 	 * we're in, and the set of all function blocks first
