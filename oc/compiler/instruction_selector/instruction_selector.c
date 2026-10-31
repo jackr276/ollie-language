@@ -1890,8 +1890,7 @@ static void add_initializer_members_to_memory_address_adjustment_list(three_addr
 
 /**
  * We are passing to this memory region parameter via an initializer. Since this is the case, we will need to create
- * a memory region for this type and emit the proper initializations into it. We need to also make a close
- * note of any "memory addresses to adjust" that come from inside the initializer
+ * a memory region for this type and emit the proper initializations into it
  */
 static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* initializer_result){
 	//Extract this to have it on hand
@@ -1907,14 +1906,10 @@ static inline void store_pass_by_initializer_parameter(instruction_t* call_state
 }
 
 
-
 /**
  * If we have a struct or union type, we automatically will be passing it by copy.
  * This means that it is treated entirely separate from the way in which we handle
- * regular parameters which is why we have this separate rule for it. We need to 
- * be cautious about the memory addresses to adjust especially here, because we
- * will be making a caller stack allocation that will mess up original address
- * variables
+ * regular parameters which is why we have this separate rule for it
  */
 static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result){
 	//This should always be a variable if we're copying
@@ -2214,6 +2209,56 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 
 
 /**
+ * If we have memory addresses before stack allocations, we need to adjust the offset
+ * of the source memory region because we've emitted new stack allocation statements
+ * for it. Remember that memory address variables in OIR only tell us how far off the
+ * stack to offset
+ *
+ * Say we have this in OIR where my_region is a local stack region:
+ *
+ * 	call x(MEM<my_region>)
+ *
+ * What happens if we decide that we need to pass my_region by copy? Well
+ * then we'll have to allocate a stack region for that function parameter
+ * passing like this during lowering:
+ *
+ * 	rsp - 16 <- allocate 16 bytes
+ * 	memory_copy parameter_mem<t1> <- MEM<my_region>  <-- my_region's address is now off by 16 bytes
+ * 	rsp + 16 <- deallocate 16 bytes
+ *
+ * Note how doing this will make the old memory address invalid because it's stack offset is
+ * not accounting for the 16 bytes we just allocated. To fix this, we will crawl from the new
+ * stack allocation down to the function call and add an adjustment amount totalling the size 
+ * of the new stack allocation to every single source memory address variable to compensate. The
+ * destination addresses are stack parameters, so they don't need to be fixed
+ */
+static inline void adjust_memory_addresses_after_stack_allocation(instruction_t* adjustment_start, instruction_t* adjustment_end,
+																	int64_t adjustment_amount){
+
+	instruction_t* cursor = adjustment_start;
+	while(cursor != adjustment_end){
+		/**
+		 * Case 1: we have a memory address variable in the first operand
+		 */
+		if(is_memory_address_variable(cursor->operands.oir.operand1) == TRUE){
+			cursor->operands.oir.operand1->memory_address_base_adjustment = adjustment_amount;
+		}
+
+		/**
+		 * Case 2: we have a memory address variable in the source addressing mode
+		 * expression
+		 */
+		if(is_memory_address_variable(cursor->operands.oir.source_address_expression.address_operand1) == TRUE){
+			cursor->operands.oir.source_address_expression.address_operand1->memory_address_base_adjustment = adjustment_amount;
+		}
+
+
+		cursor = cursor->next_statement;
+	}
+}
+
+
+/**
  * Lower a function call statement into the lowest level of OIR that we have before we get to the
  * acutal instruction selection. This includes adding parameter copying, return by copy handling and
  * call stack management. One thing that we do not have to do is anything with error handling. That has
@@ -2424,38 +2469,18 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 			insert_instruction_before_given(stack_allocation, block_contained_in->leader_statement);
 		}
 
-		//TODO CRAWL FROM THE STACK ALLOCATION DOWN TO THE FUNCTION CALL FOR OUR MEMORY ADDRESSES
-
-
+		/**
+		 * Now that we have our stack allocation, all of the source side memory addresses for our parameter
+		 * assignment are now invalid. This is because we've shifted the stack pointer down by however big
+		 * the stack passed parameter region is. To accomodate for this, we'll go through and add a 
+		 * "memory address base adjustment" value equaling the total size of the stack passed parameter region
+		 * to every single memory address variable on the source side of things
+		 */
+		adjust_memory_addresses_after_stack_allocation(stack_allocation, call_statement, stack_passed_param_region->total_size);
 
 		//Emit and insert our stack deallocation statement - this always goes immediately after the call
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
 		insert_instruction_after_given(stack_deallocation, call_statement);
-
-		/**
-		 * If we have memory addresses before stack allocations, we need to adjust the offset
-		 * of the source memory region because we've emitted new stack allocation statements
-		 * for it. Remember that memory address variables in OIR only tell us how far off the
-		 * stack to offset
-		 *
-		 * Say we have this in OIR where my_region is a local stack region:
-		 *
-		 * 	call x(MEM<my_region>)
-		 *
-		 * What happens if we decide that we need to pass my_region by copy. Well
-		 * then we'll have to allocate a stack region for that function parameter
-		 * passing like this during lowering:
-		 *
-		 * 	rsp - 16 <- allocate 16 bytes
-		 * 	memory_copy parameter_mem<t1> <- MEM<my_region>  <-- my_region's address is now off by 16 bytes
-		 * 	rsp + 16 <- deallocate 16 bytes
-		 *
-		 * Note how doing this will make the old memory address invalid because it's stack offset is
-		 * not accounting for the 16 bytes we just allocated. This is why we maintain a list of 
-		 * memory address like MEM<my_region> who are at risk of this happening, so at the end
-		 * here we can go through and "adjust" their address by bumping the offset up by however
-		 * much we allocated
-		 */
 	}
 
 	//This is no longer of use
