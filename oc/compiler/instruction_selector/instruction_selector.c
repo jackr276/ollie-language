@@ -1417,7 +1417,6 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 }
 
 
-
 /**
  * Take a function call that is explicitly eligible for return region forwarding and perform the RRF here.
  * 
@@ -1426,13 +1425,74 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  * 		region over into a new region(return by copy region is the source)
  * 	2.) Replace all references to the original return by copy region with the new return by copy region.
  * 	3.) Delete the return by copy region from the stack
- * 	4.) Delete the final memory copy from the return by copy region over to the new regoin
+ * 	4.) Delete the final memory copy from the return by copy region over to the new region
+ *
+ * 	Below is an example:
+ * 	^t30_1 <- initialize memory region <--- original ret by copy region
+ * 	t43 <- MEM<^t30_1>
+ * 	t29, t32 <- call return_by_copy_with_errors(t43) <--- other parameters haven't been added yet
+ * 	t33 <- t32
+ * 	t37 <- t33 > 2
+ * 	cbranch_a .L17 else .L13
+ *
+ * 	.section .rodata
+ * 		.align 8
+ * 	.JT1:
+ * 		.quad	.L14
+ * 		.quad	.L17
+ * 		.quad	.L16
+ *
+ * .L13:
+ * 	jmp *.JT1(, t33 ,8)
+ *
+ * .L17:
+ * 	memory copy 40 bytes (MEM<^t30_1>) <- (MEM<null_struct_1>)
+ * 	jmp .L14
+ *
+ * .L16:
+ * memory copy 40 bytes (MEM<^t30_1>) <- (MEM<null_struct_1>)
+ * jmp .L14
+ *
+ * .L14:
+ *  memory copy 40 bytes 32(MEM<ret_val1_1>) <- (MEM<^t30_1>) <--- the addressing region we're going to is 32(MEM<ret_val_1)
+ *  load t38 <- 4(MEM<ret_val1_1>)
+ *  ret t38 
+ *
+ * We will turn this into:
+ * 	t43 <- LEA 32(MEM<Ret_val_1>)
+ * 	t29, t32 <- call return_by_copy_with_errors(t43) <--- other parameters haven't been added yet
+ * 	t33 <- t32
+ * 	t37 <- t33 > 2
+ * 	cbranch_a .L17 else .L13
+ *
+ * 	.section .rodata
+ * 		.align 8
+ * 	.JT1:
+ * 		.quad	.L14
+ * 		.quad	.L17
+ * 		.quad	.L16
+ *
+ * .L13:
+ * 	jmp *.JT1(, t33 ,8)
+ *
+ * .L17:
+ * 	memory copy 40 bytes 32(MEM<ret_val_1>) <- (MEM<null_struct_1>) <-- replaced with DEST addressing expression
+ * 	jmp .L14
+ *
+ * .L16:
+ * memory copy 40 bytes 32(MEM<ret_val_1>) <- (MEM<null_struct_1>) <-- replaced with DEST addressing expression
+ * jmp .L14
+ *
+ * .L14:
+ *  load t38 <- 4(MEM<ret_val1_1>)
+ *  ret t38 
+ * 	
+ * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
+ * code that came as a part of this
  */
 static inline void handle_return_region_forwarding(instruction_t* call_statement, dynamic_array_t* memory_addresses_to_adjust){
 
 }
-
-
 
 
 /**
@@ -1961,7 +2021,6 @@ static void lower_call_statement(instruction_t* call_statement){
 		handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
-
 
 	/**
 	 * Step 3: If the given function call is eligible for RRF, we will now go through and
