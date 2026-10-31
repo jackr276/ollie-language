@@ -122,7 +122,6 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
 static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
-static instruction_t* generate_OIR_lea_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee);
 
 
 /**
@@ -5538,6 +5537,17 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 
 
 /**
+ * If we somehow end up with a lea statement that is of addressing mode BASE_ADDRESS_ONLY, it is no longer
+ * useful as a lea statement and will instead be converted into a regular assignment expression. This helper
+ * deals with NULL checking and does not assume that it's being provided with a LEA statement, so it can be used
+ * freely
+ */
+static inline void convert_lea_statement_to_assignment_expression_if_appropriate(instruction_t* instruction, u_int8_t* changed){
+
+}
+
+
+/**
  * Perform memory address remediations for a given instruction in our instruction window. This function
  * will update the changed value in the event that a change does occur
  */
@@ -6119,6 +6129,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * they are no longer needed and have no assembly equivalent
 	 */
 	remove_memory_region_init_statement_if_found(window, &changed);
+
+	/**
+	 * Lea statement conversions - if we have a lea statement that is of addressing
+	 * mode BASE_ADDRESS_ONLY, then it is effectively useless and will be converted
+	 * into an assignment expression
+	 */
+	convert_lea_statement_to_assignment_expression_if_appropriate(window->instruction1, &changed);
+	convert_lea_statement_to_assignment_expression_if_appropriate(window->instruction2, &changed);
+	convert_lea_statement_to_assignment_expression_if_appropriate(window->instruction3, &changed);
 
 	/**
 	 * Memory address rememediation - if we have non store/load
