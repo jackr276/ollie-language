@@ -2286,7 +2286,7 @@ static inline void adjust_memory_addresses_after_stack_allocation(instruction_t*
  * 		used in the parameter storage to account for the extra offset made by said stack
  * 		allocation
  */
-static void lower_call_statement(instruction_t* call_statement, dynamic_array_t* function_blocks){
+static void lower_call_statement(instruction_t* call_statement){
 	//Extract the block and function blocks
 	basic_block_t* block_contained_in = call_statement->block_contained_in;
 
@@ -2507,7 +2507,7 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
  * We should flag the lowered function calls with their lowered flag set to TRUE. This
  * is important for the printer to properly display everything
  */
-static inline void perform_call_lowering_in_function(symtab_function_record_t* function, dynamic_array_t* function_blocks){
+static inline void perform_call_lowering_in_function(dynamic_array_t* function_blocks){
 	//Run through every block currently listed
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		//Extract the block that we want to process
@@ -2521,7 +2521,7 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 			 * by this process, we will invoke the helper to do all of this
 			 */
 			if(is_call_statement(instruction_cursor) && instruction_cursor->call_storage.has_been_lowered == FALSE){
-				lower_call_statement(instruction_cursor, function_blocks);
+				lower_call_statement(instruction_cursor);
 			}
 
 			//Bump up to the next statement
@@ -10561,7 +10561,7 @@ static void simplify(cfg_t* cfg){
 		 * true complexity of a function call. We will now do all of in depth
 		 * work to do this
 		 */
-		perform_call_lowering_in_function(function, &(function->function_blocks));
+		perform_call_lowering_in_function(&(function->function_blocks));
 
 		/**
 		 * Run the simplifier for the first time after we do our call lowering. We will
