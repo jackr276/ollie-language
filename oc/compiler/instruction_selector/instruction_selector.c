@@ -1377,12 +1377,6 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 													int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	u_int32_t line_number = call_statement->line_number;
 
-	if(call_statement->call_storage.is_rrf_eligible == TRUE){
-
-	} else {
-
-	}
-
 	/**
 	 * Emit a fresh memory address variable using the symtab variable from the 
 	 * function call statement itself
@@ -1415,6 +1409,38 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 */
 	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 }
+
+
+
+static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, three_addr_var_t* source_memory_address_var){
+
+}
+
+
+
+/**
+ * Search all blocks for the return region forwarding "result copy". This is the final memory copy where
+ * the source is the return by copy region and the destination is some other stack local region. We are after
+ * this 
+ */
+static inline void find_rrf_result_copy(instruction_t* call_statement){
+	/**
+	 * Extract the block that the call statement begins in, the function that
+	 * we're in, and the set of all function blocks first
+	 */
+	basic_block_t* starting_block = call_statement->block_contained_in;
+	symtab_function_record_t* function_contained_in = starting_block->function_defined_in;
+	dynamic_array_t* function_blocks = &(function_contained_in->function_blocks);
+
+	/**
+	 * Reset the visited status for this function before we begin our search
+	 */
+	reset_visited_status_for_function(function_blocks);
+
+	three_addr_var_t* 
+
+}
+
 
 
 
@@ -1493,8 +1519,7 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
  * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
  * code that came as a part of this
  */
-static inline void handle_return_region_forwarding(instruction_t* call_statement, dynamic_array_t* function_blocks,
-													dynamic_array_t* memory_addresses_to_adjust){
+static inline void handle_return_region_forwarding(instruction_t* call_statement, dynamic_array_t* memory_addresses_to_adjust){
 
 }
 
@@ -1949,10 +1974,10 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
  * are as follows:
  * 	1.) Create the function call stack region if appropriate
  * 	2.) Handle a return by copy parameter if one exists
- * 	3.) Perform return region forwarding if applicable
- * 	4.) Handle any/all regular parameters(stack passed is included)
- * 	5.) Handle the elaborative parameter if one exists
- * 	6.) Allocate the function call stack region. If needed, adjust any memory addresses
+ * 		2.5) Perform return region forwarding if applicable
+ * 	3.) Handle any/all regular parameters(stack passed is included)
+ * 	4.) Handle the elaborative parameter if one exists
+ * 	5.) Allocate the function call stack region. If needed, adjust any memory addresses
  * 		used in the parameter storage to account for the extra offset made by said stack
  * 		allocation
  */
@@ -2025,19 +2050,19 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 	if(called_function_signature->returns_by_copy == TRUE){
 		handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
+
+		/**
+		 * Step 2.5: If the given function call is eligible for RRF, we will now go through and
+		 * perform said return region forwarding. A detailed explanation of this process
+		 * can be found at the comment above the helper function
+		 */
+		if(call_statement->call_storage.is_rrf_eligible == TRUE){
+			handle_return_region_forwarding(call_statement, &memory_addresses_to_adjust);
+		}
 	}
 
 	/**
-	 * Step 3: If the given function call is eligible for RRF, we will now go through and
-	 * perform said return region forwarding. A detailed explanation of this process
-	 * can be found at the comment above the helper function
-	 */
-	if(call_statement->call_storage.is_rrf_eligible == TRUE){
-		handle_return_region_forwarding(call_statement, function_blocks,  &memory_addresses_to_adjust);
-	}
-
-	/**
-	 * Step 4: process the non-elaborative parameters at this stage. We will run
+	 * Step 3: process the non-elaborative parameters at this stage. We will run
 	 * through whatever our parameter result index is at until we hit the end of
 	 * the non-elaborative parameter count
 	 */
@@ -2081,7 +2106,7 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 	}
 
 	/**
-	 * Step 5: If we have an elaborative parameter, it will *always* come after all of the
+	 * Step 4: If we have an elaborative parameter, it will *always* come after all of the
 	 * regular ones. Note that we cannot just rely on whether or not we still
 	 * have parameters to process elaborative stack params have a special hidden
 	 * "paramcount" that always needs to be populated even if there are 0 parameters
@@ -2126,7 +2151,7 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 	}
 
 	/**
-	 * Step 6: Let's now handle everything that we need to do with the stack(if we're touching it at all)
+	 * Step 5: Let's now handle everything that we need to do with the stack(if we're touching it at all)
 	 *
 	 * If we have stack parameters, then we need to emit an allocation and deallocation statement. The
 	 * allocation has to go before all of the parameter assignments, and the deallocation must go immediately
