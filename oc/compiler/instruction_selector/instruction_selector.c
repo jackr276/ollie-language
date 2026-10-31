@@ -1419,8 +1419,9 @@ static inline three_addr_var_t* handle_return_by_copy_parameter(instruction_t* c
 }
 
 
-
-static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, three_addr_var_t* source_memory_address_var){
+/**
+ */
+static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, instruction_t* search_start, three_addr_var_t* source_memory_address_var){
 
 }
 
@@ -1431,7 +1432,7 @@ static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, 
  * the source is the return by copy region and the destination is some other stack local region. We are after
  * this 
  */
-static inline void find_rrf_result_copy(instruction_t* call_statement, three_addr_var_t* return_region_memory_address_var){
+static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement, three_addr_var_t* return_region_memory_address_var){
 	/**
 	 * Extract the block that the call statement begins in, the function that
 	 * we're in, and the set of all function blocks first
@@ -1445,11 +1446,23 @@ static inline void find_rrf_result_copy(instruction_t* call_statement, three_add
 	 */
 	reset_visited_status_for_function(function_blocks);
 
+	/**
+	 * We will let the recursive helper search for the RRF result copy, starting at the current
+	 * block at the current call statement and working our way down. Remember, we are looking
+	 * for the one and only memory copy statement that will have the return region address var
+	 * as the *SOURCE*
+	 *
+	 * If this is NULL, then something has gone seriously wrong. The compiler should never allow
+	 * a situation like that to happen, so we panic
+	 */
+	instruction_t* rrf_result_copy = search_for_rrf_result_copy_in_block(starting_block, call_statement->next_statement, return_region_memory_address_var);
+	if(rrf_result_copy == NULL){
+		trigger_ice_panic("Return region forwarding failed to find the final memory copy for the return region");
+	}
+
+	//Give back what we found
+	return rrf_result_copy;
 }
-
-
-
-
 
 
 /**
@@ -1529,6 +1542,11 @@ static inline void find_rrf_result_copy(instruction_t* call_statement, three_add
  */
 static inline void handle_return_region_forwarding(instruction_t* call_statement, three_addr_var_t* return_region_memory_address,
 													dynamic_array_t* memory_addresses_to_adjust){
+	/**
+	 * Step 1: use the helper function to search through and find the final memory copy 
+	 * from the return region address into what will be our forwarded return region
+	 */
+	instruction_t* rrf_memory_copy = find_rrf_result_copy(call_statement, return_region_memory_address);
 
 }
 
