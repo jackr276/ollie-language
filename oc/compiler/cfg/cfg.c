@@ -12407,6 +12407,27 @@ static inline void reverse_topological_sort_inline_call_graph(u_int8_t* inline_c
 }
 
 
+static void perform_return_region_forwarding_in_function(symtab_function_record_t* function){
+
+}
+
+
+
+
+/**
+ * TODO - we essentially just want to scan the function and find the memory copy statement where the return region
+ * is the source, and then replace all mention of the return region with destination, and that should do it
+ *
+ * For each function
+ * 	
+ */
+static void return_region_forwarding_pass(cfg_t* cfg){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+
+	}
+}
+
+
 /**
  * Use a reverse topological sort to get the function inlining order
  */
@@ -14273,6 +14294,13 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 * inlining or any dominance relations
 	 */
 	visit_prog_node(cfg, results->root);
+
+	/**
+	 * Now we can perform any/all return region forwarding in this given
+	 * pass TODO MAYBE
+	 */
+	return_region_forwarding_pass(cfg);
+
 
 	/**
 	 * Invoke the helper to perform all function inlining if there are inlined

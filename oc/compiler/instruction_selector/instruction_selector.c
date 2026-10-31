@@ -1549,7 +1549,6 @@ static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array
 }
 
 
-
 /**
  *
  *
