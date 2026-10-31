@@ -1840,55 +1840,6 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 
 
 /**
- * In the event that we have stack allocations required for the parameter passing setup in a function call, we will
- * need to adjust their memory addresses with an offset of however much additional stack space we allocated for the 
- * function call stack passed parameters(see diagram in function call handler). This is the same for values in initializers.
- * This helper will go through and add all values in an initializer that need to be adjusted
- *
- *
- * TODO MAYBE WITH THIS ONE
- */
-static void add_initializer_members_to_memory_address_adjustment_list(three_addr_initializer_t* initializer, dynamic_array_t* memory_addresses_to_adjust){
-	/**
-	 * This wasn't allocated so we believe it to be useless - just
-	 * get out in this case
-	 */
-	if(memory_addresses_to_adjust->internal_array == NULL){
-		return;
-	}
-
-	//Run through all of our results
-	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
-		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
-
-		switch(result->result_type){
-			case INITIALIZER_RESULT_TYPE_CONSTANT:
-				break;
-
-			//Recursively deal with all members in that subinitializer
-			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
-				add_initializer_members_to_memory_address_adjustment_list(result->value.initializer_value, memory_addresses_to_adjust);
-				break;
-
-			/**
-			 * If we have a variable that is a memory address of any kind, we will need to adjust
-			 * it after we emit the function call stack allocation statement
-			 */
-			case INITIALIZER_RESULT_TYPE_VARIABLE: {
-				three_addr_var_t* result_variable = result->value.variable_value;
-
-				if(is_memory_address_variable(result_variable) == TRUE){
-					dynamic_array_add(memory_addresses_to_adjust, result_variable);
-				}
-
-				break;
-		    }
-		}
-	}
-}
-
-
-/**
  * We are passing to this memory region parameter via an initializer. Since this is the case, we will need to create
  * a memory region for this type and emit the proper initializations into it
  */
@@ -2204,6 +2155,43 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 		//Create the memory copy and throw it in before the call statement
 		instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
 		insert_instruction_before_given(memory_copy, call_statement);
+	}
+}
+
+
+/**
+ * Recursively go through all values in an initializer and add the adjustment amount to any variables that are
+ * memory address variables
+ */
+static void add_initializer_members_to_memory_address_adjustment_list(three_addr_initializer_t* initializer, int64_t adjustment_amount){
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+
+			/**
+			 * Recursively deal with all members in that subinitializer
+			 */
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				add_initializer_members_to_memory_address_adjustment_list(result->value.initializer_value, adjustment_amount);
+				break;
+
+			/**
+			 * If we have a variable that is a memory address of any kind, we will need to adjust
+			 * it after we emit the function call stack allocation statement
+			 */
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				three_addr_var_t* result_variable = result->value.variable_value;
+
+				if(is_memory_address_variable(result_variable) == TRUE){
+					result_variable->memory_address_base_adjustment = adjustment_amount;
+				}
+
+				break;
+		    }
+		}
 	}
 }
 
