@@ -1667,10 +1667,12 @@ static void replace_all_references_in_block(basic_block_t* block, instruction_t*
 	block->visited = TRUE;
 
 	/**
+	 * TODO DOC
 	 */
 	instruction_t* cursor = starting_instruction;
 	while(cursor != NULL){
-
+		replace_reference_with_address_expression(cursor, replaced_region_variable, replacement_address_expression);
+		cursor = cursor->next_statement;
 	}
 
 	/**
