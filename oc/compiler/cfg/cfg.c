@@ -13457,12 +13457,15 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 
 
 /**
- * Perform all needed setup for an inlined function that will return by copy
+ * Perform all needed setup for an inlined function that will return by copy. To do this, we only need to create
+ * an association between the caller's return by copy variable and the function that we're inlining's return by
+ * copy parameter variables. Once we do this, the cloner should take care of the rest. Do note that we do not
+ * need to create any new memory regions here, the return by copy region is created along with the original
+ * function call statement, so we already have what we need
  *
- * TODO REVAMP DESC
- *
- *
- * TODO RRF IMPLEMENTATION
+ * NOTE: due to this happening *BEFORE* SSA, we are unfortunately unable to implement return region forwarding
+ * for inlined function calls. However, inlining a function does mean that all memory regions are together at
+ * once, so it does expose additional opportunities for function internal memory optimizations
  */
 static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, variable_map_t* variable_map, int32_t* current_gp_parameter_order){
 	/**
