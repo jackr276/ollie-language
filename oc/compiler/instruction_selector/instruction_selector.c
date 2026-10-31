@@ -1439,7 +1439,6 @@ static inline three_addr_var_t* handle_return_by_copy_parameter(instruction_t* c
  * 	 	else:
  * 	 		advance the cursor
  *
- *
  * 	 for each successor s of block:
  * 	 	result <- find_rrf_copy(block, block's first statement, searching_for_var)
  * 	 	if result is not NULL:
@@ -1450,9 +1449,59 @@ static inline three_addr_var_t* handle_return_by_copy_parameter(instruction_t* c
  * NOTE: this is a recursive function
  */
 static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, instruction_t* search_start, three_addr_var_t* source_memory_address_var){
+	/**
+	 * Already been here before so get out
+	 */
+	if(block->visited == TRUE){
+		return NULL;
+	}
 
+	/**
+	 * Flag this as visited for the next go around
+	 */
+	block->visited = TRUE;
+
+	/**
+	 * Run through every single statement inside of the block, searching for a memory
+	 * copy statement whose source addressing mode is BASE_ADDRESS_ONLY and whose address
+	 * operand 1 is identical to the source memory address var
+	 */
+	instruction_t* cursor = search_start;
+	while(cursor != NULL){
+		if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT 
+			&& cursor->operands.oir.source_address_expression.addressing_mode == ADDRESSING_MODE_BASE_ADDRESS_ONLY
+			&& variables_equal(cursor->operands.oir.source_address_expression.address_operand1, source_memory_address_var) == TRUE){
+			return cursor;
+		}
+
+		cursor = cursor->next_statement;
+	}
+
+	/**
+	 * If we get here then we found nothing in this block. We'll need to work
+	 * our way through all of it's descendants recursively until we do find
+	 * something
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		/**
+		 * Get the successor out and recursively search it and all of its successors. This 
+		 * ends up being a depth-first search, which is what we want. It is most likely that
+		 * the final result copy will be in a distant successor as opposed to an immediate one.
+		 *
+		 * If we do find something, return it and propogate it up the chain
+		 */
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		instruction_t* result = search_for_rrf_result_copy_in_block(successor, successor->leader_statement, source_memory_address_var);
+
+		//Send the result up the chain
+		if(result != NULL){
+			return result;
+		}
+	}
+
+	//This block and all of it's descendants had nothing
+	return NULL;
 }
-
 
 
 /**
