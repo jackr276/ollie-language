@@ -147,6 +147,19 @@ static inline void clone_addressing_operands_into_given(addressing_operands_t* d
 		destination->address_operand1 = emit_var_copy(source->address_operand1);
 	}
 
+	if(source->address_operand2 != NULL){
+		destination->address_operand2 = emit_var_copy(source->address_operand2);
+	}
+
+	if(source->address_offset != NULL){
+		destination->address_offset = emit_constant_copy(source->address_offset);
+	}
+
+	if(source->rip_offset_var != NULL){
+		destination->rip_offset_var = emit_var_copy(source->rip_offset_var);
+	}
+
+	destination->address_multiplier = source->address_multiplier;
 }
 
 
@@ -1684,16 +1697,36 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	/**
 	 * Step 3: now that we have the region that we want to forward in our hand, we can replace the original
 	 * parameter assignment with an assignment to that variable. We will generate a LEA statement for
-	 * this purpose. 
-	 *
-	 * TODO MEMORY ADDRESS VAR
+	 * this purpose. Before doing this, we need to emit a complete clone of the forwarded region to
+	 * ensure that there is no accidental shared pointers
 	 */
 	addressing_operands_t parameter_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+	clone_addressing_operands_into_given(&parameter_operands, forwarded_return_region);
 
+	/**
+	 * Emit the parameter assignment lea, insert it before our given parameter assignment, then
+	 * delete the given parameter assignment
+	 */
+	instruction_t* parameter_assignment_lea = generate_OIR_lea_from_addressing_operands(&parameter_operands, 
+																						return_region_parameter_assignment->operands.oir.assignee);
+	insert_instruction_before_given(parameter_assignment_lea, return_region_parameter_assignment);
+	delete_statement(return_region_parameter_assignment);
 
-	instruction_t* parameter_assignment_lea = generate_OIR_lea_from_addressing_operands(, three_addr_var_t *assignee);
+	/**
+	 * Now that we've completely replaced our parameter assignment, we will need to *DELETE* the
+	 * old return region address from the "memory addresses to adjust" if it's in there, and
+	 * then we'll need to add the 
+	 */
+	if(memory_addresses_to_adjust->internal_array != NULL){
+		dynamic_array_delete(memory_addresses_to_adjust, return_region_memory_address);
 
-
+		/**
+		 * If the new one is a memory address variable then we'll need to add it in
+		 */
+		if(is_memory_address_variable(parameter_operands.address_operand1) == TRUE){
+			dynamic_array_add(memory_addresses_to_adjust, parameter_operands.address_operand1);
+		}
+	}
 
 
 	/**
