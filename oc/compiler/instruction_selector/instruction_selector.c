@@ -1377,6 +1377,12 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 													int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	u_int32_t line_number = call_statement->line_number;
 
+	if(call_statement->call_storage.is_rrf_eligible == TRUE){
+
+	} else {
+
+	}
+
 	/**
 	 * Emit a fresh memory address variable using the symtab variable from the 
 	 * function call statement itself
@@ -1409,6 +1415,24 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 */
 	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
 }
+
+
+
+/**
+ * Take a function call that is explicitly eligible for return region forwarding and perform the RRF here.
+ * 
+ * This involves three steps:
+ * 	1.) search all descendants of the call block to find the region where we memory copy from the return-by-copy
+ * 		region over into a new region(return by copy region is the source)
+ * 	2.) Replace all references to the original return by copy region with the new return by copy region.
+ * 	3.) Delete the return by copy region from the stack
+ * 	4.) Delete the final memory copy from the return by copy region over to the new regoin
+ */
+static inline void handle_return_region_forwarding(instruction_t* call_statement, dynamic_array_t* memory_addresses_to_adjust){
+
+}
+
+
 
 
 /**
@@ -1938,6 +1962,17 @@ static void lower_call_statement(instruction_t* call_statement){
 								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
 	}
 
+
+	/**
+	 * Step 3: If the given function call is eligible for RRF, we will now go through and
+	 * perform said return region forwarding
+	 */
+	if(call_statement->call_storage.is_rrf_eligible == TRUE){
+		handle_return_region_forwarding(call_statement, &memory_addresses_to_adjust);
+	}
+
+
+	//TODO UPDATE STEPS
 	/**
 	 * Step 3: process the non-elaborative parameters at this stage. We will run
 	 * through whatever our parameter result index is at until we hit the end of
