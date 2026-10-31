@@ -263,7 +263,7 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
 					 * ones that we can currently guarantee will be aligned
 					 * if we have a stack pointer
 					 */
-					switch(current_instruction->addressing_mode){
+					switch(current_instruction->operands.x86.addressing_mode){
 						/**
 						 * Base address only - the address is now %rsp
 						 * so this has to be aligned

@@ -129,8 +129,6 @@ struct generic_ast_node_t{
 		generic_type_t* error_type;
 		//For any/all error types, we'll hold onto the actual value of the error here
 		u_int32_t error_id;
-		//Store the number of bytes to copy for a copy assignment
-		u_int64_t bytes_to_copy;
 		//The label record that we're storing
 		symtab_label_record_t* label_record;
 		//Hold the upper and lower bounds for switch statement values
@@ -176,6 +174,13 @@ struct generic_ast_node_t{
 	u_int8_t memory_access_required;
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
+	/**
+	 * Return Region Forwarding(RRF) in OIR refers to the ability for us to 
+	 * forward the region that we would copy a return-by-copy function's value
+	 * into to the return by copy function itself, and have that function use
+	 * it as return region. 
+	 */
+	u_int8_t is_return_region_forwarding_eligible;
 	/**
 	 * This union has two values:
 	 *

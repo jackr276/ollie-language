@@ -364,26 +364,21 @@ instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* 
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
  */
-instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number);
+instruction_t* emit_memory_copy_instruction(addressing_operands_t* destination_address, addressing_operands_t* source_address, u_int64_t byte_amount_to_copy, u_int32_t line_number);
 
 /**
  * Emit a memory copy statement from one memory region to another. This exists
  * purely as an OIR statement and is converted to moves later on down the road
  *
- * This variation is meant for the most common use case where the destination is
- * just a base address
+ * This variation is meant for the most common use case where the destination 
+ * and source are just a base address
  */
-instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* destination_address, three_addr_var_t* source_memory_region, u_int64_t byte_amount_to_copy, u_int32_t line_number);
+instruction_t* emit_memory_copy_instruction_base_address_only(three_addr_var_t* destination_address, three_addr_var_t* source_address, u_int64_t byte_amount_to_copy, u_int32_t line_number);
 
 /**
  * Emit a store statement that only uses the base address
  */
 instruction_t* emit_store_base_address_only(three_addr_var_t* base_address, three_addr_var_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
-
-/**
- * Emit a store statement that only uses the base address
- */
-instruction_t* emit_store_const_base_address_only(three_addr_var_t* base_address, three_addr_const_t* storee, generic_type_t* memory_write_type, u_int32_t line_number);
 
 /**
  * Emit a store with a base address and an index value(variable offset). This maps
