@@ -7498,7 +7498,16 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		add_statement(current_block, error_assignment);
 		error_assignee = error_assignment->operands.oir.assignee;
 
-		//TODO DO WE NEED THE %RAX MOVE HERE??? YOU NEED TO TEST IT
+		/**
+		 * If we have something that does return a value in %rax(no return by copy and doesn't
+		 * return void), then similar to the error assignment we'll do a temp assignment so that
+		 * we can avoid any potential register clobbering issues with %RAX in the handles statement
+		 */
+		if(signature->returns_void == FALSE && signature->returns_by_copy == FALSE){
+			instruction_t* ret_val_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
+			add_statement(current_block, ret_val_assignment);
+			function_assignee = ret_val_assignment->operands.oir.assignee;
+		}
 
 		/**
 		 * Let the handle statement emitter handle the rest. It should emit everything that we need
