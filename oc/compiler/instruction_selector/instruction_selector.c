@@ -1468,9 +1468,15 @@ static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, 
 	 */
 	instruction_t* cursor = search_start;
 	while(cursor != NULL){
+		printf("CONSIDERING\n");
+		print_three_addr_code_stmt(stdout, cursor);
+		printf("LOOKING FOR VAR:");
+		print_variable(stdout, source_memory_address_var, PRINTING_VAR_INLINE);
+		printf("\n");
+
 		if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT 
 			&& cursor->operands.oir.source_address_expression.addressing_mode == ADDRESSING_MODE_BASE_ADDRESS_ONLY
-			&& variables_equal(cursor->operands.oir.source_address_expression.address_operand1, source_memory_address_var) == TRUE){
+			&& variables_equal_no_ssa(cursor->operands.oir.source_address_expression.address_operand1, source_memory_address_var) == TRUE){
 			return cursor;
 		}
 
@@ -1625,6 +1631,13 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	 */
 	instruction_t* rrf_memory_copy = find_rrf_result_copy(call_statement, return_region_memory_address);
 
+	printf("FOUND IT\n");
+	print_three_addr_code_stmt(stdout, rrf_memory_copy);
+	printf("\n\n");
+
+
+	printf("TODO NOT IMPLEMENTED\n");
+	exit(1);
 }
 
 
