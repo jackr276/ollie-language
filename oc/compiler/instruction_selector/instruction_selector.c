@@ -1372,8 +1372,11 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
  *
  *
  * TODO NEEDS DOC
+ *
+ * NOTE: this function will return the created memory address variable for the return region, in the event that we
+ * need it to do return region forwarding
  */
-static inline void handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type,
+static inline three_addr_var_t* handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type,
 													int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
 	u_int32_t line_number = call_statement->line_number;
 
@@ -1408,6 +1411,11 @@ static inline void handle_return_by_copy_parameter(instruction_t* call_statement
 	 * are stack params, so we can use that as our test
 	 */
 	dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
+
+	/**
+	 * Give back the return by copy region memory address var
+	 */
+	return return_by_copy_region_address;
 }
 
 
@@ -1423,7 +1431,7 @@ static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, 
  * the source is the return by copy region and the destination is some other stack local region. We are after
  * this 
  */
-static inline void find_rrf_result_copy(instruction_t* call_statement){
+static inline void find_rrf_result_copy(instruction_t* call_statement, three_addr_var_t* return_region_memory_address_var){
 	/**
 	 * Extract the block that the call statement begins in, the function that
 	 * we're in, and the set of all function blocks first
@@ -1437,8 +1445,6 @@ static inline void find_rrf_result_copy(instruction_t* call_statement){
 	 */
 	reset_visited_status_for_function(function_blocks);
 
-	three_addr_var_t* 
-
 }
 
 
@@ -1448,6 +1454,8 @@ static inline void find_rrf_result_copy(instruction_t* call_statement){
 
 /**
  * Take a function call that is explicitly eligible for return region forwarding and perform the RRF here.
+ * This function takes as parameters the original call statement, the original return by copy region memory address,
+ * and the dynamic array that contains the set of all memory addresses to adjust
  * 
  * This involves four steps:
  * 	1.) search all descendants of the call block to find the region where we memory copy from the return-by-copy
@@ -1519,7 +1527,8 @@ static inline void find_rrf_result_copy(instruction_t* call_statement){
  * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
  * code that came as a part of this
  */
-static inline void handle_return_region_forwarding(instruction_t* call_statement, dynamic_array_t* memory_addresses_to_adjust){
+static inline void handle_return_region_forwarding(instruction_t* call_statement, three_addr_var_t* return_region_memory_address,
+													dynamic_array_t* memory_addresses_to_adjust){
 
 }
 
@@ -2048,8 +2057,12 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 	 * handle anything else
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
-		handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
-								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
+		/**
+		 * Let the helper take care of this. It will give back the return region memory address
+		 * var so that, in the event that we are RRF eligible, we can use it
+		 */
+		three_addr_var_t* return_region_address = handle_return_by_copy_parameter(call_statement, called_function_signature->return_type,
+								  													&current_gp_parameter_order, &memory_addresses_to_adjust);
 
 		/**
 		 * Step 2.5: If the given function call is eligible for RRF, we will now go through and
@@ -2057,7 +2070,7 @@ static void lower_call_statement(instruction_t* call_statement, dynamic_array_t*
 		 * can be found at the comment above the helper function
 		 */
 		if(call_statement->call_storage.is_rrf_eligible == TRUE){
-			handle_return_region_forwarding(call_statement, &memory_addresses_to_adjust);
+			handle_return_region_forwarding(call_statement, return_region_address, &memory_addresses_to_adjust);
 		}
 	}
 
