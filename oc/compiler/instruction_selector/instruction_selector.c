@@ -1420,6 +1420,34 @@ static inline three_addr_var_t* handle_return_by_copy_parameter(instruction_t* c
 
 
 /**
+ * Search the given block for the memory copy statement whose *SOURCE* is a BASE_ADDRESS_ONLY expression
+ * where the source memory address var resides in the first address operand. If we fail to find the
+ * copy in this block, we will search all of this block's successors recursively.
+ *
+ * The algorithm to do this is described below, and is pretty simple in its execution
+ *
+ * Algorithm find_rrf_copy(block, search_start, searching_for_var):
+ * 	 if block is visited:
+ * 	 	return NULL
+ *
+ * 	 flag block as visited
+ *
+ * 	 cursor <- search_start
+ * 	 while search_start is not NULL:
+ * 	 	if cursor is memory copy AND memory copy source is searching for var:
+ * 	 		return cursor
+ * 	 	else:
+ * 	 		advance the cursor
+ *
+ *
+ * 	 for each successor s of block:
+ * 	 	result <- find_rrf_copy(block, block's first statement, searching_for_var)
+ * 	 	if result is not NULL:
+ * 	 		return result
+ *
+ * 	 return NULL
+ *
+ * NOTE: this is a recursive function
  */
 static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, instruction_t* search_start, three_addr_var_t* source_memory_address_var){
 
