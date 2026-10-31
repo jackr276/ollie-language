@@ -1679,7 +1679,7 @@ static void replace_all_references_in_block(basic_block_t* block, instruction_t*
  * TODO DOC
  *
  */
-static void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
+static inline void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
 																			addressing_operands_t* replacement_address_expression){
 	/**
 	 * Extract the block that the call statement begins in, the function that
@@ -1696,7 +1696,8 @@ static void replace_all_memory_region_references_with_addressing_expression(inst
 
 	/**
 	 * Seed our replacement run with the block that the call statement is in and start searching
-	 * immediately after the call statement
+	 * immediately after the call statement. This recursive call will handle every successor of
+	 * the starting block as well
 	 */
 	replace_all_references_in_block(starting_block, call_statement->next_statement, replaced_region_variable, replacement_address_expression);
 }
@@ -2226,7 +2227,10 @@ static inline void adjust_memory_addresses_after_stack_allocation(instruction_t*
 																	int64_t adjustment_amount){
 
 	/**
-	 * TODO DOC
+	 * Crawl through from the starting instruction to the ending instruction. We only care
+	 * about memory addresses on the *SOURCE* side of any operation. Memory addresses on
+	 * the destination side belong to the new stack allocation that we're adjusting for, so
+	 * they do not need to be altered at all
 	 */
 	instruction_t* cursor = adjustment_start;
 	while(cursor != adjustment_end){
