@@ -2162,8 +2162,10 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 /**
  * Recursively go through all values in an initializer and add the adjustment amount to any variables that are
  * memory address variables
+ *
+ * NOTE: this is a recursive function
  */
-static void add_initializer_members_to_memory_address_adjustment_list(three_addr_initializer_t* initializer, int64_t adjustment_amount){
+static void adjust_memory_addresses_in_initializer(three_addr_initializer_t* initializer, int64_t adjustment_amount){
 	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
 		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
 
@@ -2175,7 +2177,7 @@ static void add_initializer_members_to_memory_address_adjustment_list(three_addr
 			 * Recursively deal with all members in that subinitializer
 			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
-				add_initializer_members_to_memory_address_adjustment_list(result->value.initializer_value, adjustment_amount);
+				adjust_memory_addresses_in_initializer(result->value.initializer_value, adjustment_amount);
 				break;
 
 			/**
@@ -2223,6 +2225,9 @@ static void add_initializer_members_to_memory_address_adjustment_list(three_addr
 static inline void adjust_memory_addresses_after_stack_allocation(instruction_t* adjustment_start, instruction_t* adjustment_end,
 																	int64_t adjustment_amount){
 
+	/**
+	 * TODO DOC
+	 */
 	instruction_t* cursor = adjustment_start;
 	while(cursor != adjustment_end){
 		/**
@@ -2240,6 +2245,13 @@ static inline void adjust_memory_addresses_after_stack_allocation(instruction_t*
 			cursor->operands.oir.source_address_expression.address_operand1->memory_address_base_adjustment = adjustment_amount;
 		}
 
+		/**
+		 * Case 3: we have an initializer. In this case, we'll need to recrusively go through and
+		 * check all sub-initializers for memory address variables
+		 */
+		if(cursor->operands.oir.initializer_operand != NULL){
+			adjust_memory_addresses_in_initializer(cursor->operands.oir.initializer_operand, adjustment_amount);
+		}
 
 		cursor = cursor->next_statement;
 	}
