@@ -1571,6 +1571,41 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
 
 /**
  *
+ * NOTE: this function is recursive
+ */
+static void replace_all_references_in_block(basic_block_t* block, instruction_t* starting_instruction, three_addr_var_t* replaced_region_variable,
+											addressing_operands_t* replacement_address_expression){
+	/**
+	 * We've already been here so leave
+	 */
+	if(block->visited == TRUE){
+		return;
+	}
+
+	/**
+	 * Flag as visited
+	 */
+	block->visited = TRUE;
+
+	/**
+	 */
+	instruction_t* cursor = starting_instruction;
+	while(cursor != NULL){
+
+	}
+
+	/**
+	 * Run through all of this block's successors and perform the exact same replacement with them
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		replace_all_references_in_block(successor, successor->leader_statement, replaced_region_variable, replacement_address_expression);
+	}
+}
+
+
+/**
+ *
  *
  */
 static void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
@@ -1586,8 +1621,13 @@ static void replace_all_memory_region_references_with_addressing_expression(inst
 	/**
 	 * Wipe the visited status for this function clean first
 	 */
+	reset_visited_status_for_function(function_blocks);
 
-
+	/**
+	 * Seed our replacement run with the block that the call statement is in and start searching
+	 * immediately after the call statement
+	 */
+	replace_all_references_in_block(starting_block, call_statement->next_statement, replaced_region_variable, replacement_address_expression);
 }
 
 
