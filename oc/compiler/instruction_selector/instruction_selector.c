@@ -137,6 +137,33 @@ static inline void trigger_ice_panic(char* message){
 
 
 /**
+ * Perform a complete clone of the given addressing operands from the source into the destination. Once
+ * done, the destination operands will share no memory with the source operands
+ */
+static inline void clone_addressing_operands_into_given(addressing_operands_t* destination, addressing_operands_t* source){
+	destination->addressing_mode = source->addressing_mode;
+
+	if(source->address_operand1 != NULL){
+		destination->address_operand1 = emit_var_copy(source->address_operand1);
+	}
+
+	if(source->address_operand2 != NULL){
+		destination->address_operand2 = emit_var_copy(source->address_operand2);
+	}
+
+	if(source->address_offset != NULL){
+		destination->address_offset = emit_constant_copy(source->address_offset);
+	}
+
+	if(source->rip_offset_var != NULL){
+		destination->rip_offset_var = emit_var_copy(source->rip_offset_var);
+	}
+
+	destination->address_multiplier = source->address_multiplier;
+}
+
+
+/**
  * Is the given type always assigned by copy?
  */
 static inline u_int8_t is_type_assigned_by_copy(generic_type_t* type){
@@ -1369,372 +1396,461 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 
 
 /**
- * Recursively search a block and all of its successors for memory copy instruction where the source
- * variable is the source base address. We will update the variable along the way in an SSA compliant
- * way if there are updates to it. Below is a generalized algorithm that describes what we're doing
+ * In order 
  *
- * algorithm search_block(block, starting_instruction, source_variable):
- * 	if block is visited:
- * 		return
+ * NOTE: this function will return the parameter assignment expression that has the return by copy region as
+ * the source. In the event of return region forwarding, this will be replaced with the forwarded region
+ */
+static inline instruction_t* handle_return_by_copy_parameter(instruction_t* call_statement, generic_type_t* return_type, int32_t* gp_parameter_order){
+	u_int32_t line_number = call_statement->line_number;
+
+	/**
+	 * Emit a fresh memory address variable using the symtab variable from the 
+	 * function call statement itself
+	 */
+	three_addr_var_t* return_by_copy_region_address = emit_memory_address_var(call_statement->call_storage.return_by_copy_variable);
+
+	/**
+	 * Create a temp var that will actually represent the region
+	 * address being assigned to %RDI. It will need a GP parameter
+	 * order of 1. Following adding the GP parameter order in we'll
+	 * bump it up by 1 as well
+	 */
+	three_addr_var_t* region_variable = emit_temp_var(return_type);
+	region_variable->class_relative_parameter_order = *gp_parameter_order;
+	(*gp_parameter_order)++;
+
+	//Emit the assignment and add it before the call statement
+	instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, line_number);
+	insert_instruction_before_given(parameter_assignment, call_statement);
+
+	/**
+	 * The region variable goes into the parameter array
+	 */
+	dynamic_array_add(&(call_statement->parameters), region_variable);
+
+	/**
+	 * Give back the parameter assignment that has the return region memory address
+	 */
+	return parameter_assignment;
+}
+
+
+/**
+ * Search the given block for the memory copy statement whose *SOURCE* is a BASE_ADDRESS_ONLY expression
+ * where the source memory address var resides in the first address operand. If we fail to find the
+ * copy in this block, we will search all of this block's successors recursively.
  *
- * 	flag cursor as visited
+ * The algorithm to do this is described below, and is pretty simple in its execution
  *
- * 	cursor <- starting_instruction
+ * Algorithm find_rrf_copy(block, search_start, searching_for_var):
+ * 	 if block is visited:
+ * 	 	return NULL
  *
- * 	while cursor is not null:
- * 		if cursor is assignment and source is the source_variable:
- * 			source_variable <- assignment's assignee // There's been a reassignment so change what we're after
+ * 	 flag block as visited
  *
- * 		else if cursor is phi function and source is in the phi parameters
- * 			source_variable = phi's assignee
+ * 	 cursor <- search_start
+ * 	 while search_start is not NULL:
+ * 	 	if cursor is memory copy AND memory copy source is searching for var:
+ * 	 		return cursor
+ * 	 	else:
+ * 	 		advance the cursor
  *
- * 		else if cursor is memory copy and the source address operand 1 is the variable:
- * 			return memory copy instruction // FOUND IT!
+ * 	 for each successor s of block:
+ * 	 	result <- find_rrf_copy(block, block's first statement, searching_for_var)
+ * 	 	if result is not NULL:
+ * 	 		return result
  *
- * 		cursor = cursor->next
- *
- * 	for each successor s of cursor:
- * 		successor_result <- search_block(s, s's starting statement, source_variable)
- *
- * 		if(successor_result is not null):
- * 			return successor result
- *
- *  return NULL
+ * 	 return NULL
  *
  * NOTE: this is a recursive function
  */
-static instruction_t* search_block_for_rrf_memory_copy(basic_block_t* block, instruction_t* starting_point, three_addr_var_t* searching_for){
+static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, instruction_t* search_start, three_addr_var_t* source_memory_address_var){
 	/**
-	 * We've already visited so get out
+	 * Already been here before so get out
 	 */
 	if(block->visited == TRUE){
 		return NULL;
 	}
 
 	/**
-	 * Now flag that we've visited this specific block
+	 * Flag this as visited for the next go around
 	 */
 	block->visited = TRUE;
 
 	/**
-	 * Start at the given "starting point" for the block and crawl down
-	 * the block, applying the search rules as needed
+	 * Run through every single statement inside of the block, searching for a memory
+	 * copy statement whose source addressing mode is BASE_ADDRESS_ONLY and whose address
+	 * operand 1 is identical to the source memory address var
 	 */
-	instruction_t* cursor = starting_point;
+	instruction_t* cursor = search_start;
 	while(cursor != NULL){
-		/**
-		 * Based on the type of instruction we'll either update the variable
-		 * that we're after or have our end condition
-		 */
-		switch(cursor->statement_type){
-			/**
-			 * Case 1: we will often times reassign the given source variable. If
-			 * that's the case, then we need to *update* the source variable that we're
-			 * searching for to be the one that was just assigned
-			 *
-			 * t17 <- call func()
-			 * t18 <- 17  <-- we should update our search to be after t18
-			 */
-			case THREE_ADDR_CODE_ASSN_STMT: {
-				if(variables_equal(cursor->operands.oir.operand1, searching_for) == TRUE){
-					searching_for = cursor->operands.oir.assignee;
-				}
-
-				break;
-			}
-
-			/**
-			 * Case 2: if we have a phi function(join node) that involves our variable then we'll
-			 * need to assign our variable to be that. This will happen when we're dealing with
-			 * handles statements
-			 *
-			 * ^t32_2 <- PHI(^t32_1, ^t32_3, ^t32_4) <-- should be searching for ^t32_2
-			 */
-			case THREE_ADDR_CODE_PHI_STMT: {
-				/**
-				 * Crawl through all of the phi parameters and see if we have anything that's
-				 * equal to our current "searching_for". If we do, then we can reassign "searching_for"
-				 * to be the assignee
-				 */
-				for(int32_t i = 0; i < cursor->parameters.current_index; i++){
-					three_addr_var_t* phi_parameter = dynamic_array_get_at(&(cursor->parameters), i);
-
-					if(variables_equal(phi_parameter, searching_for) == TRUE){
-						searching_for = cursor->operands.oir.assignee;
-						//No point in searching the phi operands further
-						break;
-					}
-				}
-
-				break;
-			}
-
-			/**
-			 * Case 3: if we have a memory copy statement *and* the source address region's
-			 * base address is equal to the variable that we're after, then we have what
-			 * we're looking for. We'll return a reference to this entire thing and the
-			 * function will propogate it up the chain
-			 */
-			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
-				if(variables_equal(cursor->operands.oir.source_address_expression.address_operand1, searching_for) == TRUE){
-					return cursor;
-				}
-
-				break;
-			}
-
-			/**
-			 * Otherwise it's not of any interest so skip it
-			 */
-			default: {
-				break;
-			}
+		if(cursor->statement_type == THREE_ADDR_CODE_MEMORY_COPY_STATEMENT 
+			&& cursor->operands.oir.source_address_expression.addressing_mode == ADDRESSING_MODE_BASE_ADDRESS_ONLY
+			&& variables_equal_no_ssa(cursor->operands.oir.source_address_expression.address_operand1, source_memory_address_var) == TRUE){
+			return cursor;
 		}
 
-		//Found nothing - bump this up to the next statement
 		cursor = cursor->next_statement;
 	}
 
 	/**
-	 * If we get here, then we've exhausted the entire block. We will continue
-	 * the search throughout the rest of the function using this block's successors
+	 * If we get here then we found nothing in this block. We'll need to work
+	 * our way through all of it's descendants recursively until we do find
+	 * something
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
-
 		/**
-		 * Search the successor. If at any point we have a non-null return, that means that
-		 * we found something. In that case we will stop processing and return up the chain
+		 * Get the successor out and recursively search it and all of its successors. This 
+		 * ends up being a depth-first search, which is what we want. It is most likely that
+		 * the final result copy will be in a distant successor as opposed to an immediate one.
+		 *
+		 * If we do find something, return it and propogate it up the chain
 		 */
-		instruction_t* found = search_block_for_rrf_memory_copy(successor, successor->leader_statement, searching_for);
-		if(found != NULL){
-			return found;
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		instruction_t* result = search_for_rrf_result_copy_in_block(successor, successor->leader_statement, source_memory_address_var);
+
+		//Send the result up the chain
+		if(result != NULL){
+			return result;
 		}
 	}
 
-	//Nothing found in this block or any successors, return NULL
+	//This block and all of it's descendants had nothing
 	return NULL;
 }
 
 
 /**
- * We know that, if we have a return by copy function call, we must be doing a memory
- * copy either in the original block or in some successor(immediate or distant). What's
- * worth nothing is that this will *ALWAYS* come down to just one final memory copy statement
- * in the end to the region that we're after, which we can use to our advantage
+ * Search all blocks for the return region forwarding "result copy". This is the final memory copy where
+ * the source is the return by copy region and the destination is some other stack local region. We are after
+ * this 
  */
-static inline instruction_t* get_rrf_memory_copy_for_function_call(dynamic_array_t* function_blocks, instruction_t* call_statement){
+static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement, three_addr_var_t* return_region_memory_address_var){
 	/**
-	 * First reset the visited status for all of our blocks so that we can flag
-	 * blocks as visited as we go
+	 * Extract the block that the call statement begins in, the function that
+	 * we're in, and the set of all function blocks first
+	 */
+	basic_block_t* starting_block = call_statement->block_contained_in;
+	symtab_function_record_t* function_contained_in = starting_block->function_defined_in;
+	dynamic_array_t* function_blocks = &(function_contained_in->function_blocks);
+
+	/**
+	 * Reset the visited status for this function before we begin our search
 	 */
 	reset_visited_status_for_function(function_blocks);
 
 	/**
-	 * Get the block and the instruction that we're looking for. Remember that we'll
-	 * be after the addressing mode expression where the assignee is the source's first
-	 * address operand. It should always work out this way. Of course there will be
-	 * assignments along the way that change exactly what we're after, but this is the
-	 * real gist of it
+	 * We will let the recursive helper search for the RRF result copy, starting at the current
+	 * block at the current call statement and working our way down. Remember, we are looking
+	 * for the one and only memory copy statement that will have the return region address var
+	 * as the *SOURCE*
+	 *
+	 * If this is NULL, then something has gone seriously wrong. The compiler should never allow
+	 * a situation like that to happen, so we panic
 	 */
-	basic_block_t* call_block = call_statement->block_contained_in;
-	three_addr_var_t* searching_for_variable = call_statement->operands.oir.assignee;
+	instruction_t* rrf_result_copy = search_for_rrf_result_copy_in_block(starting_block, call_statement->next_statement, return_region_memory_address_var);
+	if(rrf_result_copy == NULL){
+		trigger_ice_panic("Return region forwarding failed to find the final memory copy for the return region");
+	}
 
-	/**
-	 * Let the helper do all of our searching recursively. In theory we should always return an
-	 * answer here. If we don't, then that's some kind of error. We always start searching the
-	 * original block at the statement immediately after the call statement
-	 */
-	return search_block_for_rrf_memory_copy(call_block, call_statement->next_statement, searching_for_variable);
+	//Give back what we found
+	return rrf_result_copy;
 }
 
 
 /**
- * Handle a return-by-copy parameter by allocating a special parameter that goes into %rdi which contains
- * a pointer to a stack region that we've allocated within the *CALLER'S* stack frame. This is done so that
- * it is guaranteed to survive after the function that we're calling returns. This helper also handles all
- * of the needed updates to the various trackers around memory addresses, parameter order, etc.
+ * TODO DOC
  *
- * This helper also deals with all logic for Ollie's built in "Return Region Forwarding" optimization, if this 
- * call statement has been deemed fit for it
  */
-static inline void handle_return_by_copy_parameter(dynamic_array_t* function_blocks,  instruction_t* call_statement, stack_data_area_t* caller_stack_frame,
-													generic_type_t* return_type, int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
-	u_int32_t line_number = call_statement->line_number;
+static inline void replace_reference_with_address_expression(instruction_t* instruction, three_addr_var_t* replaced_region_variable,
+																addressing_operands_t* replacement_address_expression){
+	/**
+	 * Case 1: the return region variable is equal to the first operand. We will emit a lea statement
+	 * using the replacement expression and replace operand1 with the result of the lea. Future 
+	 * simplifier steps will compress them as needed
+	 */
+	if(variables_equal_no_ssa(instruction->operands.oir.operand1, replaced_region_variable) == TRUE){
+		/**
+		 * First create a complete clone of the replacement operands to use
+		 */
+		addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+		clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
+
+		/**
+		 * Create a brand new assignee, emit a lea using the old operand1 and the addressing operands
+		 * and insert it before our given instruction, then replace the old operand1 with our new temp
+		 * assignee
+		 */
+		three_addr_var_t* new_assignee = emit_temp_var(instruction->operands.oir.operand1->type);
+		instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(&cloned_operands, new_assignee);
+		insert_instruction_before_given(lea_statement, instruction);
+		instruction->operands.oir.operand1 = new_assignee;
+	}
 
 	/**
-	 * Case 1: we are not eligible for return region forwarding. In this case, we'll need to emit a fresh
-	 * region to copy into and pass that into the %rdi parameter
+	 * Case 2: the return region variable is equal to the first address operand in the SOURCE addressing
+	 * mode expression. We will emit a lea statement using the replacement expression and replace
+	 * address_operand1 with the result of the lea. Future simplifier steps will compress them as needed
 	 */
-	if(call_statement->is_rrf_eligible == FALSE){
+	if(variables_equal_no_ssa(instruction->operands.oir.source_address_expression.address_operand1, replaced_region_variable) == TRUE){
 		/**
-		 * Create a stack region inside of this function that represents a new return by copy region. We can
-		 * also mark it immediately because we know that it will always be used
+		 * First create a complete clone of the replacement operands to use
 		 */
-		stack_region_t* return_by_copy_region = create_stack_region_for_type(caller_stack_frame, return_type);
-		return_by_copy_region->mark = TRUE;
-		
-		//Emit the special memory address temp var for this
-		three_addr_var_t* return_by_copy_region_address = emit_memory_address_temp_var(return_type, return_by_copy_region);
+		addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+		clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
 
 		/**
-		 * Create a temp var that will actually represent the region
-		 * address being assigned to %RDI. It will need a GP parameter
-		 * order of 1
+		 * Create a brand new assignee, emit a lea using the old address_operand1 and the addressing operands
+		 * and insert it before our given instruction, then replace the old address_operand1 with our new temp
+		 * assignee
 		 */
-		three_addr_var_t* region_variable = emit_temp_var(return_type);
-		region_variable->class_relative_parameter_order = *gp_parameter_order;
-		(*gp_parameter_order)++;
-
-		//Emit the assignment and add it before the call statement
-		instruction_t* parameter_assignment = emit_assignment_instruction(region_variable, return_by_copy_region_address, line_number);
-		insert_instruction_before_given(parameter_assignment, call_statement);
-
-		/**
-		 * The region variable goes into the parameter array
-		 */
-		dynamic_array_add(&(call_statement->parameters), region_variable);
-
-		/**
-		 * This is a memory address variable so we'll need to adjust it if there
-		 * are stack params. The caller has allocated this dynamic array if there
-		 * are stack params, so we can use that as our test
-		 */
-		dynamic_array_add_if_allocated(memory_addresses_to_adjust, return_by_copy_region_address);
+		three_addr_var_t* new_assignee = emit_temp_var(instruction->operands.oir.source_address_expression.address_operand1->type);
+		instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(&cloned_operands, new_assignee);
+		insert_instruction_before_given(lea_statement, instruction);
+		instruction->operands.oir.source_address_expression.address_operand1 = new_assignee;
+	}
 
 	/**
-	 * Case 2: we are eligible for return region forwarding. The process goes as follows:
-	 * 	1.) Find the end result memory copy statement. The destination of this memory copy statement
-	 * 		is the return region that we are going to forward
-	 * 	2.) Emit the appropriate assignment of this destination memory address to our new parameter
-	 * 		variable. This parameter variable is what will eventually end up in %rdi
-	 * 	3.) Delete the old memory copy statement. We will no longer need it, so there's no point in
-	 * 		keeping it around
+	 * Case 2: the return region variable is equal to the first address operand in the DEST addressing
+	 * mode expression. We will emit a lea statement using the replacement expression and replace
+	 * address_operand1 with the result of the lea. Future simplifier steps will compress them as needed
 	 */
-	} else {
+	if(variables_equal_no_ssa(instruction->operands.oir.destination_address_expression.address_operand1, replaced_region_variable) == TRUE){
 		/**
-		 * First let the recursive helper find the memory copy statement that is RRF eligible for us. We'll maintain
-		 * a sanity check and panic if this is ever not NULL
+		 * First create a complete clone of the replacement operands to use
 		 */
-		instruction_t* rrf_memory_copy = get_rrf_memory_copy_for_function_call(function_blocks, call_statement);
-		if(rrf_memory_copy == NULL){
-			trigger_ice_panic("Function call was marked as RRF eligible but no RRF eligible memory copy could be found");
-		}
+		addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+		clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
 
 		/**
-		 * Create a temp var that will actually represent the region
-		 * address being assigned to %RDI. It will need a GP parameter
-		 * order of 1
+		 * Create a brand new assignee, emit a lea using the old address_operand1 and the addressing operands
+		 * and insert it before our given instruction, then replace the old address_operand1 with our new temp
+		 * assignee
 		 */
-		three_addr_var_t* region_variable = emit_temp_var(return_type);
-		region_variable->class_relative_parameter_order = *gp_parameter_order;
-		(*gp_parameter_order)++;
-
-		/**
-		 * The region variable goes into the parameter array
-		 */
-		dynamic_array_add(&(call_statement->parameters), region_variable);
-
-		/**
-		 * The operands that we are going to forward should always be the destination of this given memory
-		 * copy statement. We will be assigning these over to our "region variable" in the end
-		 */
-		addressing_operands_t* rrf_operands = &(rrf_memory_copy->operands.oir.destination_address_expression);
-
-		/**
-		 * If we have a BASE_ADDRESS_ONLY addressing mode then we'll need to make this a plain
-		 * assignment statement. Otherwise, we'll convert it to a lea using the given addressing
-		 * operands
-		 */
-		if(rrf_operands->addressing_mode != ADDRESSING_MODE_BASE_ADDRESS_ONLY){
-			instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(rrf_operands, region_variable);
-			insert_instruction_before_given(lea_statement, call_statement);
-		} else {
-			instruction_t* assignment_instruction = emit_assignment_instruction(region_variable, rrf_operands->address_operand1, line_number);
-			insert_instruction_before_given(assignment_instruction, call_statement);
-		}
-
-		/**
-		 * There is a chance that the first address operand is a memory address variable. If it is,
-		 * and we have stack parameters, then we're going to need to throw this is as one of our "memory
-		 * addresses to adjust" so that we add the needed offset to it
-		 */
-		if(is_memory_address_variable(rrf_operands->address_operand1) == TRUE){
-			dynamic_array_add_if_allocated(memory_addresses_to_adjust, rrf_operands->address_operand1);
-		}
-
-		/**
-		 * Now that the return region forwarding is complete, the original memory copy statement is of
-		 * no use anymore. We will delete it, and following that mark and sweep will take care
-		 * of the orphaned operations
-		 */
-		delete_statement(rrf_memory_copy);
+		three_addr_var_t* new_assignee = emit_temp_var(instruction->operands.oir.destination_address_expression.address_operand1->type);
+		instruction_t* lea_statement = generate_OIR_lea_from_addressing_operands(&cloned_operands, new_assignee);
+		insert_instruction_before_given(lea_statement, instruction);
+		instruction->operands.oir.destination_address_expression.address_operand1 = new_assignee;
 	}
 }
 
 
 /**
- * In the event that we have stack allocations required for the parameter passing setup in a function call, we will
- * need to adjust their memory addresses with an offset of however much additional stack space we allocated for the 
- * function call stack passed parameters(see diagram in function call handler). This is the same for values in initializers.
- * This helper will go through and add all values in an initializer that need to be adjusted
+ * TODO DOC
+ *
+ *
+ * NOTE: this function is recursive
  */
-static void add_initializer_members_to_memory_address_adjustment_list(three_addr_initializer_t* initializer, dynamic_array_t* memory_addresses_to_adjust){
+static void replace_all_references_in_block(basic_block_t* block, instruction_t* starting_instruction, three_addr_var_t* replaced_region_variable,
+											addressing_operands_t* replacement_address_expression){
 	/**
-	 * This wasn't allocated so we believe it to be useless - just
-	 * get out in this case
+	 * We've already been here so leave
 	 */
-	if(memory_addresses_to_adjust->internal_array == NULL){
+	if(block->visited == TRUE){
 		return;
 	}
 
-	//Run through all of our results
-	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
-		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+	/**
+	 * Flag as visited
+	 */
+	block->visited = TRUE;
 
-		switch(result->result_type){
-			case INITIALIZER_RESULT_TYPE_CONSTANT:
-				break;
-
-			//Recursively deal with all members in that subinitializer
-			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
-				add_initializer_members_to_memory_address_adjustment_list(result->value.initializer_value, memory_addresses_to_adjust);
-				break;
-
-			/**
-			 * If we have a variable that is a memory address of any kind, we will need to adjust
-			 * it after we emit the function call stack allocation statement
-			 */
-			case INITIALIZER_RESULT_TYPE_VARIABLE: {
-				three_addr_var_t* result_variable = result->value.variable_value;
-
-				if(is_memory_address_variable(result_variable) == TRUE){
-					dynamic_array_add(memory_addresses_to_adjust, result_variable);
-				}
-
-				break;
-		    }
-		}
+	/**
+	 * TODO DOC
+	 */
+	instruction_t* cursor = starting_instruction;
+	while(cursor != NULL){
+		replace_reference_with_address_expression(cursor, replaced_region_variable, replacement_address_expression);
+		cursor = cursor->next_statement;
 	}
+
+	/**
+	 * Run through all of this block's successors and perform the exact same replacement with them
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		replace_all_references_in_block(successor, successor->leader_statement, replaced_region_variable, replacement_address_expression);
+	}
+}
+
+
+/**
+ * TODO DOC
+ *
+ */
+static inline void replace_all_memory_region_references_with_addressing_expression(instruction_t* call_statement, three_addr_var_t* replaced_region_variable,
+																			addressing_operands_t* replacement_address_expression){
+	/**
+	 * Extract the block that the call statement begins in, the function that
+	 * we're in, and the set of all function blocks first
+	 */
+	basic_block_t* starting_block = call_statement->block_contained_in;
+	symtab_function_record_t* function_contained_in = starting_block->function_defined_in;
+	dynamic_array_t* function_blocks = &(function_contained_in->function_blocks);
+
+	/**
+	 * Wipe the visited status for this function clean first
+	 */
+	reset_visited_status_for_function(function_blocks);
+
+	/**
+	 * Seed our replacement run with the block that the call statement is in and start searching
+	 * immediately after the call statement. This recursive call will handle every successor of
+	 * the starting block as well
+	 */
+	replace_all_references_in_block(starting_block, call_statement->next_statement, replaced_region_variable, replacement_address_expression);
+}
+
+
+/**
+ * Take a function call that is explicitly eligible for return region forwarding and perform the RRF here.
+ * This function takes as parameters the original call statement and the original parameter assignment for the
+ * return region memory address.
+ * 
+ * This involves four steps:
+ * 	1.) search all descendants of the call block to find the region where we memory copy from the return-by-copy
+ * 		region over into a new region(return by copy region is the source)
+ * 	2.) Delete the final memory copy from the return by copy region over to the new region
+ * 	3.) Replace the original parameter assignment with the return region with the new forwarded address expression
+ * 	3.) Replace all other references to the original return by copy region with the new return by copy address expression(NOT just a region)
+ * 	5.) Delete the original return by copy region from the stack
+ *
+ * 	Below is an example:
+ * 	^t30_1 <- initialize memory region <--- original ret by copy region
+ * 	t43 <- MEM<^t30_1>
+ * 	t29, t32 <- call return_by_copy_with_errors(t43) <--- other parameters haven't been added yet
+ * 	t33 <- t32
+ * 	t37 <- t33 > 2
+ * 	cbranch_a .L17 else .L13
+ *
+ * 	.section .rodata
+ * 		.align 8
+ * 	.JT1:
+ * 		.quad	.L14
+ * 		.quad	.L17
+ * 		.quad	.L16
+ *
+ * .L13:
+ * 	jmp *.JT1(, t33 ,8)
+ *
+ * .L17:
+ * 	memory copy 40 bytes (MEM<^t30_1>) <- (MEM<null_struct_1>)
+ * 	jmp .L14
+ *
+ * .L16:
+ * memory copy 40 bytes (MEM<^t30_1>) <- (MEM<null_struct_1>)
+ * jmp .L14
+ *
+ * .L14:
+ *  memory copy 40 bytes 32(MEM<ret_val1_1>) <- (MEM<^t30_1>) <--- the addressing region we're going to is 32(MEM<ret_val_1)
+ *  load t38 <- 4(MEM<ret_val1_1>)
+ *  ret t38 
+ *
+ * We will turn this into:
+ * 	t43 <- LEA 32(MEM<Ret_val_1>)
+ * 	t29, t32 <- call return_by_copy_with_errors(t43) <--- other parameters haven't been added yet
+ * 	t33 <- t32
+ * 	t37 <- t33 > 2
+ * 	cbranch_a .L17 else .L13
+ *
+ * 	.section .rodata
+ * 		.align 8
+ * 	.JT1:
+ * 		.quad	.L14
+ * 		.quad	.L17
+ * 		.quad	.L16
+ *
+ * .L13:
+ * 	jmp *.JT1(, t33 ,8)
+ *
+ * .L17:
+ * 	memory copy 40 bytes 32(MEM<ret_val_1>) <- (MEM<null_struct_1>) <-- replaced with DEST addressing expression
+ * 	jmp .L14
+ *
+ * .L16:
+ * memory copy 40 bytes 32(MEM<ret_val_1>) <- (MEM<null_struct_1>) <-- replaced with DEST addressing expression
+ * jmp .L14
+ *
+ * .L14:
+ *  load t38 <- 4(MEM<ret_val1_1>)
+ *  ret t38 
+ * 	
+ * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
+ * code that came as a part of this
+ */
+static inline void handle_return_region_forwarding(instruction_t* call_statement, instruction_t* return_region_parameter_assignment){
+	/**
+	 * Get the block contained in and the function contained in for reference
+	 */
+	basic_block_t* block_contained_in = call_statement->block_contained_in;
+	symtab_function_record_t* function_contained_in = block_contained_in->function_defined_in;
+
+	/**
+	 * The original return region address always comes from the parameter assignment's source
+	 */
+	three_addr_var_t* return_region_memory_address = return_region_parameter_assignment->operands.oir.operand1;
+
+	/**
+	 * Step 1: use the helper function to search through and find the final memory copy 
+	 * from the return region address into what will be our forwarded return region. We'll
+	 * grab a reference to the forwarded return region here as well
+	 */
+	instruction_t* rrf_memory_copy = find_rrf_result_copy(call_statement, return_region_memory_address);
+	addressing_operands_t* forwarded_return_region = &(rrf_memory_copy->operands.oir.destination_address_expression);
+
+	/**
+	 * Step 2: this memory copy statement is now entirely useless. We're going to delete it from the 
+	 * block to avoid accidentally reprocessing it down the road
+	 *
+	 * Remember that delete_statement just unlinks it in the block, no memory is released so all of
+	 * the data in here it still safe to use
+	 */
+	delete_statement(rrf_memory_copy);
+
+	/**
+	 * Step 3: now that we have the region that we want to forward in our hand, we can replace the original
+	 * parameter assignment with an assignment to that variable. We will generate a LEA statement for
+	 * this purpose. Before doing this, we need to emit a complete clone of the forwarded region to
+	 * ensure that there is no accidental shared pointers
+	 */
+	addressing_operands_t forwarded_return_region_clone = INITIALIZE_NULL_ADDRESS_OPERANDS;
+	clone_addressing_operands_into_given(&forwarded_return_region_clone, forwarded_return_region);
+
+	/**
+	 * Emit the parameter assignment lea, insert it before our given parameter assignment, then
+	 * delete the given parameter assignment
+	 */
+	instruction_t* parameter_assignment_lea = generate_OIR_lea_from_addressing_operands(&forwarded_return_region_clone, 
+																						return_region_parameter_assignment->operands.oir.assignee);
+	insert_instruction_before_given(parameter_assignment_lea, return_region_parameter_assignment);
+	delete_statement(return_region_parameter_assignment);
+
+	/**
+	 * Step 4: replace every other memory address variable or regular variable that mentions the original
+	 * return by copy variable with the addressing expression that we have for the new return region that
+	 * we're forwarding. 
+	 */
+	replace_all_memory_region_references_with_addressing_expression(call_statement, return_region_memory_address, forwarded_return_region);
+
+	/**
+	 * Step 5: the old return by copy region is now useless. Remove it from the function's local stack
+	 */
+	remove_region_from_stack(&(function_contained_in->local_stack), return_region_memory_address->associated_memory_region.stack_region);
 }
 
 
 /**
  * We are passing to this memory region parameter via an initializer. Since this is the case, we will need to create
- * a memory region for this type and emit the proper initializations into it. We need to also make a close
- * note of any "memory addresses to adjust" that come from inside the initializer
+ * a memory region for this type and emit the proper initializations into it
  */
-static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
-														parameter_result_t* initializer_result, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_pass_by_initializer_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* initializer_result){
 	//Extract this to have it on hand
 	three_addr_initializer_t* result_initializer = initializer_result->param_result.initializer_result;
 
 	//Create the pass-by-initializer region and create a memory address variable for it
-	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type); 
+	stack_region_t* pass_by_initializer_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type); 
 	three_addr_var_t* pass_by_initializer_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_initializer_region);
-
-	//Let the helper store any memory addresses that will need adjustment
-	add_initializer_members_to_memory_address_adjustment_list(result_initializer, memory_addresses_to_adjust);
 
 	//Emit the initializer and insert it right before the call instruction
 	instruction_t* initializer_instruction = emit_initialization_instruction(pass_by_initializer_memory_address, result_initializer, call_statement->line_number);
@@ -1742,35 +1858,20 @@ static inline void store_pass_by_initializer_parameter(instruction_t* call_state
 }
 
 
-
 /**
  * If we have a struct or union type, we automatically will be passing it by copy.
  * This means that it is treated entirely separate from the way in which we handle
- * regular parameters which is why we have this separate rule for it. We need to 
- * be cautious about the memory addresses to adjust especially here, because we
- * will be making a caller stack allocation that will mess up original address
- * variables
+ * regular parameters which is why we have this separate rule for it
  */
-static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type,
-												parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_pass_by_copy_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result){
 	//This should always be a variable if we're copying
 	three_addr_var_t* copying_from_var = result->param_result.variable_result;
-	
-	/**
-	 * If this is a memory address variable(remember it could just be 
-	 * a pointer var), then we'll need to add it to the list of memory
-	 * addresses that need adjustment once we actually allocate the stack
-	 * regions
-	 */
-	if(is_memory_address_variable(copying_from_var) == TRUE){
-		dynamic_array_add_if_allocated(memory_addresses_to_adjust, copying_from_var);
-	}
 
 	/**
 	 * Let's now create the parameter stack region for this parameter to be copied
 	 * into. We'll allocate a memory address temp var for it as well
 	 */
-	stack_region_t* pass_by_copy_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+	stack_region_t* pass_by_copy_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 	three_addr_var_t* pass_by_copy_memory_address = emit_memory_address_temp_var(parameter_type, pass_by_copy_region);
 
 	/**
@@ -1787,8 +1888,7 @@ static inline void store_pass_by_copy_parameter(instruction_t* call_statement, g
  * Handle the storage of a general purpose register type parameter and everything that comes with it. This rule will
  * automatically decide whether or not a parameter needs to be stored on the stack based on the parameter order
  */
-static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-									  int32_t* gp_parameter_order, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_gp_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result, int32_t* gp_parameter_order){
 	/**
 	 * If we are at or under the max number of GP register passed parameters
 	 * we are not going to need a stack allocation in the parameter call stack.
@@ -1805,15 +1905,6 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				//Emit the assignment and insert it before the call statement
 				instruction_t* param_assignment = emit_assignment_instruction(parameter_variable, result_var, call_statement->line_number); 
@@ -1852,22 +1943,13 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
 		}
 
 		//Create a stack region for this type and get a variable for it
-		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				/**
 				 * Store this parameter result into the allocated region for it. Note we will
@@ -1910,9 +1992,7 @@ static inline void store_gp_parameter(instruction_t* call_statement, generic_typ
  * Handle the storage of an SSE register type parameter and everything that comes with it. This rule will
  * automatically decide whether or not a parameter needs to be stored on the stack based on the parameter order
  */
-static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result,
-									   int32_t* sse_parameter_order,dynamic_array_t* memory_addresses_to_adjust){
-
+static inline void store_sse_parameter(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result, int32_t* sse_parameter_order){
 	/**
 	 * If we are at or under the max number of SSE register passed parameters
 	 * we are not going to need a stack allocation in the parameter call stack.
@@ -1929,15 +2009,6 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				//Emit the assignment and insert it before the call statement
 				instruction_t* param_assignment = emit_assignment_instruction(parameter_variable, result_var, call_statement->line_number); 
@@ -1967,22 +2038,13 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
 
 	} else {
 		//Create a stack region for this type and get a variable for it
-		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* parameter_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* stack_region_address = emit_memory_address_temp_var(parameter_type, parameter_region);
 
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				/**
-				 * If this is a memory address variable, we'll need to adjust it if
-				 * we have a stack passed parameter region so add it to the list if it
-				 * exists
-				 */
-				if(is_memory_address_variable(result_var)){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				/**
 				 * Store this parameter result into the allocated region for it. Note we will
@@ -2025,8 +2087,7 @@ static inline void store_sse_parameter(instruction_t* call_statement, generic_ty
  * Store an elaborative parameter result to the stack passed parameter region. We will have to create the region
  * for each parameter that we see. This rule takes care of memory copy parameters and regular parameter types
  */
-static inline void store_elaborative_parameter_result(instruction_t* call_statement, generic_type_t* parameter_type, 
-													  parameter_result_t* result, dynamic_array_t* memory_addresses_to_adjust){
+static inline void store_elaborative_parameter_result(instruction_t* call_statement, generic_type_t* parameter_type, parameter_result_t* result){
 	/**
 	 * Most common - we are not passing by copy so we'll have to break done by either constant or
 	 * variable result. There's no need to split along SSE/GP because we are always storing to
@@ -2034,18 +2095,13 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 	 */
 	if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 		//Allocate a fresh region for this and get a variable for it
-		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
 
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR: {
 				//Extract the result var
 				three_addr_var_t* result_var = result->param_result.variable_result;
-
-				//Bookkeeping: stash this if it's a memory address variable
-				if(is_memory_address_variable(result_var) == TRUE){
-					dynamic_array_add_if_allocated(memory_addresses_to_adjust, result_var);
-				}
 
 				//Emit and add the store for this variable parameter
 				instruction_t* store_statement = emit_store_base_address_only(region_variable, result_var, parameter_type, call_statement->line_number);
@@ -2078,12 +2134,9 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 		three_addr_initializer_t* initializer = result->param_result.initializer_result;
 
 		//Allocate a fresh region for this and get a variable for it
-		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* storing_into_region_address = emit_memory_address_temp_var(parameter_type, storing_into_region);
 		
-		//Let the helper deal with any memory addresses that require adjustment
-		add_initializer_members_to_memory_address_adjustment_list(initializer, memory_addresses_to_adjust);
-
 		//Emit and insert this right before the call statement
 		instruction_t* initialization = emit_initialization_instruction(storing_into_region_address, initializer, call_statement->line_number);
 		insert_instruction_before_given(initialization, call_statement);
@@ -2094,20 +2147,117 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
 	 */
 	} else {
 		//Allocate a fresh region for this and get a variable for it
-		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->optional_storage.call_storage.stack_parameter_area), parameter_type);
+		stack_region_t* storing_into_region = create_stack_region_for_type(&(call_statement->call_storage.stack_parameter_area), parameter_type);
 		three_addr_var_t* region_variable = emit_memory_address_temp_var(parameter_type, storing_into_region);
 
 		//Unpack the parameter result - it will always be a variable
 		three_addr_var_t* result_var = result->param_result.variable_result;
 
-		//Bookkeeping: stash this if it's a memory address variable
-		if(is_memory_address_variable(result_var) == TRUE){
-			dynamic_array_add(memory_addresses_to_adjust, result_var);
-		}
-
 		//Create the memory copy and throw it in before the call statement
 		instruction_t* memory_copy = emit_memory_copy_instruction_base_address_only(region_variable, result_var, parameter_type->type_size, call_statement->line_number);
 		insert_instruction_before_given(memory_copy, call_statement);
+	}
+}
+
+
+/**
+ * Recursively go through all values in an initializer and add the adjustment amount to any variables that are
+ * memory address variables
+ *
+ * NOTE: this is a recursive function
+ */
+static void adjust_memory_addresses_in_initializer(three_addr_initializer_t* initializer, int64_t adjustment_amount){
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_CONSTANT:
+				break;
+
+			/**
+			 * Recursively deal with all members in that subinitializer
+			 */
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
+				adjust_memory_addresses_in_initializer(result->value.initializer_value, adjustment_amount);
+				break;
+
+			/**
+			 * If we have a variable that is a memory address of any kind, we will need to adjust
+			 * it after we emit the function call stack allocation statement
+			 */
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				three_addr_var_t* result_variable = result->value.variable_value;
+
+				if(is_memory_address_variable(result_variable) == TRUE){
+					result_variable->memory_address_base_adjustment = adjustment_amount;
+				}
+
+				break;
+		    }
+		}
+	}
+}
+
+
+/**
+ * If we have memory addresses before stack allocations, we need to adjust the offset
+ * of the source memory region because we've emitted new stack allocation statements
+ * for it. Remember that memory address variables in OIR only tell us how far off the
+ * stack to offset
+ *
+ * Say we have this in OIR where my_region is a local stack region:
+ *
+ * 	call x(MEM<my_region>)
+ *
+ * What happens if we decide that we need to pass my_region by copy? Well
+ * then we'll have to allocate a stack region for that function parameter
+ * passing like this during lowering:
+ *
+ * 	rsp - 16 <- allocate 16 bytes
+ * 	memory_copy parameter_mem<t1> <- MEM<my_region>  <-- my_region's address is now off by 16 bytes
+ * 	rsp + 16 <- deallocate 16 bytes
+ *
+ * Note how doing this will make the old memory address invalid because it's stack offset is
+ * not accounting for the 16 bytes we just allocated. To fix this, we will crawl from the new
+ * stack allocation down to the function call and add an adjustment amount totalling the size 
+ * of the new stack allocation to every single source memory address variable to compensate. The
+ * destination addresses are stack parameters, so they don't need to be fixed
+ */
+static inline void adjust_memory_addresses_after_stack_allocation(instruction_t* adjustment_start, instruction_t* adjustment_end,
+																	int64_t adjustment_amount){
+
+	/**
+	 * Crawl through from the starting instruction to the ending instruction. We only care
+	 * about memory addresses on the *SOURCE* side of any operation. Memory addresses on
+	 * the destination side belong to the new stack allocation that we're adjusting for, so
+	 * they do not need to be altered at all
+	 */
+	instruction_t* cursor = adjustment_start;
+	while(cursor != adjustment_end){
+		/**
+		 * Case 1: we have a memory address variable in the first operand
+		 */
+		if(is_memory_address_variable(cursor->operands.oir.operand1) == TRUE){
+			cursor->operands.oir.operand1->memory_address_base_adjustment = adjustment_amount;
+		}
+
+		/**
+		 * Case 2: we have a memory address variable in the source addressing mode
+		 * expression
+		 */
+		if(is_memory_address_variable(cursor->operands.oir.source_address_expression.address_operand1) == TRUE){
+			cursor->operands.oir.source_address_expression.address_operand1->memory_address_base_adjustment = adjustment_amount;
+		}
+
+		/**
+		 * Case 3: we have an initializer. In this case, we'll need to recrusively go through and
+		 * check all sub-initializers for memory address variables
+		 */
+		if(cursor->operands.oir.initializer_operand != NULL){
+			adjust_memory_addresses_in_initializer(cursor->operands.oir.initializer_operand, adjustment_amount);
+		}
+
+		cursor = cursor->next_statement;
 	}
 }
 
@@ -2123,16 +2273,16 @@ static inline void store_elaborative_parameter_result(instruction_t* call_statem
  * are as follows:
  * 	1.) Create the function call stack region if appropriate
  * 	2.) Handle a return by copy parameter if one exists
+ * 		2.5) Perform return region forwarding if applicable
  * 	3.) Handle any/all regular parameters(stack passed is included)
  * 	4.) Handle the elaborative parameter if one exists
  * 	5.) Allocate the function call stack region. If needed, adjust any memory addresses
  * 		used in the parameter storage to account for the extra offset made by said stack
  * 		allocation
  */
-static void lower_call_statement(symtab_function_record_t* function, instruction_t* call_statement){
+static void lower_call_statement(instruction_t* call_statement, dynamic_array_t* function_blocks){
 	//Extract the block and function blocks
 	basic_block_t* block_contained_in = call_statement->block_contained_in;
-	dynamic_array_t* function_blocks = &(function->function_blocks);
 
 	//Counters for the function parameter order
 	int32_t current_gp_parameter_order = 1;
@@ -2151,7 +2301,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	//Let's extract the signature of what it is that we're calling
 	function_type_t* called_function_signature;
 	if(call_statement->statement_type == THREE_ADDR_CODE_FUNC_CALL){
-		called_function_signature = call_statement->called_function->signature->internal_types.function_type;
+		called_function_signature = call_statement->call_storage.called_function->signature->internal_types.function_type;
 	} else {
 		called_function_signature = call_statement->operands.oir.operand1->type->internal_types.function_type;
 	}
@@ -2159,17 +2309,6 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	//Get the total number of non-elaborative parameters and whether or not we have stack params
 	int32_t non_elaborative_param_count = get_non_elaborative_parameter_count(called_function_signature);
 	u_int8_t has_stack_params = called_function_signature->contains_stack_params;
-
-	/**
-	 * Maintain a dynamic array that contains all of the memory addresses that we need to adjust.
-	 * Whenever we stumble across a memory address var that's in the parameter result array,
-	 * we'll add it's stack region here as something that we need to adjust. See below for
-	 * more details
-	 */
-	dynamic_array_t memory_addresses_to_adjust = INITIALIZE_DYNAMIC_ARRAY;
-	if(has_stack_params == TRUE){
-		memory_addresses_to_adjust = dynamic_array_alloc();
-	}
 
 	/**
 	 * Functions that have more than one non-elaborative param *OR* return by copy
@@ -2184,7 +2323,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * Step 1: if we have a function that has stack parameters, it is up to us to allocate
 	 * the stack data area for it now. We'll also grab a pointer to it for our convenience
 	 */
-	stack_data_area_t* stack_passed_param_region = &(call_statement->optional_storage.call_storage.stack_parameter_area);
+	stack_data_area_t* stack_passed_param_region = &(call_statement->call_storage.stack_parameter_area);
 	if(called_function_signature->contains_stack_params == TRUE){
 		stack_data_area_alloc(stack_passed_param_region, STACK_TYPE_TEMP_USE);
 	}
@@ -2197,8 +2336,22 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 	 * handle anything else
 	 */
 	if(called_function_signature->returns_by_copy == TRUE){
-		handle_return_by_copy_parameter(function_blocks, call_statement, &(function->local_stack), called_function_signature->return_type,
-								  		&current_gp_parameter_order, &memory_addresses_to_adjust);
+		/**
+		 * Let the helper take care of this. It will return the created return region
+		 * parameter assignment in the event that we need it for return region forwarding
+		 */
+		instruction_t* return_region_assignment = handle_return_by_copy_parameter(call_statement,
+																					called_function_signature->return_type,
+								  													&current_gp_parameter_order);
+
+		/**
+		 * Step 2.5: If the given function call is eligible for RRF, we will now go through and
+		 * perform said return region forwarding. A detailed explanation of this process
+		 * can be found at the comment above the helper function
+		 */
+		if(call_statement->call_storage.is_rrf_eligible == TRUE){
+			handle_return_region_forwarding(call_statement, return_region_assignment);
+		}
 	}
 
 	/**
@@ -2212,7 +2365,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * If all of our counting is correct then these should be lining up perfectly with result
 		 * to desired type
 		 */
-		parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
+		parameter_result_t* result = get_result_at_index(&(call_statement->call_storage.parameter_results), parameter_result_index);
 		generic_type_t* parameter_type = dynamic_array_get_at(&(called_function_signature->function_parameters), signature_params_index);
 
 		/**
@@ -2225,9 +2378,9 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 */
 		if(is_pass_by_copy_type(parameter_type) == FALSE && result->result_type != PARAM_RESULT_TYPE_INITIALIZER){
 			if(IS_FLOATING_POINT(parameter_type) == FALSE){
-				store_gp_parameter(call_statement, parameter_type, result, &current_gp_parameter_order, &memory_addresses_to_adjust);
+				store_gp_parameter(call_statement, parameter_type, result, &current_gp_parameter_order);
 			} else {
-				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order, &memory_addresses_to_adjust);
+				store_sse_parameter(call_statement, parameter_type, result, &current_sse_paramter_order);
 			}
 
 		/**
@@ -2235,13 +2388,13 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * is going to require us to create a memory region and "initialize" into it
 		 */
 		} else if(result->result_type == PARAM_RESULT_TYPE_INITIALIZER){
-			store_pass_by_initializer_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
+			store_pass_by_initializer_parameter(call_statement, parameter_type, result);
 
 		/**
 		 * Final option is that we have a pure pass by copy parameter that is not using any initialization
 		 */
 		} else {
-			store_pass_by_copy_parameter(call_statement, parameter_type, result, &memory_addresses_to_adjust);
+			store_pass_by_copy_parameter(call_statement, parameter_type, result);
 		}
 	}
 
@@ -2265,7 +2418,7 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		}
 
 		//The number is however many results we have left over. This is our "paramcount"
-		int32_t elaborative_paramcount = call_statement->parameter_results.current_index - parameter_result_index;
+		int32_t elaborative_paramcount = call_statement->call_storage.parameter_results.current_index - parameter_result_index;
 		three_addr_const_t* paramcount_constant = emit_direct_integer_or_char_constant(elaborative_paramcount, i32);
 
 		/**
@@ -2283,10 +2436,10 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 		 * Now run through the remaining parameter results and store them to the stack region
 		 * after we've already added the paramcount
 		 */
-		for(; parameter_result_index < call_statement->parameter_results.current_index; parameter_result_index++){
+		for(; parameter_result_index < call_statement->call_storage.parameter_results.current_index; parameter_result_index++){
 			//Pass it along to the helper to process
-			parameter_result_t* result = get_result_at_index(&(call_statement->parameter_results), parameter_result_index);
-			store_elaborative_parameter_result(call_statement, elaborated_type, result, &memory_addresses_to_adjust);
+			parameter_result_t* result = get_result_at_index(&(call_statement->call_storage.parameter_results), parameter_result_index);
+			store_elaborative_parameter_result(call_statement, elaborated_type, result);
 		}
 	}
 
@@ -2320,47 +2473,25 @@ static void lower_call_statement(symtab_function_record_t* function, instruction
 			insert_instruction_before_given(stack_allocation, block_contained_in->leader_statement);
 		}
 
+		/**
+		 * Now that we have our stack allocation, all of the source side memory addresses for our parameter
+		 * assignment are now invalid. This is because we've shifted the stack pointer down by however big
+		 * the stack passed parameter region is. To accomodate for this, we'll go through and add a 
+		 * "memory address base adjustment" value equaling the total size of the stack passed parameter region
+		 * to every single memory address variable on the source side of things
+		 */
+		adjust_memory_addresses_after_stack_allocation(stack_allocation, call_statement, stack_passed_param_region->total_size);
+
 		//Emit and insert our stack deallocation statement - this always goes immediately after the call
 		instruction_t* stack_deallocation = emit_stack_deallocation_ir_statement(stack_deallocation_constant);
 		insert_instruction_after_given(stack_deallocation, call_statement);
-
-		/**
-		 * If we have memory addresses before stack allocations, we need to adjust the offset
-		 * of the source memory region because we've emitted new stack allocation statements
-		 * for it. Remember that memory address variables in OIR only tell us how far off the
-		 * stack to offset
-		 *
-		 * Say we have this in OIR where my_region is a local stack region:
-		 *
-		 * 	call x(MEM<my_region>)
-		 *
-		 * What happens if we decide that we need to pass my_region by copy. Well
-		 * then we'll have to allocate a stack region for that function parameter
-		 * passing like this during lowering:
-		 *
-		 * 	rsp - 16 <- allocate 16 bytes
-		 * 	memory_copy parameter_mem<t1> <- MEM<my_region>  <-- my_region's address is now off by 16 bytes
-		 * 	rsp + 16 <- deallocate 16 bytes
-		 *
-		 * Note how doing this will make the old memory address invalid because it's stack offset is
-		 * not accounting for the 16 bytes we just allocated. This is why we maintain a list of 
-		 * memory address like MEM<my_region> who are at risk of this happening, so at the end
-		 * here we can go through and "adjust" their address by bumping the offset up by however
-		 * much we allocated
-		 */
-		for(int32_t i = 0; i < memory_addresses_to_adjust.current_index; i++){
-			//Get the variable and add in the base adjustment
-			three_addr_var_t* memory_address = dynamic_array_get_at(&memory_addresses_to_adjust, i);
-			memory_address->memory_address_base_adjustment = stack_passed_param_region->total_size;
-		}
 	}
 
-	//These are both no longer of use
-	dynamic_array_dealloc(&memory_addresses_to_adjust);
-	parameter_results_array_dealloc(&(call_statement->parameter_results));
+	//This is no longer of use
+	parameter_results_array_dealloc(&(call_statement->call_storage.parameter_results));
 
 	//Once we've fully lowered this call statement flag it as fully lowered
-	call_statement->optional_storage.call_storage.has_been_lowered = TRUE;
+	call_statement->call_storage.has_been_lowered = TRUE;
 }
 
 
@@ -2383,8 +2514,8 @@ static inline void perform_call_lowering_in_function(symtab_function_record_t* f
 			 * If we have a function call statement *AND* it has not already been lowered
 			 * by this process, we will invoke the helper to do all of this
 			 */
-			if(is_call_statement(instruction_cursor) && instruction_cursor->optional_storage.call_storage.has_been_lowered == FALSE){
-				lower_call_statement(function, instruction_cursor);
+			if(is_call_statement(instruction_cursor) && instruction_cursor->call_storage.has_been_lowered == FALSE){
+				lower_call_statement(instruction_cursor, function_blocks);
 			}
 
 			//Bump up to the next statement
@@ -5504,6 +5635,40 @@ static inline void combine_lea_with_address_operand2(instruction_window_t* windo
 
 
 /**
+ * If we somehow end up with a lea statement that is of addressing mode BASE_ADDRESS_ONLY, it is no longer
+ * useful as a lea statement and will instead be converted into a regular assignment expression. This helper
+ * deals with NULL checking and does not assume that it's being provided with a LEA statement, so it can be used
+ * freely
+ */
+static inline void convert_lea_statement_to_assignment_expression_if_appropriate(instruction_t* instruction, u_int8_t* changed){
+	/**
+	 * If it's NULL or not a lea then get out
+	 */
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_LEA_STMT){
+		return;
+	}
+
+	/**
+	 * If it's not a BASE_ADDRESS_ONLY addressing mode then it's also not of concern
+	 */
+	if(instruction->operands.oir.source_address_expression.addressing_mode != ADDRESSING_MODE_BASE_ADDRESS_ONLY){
+		return;
+	}
+
+	/**
+	 * Copy over the BASE_ADDRESS into the first operand, then wipe out the address operands and convert
+	 * this into an assignment expression 
+	 */
+	instruction->operands.oir.operand1 = instruction->operands.oir.source_address_expression.address_operand1;
+	instruction->operands.oir.source_address_expression = INITIALIZE_NULL_ADDRESS_OPERANDS;
+	instruction->statement_type = THREE_ADDR_CODE_ASSN_STMT;
+
+	//Flag as changed
+	*changed = TRUE;
+}
+
+
+/**
  * Perform memory address remediations for a given instruction in our instruction window. This function
  * will update the changed value in the event that a change does occur
  */
@@ -6085,6 +6250,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * they are no longer needed and have no assembly equivalent
 	 */
 	remove_memory_region_init_statement_if_found(window, &changed);
+
+	/**
+	 * Lea statement conversions - if we have a lea statement that is of addressing
+	 * mode BASE_ADDRESS_ONLY, then it is effectively useless and will be converted
+	 * into an assignment expression
+	 */
+	convert_lea_statement_to_assignment_expression_if_appropriate(window->instruction1, &changed);
+	convert_lea_statement_to_assignment_expression_if_appropriate(window->instruction2, &changed);
+	convert_lea_statement_to_assignment_expression_if_appropriate(window->instruction3, &changed);
 
 	/**
 	 * Memory address rememediation - if we have non store/load
@@ -16866,7 +17040,7 @@ static inline void handle_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.call_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->call_storage.error_assignee;
 }
 
 
@@ -16884,7 +17058,7 @@ static inline void handle_indirect_function_call(instruction_t* instruction){
 	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
 
 	//Grab the error assignee if we have one(or it could be null)
-	instruction->operands.x86.destination_register2 = instruction->optional_storage.call_storage.error_assignee;
+	instruction->operands.x86.destination_register2 = instruction->call_storage.error_assignee;
 }
 
 
