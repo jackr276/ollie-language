@@ -1564,6 +1564,25 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
 
 
 /**
+ * TODO THIS AS WELL
+ */
+static void replace_references_in_initializer_with_address_expression(three_addr_initializer_t* initializer, three_addr_var_t* replace_region_variable,
+																		addressing_operands_t* replacement_address_expression){
+}
+
+
+
+static inline void replace_references_in_parameter_results_with_address_expression(instruction_t* instruction, three_addr_var_t* replaced_region_variable,
+																					addressing_operands_t* replacement_address_expression){
+	for(int32_t i = 0; i < instruction->call_storage.parameter_results.current_index; i++){
+		parameter_result_t* parameter_reslut = get_result_at_index(&(instruction->call_storage.parameter_results), i);
+	}
+
+}
+
+
+
+/**
  * TODO DOC
  *
  */
@@ -1616,7 +1635,7 @@ static inline void replace_reference_with_address_expression(instruction_t* inst
 	}
 
 	/**
-	 * Case 2: the return region variable is equal to the first address operand in the DEST addressing
+	 * Case 3: the return region variable is equal to the first address operand in the DEST addressing
 	 * mode expression. We will emit a lea statement using the replacement expression and replace
 	 * address_operand1 with the result of the lea. Future simplifier steps will compress them as needed
 	 */
@@ -1637,6 +1656,16 @@ static inline void replace_reference_with_address_expression(instruction_t* inst
 		insert_instruction_before_given(lea_statement, instruction);
 		instruction->operands.oir.destination_address_expression.address_operand1 = new_assignee;
 	}
+
+	/**
+	 * Case 4: the return region variable may be found as a parameter inside of a function call. In this case, we'll
+	 * need to emit a lea
+	 */
+
+
+	//TODO WHAT ABOUT FUNCTION CALLS???? OVERSIGHT!!!!
+	//
+	//WHAT ABOUT INITIALIZERS???
 }
 
 
