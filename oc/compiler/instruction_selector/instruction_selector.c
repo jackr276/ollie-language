@@ -1666,12 +1666,15 @@ static void replace_all_memory_region_references_with_addressing_expression(inst
  * 	
  * After this occurs, subsequent calls to simplify and mark and sweep in the simplifier process will remove any now-orphaned
  * code that came as a part of this
- *
- * TODO HOW ARE WE GOING TO HANDLE GRABBING UNSIMPLIFIED MEMORY ADDRESSES FOR OUR MEMORY ADDRESSES TO ADJUST??? IS THAT EVEN POSSIBLE
- * TO HAVE HAPPEN??
  */
 static inline void handle_return_region_forwarding(instruction_t* call_statement, instruction_t* return_region_parameter_assignment,
 													dynamic_array_t* memory_addresses_to_adjust){
+	/**
+	 * Get the block contained in and the function contained in for reference
+	 */
+	basic_block_t* block_contained_in = call_statement->block_contained_in;
+	symtab_function_record_t* function_contained_in = block_contained_in->function_defined_in;
+
 	/**
 	 * The original return region address always comes from the parameter assignment's source
 	 */
@@ -1700,14 +1703,14 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	 * this purpose. Before doing this, we need to emit a complete clone of the forwarded region to
 	 * ensure that there is no accidental shared pointers
 	 */
-	addressing_operands_t parameter_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
-	clone_addressing_operands_into_given(&parameter_operands, forwarded_return_region);
+	addressing_operands_t forwarded_return_region_clone = INITIALIZE_NULL_ADDRESS_OPERANDS;
+	clone_addressing_operands_into_given(&forwarded_return_region_clone, forwarded_return_region);
 
 	/**
 	 * Emit the parameter assignment lea, insert it before our given parameter assignment, then
 	 * delete the given parameter assignment
 	 */
-	instruction_t* parameter_assignment_lea = generate_OIR_lea_from_addressing_operands(&parameter_operands, 
+	instruction_t* parameter_assignment_lea = generate_OIR_lea_from_addressing_operands(&forwarded_return_region_clone, 
 																						return_region_parameter_assignment->operands.oir.assignee);
 	insert_instruction_before_given(parameter_assignment_lea, return_region_parameter_assignment);
 	delete_statement(return_region_parameter_assignment);
@@ -1715,7 +1718,8 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	/**
 	 * Now that we've completely replaced our parameter assignment, we will need to *DELETE* the
 	 * old return region address from the "memory addresses to adjust" if it's in there, and
-	 * then we'll need to add the 
+	 * then we'll need to add any memory address variables in the forwarded return region
+	 * into the set of memory addresses to adjust
 	 */
 	if(memory_addresses_to_adjust->internal_array != NULL){
 		dynamic_array_delete(memory_addresses_to_adjust, return_region_memory_address);
@@ -1723,29 +1727,22 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 		/**
 		 * If the new one is a memory address variable then we'll need to add it in
 		 */
-		if(is_memory_address_variable(parameter_operands.address_operand1) == TRUE){
-			dynamic_array_add(memory_addresses_to_adjust, parameter_operands.address_operand1);
+		if(is_memory_address_variable(forwarded_return_region_clone.address_operand1) == TRUE){
+			dynamic_array_add(memory_addresses_to_adjust, forwarded_return_region_clone.address_operand1);
 		}
 	}
-
 
 	/**
 	 * Step 4: replace every other memory address variable or regular variable that mentions the original
 	 * return by copy variable with the addressing expression that we have for the new return region that
 	 * we're forwarding. 
-	 *
-	 * NOTE: this will only remove references that happen *AFTER* the call statement. The parameter assignment
-	 * in the call statement has been left intentionally to be processed in the next step
-	 *
-	 * TODO ALSO REMOVE IT FROM THE MEMORY ADDRESSES TO ADJUST
 	 */
 	replace_all_memory_region_references_with_addressing_expression(call_statement, return_region_memory_address, forwarded_return_region);
 
-
-
-
-	printf("TODO NOT IMPLEMENTED\n");
-	exit(1);
+	/**
+	 * Step 5: the old return by copy region is now useless. Remove it from the function's local stack
+	 */
+	remove_region_from_stack(&(function_contained_in->local_stack), return_region_memory_address->associated_memory_region.stack_region);
 }
 
 
