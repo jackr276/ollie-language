@@ -122,6 +122,7 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
 static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+static instruction_t* generate_OIR_lea_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee);
 
 
 /**
@@ -132,6 +133,20 @@ static inline three_addr_var_t* create_and_insert_converting_move_instruction(in
 static inline void trigger_ice_panic(char* message){
 	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
 	exit(1);
+}
+
+
+/**
+ * Perform a complete clone of the given addressing operands from the source into the destination. Once
+ * done, the destination operands will share no memory with the source operands
+ */
+static inline void clone_addressing_operands_into_given(addressing_operands_t* destination, addressing_operands_t* source){
+	destination->addressing_mode = source->addressing_mode;
+
+	if(source->address_operand1 != NULL){
+		destination->address_operand1 = emit_var_copy(source->address_operand1);
+	}
+
 }
 
 
@@ -1657,10 +1672,6 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	instruction_t* rrf_memory_copy = find_rrf_result_copy(call_statement, return_region_memory_address);
 	addressing_operands_t* forwarded_return_region = &(rrf_memory_copy->operands.oir.destination_address_expression);
 
-	printf("FOUND IT\n");
-	print_three_addr_code_stmt(stdout, rrf_memory_copy);
-	printf("\n\n");
-
 	/**
 	 * Step 2: this memory copy statement is now entirely useless. We're going to delete it from the 
 	 * block to avoid accidentally reprocessing it down the road
@@ -1669,6 +1680,18 @@ static inline void handle_return_region_forwarding(instruction_t* call_statement
 	 * the data in here it still safe to use
 	 */
 	delete_statement(rrf_memory_copy);
+
+	/**
+	 * Step 3: now that we have the region that we want to forward in our hand, we can replace the original
+	 * parameter assignment with an assignment to that variable. We will generate a LEA statement for
+	 * this purpose. 
+	 *
+	 * TODO MEMORY ADDRESS VAR
+	 */
+	addressing_operands_t parameter_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+
+
+	instruction_t* parameter_assignment_lea = generate_OIR_lea_from_addressing_operands(, three_addr_var_t *assignee);
 
 
 
