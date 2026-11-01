@@ -1566,8 +1566,8 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
 /**
  * TODO THIS AS WELL
  */
-static void replace_references_in_initializer_with_address_expression(three_addr_initializer_t* initializer, three_addr_var_t* replace_region_variable,
-																		addressing_operands_t* replacement_address_expression){
+static void replace_all_references_in_initializer_with_address_expression(three_addr_initializer_t* initializer, three_addr_var_t* replaced_region_variable,
+																			addressing_operands_t* replacement_address_expression){
 }
 
 
@@ -1586,6 +1586,15 @@ static inline void replace_references_in_parameter_results_with_address_expressi
 
 		parameter_result_t* parameter_result = get_result_at_index(&(instruction->call_storage.parameter_results), i);
 		switch(parameter_result->result_type){
+			/**
+			 * For an initialzier, we will need to invoke the recursive helper to search and replace for us. Initializers
+			 * can have a recursive structure, so searching inside of this function will not suffice
+			 */
+			case PARAM_RESULT_TYPE_INITIALIZER: {
+				three_addr_initializer_t* initializer = parameter_result->param_result.initializer_result;
+				replace_all_references_in_initializer_with_address_expression(initializer, replaced_region_variable, replacement_address_expression);
+				break;
+			}
 
 			/**
 			 * If we find a variable that is equal, we will generate an OIR lea expression and replace that variable
@@ -1593,7 +1602,20 @@ static inline void replace_references_in_parameter_results_with_address_expressi
 			 */
 			case PARAM_RESULT_TYPE_VAR: {
 				if(variables_equal_no_ssa(replaced_region_variable, parameter_result->param_result.variable_result) == TRUE){
+					/**
+					 * First get a fresh clone of these operands to avoid any shared pointer issues
+					 */
+					addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+					clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
 
+					/**
+					 * Create a new temp var using the original variable's type, generate and insert the lea, and
+					 * then replace the original variable reference with the new result var
+					 */
+					three_addr_var_t* new_result_var = emit_temp_var(parameter_result->param_result.variable_result->type);
+					instruction_t* lea_stmt = generate_OIR_lea_from_addressing_operands(&cloned_operands, new_result_var);
+					insert_instruction_before_given(lea_stmt, instruction);
+					parameter_result->param_result.variable_result = new_result_var;
 				}
 
 				break;
@@ -1607,9 +1629,7 @@ static inline void replace_references_in_parameter_results_with_address_expressi
 			}
 		}
 	}
-
 }
-
 
 
 /**
@@ -1688,12 +1708,12 @@ static inline void replace_reference_with_address_expression(instruction_t* inst
 	}
 
 	/**
-	 * Case 4: the return region variable may be found as a parameter inside of a function call. In this case, we'll
-	 * need to emit a lea
+	 * Case 4: the return region variable may be found as a parameter inside of a function call. We will let our
+	 * specialized helper search any/all function parameters and perform the replacement as needed
 	 */
+	replace_references_in_parameter_results_with_address_expression(instruction, replaced_region_variable, replacement_address_expression);
 
 
-	//TODO WHAT ABOUT FUNCTION CALLS???? OVERSIGHT!!!!
 	//
 	//WHAT ABOUT INITIALIZERS???
 }
