@@ -1564,10 +1564,34 @@ static inline instruction_t* find_rrf_result_copy(instruction_t* call_statement,
 
 
 /**
- * TODO THIS AS WELL
+ * Replace all memory address variables that reference the same region as the "replaced" region variable with the
+ * new addressing mode expression. This new addressing mode expression will be placed directly before the original
+ * instruction as a LEA, and the reference inside of the initializer will be replaced with the result of the lea
+ *
+ * NOTE: this is a recursive function
  */
-static void replace_all_references_in_initializer_with_address_expression(three_addr_initializer_t* initializer, three_addr_var_t* replaced_region_variable,
+static void replace_all_references_in_initializer_with_address_expression(instruction_t* instruction, three_addr_initializer_t* initializer, three_addr_var_t* replaced_region_variable,
 																			addressing_operands_t* replacement_address_expression){
+	/**
+	 * Run through every single initializer result in this given initializer
+	 */
+	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
+		switch(result->result_type){
+			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
+
+			}
+
+			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+
+		  	}
+
+			case INITIALIZER_RESULT_TYPE_CONSTANT: {
+
+		  	}
+		}
+
+	}
 }
 
 
@@ -1592,7 +1616,7 @@ static inline void replace_references_in_parameter_results_with_address_expressi
 			 */
 			case PARAM_RESULT_TYPE_INITIALIZER: {
 				three_addr_initializer_t* initializer = parameter_result->param_result.initializer_result;
-				replace_all_references_in_initializer_with_address_expression(initializer, replaced_region_variable, replacement_address_expression);
+				replace_all_references_in_initializer_with_address_expression(instruction, initializer, replaced_region_variable, replacement_address_expression);
 				break;
 			}
 
