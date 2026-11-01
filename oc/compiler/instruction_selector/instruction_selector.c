@@ -1690,8 +1690,11 @@ static inline void replace_references_in_parameter_results_with_address_expressi
 
 
 /**
- * TODO DOC
- *
+ * With the given instruction, replace any reference to the "replaced" region variable inside of its operands with
+ * the replacement address expression. Note that it is an expression, *NOT* just another memory address variable. Ollie's
+ * RRF model allows for address expressions to be forwarded. Because of this, we'll usually need to emit a lea directly
+ * before the instruction representing the address expression, and then replace the replaced region variable with that
+ * lea's result variable
  */
 static inline void replace_reference_with_address_expression(instruction_t* instruction, three_addr_var_t* replaced_region_variable,
 																addressing_operands_t* replacement_address_expression){

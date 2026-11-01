@@ -3069,7 +3069,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 			/**
 			 * Let the helper do the printing for us here. Lea's only ever have source address expressions
 			 */
-			fprintf(fl, " <- ");
+			fprintf(fl, " <- lea ");
 			print_OIR_addressing_mode_expression(fl, &(stmt->operands.oir.source_address_expression), PRINTING_VAR_INLINE);
 			fprintf(fl, "\n");
 			break;
