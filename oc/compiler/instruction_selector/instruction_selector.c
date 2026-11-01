@@ -1576,21 +1576,54 @@ static void replace_all_references_in_initializer_with_address_expression(instru
 	 * Run through every single initializer result in this given initializer
 	 */
 	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
+		/**
+		 * Extract the initializer result and process based on the result type
+		 */
 		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
 		switch(result->result_type){
+			/**
+			 * For a sub initializer we will recursively invoke this function again
+			 * to search all of its contents for the memory address to replace
+			 */
 			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER: {
-
+				three_addr_initializer_t* result_initializer = result->value.initializer_value;	
+				replace_all_references_in_initializer_with_address_expression(instruction, result_initializer, replaced_region_variable, replacement_address_expression);
+				break;
 			}
 
+			/**
+			 * If a variable matches the given memory address variable to replace, we will need to emit an OIR lea
+			 * instruction with the address operands given, and then replace the reference to the old variable
+			 * with the new lea result variable
+			 */
 			case INITIALIZER_RESULT_TYPE_VARIABLE: {
+				if(variables_equal_no_ssa(result->value.variable_value, replaced_region_variable) == TRUE){
+					/**
+					 * First emit a complete clone of these operands to avoid any shared pointer bugs
+					 */
+					addressing_operands_t cloned_operands = INITIALIZE_NULL_ADDRESS_OPERANDS;
+					clone_addressing_operands_into_given(&cloned_operands, replacement_address_expression);
 
+					/**
+					 * Now generate the lea, place it before the original instruction, and replace
+					 * the old memory address variable with the lea result variable
+					 */
+					three_addr_var_t* lea_result = emit_temp_var(result->value.variable_value->type);
+					instruction_t* lea_stmt = generate_OIR_lea_from_addressing_operands(&cloned_operands, lea_result);
+					insert_instruction_before_given(lea_stmt, instruction);
+					result->value.variable_value = lea_result;
+				}
+
+				break;
 		  	}
 
+			/**
+			 * Constants are irrelevant so skip
+			 */
 			case INITIALIZER_RESULT_TYPE_CONSTANT: {
-
+				break;
 		  	}
 		}
-
 	}
 }
 
@@ -1736,10 +1769,14 @@ static inline void replace_reference_with_address_expression(instruction_t* inst
 	 * specialized helper search any/all function parameters and perform the replacement as needed
 	 */
 	replace_references_in_parameter_results_with_address_expression(instruction, replaced_region_variable, replacement_address_expression);
-
-
-	//
-	//WHAT ABOUT INITIALIZERS???
+	
+	/**
+	 * Case 5: if we have an initializer operand, we need to recursively search through it and perform replacements as
+	 * we see fit
+	 */
+	if(instruction->operands.oir.initializer_operand != NULL){
+		replace_all_references_in_initializer_with_address_expression(instruction, instruction->operands.oir.initializer_operand, replaced_region_variable, replacement_address_expression);
+	}
 }
 
 
