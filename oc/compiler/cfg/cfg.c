@@ -1605,8 +1605,8 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 				 * be constants(in which case we don't care) or variables in which case we need to add them
 				 */
 				case THREE_ADDR_CODE_FUNC_CALL: {
-					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
-						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
+					for(int32_t j = 0; j  < cursor->call_storage.parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->call_storage.parameter_results), j);
 
 						switch(result->result_type){
 							case PARAM_RESULT_TYPE_VAR:
@@ -1622,7 +1622,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
+					add_variable_to_def_set(cursor->call_storage.error_assignee, block);
 					break;
 				}
 
@@ -1635,8 +1635,8 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 					add_variable_to_use_set(cursor->operands.oir.operand1, block);
 
 					//Run through the params and add them
-					for(int32_t j = 0; j  < cursor->parameter_results.current_index; j++){
-						parameter_result_t* result = get_result_at_index(&(cursor->parameter_results), j);
+					for(int32_t j = 0; j  < cursor->call_storage.parameter_results.current_index; j++){
+						parameter_result_t* result = get_result_at_index(&(cursor->call_storage.parameter_results), j);
 
 						switch(result->result_type){
 							case PARAM_RESULT_TYPE_VAR:
@@ -1652,7 +1652,7 @@ static void compute_use_and_def_sets_for_function(dynamic_array_t* function_bloc
 
 					//Both the returned variable and error assignee are defined here
 					add_variable_to_def_set(cursor->operands.oir.assignee, block);
-					add_variable_to_def_set(cursor->optional_storage.call_storage.error_assignee, block);
+					add_variable_to_def_set(cursor->call_storage.error_assignee, block);
 					break;
 				}
 
@@ -6964,15 +6964,26 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
  * final_result_var = final_assignee
  *
  * The overall result of the function call itself will be stored in the final result var
+ *
+ * A note on return by copy: Return by copy is a special case because, although we're always returning the result
+ * inside of %rax(this is guarnateed by the calling convention), it is much easier for us to instead use the return
+ * region variable/memory address itself. We will still carry through the "final assignee" to the end, but all of our
+ * memory copy expressions will be copied into the given memory address variable, not %rax, inside of each handle statement
  */
-static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block, generic_ast_node_t* handle_node, three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
-	//Allocate the results
+static cfg_result_package_t emit_handle_statement(instruction_t* function_call_statement, basic_block_t* starting_block, generic_ast_node_t* handle_node,
+													three_addr_var_t* function_assignee, three_addr_var_t* error_assignee){
+	u_int32_t line_number = handle_node->line_number;
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
 
 	/**
 	 * We are going to use a pseudo temp var for our final result here. We will do this because we'll
 	 * need to assign to it over multiple blocks potentially. This is a temp var on the surface but
-	 * under the hood it is SSA compatible so phi-functions will be inserted as needed
+	 * under the hood it is SSA compatible so phi-functions will be inserted as needed. 
+	 *
+	 * This function result variable is important for register clobbering as well. We will always
+	 * have this function result variable around. However, in the event that we have a return-by-copy
+	 * function call, this function result variable will *NOT* be used as the memory address. We will
+	 * use the memory address directly for that
 	 */
 	symtab_variable_record_t* function_result_var = NULL;
 	if(function_assignee != NULL){
@@ -6985,10 +6996,11 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 */
 	basic_block_t* jump_calculation_block = basic_block_alloc_and_estimate();
 	basic_block_t* error_handling_ending_block = basic_block_alloc_and_estimate();
-	//Holder for the default block
 	basic_block_t* default_block = NULL;
 
-	//The lower bound is always 0, and the upper bound is determined by the parser
+	/**
+	 * The lower bound is always 0, and the upper bound is determined by the parser
+	 */
 	u_int32_t lower_bound = handle_node->optional_storage.switch_bounds.lower_bound;
 	u_int32_t upper_bound = handle_node->optional_storage.switch_bounds.upper_bound;
 
@@ -7006,9 +7018,8 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	 * or not
 	 */
 	basic_block_t* no_error_block;
-
 	if(function_assignee != NULL){
-		no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee, handle_node->line_number);
+		no_error_block = emit_no_error_block_for_handle(function_result_var, function_assignee, line_number);
 	} else {
 		no_error_block = emit_no_error_block_for_void_returning_handle();
 	}
@@ -7057,7 +7068,7 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 			switch(handle_results.type){
 				case CFG_RESULT_TYPE_CONST: {
-					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, handle_node->line_number);
+					instruction_t* result_assignment = emit_assignment_with_const_instruction(emit_var(function_result_var), handle_results.result_value.result_const, line_number);
 					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
 				}
@@ -7072,17 +7083,30 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 					//Extract for our convenience
 					three_addr_var_t* result_var = handle_results.result_value.result_var;
 
+					/**
+					 * No return by copy so just assign this over to the function result variable and move along
+					 */
 					if(is_type_returned_by_copy(function_assignee->type) == FALSE){
-						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), result_var, handle_node->line_number);
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), result_var, line_number);
 						insert_instruction_before_given(result_assignment, last_instruction);
 
+					/**
+					 * For a return by copy, we'll use the known memory address of the return region directly to emit the return by copy. We will still
+					 * use the symbolic function assignee and copy it over to the result var to keep the static analyzer happy, but for all intents
+					 * and purposes we do not need it
+					 */
 					} else {
-						//First we copy into the return region
-						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(emit_var_copy(function_assignee), result_var, function_assignee->type->type_size, handle_node->line_number);
+						/**
+						 * Emit a fresh memory address variable for the return by copy region and copy the result over to it
+						 */
+						three_addr_var_t* return_by_copy_var = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
+						instruction_t* copy_to_ret_region = emit_memory_copy_instruction_base_address_only(return_by_copy_var, result_var, function_assignee->type->type_size, line_number);
 						insert_instruction_before_given(copy_to_ret_region, last_instruction);
 
-						//Then we come through and assign the function assignee to the result var, just to keep SSA happy
-						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), handle_node->line_number);
+						/**
+						 * Then we come through and assign the function assignee to the result var, just to keep SSA happy
+						 */
+						instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), line_number);
 						insert_instruction_before_given(result_assignment, last_instruction);
 					}
 
@@ -7090,23 +7114,27 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 				}
 
 				/**
-				 * If we have an initializer, we know that we are initializing into the return by copy memory region. Luckily
-				 * for us, we know that the function assignee(%rax register) when the function returns contains the address
-				 * of the return by copy parameter that we've created(%rdi param register). Because of this, we can emit
-				 * our initializer into the function assignee first and then assign that over to our "function result var"
-				 * so that it's carried through the rest of the handle statement. This allows us to avoid the creation of
-				 * any new memory regions
+				 * Initializer results will only exist *IF* we have a return by copy function call. As such, we treat this the exact same as we
+				 * do for our regular return by copy results. We will emit the memory address variable from the return by copy variable, initialize
+				 * into it, and then emit a symbolic assignment of our function assignee over to our function result var
 				 */
 				case CFG_RESULT_TYPE_INITIALIZER: {
-					//Get the result initializer out
+					/**
+					 * Create a fresh return by copy variable and extract the initializer
+					 */
+					three_addr_var_t* return_by_copy_var = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
 					three_addr_initializer_t* result_initializer = handle_results.result_value.result_initializer;
 
-					//First initialize right into the function assignee
-					instruction_t* initialization = emit_initialization_instruction(emit_var_copy(function_assignee), result_initializer, handle_node->line_number);
+					/**
+					 * Now initialize right into the known return by copy region
+					 */
+					instruction_t* initialization = emit_initialization_instruction(return_by_copy_var, result_initializer, line_number);
 					insert_instruction_before_given(initialization, last_instruction);
 
-					//Now assign the pointer represented by %rax over to our function result var, as it now contains our initializer
-					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), function_assignee, handle_node->line_number);
+					/**
+					 * Now assign the pointer represented by %rax over to our function result var, just to keep SSA happy
+					 */
+					instruction_t* result_assignment = emit_assignment_instruction(emit_var(function_result_var), emit_var_copy(function_assignee), line_number);
 					insert_instruction_before_given(result_assignment, last_instruction);
 					break;
 				}
@@ -7157,13 +7185,11 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 
 	/**
 	 * We will jump to the default error block if we are above this value. The branch will take this
-	 * all into account
+	 * all into account. We use BRANCH_A because this is always unsigned
 	 */
-	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant, handle_node->line_number);
-	//Add the comparsion
+	instruction_t* comparison = emit_binary_operation_with_const_instruction(emit_temp_var(u64), error_assignee, G_THAN, upper_bound_constant, line_number);
 	add_statement(starting_block, comparison);
-	//Get the branch out - this handles everything for us
-	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->operands.oir.assignee, handle_node->line_number);
+	emit_branch_for_switch_statement(starting_block, default_block, jump_calculation_block, BRANCH_A, comparison->operands.oir.assignee, line_number);
 
 	/**
 	 * Now we can do the indirect jump calculation and emit the indirect jump. Remember that we're already starting at 0, so we don't
@@ -7173,24 +7199,37 @@ static cfg_result_package_t emit_handle_statement(basic_block_t* starting_block,
 	add_statement(jump_calculation_block, indirect_jump);
 
 	/**
-	 * The final thing that we need to do is emit one final assignment for the error result var
-	 * into some generic temporary holder. This is what we will give back to the
-	 * caller as the assignee
+	 * If we have a result variable to give back, then we'll do an assignment with a new temporary variable here. We will
+	 * do this whether or not we are returning by copy. If we are returning by copy, the result package will have
+	 * the *memory address variable* as its result variable, not the new temp var. The new temp var may be cleaned
+	 * up by the optimizer's mark and sweep but that's ok
 	 */
+	three_addr_var_t* final_assignee = NULL;
 	if(function_result_var != NULL){
-		instruction_t* final_result_assingnment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var), handle_node->line_number);
-		add_statement(error_handling_ending_block, final_result_assingnment);
+		/**
+		 * Not returned by copy, emit the assignment to avoid register clobbering
+		 */
+		if(is_type_returned_by_copy(function_assignee->type) == FALSE){
+			instruction_t* final_result_assignment = emit_assignment_instruction(emit_temp_var(function_result_var->type_defined_as), emit_var(function_result_var), line_number);
+			add_statement(error_handling_ending_block, final_result_assignment);
 
-		//This is the final assignee for the result package
-		result_package.type = CFG_RESULT_TYPE_VAR;
-		result_package.result_value.result_var = final_result_assingnment->operands.oir.assignee;
+			final_assignee = final_result_assignment->operands.oir.assignee;
+
+		/**
+		 * Returned by copy - the final assignee is the memory address of the return region
+		 */
+		} else {
+			final_assignee = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
+		}
 	}
 
-	//We can already fill in the result package
+	/**
+	 * Fill out and return the final result package here
+	 */
+	result_package.result_value.result_var = final_assignee;
+	result_package.type = CFG_RESULT_TYPE_VAR;
 	result_package.starting_block = starting_block;
 	result_package.final_block = error_handling_ending_block;
-
-	//Give back the final result package
 	return result_package;
 }
 
@@ -7286,21 +7325,20 @@ static inline cfg_result_package_t emit_elaborative_param_expressions(basic_bloc
  * will hold all of them until we handle them in the instruction selection step
  */
 static cfg_result_package_t emit_function_call(basic_block_t* basic_block, generic_ast_node_t* function_call_node){
-	//Blank return package for now
 	cfg_result_package_t result_package = INITIALIZE_BLANK_CFG_RESULT;
-
-	//Keep track of the current block
-	basic_block_t* current_block = basic_block;
-
-	//Get the signature from the node itself
-	function_type_t* signature = function_call_node->optional_storage.callee_signature;
-
-	//We'll need to hold onto the statement itself and the assignee
-	instruction_t* function_call_statement = NULL;
+	u_int32_t line_number = function_call_node->line_number;
 
 	/**
-	 * We may or may not have an actual function assignee variable here
-	 * based on whether or not we return void
+	 * Keep track of the current block and grab the signature
+	 */
+	basic_block_t* current_block = basic_block;
+	function_type_t* signature = function_call_node->optional_storage.callee_signature;
+
+	/**
+	 * IMPORTANT - even if we have a return-by-copy function here, we still need a symbolic
+	 * function_assignee to represent us clobbering %rax. If we did not have this, the caller
+	 * may be mistaken in thinking that %rax was not clobbered by this function, while in reality
+	 * it always will be
 	 */
 	three_addr_var_t* function_assignee = NULL;
 	if(signature->returns_void == FALSE){
@@ -7314,6 +7352,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * Any/all of our conditional processing will be done here. After this everything
 	 * needs to be agnostic to the node type
 	 */
+	instruction_t* function_call_statement = NULL;
 	switch(function_call_node->ast_node_type){
 		/**
 		 * For indirect function calls, the first child will always point to a unary
@@ -7325,10 +7364,10 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 			current_block = unary_results.final_block;
 
 			//Our function pointer itself comes from whatever this result is
-			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, function_call_node->line_number);
+			three_addr_var_t* function_pointer_var = unpack_result_package(&unary_results, current_block, line_number);
 
 			//Now we can emit the indirect call statement
-			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, function_call_node->line_number);
+			function_call_statement = emit_indirect_function_call_instruction(function_pointer_var, function_assignee, line_number);
 
 			//Make sure that we advance the cursor up to be in the parameters
 			cursor = cursor->next_sibling;
@@ -7340,17 +7379,49 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * record that we are calling itself is stored inside of the func_record field
 		 */
 		case AST_NODE_TYPE_FUNCTION_CALL: { 
-			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, function_call_node->line_number);
-			function_call_statement->is_inlined_call = signature->is_inlined;
-
+			function_call_statement = emit_function_call_instruction(function_call_node->func_record, function_assignee, line_number);
+			function_call_statement->call_storage.is_inlined_call = signature->is_inlined;
 			break;
 		}
 
-		//This should be unreachable but just to be sure
+		/**
+		 * This should be unreachable but just to be sure
+		 */
 		default: {
 			trigger_ice_panic("Incompatible node type found in function call handler");
 			break;
 		}
+	}
+
+	/**
+	 * If this function returns by copy, then we will maintain a special stack region and SSA
+	 * compatible temporary variable representing the return by copy region internally. This
+	 * will allow us to use the return region directly. Even though it is guaranteed to
+	 * be returned via %rax, using the local region opens up many more possibilities for us
+	 * in terms of optimizations
+	 */
+	if(signature->returns_by_copy == TRUE){
+		/**
+		 * Create the region, SSA compatible temp var, and create the association between the two
+		 */
+		stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), signature->return_type);
+		symtab_variable_record_t* return_by_copy_variable = create_ssa_compatible_temp_var(current_function,
+																							signature->return_type,
+																							variable_symtab,
+																							get_next_variable_id());
+		/**
+		 * Make the association between this new variable and the return by copy region. We will store
+		 * a reference to this variable inside of the call statement itself
+		 */
+		return_by_copy_variable->stack_region = return_by_copy_region;
+		function_call_statement->call_storage.return_by_copy_variable = return_by_copy_variable;
+
+		/**
+		 * For SSA purposes, we need to emit a synthetic memory initialization statement to represent that this
+		 * was initialized and add it into the block
+		 */
+		instruction_t* synthetic_initialization = emit_synthetic_memory_initialization(emit_var(return_by_copy_variable), line_number);
+		add_statement(current_block, synthetic_initialization);
 	}
 
 	/**
@@ -7359,11 +7430,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * region forwarding eligible. Though this will have no effect right now, it will later
 	 * on in the instruction selector
 	 */
-	function_call_statement->is_rrf_eligible = function_call_node->is_return_region_forwarding_eligible;
+	function_call_statement->call_storage.is_rrf_eligible = function_call_node->is_return_region_forwarding_eligible;
 
-	//If we have parameters allocate the array now
+	/**
+	 * If we do have function parameters, now is the time to allocate the storage for them inside
+	 * of the parameter results array
+	 */
 	if(signature->function_parameters.current_index != 0){
-		function_call_statement->parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
+		function_call_statement->call_storage.parameter_results = parameter_results_array_alloc(signature->function_parameters.current_index);
 	}
 
 	/**
@@ -7371,14 +7445,14 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	 * we're done once we either hit NULL or a handles statement
 	 */
 	while(cursor != NULL && cursor->ast_node_type != AST_NODE_TYPE_HANDLE_STMT){
-		cfg_result_package_t parameter_results;
+		cfg_result_package_t parameter_results = INITIALIZE_BLANK_CFG_RESULT;
 
 		/**
 		 * For everything that is not an elaborative param statement, we'll
 		 * handle it internally to this function
 		 */
 		if(cursor->ast_node_type != AST_NODE_TYPE_ELABORATIVE_PARAM_STMT){
-			parameter_results = emit_parameter_expression(current_block, cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_parameter_expression(current_block, cursor, &(function_call_statement->call_storage.parameter_results));
 
 		/**
 		 * Otherwise we have an elaborative param. Unrelated but worth nothing that this will
@@ -7387,7 +7461,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 * handle the stack management later
 		 */
 		} else {
-			parameter_results = emit_elaborative_param_expressions(current_block, cursor, &(function_call_statement->parameter_results));
+			parameter_results = emit_elaborative_param_expressions(current_block, cursor, &(function_call_statement->call_storage.parameter_results));
 		}
 
 		//Bump the final block and move up
@@ -7409,37 +7483,65 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 	if(cursor != NULL && cursor->ast_node_type == AST_NODE_TYPE_HANDLE_STMT){
 		/**
 		 * Since we have a handle statement, we have to have an error assignee. Let's also now emit that and
-		 * the result assignment that comes with it
+		 * the result assignment that comes with it. The error assignee is stored in the function call
+		 * statement itself
 		 */
 		three_addr_var_t* error_assignee = emit_temp_var(u64);
+		function_call_statement->call_storage.error_assignee = error_assignee;
 
-		//This is stored in the optional second assignee slot
-		function_call_statement->optional_storage.call_storage.error_assignee = error_assignee;
+		/**
+		 * For register allocation reasons, we want to have extra assignments for these variables inserted in
+		 * just to avoid clobbering the %rdx register. This is universal for the error assignee so we'll emit
+		 * it now
+		 */
+		instruction_t* error_assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, line_number);
+		add_statement(current_block, error_assignment);
+		error_assignee = error_assignment->operands.oir.assignee;
 
-		//Now we'll have a move statement just for register allocation reasons
-		instruction_t* assignment = emit_assignment_instruction(emit_temp_var(error_assignee->type), error_assignee, function_call_node->line_number);
+		/**
+		 * If we have something that does return a value in %rax(no return by copy and doesn't
+		 * return void), then similar to the error assignment we'll do a temp assignment so that
+		 * we can avoid any potential register clobbering issues with %RAX in the handles statement
+		 */
+		if(signature->returns_void == FALSE && signature->returns_by_copy == FALSE){
+			instruction_t* ret_val_assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
+			add_statement(current_block, ret_val_assignment);
+			function_assignee = ret_val_assignment->operands.oir.assignee;
+		}
 
-		//Add it into the block
-		add_statement(current_block, assignment);
-
-		//This now is our error assignee that will be used in the CFG
-		error_assignee = assignment->operands.oir.assignee;
-
-		//Let the helper do the rest. It will spit back the results of the final assignment for us
-		result_package = emit_handle_statement(current_block, cursor, function_assignee, error_assignee);
+		/**
+		 * Let the handle statement emitter handle the rest. It should emit everything that we need
+		 * for us including nuances with return-by-copy
+		 */
+		result_package = emit_handle_statement(function_call_statement, current_block, cursor, function_assignee, error_assignee);
 
 	} else {
-		//If this is not a void return type, we'll need to emit this temp assignment
+		/**
+		 * If this function does not return void, then we'll need to emit a temp assignment to help
+		 * with register clobbering in the register allocator. The only exception is return by copy
+		 * functions, for which this is unneccessary because we aren't using the %rax value anyways
+		 */
 		if(signature->returns_void == FALSE){
 			/**
-			 * Emit an assignment instruction. This will become very important way down the line in register
-			 * allocation to avoid interference
+			 * If we are *NOT* returning by copy, %rax is an important value for us. We'll as such need to come here
+			 * and emit a final temp assignment to reduce the register clobbering for %rax in the instruction selector
 			 */
-			instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, function_call_node->line_number);
-			add_statement(current_block, assignment);
+			if(signature->returns_by_copy == FALSE){
+				instruction_t* assignment = emit_assignment_instruction(emit_temp_var(function_assignee->type), function_assignee, line_number);
+				add_statement(current_block, assignment);
 
-			//Reassign this value
-			function_assignee = assignment->operands.oir.assignee;
+				//Reassign this value
+				function_assignee = assignment->operands.oir.assignee;
+
+			/**
+			 * Otherwise, we're returning by copy. Even though we are able to use %rax as our return-by-copy variable as guaranteed
+			 * by the System V ABI, it's much more convenient for us to just use the actual memory address variable of the region
+			 * that we know exists in the caller's stack frame. As such, the assignee that we *return* from this function will
+			 * be a memory address variable representing the return by copy region
+			 */
+			} else {
+				function_assignee = emit_memory_address_var(function_call_statement->call_storage.return_by_copy_variable);
+			}
 		}
 
 		/**
@@ -7448,6 +7550,7 @@ static cfg_result_package_t emit_function_call(basic_block_t* basic_block, gener
 		 */
 		result_package.type = CFG_RESULT_TYPE_VAR;
 		result_package.result_value.result_var = function_assignee;
+		result_package.starting_block = basic_block;
 		result_package.final_block = current_block;
 	}
 
@@ -12506,6 +12609,25 @@ static inline symtab_variable_record_t* clone_symtab_variable(symtab_variable_re
 
 
 /**
+ * First, attempt to find a symtab variable that maps to this one inside of the variable map. If a mapping/clone already exists, then
+ * return it. If it does not, then create a mapping for it using the utility and return the clone
+ */
+static inline symtab_variable_record_t* get_or_clone_symtab_variable(symtab_variable_record_t* source_variable, variable_map_t* variable_map){
+	variable_mapping_t* existing_mapping = get_mapping_for_symtab_variable(variable_map, source_variable);
+
+	/**
+	 * If a mapping exists, then return the existing clone. Otherwise, create a new clone
+	 * and mapping and return that
+	 */
+	if(existing_mapping != NULL){
+		return existing_mapping->destination.symtab_variable;
+	} else {
+		return clone_symtab_variable(source_variable, variable_map);
+	}
+}
+
+
+/**
  * Clone a variable(temporary or not) using the variable map strategy where every
  * source variable maps to a branch new variable in the inlined function
  */
@@ -13009,32 +13131,41 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 
 			//Clone over all of this information
 			new_call->statement_type = source_instruction->statement_type;
-			new_call->is_inlined_call = source_instruction->is_inlined_call;
+			new_call->call_storage.is_inlined_call = source_instruction->call_storage.is_inlined_call;
 			new_call->line_number = source_instruction->line_number;
-			new_call->is_rrf_eligible = source_instruction->is_rrf_eligible;
+			new_call->call_storage.is_rrf_eligible = source_instruction->call_storage.is_rrf_eligible;
+
+			/**
+			 * Function calls that return by copy will have a return by copy stack region and memory address
+			 * variable created for them. When we clone the call, we will need to clone this variable as
+			 * well.
+			 */
+			if(source_instruction->call_storage.return_by_copy_variable != NULL){
+				new_call->call_storage.return_by_copy_variable = get_or_clone_symtab_variable(source_instruction->call_storage.return_by_copy_variable, variable_map);
+			}
 
 			//Clone our assignee and error assignee over
 			new_call->operands.oir.assignee = clone_variable(source_instruction->operands.oir.assignee, variable_map);
-			new_call->optional_storage.call_storage.error_assignee = clone_variable(source_instruction->optional_storage.call_storage.error_assignee, variable_map);
+			new_call->call_storage.error_assignee = clone_variable(source_instruction->call_storage.error_assignee, variable_map);
 
 			/**
 			 * Remember that indirect calls use operand1 and direct calls use
 			 * the called function slot, either or is fine here we'll copy 
 			 * them both
 			 */
-			new_call->called_function = source_instruction->called_function;
+			new_call->call_storage.called_function = source_instruction->call_storage.called_function;
 			new_call->operands.oir.operand1 = clone_variable(source_instruction->operands.oir.operand1, variable_map);
 
 			//Allocate a fresh parameter results array so that we can clone over the parameters
-			new_call->parameter_results = parameter_results_array_alloc(source_instruction->parameter_results.current_index);
+			new_call->call_storage.parameter_results = parameter_results_array_alloc(source_instruction->call_storage.parameter_results.current_index);
 
 			/**
 			 * Now we're going to run through and clone all of the parameter results over one
 			 * by one in the same order
 			 */
-			for(int32_t i = 0; i < source_instruction->parameter_results.current_index; i++){
+			for(int32_t i = 0; i < source_instruction->call_storage.parameter_results.current_index; i++){
 				//Get the source result
-				parameter_result_t* source_result = get_result_at_index(&(source_instruction->parameter_results), i);
+				parameter_result_t* source_result = get_result_at_index(&(source_instruction->call_storage.parameter_results), i);
 
 				/**
 				 * Clone over by type. Note that we do need to clone even for constants because we need distinct
@@ -13043,19 +13174,19 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 				switch(source_result->result_type){
 					case PARAM_RESULT_TYPE_CONST:{
 						three_addr_const_t* cloned_constant = clone_constant(source_result->param_result.constant_result);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
+						add_parameter_result_to_results_array(&(new_call->call_storage.parameter_results), cloned_constant, PARAM_RESULT_TYPE_CONST);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_VAR:{
 						three_addr_var_t* cloned_variable = clone_variable(source_result->param_result.variable_result, variable_map);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
+						add_parameter_result_to_results_array(&(new_call->call_storage.parameter_results), cloned_variable, PARAM_RESULT_TYPE_VAR);
 						break;
 					}
 
 					case PARAM_RESULT_TYPE_INITIALIZER: {
 						three_addr_initializer_t* cloned_initializer = clone_initializer(source_result->param_result.initializer_result, variable_map);
-						add_parameter_result_to_results_array(&(new_call->parameter_results), cloned_initializer, PARAM_RESULT_TYPE_INITIALIZER);
+						add_parameter_result_to_results_array(&(new_call->call_storage.parameter_results), cloned_initializer, PARAM_RESULT_TYPE_INITIALIZER);
 						break;
 					}
 				}
@@ -13326,49 +13457,37 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 
 
 /**
- * Perform all needed setup for an inlined function that will return by copy
+ * Perform all needed setup for an inlined function that will return by copy. To do this, we only need to create
+ * an association between the caller's return by copy variable and the function that we're inlining's return by
+ * copy parameter variables. Once we do this, the cloner should take care of the rest. Do note that we do not
+ * need to create any new memory regions here, the return by copy region is created along with the original
+ * function call statement, so we already have what we need
  *
- * All functions that do return by copy already have a special return by copy variable created
- * for them to use internally. For our purposes, we can create a new dummy variable and then
- * create a one-to-one mapping of that variable to this new one with an allocated stack region
- * for this all to work
- *
- * Since we're replacing parameters and parameter aliases with memory address variables, we are
- * able to replace both the original return by copy variable and the variable that aliases it
- * with our memory address variable to avoid the need for extra interference
+ * NOTE: due to this happening *BEFORE* SSA, we are unfortunately unable to implement return region forwarding
+ * for inlined function calls. However, inlining a function does mean that all memory regions are together at
+ * once, so it does expose additional opportunities for function internal memory optimizations
  */
-static inline void setup_return_by_copy_for_inlined_call(symtab_function_record_t* function_to_clone, basic_block_t* function_entry,
-														 variable_map_t* variable_map, int32_t* current_gp_parameter_order){
-	//Extract the cloning signature from the function
-	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
-
-	//Get both the original return by copy variable and the alias variable
-	symtab_variable_record_t* original_return_by_copy_variable = function_to_clone->return_by_copy_variable;
-	symtab_variable_record_t* alias_of_return_by_copy_variable = original_return_by_copy_variable->alias;
+static inline void setup_return_by_copy_for_inlined_call(instruction_t* original_function_call, variable_map_t* variable_map, int32_t* current_gp_parameter_order){
+	/**
+	 * Let's first extract the function to clone, it's signature, and the *CALLEE* side return by copy
+	 * variables(there's the original and an alias). These variables are meant to represent the parameter
+	 * in %RDI that the callee receives containing the return by copy region address
+	 */
+	symtab_function_record_t* function_to_clone = original_function_call->call_storage.called_function;
+	symtab_variable_record_t* original_callee_return_by_copy_variable = function_to_clone->return_by_copy_variable;
+	symtab_variable_record_t* alias_of_callee_return_by_copy_variable = original_callee_return_by_copy_variable->alias;
 
 	/**
-	 * Create a variable that is SSA compatible - it does not specifically need to be
-	 * return by copy because there are no register allocation rules here
+	 * The function call already contains our caller's return by copy symtab variable
 	 */
-	symtab_variable_record_t* new_return_by_copy_variable = create_ssa_compatible_temp_var(current_function, cloning_signature->return_type, variable_symtab, get_next_variable_id());
-
-	//Create the stack region
-	stack_region_t* return_by_copy_region = create_stack_region_for_type(&(current_function->local_stack), cloning_signature->return_type);
-
-	//Associate it with our return by copy variable
-	new_return_by_copy_variable->stack_region = return_by_copy_region;
-
-	//We will also need a synthetic initialization for this to not be flagged by the static analyzer
-	instruction_t* initialization = emit_synthetic_memory_initialization(emit_var(new_return_by_copy_variable), function_to_clone->line_number);
-	add_statement(function_entry, initialization);
+	symtab_variable_record_t* caller_return_by_copy_variable = original_function_call->call_storage.return_by_copy_variable;
 
 	/**
-	 * Now we will create a mapping that goes from the old return by copy variable(that is already in the function body) and map
-	 * it to this new return by copy variable. We will do the same thing for the alias because we don't need to worry
-	 * about register clobbering once we inline
+	 * To make this work, all we need to do now is tell the variable mapper to replace all references to the original call
+	 * side return by copy variables with the pre-existing caller return by copy variable and that should take care of things
 	 */
-	create_mapping_for_symtab_variable(variable_map, original_return_by_copy_variable, new_return_by_copy_variable);
-	create_mapping_for_symtab_variable(variable_map, alias_of_return_by_copy_variable, new_return_by_copy_variable);
+	create_mapping_for_symtab_variable(variable_map, original_callee_return_by_copy_variable, caller_return_by_copy_variable);
+	create_mapping_for_symtab_variable(variable_map, alias_of_callee_return_by_copy_variable, caller_return_by_copy_variable);
 
 	/**
 	 * Since, for regular functions, this is passed in via %rdi, we will bump up the GP parameter order
@@ -13742,14 +13861,14 @@ static inline void setup_function_parameters_for_inlined_call(symtab_function_re
  * We also pass in a list of all of our parameter results from the given function call so that we can manage them
  */
 static void clone_entire_function_for_inlining(instruction_t* original_call_statement, basic_block_t* block_inlined_in,
-												basic_block_t** function_entry, basic_block_t** function_exit,
-												symtab_variable_record_t* return_variable, symtab_variable_record_t* raise_variable,
-												parameter_results_array_t* parameter_results, variable_map_t* variable_map){
+												basic_block_t** function_entry, basic_block_t** function_exit, symtab_variable_record_t* return_variable,
+												symtab_variable_record_t* raise_variable, parameter_results_array_t* parameter_results,
+												variable_map_t* variable_map){
 	/**
 	 * Extract the function that we want to clone, it's signature and the execution
 	 * frequency of what we're inlining
 	 */
-	symtab_function_record_t* function_to_clone = original_call_statement->called_function;
+	symtab_function_record_t* function_to_clone = original_call_statement->call_storage.called_function;
 	function_type_t* cloning_signature = function_to_clone->signature->internal_types.function_type;
 	int32_t inlined_in_execution_frequency = block_inlined_in->estimated_execution_frequency;
 
@@ -13810,13 +13929,13 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 	}
 
 	/**
-	 * Step 2: return by copy handling
+	 * Step 2: return by copy and return region forwarding handling
 	 *
 	 * This has enough complexity to warrant a helper function, more documentation in that
 	 * function itself
 	 */
 	if(cloning_signature->returns_by_copy == TRUE){
-		setup_return_by_copy_for_inlined_call(function_to_clone, *function_entry, variable_map, &current_gp_parameter_order);
+		setup_return_by_copy_for_inlined_call(original_call_statement, variable_map, &current_gp_parameter_order);
 	} 
 
 	/**
@@ -13909,7 +14028,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	begin_new_inline_call(variable_map);
 
 	//Extract the signature of the function that we're calling
-	function_type_t* inlined_function_signature = call_to_inline->called_function->signature->internal_types.function_type;
+	function_type_t* inlined_function_signature = call_to_inline->call_storage.called_function->signature->internal_types.function_type;
 
 	//Get the block where this function call is currently
 	basic_block_t* block_inlined_in = call_to_inline->block_contained_in;
@@ -13963,7 +14082,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 										&inlined_function_exit,
 										symtab_return_variable,
 										symtab_raise_variable,
-										&(call_to_inline->parameter_results),
+										&(call_to_inline->call_storage.parameter_results),
 										variable_map);
 
 	/**
@@ -13986,7 +14105,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	 * Same deal if we had errors that we raise
 	 */
 	if(inlined_function_signature->raises_errors == TRUE){
-		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->optional_storage.call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
+		instruction_t* raised_variable_assignment = emit_assignment_instruction(call_to_inline->call_storage.error_assignee, emit_var(symtab_raise_variable), call_to_inline->line_number);
 		add_statement(inlined_function_exit, raised_variable_assignment);
 	}
 
@@ -14039,7 +14158,7 @@ static inline void inline_eligible_calls_in_function(symtab_function_record_t* f
 			 * If we find a call that should be inlined we'll add it onto
 			 * our list
 			 */
-			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->is_inlined_call == TRUE){
+			if(cursor->statement_type == THREE_ADDR_CODE_FUNC_CALL && cursor->call_storage.is_inlined_call == TRUE){
 				dynamic_array_add(calls_to_inline, cursor);
 			}
 

@@ -1348,7 +1348,7 @@ static void rename_block(basic_block_t* entry){
 				}
 				
 				//Function calls contain parameters that count as RHS vars
-				parameter_results_array_t* func_params = &(cursor->parameter_results);
+				parameter_results_array_t* func_params = &(cursor->call_storage.parameter_results);
 
 				for(int32_t k = 0; k < func_params->current_index; k++){
 					parameter_result_t* current_param = get_result_at_index(func_params, k);
@@ -2038,9 +2038,9 @@ static inline u_int8_t does_instruction_comply_with_definite_assignment(instruct
 	overall_result &= check_initializer_for_definite_assignment(instruction, instruction->operands.oir.initializer_operand);
 
 	//Check all parameters as well for function calls
-	for(int32_t i = 0; i < instruction->parameter_results.current_index; i++){
+	for(int32_t i = 0; i < instruction->call_storage.parameter_results.current_index; i++){
 		//Get the parameter result
-		parameter_result_t* result = get_result_at_index(&(instruction->parameter_results), i);
+		parameter_result_t* result = get_result_at_index(&(instruction->call_storage.parameter_results), i);
 
 		switch(result->result_type){
 			case PARAM_RESULT_TYPE_VAR:
