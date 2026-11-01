@@ -1571,11 +1571,41 @@ static void replace_references_in_initializer_with_address_expression(three_addr
 }
 
 
-
+/**
+ * Replace all memory address variables that reference the same region as the "replaced" region variable with
+ * the new addressing mode expression. This new addressing mode expression will be placed directly before the
+ * original call instruction and the reference in the parameter result array will be replaced. We will also
+ * invoke the reference replacer for initializers in the event that we have an initializer parameter result
+ */
 static inline void replace_references_in_parameter_results_with_address_expression(instruction_t* instruction, three_addr_var_t* replaced_region_variable,
 																					addressing_operands_t* replacement_address_expression){
+	/**
+	 * Run through all of our results
+	 */
 	for(int32_t i = 0; i < instruction->call_storage.parameter_results.current_index; i++){
-		parameter_result_t* parameter_reslut = get_result_at_index(&(instruction->call_storage.parameter_results), i);
+
+		parameter_result_t* parameter_result = get_result_at_index(&(instruction->call_storage.parameter_results), i);
+		switch(parameter_result->result_type){
+
+			/**
+			 * If we find a variable that is equal, we will generate an OIR lea expression and replace that variable
+			 * with it's result
+			 */
+			case PARAM_RESULT_TYPE_VAR: {
+				if(variables_equal_no_ssa(replaced_region_variable, parameter_result->param_result.variable_result) == TRUE){
+
+				}
+
+				break;
+			}
+
+			/**
+			 * Constants are irrelevant
+			 */
+			case PARAM_RESULT_TYPE_CONST:{
+				break;
+			}
+		}
 	}
 
 }
