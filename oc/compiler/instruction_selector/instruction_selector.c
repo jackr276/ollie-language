@@ -6823,14 +6823,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * OR 
 	 *  t4 <- x | x
 	 *  t4 <- x
+	 *
+	 *
+	 * NOTE: if we have an assignee that is flagged as setting condition codes, we specifically
+	 * will not perform this optimization and we'll let other areas handle it
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->operands.oir.operand1->sets_cc == FALSE
 		&& variables_equal(window->instruction1->operands.oir.operand1, window->instruction1->operands.oir.operand2) == TRUE){
 		//Grab this out
 		instruction_t* binary_operation = window->instruction1; 
-
-		//We'll need this for some of our optimizations
-		three_addr_const_t* simplification_constant;
 
 		//We will also need the result type, especially for float determination
 		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
@@ -6843,10 +6845,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * addition and multiplying by 2 are not exactly the same. As such we're
 			 * only doing this if we have a non floating point computation type
 			 */
-			case PLUS:
+			case PLUS: {
 				if(IS_FLOATING_POINT(result_type) == FALSE){
 					//Emit the 2 for our doubling operation
-					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
+					three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
 					
 					//Op2 is no longer needed
 					binary_operation->operands.oir.operand2 = NULL;
@@ -6863,8 +6865,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//This does count as a change
 					changed = TRUE;
 				}
-
 				break;
+			}
 
 			/**
 			 * For minus, if we have a floating point computation type
@@ -6872,10 +6874,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * subtraction may not truly result in 0. As such we will only
 			 * take this step if we do *not* have floating points
 			 */
-			case MINUS:
+			case MINUS: {
 				if(IS_FLOATING_POINT(result_type) == FALSE){
 					//Spit out the 0 constant to use here
-					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+					three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 					//Remove these two operands
 					binary_operation->operands.oir.operand1 = NULL;
@@ -6895,6 +6897,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 
 				break;
+			}
 
 			/**
 			 * Any number "xor'd" with itself will always be 0 due to the 
@@ -6902,9 +6905,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * an assignment of a zero constant. These will only ever be integers
 			 * so we don't need to worry about anything regarding floating point here
 			 */
-			case CARROT:
+			case CARROT: {
 				//Get out our 0 constant
-				simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+				three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 				//Remove these variables
 				binary_operation->operands.oir.operand1 = NULL;
@@ -6919,8 +6922,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				//This is a change
 				changed = TRUE;
-
 				break;
+			}
 
 			/**
 			 * Any number bitwise and'd/or'd with itself is just going to return that exact
@@ -6929,7 +6932,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * floating point here
 			 */
 			case SINGLE_AND:
-			case SINGLE_OR:
+			case SINGLE_OR: {
 				//Delete the second operand
 				binary_operation->operands.oir.operand2 = NULL;
 
@@ -6940,56 +6943,49 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
 				break;
+			}
 
 			/**
 			 * For logical AND, if two things are the same then the
 			 * logical and result is just one
 			 */
 			case DOUBLE_AND:
-			case DOUBLE_OR:
+			case DOUBLE_OR: {
+				//Hang onto the actual assignee
+				three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
+
+				//Get rid of the second operand and the op
+				binary_operation->operands.oir.operand2 = NULL;
+				binary_operation->op = BLANK;
+
+				//Turn this into a test to see if op1 is 0 or not, that's all we need
+				binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+
+				//Emit a temporary assignee for the test not zero
+				binary_operation->operands.oir.assignee = emit_temp_var(u8);
+
 				/**
-				 * We will only go ahead with this optimization if we do
-				 * not set condition codes. This really is just a precaution,
-				 * as this should never have gotten here anyway if it does(optimizer
-				 * does it's own simplification), but we need to check
+				 * Since we aren't setting condition codes, we need to emit a setne statement
+				 * as well as an assignment over to the actual assignee for this to work
 				 */
-				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
-					//Hang onto the actual assignee
-					three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
+				instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->operands.oir.assignee);
 
-					//Get rid of the second operand and the op
-					binary_operation->operands.oir.operand2 = NULL;
-					binary_operation->op = BLANK;
+				//This goes in right after our assignee
+				insert_instruction_after_given(setne, binary_operation);
 
-					//Turn this into a test to see if op1 is 0 or not, that's all we need
-					binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+				//Now we'll need a final assignment
+				instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->operands.oir.assignee, binary_operation->line_number);
 
-					//Emit a temporary assignee for the test not zero
-					binary_operation->operands.oir.assignee = emit_temp_var(u8);
+				//This goes in after our other statement
+				insert_instruction_after_given(final_assignment, setne);
 
-					/**
-					 * Since we aren't setting condition codes, we need to emit a setne statement
-					 * as well as an assignment over to the actual assignee for this to work
-					 */
-					instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->operands.oir.assignee);
+				//Rebuild the entire window around this
+				reconstruct_window(window, final_assignment);
 
-					//This goes in right after our assignee
-					insert_instruction_after_given(setne, binary_operation);
-
-					//Now we'll need a final assignment
-					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->operands.oir.assignee, binary_operation->line_number);
-
-					//This goes in after our other statement
-					insert_instruction_after_given(final_assignment, setne);
-
-					//Rebuild the entire window around this
-					reconstruct_window(window, final_assignment);
-
-					//This is a change
-					changed = TRUE;
-				}
-
+				//This is a change
+				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * x == x / x >= x / x <= x is always true, so we will turn this into a
@@ -6999,27 +6995,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 */
 			case DOUBLE_EQUALS:
 			case G_THAN_OR_EQ:
-			case L_THAN_OR_EQ:
-				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
-					//Spit the constant out
-					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
+			case L_THAN_OR_EQ: {
+				//Spit the constant out
+				three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
 
-					//Remove these variables
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2 = NULL;
+				//Remove these variables
+				binary_operation->operands.oir.operand1 = NULL;
+				binary_operation->operands.oir.operand2 = NULL;
 
-					//Avoid any confusion with the op as well
-					binary_operation->op = BLANK;
+				//Avoid any confusion with the op as well
+				binary_operation->op = BLANK;
 
-					//Convert this into a regular assignment
-					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-					binary_operation->operands.oir.constant_operand = simplification_constant;
+				//Convert this into a regular assignment
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				binary_operation->operands.oir.constant_operand = simplification_constant;
 
-					//This is a change
-					changed = TRUE;
-				}
-
+				//This is a change
+				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * x != x / x < x / x > x is always false, so we will turn this into a
@@ -7029,27 +7023,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 */
 			case NOT_EQUALS:
 			case G_THAN:
-			case L_THAN:
-				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
-					//Spit the constant out
-					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+			case L_THAN: {
+				//Spit the constant out
+				three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
-					//Remove these variables
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2 = NULL;
+				//Remove these variables
+				binary_operation->operands.oir.operand1 = NULL;
+				binary_operation->operands.oir.operand2 = NULL;
 
-					//Avoid any confusion with the op as well
-					binary_operation->op = BLANK;
+				//Avoid any confusion with the op as well
+				binary_operation->op = BLANK;
 
-					//Convert this into a regular assignment
-					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-					binary_operation->operands.oir.constant_operand = simplification_constant;
+				//Convert this into a regular assignment
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				binary_operation->operands.oir.constant_operand = simplification_constant;
 
-					//This is a change
-					changed = TRUE;
-				}
-
+				//This is a change
+				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * By default we can't do anything so we'll need to just break out
@@ -7233,6 +7225,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
+	 *
+	 * TODO IF WE'RE SETTING CC WE CAN'T DO THIS
+	 *
 	 * If we have two adjacent binary operations where one is a bin_op_with_const
 	 * and one is a plain bin_op, there may be chances for us to convert them
 	 * into lea statements
@@ -7303,6 +7298,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * Can become
 	 * t22 <- (t19, ^t8_0, 4)
+	 *
+	 *
+	 * TODO IF WERE SETTING CC WE CANT DO THIS
 	 */
 	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
 		&& is_instruction_binary_operation(window->instruction2) == TRUE
@@ -7419,6 +7417,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * 	Turns into:
 	 * 		t46 <- 18+global_var(t3)
+	 *
+	 * TODO IF WERE SETTING CC WE CAN'T DO THIS
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
@@ -17507,7 +17507,6 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 
 			//Now add this in after the setnp instruction
 			insert_instruction_after_given(first_move_to_dest, zero_assignment);
-
 
 			//Now we need the final conditional move
 			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->operands.x86.destination_register, NOT_EQUALS, FALSE);
