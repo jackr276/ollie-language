@@ -6829,7 +6829,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * will not perform this optimization and we'll let other areas handle it
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
-		&& window->instruction1->operands.oir.operand1->sets_cc == FALSE
+		&& window->instruction1->operands.oir.assignee->sets_cc == FALSE
 		&& variables_equal(window->instruction1->operands.oir.operand1, window->instruction1->operands.oir.operand2) == TRUE){
 		//Grab this out
 		instruction_t* binary_operation = window->instruction1; 
@@ -7239,9 +7239,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * Can become
 	 * t21 <- 4(t19, t18)
 	 *
+	 * NOTE: we cannot do this if the second instruction's assignee is noted as setting condition codes
+	 * because a lea would destroy any use of condition codes
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& is_instruction_binary_operation_with_const(window->instruction2) == TRUE
+		&& window->instruction2->operands.oir.assignee->sets_cc == FALSE
 		&& window->instruction1->op == PLUS
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -7299,11 +7302,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * Can become
 	 * t22 <- (t19, ^t8_0, 4)
 	 *
-	 *
-	 * TODO IF WERE SETTING CC WE CANT DO THIS
+	 * NOTE: we can only do this combination if the second instruction's assignee
+	 * does not set condition codes. Lea statements do not set condition codes, which
+	 * is why we can't do this in that case
 	 */
 	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
 		&& is_instruction_binary_operation(window->instruction2) == TRUE
+		&& window->instruction2->operands.oir.assignee->sets_cc == FALSE
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -7418,12 +7423,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * 	Turns into:
 	 * 		t46 <- 18+global_var(t3)
 	 *
-	 * TODO IF WERE SETTING CC WE CAN'T DO THIS
+	 * NOTE: if the second operand is noted as setting condition codes, this cannot be allowed because lea
+	 * statements do not ever set condition codes
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& window->instruction2->operands.oir.assignee->sets_cc == FALSE
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 
 		//Grab these for convenience
@@ -8984,6 +8991,9 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
 			 * actually can't replace it even if we do find it. This is because we rely on the condition
 			 * code setting for any branch/conditional movement to work
+			 *
+			 *
+			 * TODO REVAMP THIS
 			 */
 			if(found_result != NULL && does_instruction_set_condition_codes(cursor) == FALSE){
 				//This is now an assignment statement
@@ -18350,6 +18360,11 @@ static inline instruction_type_t select_appropriate_test_statement(variable_size
 static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 	//Grab out what we're really after
 	instruction_t* instruction = window->instruction1;
+
+	if(instruction->operands.oir.operand1 == NULL){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
+	}
 
 	//We expect the most common case to be non-floating point
 	if(IS_FLOATING_POINT(instruction->operands.oir.operand1->type) == FALSE){

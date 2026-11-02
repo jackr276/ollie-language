@@ -25,6 +25,8 @@
  * jne A <-----  if(inverted)
  * jmp B <----- else
  */
+#include "constants.h"
+#include <sys/types.h>
 typedef enum {
 	BRANCH_CATEGORY_NORMAL,
 	BRANCH_CATEGORY_INVERSE
@@ -87,8 +89,6 @@ typedef enum {
 	THREE_ADDR_CODE_BITWISE_NOT_STMT,
 	//A logical not statement
 	THREE_ADDR_CODE_LOGICAL_NOT_STMT,
-	//An indirection statement
-	THREE_ADDR_CODE_DEREF_STMT,
 	//Binary op with const
 	THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT,
 	//Regular two address assignment
@@ -146,5 +146,28 @@ typedef enum {
 	//An initialization statement that will take an initializer
 	THREE_ADDR_CODE_INITIALIZER_STMT,
 } instruction_stmt_type_t;
+
+
+/**
+ * Does the given OIR statement set condition codes?
+ */
+static inline u_int8_t does_OIR_statement_set_condition_codes(instruction_stmt_type_t OIR_statement_type){
+	switch(OIR_statement_type){
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+		case THREE_ADDR_CODE_SETNE_STMT:
+		case THREE_ADDR_CODE_INC_STMT:
+		case THREE_ADDR_CODE_DEC_STMT:
+		case THREE_ADDR_CODE_NEG_STATEMENT:
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+		case THREE_ADDR_CODE_CLEAR_STMT:
+			return TRUE;
+
+		default:
+			return FALSE;
+	}
+}
 
 #endif /* OLLIE_INTERMEDIARY_REPRESENTATION_H */
