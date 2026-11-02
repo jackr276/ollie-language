@@ -71,13 +71,6 @@ dynamic_array_t clone_dynamic_array(dynamic_array_t* array);
 void dynamic_array_add(dynamic_array_t* array, void* ptr);
 
 /**
- * Add an item into the dynamic array *IF* the dynamic array
- * itself has been allocated. This is intended for a very specific
- * use in the instruction selector
- */
-void dynamic_array_add_if_allocated(dynamic_array_t* array, void* ptr);
-
-/**
  * Set an element at a specified index. No check will be performed
  * to see if the element is already there. Dynamic resize
  * will be in effect here
