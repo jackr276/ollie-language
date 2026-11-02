@@ -821,6 +821,9 @@ static void mark(dynamic_array_t* function_blocks){
  * function for the "Empty Block Removal" step of clean()
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
+	printf("HERE FOR BLOCK .L%d\n\n", empty_block->block_id);
+
+
 	//Use a clone since we are mutating
 	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
 
@@ -828,13 +831,16 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	for(int32_t i = 0; i < clone.current_index; i++){
 		//Grab a given predecessor out
 		basic_block_t* predecessor = dynamic_array_get_at(&clone, i);
+		printf("PREDECESSOR IS .L%d\n", predecessor->block_id);
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
 		
-		//Run through the jump table and replace all of those targets as well. Most of the time,
-		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
-		//what will ensure that switch statements are not corrupted by the optimization process
+		/**
+		 * Run through the jump table and replace all of those targets as well. Most of the time,
+		 * we won't hit this because num_nodes will be 0. In the times that we do though, this is
+		 * what will ensure that switch statements are not corrupted by the optimization process 
+		 */
 		if(predecessor->jump_table != NULL){
 			for(int32_t jump_table_index = 0; jump_table_index < predecessor->jump_table->num_nodes; jump_table_index++){
 				//If this equals the other node, we'll need to replace it
@@ -860,7 +866,9 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		//Go based on the type
 		switch(exit_statement->statement_type){
 			//One type of block exit
-			case THREE_ADDR_CODE_JUMP_STMT:
+			case THREE_ADDR_CODE_JUMP_STMT: {
+				printf("ADDING .L%d AS A SUCCESSOR OF .L%d\n", replacement->block_id, predecessor->block_id);
+
 				//If this is the right target, then replace it
 				if(exit_statement->if_block == empty_block){
 					exit_statement->if_block = replacement;
@@ -869,11 +877,14 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 				}
 
 				break;
+			}
 
 			//Other type of block exit
-			case THREE_ADDR_CODE_BRANCH_STMT:
+			case THREE_ADDR_CODE_BRANCH_STMT: {
 				//If this is the right target, then replace it
 				if(exit_statement->if_block == empty_block){
+					printf("ADDING .L%d AS A SUCCESSOR OF .L%d\n", replacement->block_id, predecessor->block_id);
+
 					exit_statement->if_block = replacement;
 					//Counts as a successor
 					add_successor(predecessor, replacement);
@@ -881,12 +892,16 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 
 				//Same for the else block
 				if(exit_statement->else_block == empty_block){
+					printf("ADDING .L%d AS A SUCCESSOR OF .L%d\n", replacement->block_id, predecessor->block_id);
+
+					
 					exit_statement->else_block = replacement;
 					//Counts as a successor
 					add_successor(predecessor, replacement);
 				}
 
 				break;
+			}
 
 			//By default do nothing
 			default:
@@ -1167,6 +1182,8 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
 			 * 	replace branch with a jump to j
 			 */
 			if(branch->if_block == branch->else_block){
+				printf("HERE2 FOR BLOCK .L%d\n", current->block_id);
+
 				//Delete the branch statement afterwards 
 				delete_statement(branch);
 
@@ -1199,23 +1216,24 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
 			 * If i is empty then
 			 * 	replace transfers to i with transfers to j
 			 */
-			//We know it's empty if these are the same
 			if(current->exit_statement == current->leader_statement
 				&& current->block_type != BLOCK_TYPE_FUNC_ENTRY){
 
 				//Replace all jumps to the current block with those to the jumping block
 				replace_all_branch_targets(current, jumping_to_block);
 
-				//Counts as a change
+				/**
+				 * This is a change - and we can move along after this
+				 */
 				changed = TRUE;
-
-				//We are done here, no need to continue on
 				continue;
 			}
 
 			/**
 			 * If j only has one predecessor then
 			 * 	merge i and j
+			 *
+			 * 	TODO WHAT IF ITS ITS OWN PREDECESSOR????
 			 */
 			if(jumping_to_block->predecessors.current_index == 1){
 				//Delete the jump statement because it's now useless
@@ -1227,14 +1245,17 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
 				//Combine the two
 				combine(current, jumping_to_block);
 
-				//Counts as a change 
+				/**
+				 * This is a change - and we can move along after this
+				 */
 				changed = TRUE;
-
-				//And we're done here
 				continue;
 			}
 		}
+
+	print_all_cfg_blocks(cfg_reference);
 	}
+
 
 	//Give back whether or not we changed
 	return changed;
@@ -1955,7 +1976,7 @@ cfg_t* optimize(cfg_t* cfg){
 		sweep(current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 333: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
+		 * PASS 3: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
 		 * a dedicated pass that will crawl the function once and look for them. If it is able to find them, then
 		 * it will optimize them into a conditional move pattern. If this is to happen, it will require a full
 		 * redo of the mark, sweep, block deletion and control flow recalculation passes
