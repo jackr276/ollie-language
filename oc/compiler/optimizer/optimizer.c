@@ -745,9 +745,6 @@ static void mark(dynamic_array_t* function_blocks){
 			}
 		}
 
-		//Grab this out for convenience
-		basic_block_t* block = stmt->block_contained_in;
-
 		/**
 		 * Now we'll apply this logic to the branching/indirect jumping
 		 * statements here
@@ -758,55 +755,76 @@ static void mark(dynamic_array_t* function_blocks){
 		 * 		mark j
 		 * 		add j to worklist
 		 */
-		//If this block even has an RDF(it may now)
-		if(block->reverse_dominance_frontier.internal_array != NULL){
-			for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
-				//Grab the block out of the RDF
-				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
+		basic_block_t* block = stmt->block_contained_in;
+		for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+			//Grab the block out of the RDF
+			basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
 
-				//Grab out the exit statement
-				instruction_t* exit_statement = rdf_block->exit_statement;
+			//Grab out the exit statement
+			instruction_t* exit_statement = rdf_block->exit_statement;
 
-				//We'll now go based on what the exit statement is
-				switch(exit_statement->statement_type){
-					/**
-					 * An indirect jump means that we had some kind of switch statement. This
-					 * will be marked as important
-					 */
-					case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
-						//Avoids infinite loops
-						if(exit_statement->mark == FALSE){
-							//Mark it
-							exit_statement->mark = TRUE;
-							//Add it to the worklist
-							dynamic_array_add(&worklist, exit_statement);
-							//This now has a mark
-							rdf_block->contains_mark = TRUE;
-						}
+			printf("EXAMINING EXIT STATEMENT IN BLOCK .L%d\n", rdf_block->block_id);
 
-						break;
+			//We'll now go based on what the exit statement is
+			switch(exit_statement->statement_type){
+				/**
+				 * An indirect jump means that we had some kind of switch statement. This
+				 * will be marked as important
+				 */
+				case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
+					//Avoids infinite loops
+					if(exit_statement->mark == FALSE){
+						//Mark it
+						exit_statement->mark = TRUE;
+						//Add it to the worklist
+						dynamic_array_add(&worklist, exit_statement);
+						//This now has a mark
+						rdf_block->contains_mark = TRUE;
+					}
 
-					/**
-					 * This is the most common case, we'll have a branch that
-					 * ends the predecessor
-					 */
-					case THREE_ADDR_CODE_BRANCH_STMT:
-						//Avoids infinite loops
-						if(exit_statement->mark == FALSE){
-							//Mark it
-							exit_statement->mark = TRUE;
-							//Add it to the worklist
-							dynamic_array_add(&worklist, exit_statement);
-							//This now has a mark
-							rdf_block->contains_mark = TRUE;
-						}
-
-						break;
-
-					//By default just leave
-					default:
-						break;
+					break;
 				}
+
+				/**
+				 * TODO
+				 */
+				case THREE_ADDR_CODE_JUMP_STMT: {
+					//Avoids infinite loops
+					if(exit_statement->mark == FALSE){
+						//Mark it
+						exit_statement->mark = TRUE;
+						//Add it to the worklist
+						dynamic_array_add(&worklist, exit_statement);
+						//This now has a mark
+						rdf_block->contains_mark = TRUE;
+					}
+
+					break;
+				}
+
+				/**
+				 * This is the most common case, we'll have a branch that
+				 * ends the predecessor
+				 */
+				case THREE_ADDR_CODE_BRANCH_STMT: {
+					//Avoids infinite loops
+					if(exit_statement->mark == FALSE){
+						printf("MARKING BRANCH IN BLOCK .L%d\n", block->block_id);
+
+						//Mark it
+						exit_statement->mark = TRUE;
+						//Add it to the worklist
+						dynamic_array_add(&worklist, exit_statement);
+						//This now has a mark
+						rdf_block->contains_mark = TRUE;
+					}
+
+					break;
+				}
+
+				//By default just leave
+				default:
+					break;
 			}
 		}
 	}
@@ -977,6 +995,7 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 				 * it's nearest marked postdominator
 				 */
 				case THREE_ADDR_CODE_BRANCH_STMT:
+					printf("BLOCK .L%d BRANCH IS USELESS\n", block->block_id);
 					//We'll first find the nearest marked postdominator
 					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
