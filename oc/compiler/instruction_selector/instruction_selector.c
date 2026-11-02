@@ -9921,12 +9921,28 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 }
 
 
+
+
+static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
+
+}
+
+
+
 /**
- * 
+ * Ollie's branch eliminator relies on our ability to trace back from a branch's so-called "relies_on" field
+ * to determine if we have a statement that we can evaluate at compile time. If we can evaluate it, we will simulate
+ * the flags that said statement would generate, and from there remove the branch entirely by simulating the branch's
+ * execution
  *
- * TODO 
+ * TODO FINISH
  */
 static inline u_int8_t perform_branch_elimination_pass(basic_block_t* function_entry, basic_block_t* function_exit, dynamic_array_t* function_blocks){
+	/**
+	 * Did we perform any branch elimination? By default assume no
+	 */
+	u_int8_t elimination_occurred = FALSE;
+
 	/**
 	 * Run through every single function block hunting for ones that end in branches
 	 */
@@ -9942,18 +9958,15 @@ static inline u_int8_t perform_branch_elimination_pass(basic_block_t* function_e
 			continue;
 		}
 
-
+		/**
+		 * By the time we get here, we know that we have a branch statement as the exit
+		 * statement. We will now call the helper to see if we're able to eliminate
+		 * this branch statement
+		 */
+		elimination_occurred |= eliminate_branch_if_possible(ending_branch);
 	}
 
-}
-
-
-
-/**
- * Emit a variable copy if and only if this is not a NULL pointer
- */
-static inline three_addr_var_t* emit_variable_copy_if_not_null(three_addr_var_t* variable){
-	return variable != NULL ? emit_var_copy(variable) : NULL;
+	return elimination_occurred;
 }
 
 
