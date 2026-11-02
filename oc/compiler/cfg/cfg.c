@@ -2276,6 +2276,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 	//Allcoate the results, hang onto the current block
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 	basic_block_t* current_block = starting_block;
+	u_int32_t line_number = conditional_node->line_number;
 
 	/**
 	 * The first thing that we need to do is emit the conditional. However - this conditional
@@ -2342,7 +2343,9 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		switch(binary_results.type){
 			case CFG_RESULT_TYPE_CONST: {
 				//Emit and add the constant assignment as our decider
-				instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
+				instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type),
+																							binary_results.result_value.result_const,
+																							line_number);
 				add_statement(current_block, constant_assignment);
 
 				//This now is our decider
@@ -2367,7 +2370,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * in by reference so that we may change it later on
 		 */
 		if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator), conditional_node->line_number);
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator), line_number);
 		}
 
 		/**
@@ -2400,7 +2403,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * Select the appropriate branch type and then emit the branch statement
 		 */
 		branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
-		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type, branch_category, conditional_node->line_number);
+		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type, line_number);
 
 		//Add it into the block
 		add_statement(current_block, branch_statement);
@@ -2599,10 +2602,9 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
 static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_block){
-	instruction_t* constant_assignment;
-
 	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+	u_int32_t line_number = conditional_node->line_number;
 
 	/**
 	 * We only allocate this storage if it is needed. If we get here and it's unallocated, now
@@ -2632,7 +2634,9 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		switch(conditional_results.type){
 			//For a constant type, we are going to need to emit an assignment
 			case CFG_RESULT_TYPE_CONST: {
-				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type), conditional_results.result_value.result_const, conditional_node->line_number);
+				instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type),
+																							conditional_results.result_value.result_const,
+																							line_number);
 
 				//Get it in the block
 				add_statement(current_block, constant_assignment);
@@ -2690,7 +2694,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		branch_type_t branch_type = select_appropriate_branch_statement(conditional_results.operator, BRANCH_CATEGORY_NORMAL, type_signed);
 
 		//Now we can finally spit this one out
-		instruction_t* branch_statement = emit_branch_statement(NULL, else_block, conditional_decider, branch_type, conditional_node->line_number);
+		instruction_t* branch_statement = emit_branch_statement(NULL, else_block, conditional_decider, branch_type, line_number);
 		
 		//Store the if destination for later
 		branch_statement->optional_storage.jumping_to_label = if_destination_label;
