@@ -1298,13 +1298,6 @@ static inline void remove_all_successors(basic_block_t* block){
 }
 
 
-
-
-
-
-
-
-
 /**
  * Is a given conditional always true or always false? We will need
  * to trace up the block to find out. If we are unable to

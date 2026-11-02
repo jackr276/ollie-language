@@ -9922,6 +9922,34 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 
 
 /**
+ * 
+ *
+ * TODO 
+ */
+static inline u_int8_t perform_branch_elimination_pass(basic_block_t* function_entry, basic_block_t* function_exit, dynamic_array_t* function_blocks){
+	/**
+	 * Run through every single function block hunting for ones that end in branches
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* function_block = dynamic_array_get_at(function_blocks, i);
+
+		/**
+		 * Get the end statement. If it's not a branch, then this block is of no use to
+		 * us so toss it out and keep going
+		 */
+		instruction_t* ending_branch = function_block->exit_statement;
+		if(ending_branch == NULL || ending_branch->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+			continue;
+		}
+
+
+	}
+
+}
+
+
+
+/**
  * Emit a variable copy if and only if this is not a NULL pointer
  */
 static inline three_addr_var_t* emit_variable_copy_if_not_null(three_addr_var_t* variable){
@@ -10714,6 +10742,7 @@ static void simplify(cfg_t* cfg){
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Extract it
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 
 		//Extract the function record too
 		symtab_function_record_t* function = function_entry->function_defined_in;
@@ -10784,13 +10813,15 @@ static void simplify(cfg_t* cfg){
 
 		/**
 		 * After we've done our global value numbering, we'll go through and determine if there
-		 * are any branch statements that can be proven to always take a certain path
+		 * are any branch statements that can be proven to always take a certain path. If we find
+		 * one that can, we will remove the conditional branch entirely and just make it take the
+		 * path that we can prove it always would take
 		 */
+		u_int8_t branch_reduction_occurred = perform_branch_elimination_pass(function_entry, function_exit, &(function->function_blocks));
+		if(branch_reduction_occurred == TRUE){
+			//TODO DETERMINE WHAT WE NEED TO DO IN HERE
 
-
-		//TODO WE NOW NEED TO DO OPTIMIZING TRUE/FALSE PATHS
-
-
+		}
 
 		/**
 		 * The second to last thing that we'll need to do is run through the function and
