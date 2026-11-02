@@ -2110,6 +2110,8 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
  * We use the "visited" flag to represent reachable/unreachable
  *
  * This function is recursive
+ *
+ * TODO ALSO NEED THIS IN THE SELECTOR
  */
 static void dfs_flag_block_reachability_rec(basic_block_t* block){
 	//We've already dealt with this one
@@ -2145,6 +2147,8 @@ static void dfs_flag_block_reachability_rec(basic_block_t* block){
  * 	for each block B in the function:
  * 		if B is not flagged as reachable then:
  * 			delete B
+ *
+ * TODO ALSO NEED THIS IN THE SELECTOR
  */
 static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
 	/**
@@ -2273,6 +2277,10 @@ cfg_t* optimize(cfg_t* cfg){
 		sweep(current_function_blocks, function_entry_block);
 
 		/**
+		 *
+		 * TODO WE ARE GOING TO GET RID OF THIS
+		 *
+		 *
 		 * PASS 3: always true/false optimization
 		 * Now that we've swept everything, let's figure out if there are
 		 * any branches that are always true or always false. We'll need to 

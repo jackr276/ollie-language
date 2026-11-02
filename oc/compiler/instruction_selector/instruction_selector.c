@@ -137,6 +137,24 @@ static inline void trigger_ice_panic(char* message){
 
 
 /**
+ * This simple helper first cleans up the old control flow relations(dominators, dominance frontiers, etc) for a given function
+ * and then recomputes them all. This is usually only done after some kind of mark/sweep/clean pass where we may end up
+ * with blocks that are useless
+ */
+static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	/**
+	 * First clean up all of the existing control relations
+	 */
+	cleanup_all_control_relations(function_blocks);
+
+	/**
+	 * Now let the graph analyzer go through and recalculate everything else
+	 */
+	calculate_all_control_flow_relations_for_function(function_entry_block, function_exit_block, function_blocks);
+}
+
+
+/**
  * Perform a complete clone of the given addressing operands from the source into the destination. Once
  * done, the destination operands will share no memory with the source operands
  */
@@ -10763,6 +10781,16 @@ static void simplify(cfg_t* cfg){
 				order_blocks(cfg);
 			}
 		}
+
+		/**
+		 * After we've done our global value numbering, we'll go through and determine if there
+		 * are any branch statements that can be proven to always take a certain path
+		 */
+
+
+		//TODO WE NOW NEED TO DO OPTIMIZING TRUE/FALSE PATHS
+
+
 
 		/**
 		 * The second to last thing that we'll need to do is run through the function and
