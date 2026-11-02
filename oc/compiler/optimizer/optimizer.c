@@ -787,6 +787,8 @@ static void mark(dynamic_array_t* function_blocks){
 
 				/**
 				 * TODO
+				 *
+				 * TODO I DONT THINK WE REALLY NEED THIS
 				 */
 				case THREE_ADDR_CODE_JUMP_STMT: {
 					//Avoids infinite loops
