@@ -694,26 +694,6 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 
 
 /**
- * Is this instruction going to be used to set condition codes? If so, we
- * don't want to accidentally value number the thing and remove it
- */
-static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instruction){
-	switch(instruction->instruction_type){
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			//Use the flag to determine this
-			return instruction->operands.oir.assignee->sets_cc;
-
-		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-			return TRUE;
-
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Does the block that we're passing in end in a direct(jmp) jump to
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
@@ -7222,12 +7202,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
-	 *
-	 * TODO IF WE'RE SETTING CC WE CAN'T DO THIS
-	 *
 	 * If we have two adjacent binary operations where one is a bin_op_with_const
 	 * and one is a plain bin_op, there may be chances for us to convert them
 	 * into lea statements
@@ -8988,14 +8964,11 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * doing this computation, we will replace the result with a copy from the
 			 * found result into this value
 			 *
-			 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
-			 * actually can't replace it even if we do find it. This is because we rely on the condition
-			 * code setting for any branch/conditional movement to work
-			 *
-			 *
-			 * TODO REVAMP THIS
+			 * Important caveat: if the assignee of this instruction is found to be setting
+			 * condition codes then we cannot do any simplification because we'd trample
+			 * the condition codes if we did
 			 */
-			if(found_result != NULL && does_instruction_set_condition_codes(cursor) == FALSE){
+			if(found_result != NULL && cursor->operands.oir.assignee->sets_cc == FALSE){
 				//This is now an assignment statement
 				cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
@@ -9970,6 +9943,15 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 			break;
 		}
 
+		/**
+		 * Sanity check - if we have an instruction that is in the
+		 * way of what we rely on for condition codes *AND* this instruction
+		 * also sets condition codes, then we have a huge problem
+		 */
+		if(does_OIR_statement_set_condition_codes(cursor->statement_type) == TRUE){
+			trigger_ice_panic("Condition code trampling detected in branch reduction");
+		}
+
 		cursor = cursor->previous_statement;
 	}
 
@@ -9979,6 +9961,15 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 */
 	if(cc_setting_stmt == NULL){
 		return FALSE;	
+	}
+
+	/**
+	 * Sanity check here - if we somehow get a statement that allegedly sets
+	 * condition codes but is literally incapable of it, we need to fail out
+	 * hard and crash the compiler
+	 */
+	if(does_OIR_statement_set_condition_codes(cc_setting_stmt->statement_type) == FALSE){
+		trigger_ice_panic("Branch was found to rely on statement that cannot set condition codes");
 	}
 
 
