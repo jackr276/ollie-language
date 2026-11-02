@@ -36,7 +36,7 @@ struct RFLAGS_t {
  * Retrieve the bit that represents the carry flag
  */
 static inline u_int8_t get_carry_flag(RFLAGS_t* flags){
-	u_int8_t bit_mask = 0x01;
+	u_int64_t bit_mask = 0x01;
 	return (flags->flag_register >> CARRY_FLAG_BIT) & bit_mask;
 }
 
@@ -47,7 +47,7 @@ static inline u_int8_t get_carry_flag(RFLAGS_t* flags){
  * NOTE: the set function always sets the value to 1
  */
 static inline void set_carry_flag(RFLAGS_t* flags){
-	u_int8_t bit_mask = 0x01;
+	u_int64_t bit_mask = 0x01;
 	bit_mask <<= CARRY_FLAG_BIT;
 	flags->flag_register |= bit_mask;
 }
@@ -57,7 +57,7 @@ static inline void set_carry_flag(RFLAGS_t* flags){
  * Retrieve the bit that represents the parity flag
  */
 static inline u_int8_t get_parity_flag(RFLAGS_t* flags){
-	u_int8_t bit_mask = 0x01;
+	u_int64_t bit_mask = 0x01;
 	return (flags->flag_register >> PARITY_FLAG_BIT) & bit_mask;
 }
 
@@ -68,7 +68,7 @@ static inline u_int8_t get_parity_flag(RFLAGS_t* flags){
  * NOTE: the set function always sets the value to 1
  */
 static inline void set_parity_flag(RFLAGS_t* flags){
-	u_int8_t bit_mask = 0x01;
+	u_int64_t bit_mask = 0x01;
 	bit_mask <<= PARITY_FLAG_BIT;
 	flags->flag_register |= bit_mask;
 }
@@ -78,7 +78,7 @@ static inline void set_parity_flag(RFLAGS_t* flags){
  * Retrieve the bit that represents the auxiliary carry flag
  */
 static inline u_int8_t get_auxiliary_carry_flag(RFLAGS_t* flags){
-	u_int8_t bit_mask = 0x01;
+	u_int64_t bit_mask = 0x01;
 	return (flags->flag_register >> AUXILIARY_CARRY_FLAG_BIT) & bit_mask;
 }
 
@@ -89,7 +89,70 @@ static inline u_int8_t get_auxiliary_carry_flag(RFLAGS_t* flags){
  * NOTE: the set function always sets the value to 1
  */
 static inline void set_auxiliary_carry_flag(RFLAGS_t* flags){
-	u_int8_t bit_mask = 0x01;
+	u_int64_t bit_mask = 0x01;
 	bit_mask <<= AUXILIARY_CARRY_FLAG_BIT;
+	flags->flag_register |= bit_mask;
+}
+
+
+/**
+ * Retrieve the bit that represents the zero flag
+ */
+static inline u_int8_t get_zero_flag(RFLAGS_t* flags){
+	u_int64_t bit_mask = 0x01;
+	return (flags->flag_register >> ZERO_FLAG_BIT) & bit_mask;
+}
+
+
+/**
+ * Set the bit that represents the zero flag
+ *
+ * NOTE: the set function always sets the value to 1
+ */
+static inline void set_zero_flag(RFLAGS_t* flags){
+	u_int64_t bit_mask = 0x01;
+	bit_mask <<= ZERO_FLAG_BIT;
+	flags->flag_register |= bit_mask;
+}
+
+
+/**
+ * Retrieve the bit that represents the sign flag
+ */
+static inline u_int8_t get_sign_flag(RFLAGS_t* flags){
+	u_int64_t bit_mask = 0x01;
+	return (flags->flag_register >> SIGN_FLAG_BIT) & bit_mask;
+}
+
+
+/**
+ * Set the bit that represents the sign flag
+ *
+ * NOTE: the set function always sets the value to 1
+ */
+static inline void set_sign_flag(RFLAGS_t* flags){
+	u_int64_t bit_mask = 0x01;
+	bit_mask <<= SIGN_FLAG_BIT;
+	flags->flag_register |= bit_mask;
+}
+
+
+/**
+ * Retrieve the bit that represents the overflow flag
+ */
+static inline u_int8_t get_overflow_flag(RFLAGS_t* flags){
+	u_int64_t bit_mask = 0x01;
+	return (flags->flag_register >> OVERFLOW_FLAG_BIT) & bit_mask;
+}
+
+
+/**
+ * Set the bit that represents the overflow flag
+ *
+ * NOTE: the set function always sets the value to 1
+ */
+static inline void set_overflow_flag(RFLAGS_t* flags){
+	u_int64_t bit_mask = 0x01;
+	bit_mask <<= OVERFLOW_FLAG_BIT;
 	flags->flag_register |= bit_mask;
 }
