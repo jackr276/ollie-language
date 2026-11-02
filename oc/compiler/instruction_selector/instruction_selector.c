@@ -9921,12 +9921,57 @@ static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* f
 }
 
 
-
-
+/**
+ * Eliminate the given branch if at all possible
+ *
+ * TODO DOC
+ *
+ */
 static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
+	/**
+	 * Extract the block that we're in and the variable that we rely on
+	 */
+	basic_block_t* block = branch_statement->block_contained_in;
+	three_addr_var_t* relies_on_var = branch_statement->relies_on;
+
+	/**
+	 * If we have a branch statement that has *NO* relies on value, then we 
+	 * will simply exit out with a FALSE. This shouldn't happen but we'll leave
+	 * it in to account for special cases
+	 */
+	if(relies_on_var == NULL){
+		return FALSE;
+	}
+
+	/**
+	 * We will now need to crawl our way up the block looking for where this
+	 * "relies on" variable was set. It should be the assignee of some other
+	 * statement. We only search for this locally within the block
+	 */
+	instruction_t* cursor = branch_statement->previous_statement;
+	instruction_t* cc_setting_stmt = NULL;
+	while(cursor != NULL){
+		/**
+		 * If we find a statement where the assignee is equal to what we rely
+		 * on then we've found it
+		 */
+		if(variables_equal(relies_on_var, cursor->operands.oir.assignee) == TRUE){
+			cc_setting_stmt = cursor;
+			break;
+		}
+
+		cursor = cursor->previous_statement;
+	}
+
+	/**
+	 * We made it here and we never found the statement that sets the condition
+	 * codes. At this point we just quit, it's not worth more searching
+	 */
+	if(cc_setting_stmt == NULL){
+		return FALSE;	
+	}
 
 }
-
 
 
 /**
@@ -9937,7 +9982,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
  *
  * TODO FINISH
  */
-static inline u_int8_t perform_branch_elimination_pass(basic_block_t* function_entry, basic_block_t* function_exit, dynamic_array_t* function_blocks){
+static inline u_int8_t branch_elimination_pass(basic_block_t* function_entry, basic_block_t* function_exit, dynamic_array_t* function_blocks){
 	/**
 	 * Did we perform any branch elimination? By default assume no
 	 */
@@ -10830,7 +10875,7 @@ static void simplify(cfg_t* cfg){
 		 * one that can, we will remove the conditional branch entirely and just make it take the
 		 * path that we can prove it always would take
 		 */
-		u_int8_t branch_reduction_occurred = perform_branch_elimination_pass(function_entry, function_exit, &(function->function_blocks));
+		u_int8_t branch_reduction_occurred = branch_elimination_pass(function_entry, function_exit, &(function->function_blocks));
 		if(branch_reduction_occurred == TRUE){
 			//TODO DETERMINE WHAT WE NEED TO DO IN HERE
 
