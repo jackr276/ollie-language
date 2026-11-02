@@ -33,7 +33,7 @@ struct RFLAGS_t {
 
 
 /**
- * Retrieve the bit that is in the carry flag
+ * Retrieve the bit that represents the carry flag
  */
 static inline u_int8_t get_carry_flag(RFLAGS_t* flags){
 	u_int8_t bit_mask = 0x01;
@@ -42,7 +42,7 @@ static inline u_int8_t get_carry_flag(RFLAGS_t* flags){
 
 
 /**
- * Set the bit that is in the carry flag
+ * Set the bit that represents the carry flag
  *
  * NOTE: the set function always sets the value to 1
  */
@@ -54,9 +54,42 @@ static inline void set_carry_flag(RFLAGS_t* flags){
 
 
 /**
- * Retrieve the bit that is in the parity flag
+ * Retrieve the bit that represents the parity flag
  */
 static inline u_int8_t get_parity_flag(RFLAGS_t* flags){
 	u_int8_t bit_mask = 0x01;
 	return (flags->flag_register >> PARITY_FLAG_BIT) & bit_mask;
+}
+
+
+/**
+ * Set the bit that represents the parity flag
+ *
+ * NOTE: the set function always sets the value to 1
+ */
+static inline void set_parity_flag(RFLAGS_t* flags){
+	u_int8_t bit_mask = 0x01;
+	bit_mask <<= PARITY_FLAG_BIT;
+	flags->flag_register |= bit_mask;
+}
+
+
+/**
+ * Retrieve the bit that represents the auxiliary carry flag
+ */
+static inline u_int8_t get_auxiliary_carry_flag(RFLAGS_t* flags){
+	u_int8_t bit_mask = 0x01;
+	return (flags->flag_register >> AUXILIARY_CARRY_FLAG_BIT) & bit_mask;
+}
+
+
+/**
+ * Set the bit that represents the auxiliary flag
+ *
+ * NOTE: the set function always sets the value to 1
+ */
+static inline void set_auxiliary_carry_flag(RFLAGS_t* flags){
+	u_int8_t bit_mask = 0x01;
+	bit_mask <<= AUXILIARY_CARRY_FLAG_BIT;
+	flags->flag_register |= bit_mask;
 }
