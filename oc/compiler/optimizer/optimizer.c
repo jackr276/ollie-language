@@ -38,16 +38,6 @@ static cfg_t* cfg_reference;
 #define IS_STACK_WORKLIST_EMPTY(current_index) ((current_index == 0) ? TRUE : FALSE)
 
 /**
- * Is a conditional always true, always false, or unknown?
- */
-typedef enum{
-	CONDITIONAL_UNKNOWN,
-	CONDITIONAL_ALWAYS_FALSE,
-	CONDITIONAL_ALWAYS_TRUE,
-} conditional_status_t;
-
-
-/**
  * Run through an entire array of function blocks and reset the status for
  * every single one. We assume that the caller knows what they are doing, and
  * that the blocks inside of the array are really the correct blocks
@@ -1308,6 +1298,13 @@ static inline void remove_all_successors(basic_block_t* block){
 }
 
 
+
+
+
+
+
+
+
 /**
  * Is a given conditional always true or always false? We will need
  * to trace up the block to find out. If we are unable to
@@ -1454,7 +1451,7 @@ static inline conditional_status_t determine_conditional_status(instruction_t* c
  * Algorithm:
  * 	for each block in the cfg:
  * 		if block ends in branch:
- * 			determine what the branch relies on
+ * 			determine what the branch relies on TODO NO LONGER
  * 			if what it relies on is always true:
  * 				rewrite the branch to always jump to the affirmative case
  * 			else if what it relies on is always false:
@@ -1507,7 +1504,12 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 			continue;
 		}
 
-		//Let's now trace back until we can find what it relies on
+		/**
+		 * Trace up until we're able to find out the result
+		 *
+		 *
+		 * TODO CAN WE GET THIS FROM OTHER BLOCKS????????
+		 */
 		while(statement_cursor != NULL){
 			//If they're equal we can leave
 			if(variables_equal(branch_relies_on, statement_cursor->operands.oir.assignee) == TRUE){

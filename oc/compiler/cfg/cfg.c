@@ -2290,16 +2290,13 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * branch itself is going to be useless. Instead of emitting things, we will just
 		 * optimize as we go right here and jump either to if or else based on
 		 * the branch type and trutfulness
-		 */
 		branch_conditional_truthfullness_t truthfullness = get_branch_conditional_truthfullness(conditional_node);
 
 		switch(truthfullness){
-			/**
 			 * We have something that is provable to always be true. 
 			 *
 			 * If regular branch -> jump to if always
 			 * If inverse branch -> jump to else always
-			 */
 			case BRANCH_CONDITIONAL_ALWAYS_TRUE: {
 				if(branch_category == BRANCH_CATEGORY_NORMAL){
 					emit_jump(current_block, if_block);
@@ -2310,12 +2307,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				return results;
 			}
 
-			/**
 			 * We have something that is provable to always be false. 
 			 *
 			 * If regular branch -> jump to else always
 			 * If inverse branch -> jump to if always
-			 */
 			case BRANCH_CONDITIONAL_ALWAYS_FALSE: {
 				if(branch_category == BRANCH_CATEGORY_NORMAL){
 					emit_jump(current_block, else_block);
@@ -2330,6 +2325,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			default:
 				break;
 		}
+		 */
 
 		//First let the helper emit it
 		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
