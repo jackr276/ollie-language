@@ -1506,9 +1506,6 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 
 		/**
 		 * Trace up until we're able to find out the result
-		 *
-		 *
-		 * TODO CAN WE GET THIS FROM OTHER BLOCKS????????
 		 */
 		while(statement_cursor != NULL){
 			//If they're equal we can leave
