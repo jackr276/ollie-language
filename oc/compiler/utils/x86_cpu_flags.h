@@ -1,7 +1,9 @@
 /**
  * Author: Jack Robbins
  * This header contains a struct that represents the RFLAGS register. We will use
- * it inside of our simulator to simulate branch jumps based on known conditionals
+ * it inside of our simulator to simulate branch jumps based on known conditionals.
+ * This header file defines the RFLAGS_t struct and provides utilities for getting
+ * and setting the bits in interest
  */
 
 #include <sys/types.h>
@@ -12,16 +14,6 @@
 #define ZERO_FLAG_BIT 6
 #define SIGN_FLAG_BIT 7
 #define OVERFLOW_FLAG_BIT 11
-
-/**
- * Define these flag values for when we are trying to set
- * flags. We can only set them on our off
- */
-typedef enum {
-	FLAG_VALUE_UNSET = 0,
-	FLAG_VALUE_SET = 1,
-} flag_value_t;
-
 
 /**
  * The RFLAGS register itself is just a 64 bit register. The layout
@@ -40,17 +32,24 @@ struct RFLAGS_t {
 };
 
 
-static inline void set_carry_flag(RFLAGS_t* flags){
-
-}
-
-
 /**
  * Retrieve the bit that is in the carry flag
  */
 static inline u_int8_t get_carry_flag(RFLAGS_t* flags){
 	u_int8_t bit_mask = 0x01;
 	return (flags->flag_register >> CARRY_FLAG_BIT) & bit_mask;
+}
+
+
+/**
+ * Set the bit that is in the carry flag
+ *
+ * NOTE: the set function always sets the value to 1
+ */
+static inline void set_carry_flag(RFLAGS_t* flags){
+	u_int8_t bit_mask = 0x01;
+	bit_mask <<= CARRY_FLAG_BIT;
+	flags->flag_register |= bit_mask;
 }
 
 
