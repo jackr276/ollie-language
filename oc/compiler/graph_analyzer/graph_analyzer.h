@@ -12,6 +12,16 @@
 #include "../cfg/cfg.h"
 
 /**
+ * Delete all blocks that are not reachable from the function entry blocks. To do this, 
+ * we will perform a DFS from the function block and flag every block that can be reached. 
+ * Follwoing that, if we see that there are any blocks with a value of (-1), then we delete
+ * them because they cannot be reached from the function entry
+ *
+ * This function returns TRUE if there was at least one unreachable block found
+ */
+static u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks);
+
+/**
  * Special exposes post order traversal API. The postorder traversal is needed
  * specifically in branch reduction in the optimizer/postprocessor. In this case,
  * we'll need a pre-allocated dynamic array to be passed in

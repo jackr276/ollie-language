@@ -31,6 +31,138 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
+ * Perform a DFS reachability traversal based on this block
+ * We use the "visited" flag to represent reachable/unreachable
+ *
+ * This function is recursive
+ *
+ * NOTE: we only ever use REAL edges for DFS reachability, we do not ever
+ * consider synthetic(analysis edges)
+ */
+static void dfs_flag_block_reachability_rec(basic_block_t* block){
+	/**
+	 * This has been dealt with so we do not need to reconsider it
+	 */
+	if(block->visited == TRUE){
+		return;
+	}
+
+	//It is reachable
+	block->visited = TRUE;
+
+	/**
+	 * For each of the successors recursively flag as reachable
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		dfs_flag_block_reachability_rec(dynamic_array_get_at(&(block->successors), i));
+	}
+}
+
+
+/**
+ * Delete all blocks that are not reachable from the function entry blocks. To do this, 
+ * we will perform a DFS from the function block and flag every block that can be reached. 
+ * Follwoing that, if we see that there are any blocks with a value of (-1), then we delete
+ * them because they cannot be reached from the function entry
+ *
+ * Here we will hijack the visited flag and use it to mean reachable(TRUE) or unreachable(FALSE)
+ *
+ * Algorithm remove unreachable blocks:
+ * 	for each block B:
+ * 		reset the visited flag to false
+ *
+ * 	perform DFS reachability starting at the function entry(see above)
+ *
+ * 	for each block B in the function:
+ * 		if B is not flagged as reachable then:
+ * 			delete B
+ *
+ * This function returns TRUE if there was at least one unreachable block found
+ */
+static u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+	/**
+	 * Did we do any block deletion? By default assume that we did not
+	 */
+	u_int8_t deleted_blocks = FALSE;
+
+	/**
+	 * For each block reset visited flag to false
+	 */
+	reset_visit_status_for_function(function_blocks);
+
+	/**
+	 * Now invoke the flagger to go through, starting at the function entry,
+	 * and flag everything that we are able to reach
+	 */
+	dfs_flag_block_reachability_rec(function_entry);
+
+	//We know the maximum size of how many we'd have to delete so allocate here
+	basic_block_t* to_be_deleted[function_blocks->current_index];
+	u_int32_t to_be_deleted_next_index = 0;
+
+	/**
+	 * Now run through our blocks again. Anything that is not flagged
+	 * as reachable is going to be deleted
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = function_blocks->internal_array[i];
+
+		/**
+		 * Throw it into the temp holding array
+		 */
+		if(block->visited == FALSE){
+			to_be_deleted[to_be_deleted_next_index] = block;
+			to_be_deleted_next_index++;
+
+			/**
+			 * Flag that we did find at least one block to remove
+			 */
+			deleted_blocks = TRUE;
+		}
+	}
+
+	/**
+	 * Now we can go through and delete everything that we need to
+	 * from the temporary holding array
+	 *
+	 * For each block that we do delete, we'll need to also remove
+	 * it from the successor/predecessor lists of all blocks that 
+	 * it is related to
+	 */
+	for(u_int32_t i = 0; i < to_be_deleted_next_index; i++){
+		//Extract the block
+		basic_block_t* target = to_be_deleted[i];
+
+		/**
+		 * For each predecessor of the target, remove the target as
+		 * a successor
+		 */
+		for(int32_t j = 0; j < target->predecessors.current_index; j++){
+			basic_block_t* predecessor = target->predecessors.internal_array[j];
+			delete_successor_only(predecessor, target);
+		}
+
+		/**
+		 * For each successor of the target, remove the target 
+		 * as a predecessor
+		 */
+		for(int32_t j = 0; j < target->successors.current_index; j++){
+			basic_block_t* successor = target->successors.internal_array[j];
+			delete_predecessor_only(successor, target);
+		}
+
+		//Once we've fully decoupled we can then remove this block from the function
+		dynamic_array_delete(function_blocks, to_be_deleted[i]);
+	}
+
+	/**
+	 * Give back the boolean flag determining whether or not we deleted anything
+	 */
+	return deleted_blocks;
+}
+
+
+/**
  * Initialize a block for idom computation. Remember that we may compute the immediate
  * dominators many times as the graph changes, so we *need* to ensure that we wipe
  * the slate clean every time
