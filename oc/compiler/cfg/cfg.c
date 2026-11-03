@@ -8355,7 +8355,7 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	 * here(branch, jump, ret or raise), then we will emit a jump from the final block to
 	 * the loop start
 	 */
-	if(does_block_end_in_terminal_statement(loop_body_end) == FALSE){
+	if( does_block_end_in_terminal_statement(loop_body_end) == FALSE){
 		emit_jump(loop_body_end, loop_start_block);
 	}
 
@@ -8412,24 +8412,30 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//We'll need this for later
 	generic_ast_node_t* conditional_cursor = ast_cursor;
 
-	//The very next node is a compound statement
+	/**
+	 * Advance to the next node and process the given compound statement. We will extract
+	 * the loop body entry and exit blocks from this
+	 */
 	ast_cursor = ast_cursor->next_sibling;
-
-	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
-
-	//We're out of the compound statement - pop the nesting level
-	pop_nesting_level(&nesting_stack);
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
 
 	/**
-	 * If it's null, that means that we were given an empty while loop here.
-	 * We'll just allocate our own and use that
+	 * EMPTY LOOP BODY - we'll need to model the body as starting at the while statement
+	 * entry block instead
 	 */
-	if(compound_statement_results.starting_block == NULL){
-		//Just give a dummy here
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
+	if(loop_body_start == NULL){
+		loop_body_start = while_statement_entry_block;
+		/**
+		 * This could change with ternary conditionals
+		 */
+		loop_body_end = while_statement_entry_block;
 	}
+
+	
+	//We're out of the compound statement - pop the nesting level
+	pop_nesting_level(&nesting_stack);
 
 	/**
 	 * Inverse jump out of the while loop to the end if bad
@@ -8437,24 +8443,22 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
-
-	//Let's now find the end of the compound statement
-	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
+	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, while_statement_entry_block, BRANCH_CATEGORY_INVERSE);
 
 	/**
-	 * If the block does not end in a termianl statement, we will need to emit a jump right back
-	 * up to the entry block
+	 * *IF* we had a loop body to begin with and the end of the loop does not
+	 * end in a compound statement, we'll jump from the end of the body to the
+	 * entry block
 	 */
-	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
-		emit_jump(compound_stmt_end, while_statement_entry_block);
+	if(loop_body_end != while_statement_entry_block && does_block_end_in_terminal_statement(loop_body_end) == FALSE){
+		emit_jump(loop_body_end, while_statement_entry_block);
 	}
 
-	//Now that we're done, pop these both off their respective stacks
+	/**
+	 * Package up and return the results
+	 */
 	pop(&break_stack);
 	pop(&continue_stack);
-
-	//Now we're done, so
 	return result_package;
 }
 
