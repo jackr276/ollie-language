@@ -8073,7 +8073,6 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	pop_nesting_level(&nesting_stack);
 
 	//If we have an empty interior just emit a dummy block. It will be optimized away regardless
-	//TODO BAD
 	if(compound_statement_results.starting_block == NULL){
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
@@ -8159,8 +8158,6 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	pop_nesting_level(&nesting_stack);
 
 	//It being NULL is ok, we'll just insert a dummy
-	//
-	//TODO BAD
 	if(compound_statement_results.starting_block == NULL){
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
@@ -8230,8 +8227,6 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	/**
 	 * If it's null, that means that we were given an empty while loop here.
 	 * We'll just allocate our own and use that
-	 *
-	 * TODO BAD
 	 */
 	if(compound_statement_results.starting_block == NULL){
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
@@ -8323,14 +8318,8 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	/**
 	 * If it's null, that means that we were given an empty while loop here.
 	 * We'll just allocate our own and use that
-	 *
-	 *
-	 * TODO WE NEED TO UPDATE THIS
-	 *
-	 * TODO BAD
 	 */
 	if(compound_statement_results.starting_block == NULL){
-		printf("EMPTY COMPOUND\n\n");
 		//Just give a dummy here
 		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
 		compound_statement_results.final_block = compound_statement_results.starting_block;
@@ -8540,8 +8529,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		/**
 		 * If we have an empty if statement(possible), then we'll just go about creating
 		 * a block here so we don't have any weird behavior
-		 *
-		 * TODO BAD
 		 */
 		if(compound_statement_results.starting_block == NULL){
 			compound_statement_results.starting_block = basic_block_alloc_and_estimate();
@@ -11068,10 +11055,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	 * Account for the case where we have a completely
 	 * empty compound statement. In this case we'll
 	 * just allocate a dummy block and get out
-	 *
-	 * TODO WTF IS THIS
-	 *
-	 * THIS IS CAUSING BIG ISSUES WE CANNOT BE DOING THIS HERE
 	 */
 	if(starting_block == NULL){
 		printf("EMPTY COMPOUND EMITTED BY STMT ITSELF BAD\n");
