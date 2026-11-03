@@ -8147,18 +8147,24 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//All continues will go to the update block
 	push(&continue_stack, for_stmt_update_block);
 	
-	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
-	//because that is what repeats on continue
+	/**
+	 * Attempt to emit a compound statement and assign over the loop body start/end
+	 */
 	cfg_result_package_t compound_statement_results = visit_compound_statement(cursor);
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
+
+	/**
+	 * If we have no loop body at all, we'll assign the loop body to just
+	 * be the update block itself and jump to that
+	 */
+	if(loop_body_start == NULL){
+		loop_body_start = for_stmt_update_block;
+		loop_body_end = for_stmt_update_block_end;
+	}
 
 	//Once we're done with the compound statement, we are no longer in the loop
 	pop_nesting_level(&nesting_stack);
-
-	//If we have an empty interior just emit a dummy block. It will be optimized away regardless
-	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
-	}
 
 	/**
 	 * If we have a conditional at all, we will emit appropriate branch
@@ -8169,22 +8175,22 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	 * if not condition 
 	 * 	goto exit
 	 * else
-	 * 	goto update
+	 * 	goto start 
 	 */
 	if(condition_block_node != NULL){
-		emit_branch(condition_block, condition_block_node, for_stmt_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+		emit_branch(condition_block, condition_block_node, for_stmt_exit_block, loop_body_start, BRANCH_CATEGORY_INVERSE);
 
 	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
 	} else {
-		emit_jump(condition_block, compound_statement_results.starting_block);
+		emit_jump(condition_block, loop_body_start);
 	}
 
-	//However if it isn't NULL, we'll need to find the end of this compound statement
-	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
-
-	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
-		//We also need an uncoditional jump right to the update block
-		emit_jump(compound_stmt_end, for_stmt_update_block);
+	/**
+	 * If we *DID* have a body(so the loop body is not the same as the update block) and we don't have a terminal
+	 * statement at the end of the loop body, we'll emit a jump from the loop body to the update block
+	 */
+	if(loop_body_start != for_stmt_update_block && does_block_end_in_terminal_statement(loop_body_end) == FALSE){
+		emit_jump(loop_body_end, for_stmt_update_block);
 	}
 
 	//Now that we're done, we'll need to remove these both from the stack
@@ -11132,18 +11138,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 		//Advance to the next child
 		ast_cursor = ast_cursor->next_sibling;
-	}
-
-	/**
-	 * Account for the case where we have a completely
-	 * empty compound statement. In this case we'll
-	 * just allocate a dummy block and get out
-	 *
-	 * TODO BAD!
-	 */
-	if(starting_block == NULL){
-		starting_block = basic_block_alloc_and_estimate();
-		current_block = starting_block;
 	}
 
 	//If we make it down here - we still need to ensure that results are packaged properly
