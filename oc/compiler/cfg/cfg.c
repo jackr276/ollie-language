@@ -8443,7 +8443,7 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, while_statement_entry_block, BRANCH_CATEGORY_INVERSE);
+	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, loop_body_start, BRANCH_CATEGORY_INVERSE);
 
 	/**
 	 * *IF* we had a loop body to begin with and the end of the loop does not
