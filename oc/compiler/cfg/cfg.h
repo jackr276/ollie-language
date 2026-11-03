@@ -70,6 +70,15 @@ struct cfg_t{
 
 
 /**
+ * A helper function that makes a new block id. This ensures we have an atomically
+ * increasing block ID
+ */
+static inline int32_t get_next_block_id(cfg_t* cfg){
+	(cfg->block_id)++;
+	return cfg->block_id;
+}
+
+/**
  * Build the entire CFG from the AST. This function returns the CFG struct, which
  * always has the root block
  */

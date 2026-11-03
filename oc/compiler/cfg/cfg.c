@@ -640,16 +640,6 @@ static inline u_int8_t does_type_require_copy_assignment(generic_type_t* type){
 
 
 /**
- * Delete a block, including all of the needed internal
- * bookkeeping
- */
-static inline void delete_block(basic_block_t* block){
-	//And delete it from this function's blocks too
-	dynamic_array_delete(current_function_blocks, block);
-}
-
-
-/**
  * Determine the number of parameters that do not count as elaborative
  *
  * NOTE: this purely takes into account symtab variables that you would see
@@ -671,84 +661,6 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 	}
 
 	return count;
-}
-
-
-/**
- * For any blocks that are completely impossible to reach, we will scrap them all now
- * to avoid any confusion later in the process
- *
- * We consider any block with no predecessors that *is not* a function entry block
- * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
- * be creating even more unreachable blocks, so we need to take care of those too 
- */
-static inline void delete_all_unreachable_blocks(dynamic_array_t* function_blocks){
-	//Array of all blocks that are to be deleted
-	dynamic_array_t to_be_deleted = dynamic_array_alloc();
-	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
-
-	//First bulid the array of things that need to go. A block is considered
-	//unreachable if it has no predecessors and it is *not* an entry block
-	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
-
-		//Doesn't count
-		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			continue;
-		}
-
-		//This is our case for something that has to go
-		if(current_block->predecessors.current_index == 0){
-			dynamic_array_add(&to_be_deleted, current_block);
-		}
-	}
-
-	//Run through all of the blocks that need to be deleted
-	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
-		//O(1) removal
-		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
-
-		//Every successor needs to be uncoupled
-		for(int32_t i = 0; i < target->successors.current_index; i++){
-			//Extract it
-			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
-
-			//Add this link in
-			dynamic_array_add(&to_be_deleted_successors, successor);
-		}
-
-		//Now run through all of the successors that we need to delete. This is done to avoid
-		//any funniness with the indices
-		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
-			//Extract the successor
-			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
-
-			//Undo the link
-			delete_successor(target, successor);
-
-			//What if the successor now has now predecessors? That means it needs to go too
-			if(successor->predecessors.current_index == 0){
-				dynamic_array_add(&to_be_deleted, successor);
-			}
-		}
-
-		//Delete the target block now
-		delete_block(target);
-	}
-
-	//Deallocate this once we're done
-	dynamic_array_dealloc(&to_be_deleted);
-	dynamic_array_dealloc(&to_be_deleted_successors);
-}
-
-
-/**
- * A helper function that makes a new block id. This ensures we have an atomically
- * increasing block ID
- */
-static inline int32_t get_next_block_id(){
-	(cfg->block_id)++;
-	return cfg->block_id;
 }
 
 
@@ -927,7 +839,7 @@ static basic_block_t* basic_block_alloc_no_estimate(){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in
-	created->block_id = get_next_block_id();
+	created->block_id = get_next_block_id(cfg);
 
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
@@ -956,7 +868,7 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in
-	created->block_id = get_next_block_id();
+	created->block_id = get_next_block_id(cfg);
 
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
@@ -984,7 +896,7 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in even though it is a labeled block
-	created->block_id = get_next_block_id();
+	created->block_id = get_next_block_id(cfg);
 
 	//We'll mark this to indicate that this is a labeled block
 	created->block_type = BLOCK_TYPE_LABEL;
@@ -8012,8 +7924,11 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//Update the instruction counts
 	a->number_of_instructions += b->number_of_instructions;
 
-	//Delete block b now
-	delete_block(b);
+	/**
+	 * Remove this block from the set of all function blocks in the
+	 * current function
+	 */
+	dynamic_array_delete(current_function_blocks, b);
 
 	//And finally we'll deallocate b
 	basic_block_dealloc(b);
