@@ -11559,7 +11559,9 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	basic_block_t* compound_statement_exit = compound_statement_results.final_block;
 
 	/**
-	 *
+	 * If we have an actual function body, we can either merge the function start block with said
+	 * body *OR* we can emit a jump from the function start to the body. Whether or not we can depends
+	 * on the mergeability of the two blocks
 	 */
 	if(compound_statement_entry != NULL){
 		/**
@@ -11567,16 +11569,20 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 		 * emit a jump from the function's start to the compound statement start
 		 */
 		if(can_blocks_be_merged(function_starting_block, compound_statement_entry) == TRUE){
-			//Merge the two since we can
-			compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
+			/**
+			 * Merge these two blocks together
+			 */
+			merge_blocks(function_starting_block, compound_statement_entry);
 
 			/**
-			 * Due to the way that the merging works, we need to make sure that the reassignment
-			 * is valid. If it's just one big block, then the prior assignment above is actually
-			 * fine
+			 * If we merged these blocks together *AND* it turns out that the block was
+			 * just one body, we'll need to reassign the compound statement exit block
+			 * to be the function starting block, as the exit block will no longer
+			 * exist after the merge if it's one in the same with the compound statement
+			 * entry
 			 */
-			if(compound_statement_results.starting_block != compound_statement_results.final_block){
-				compound_statement_exit_block = compound_statement_results.final_block;
+			if(compound_statement_entry == compound_statement_exit){
+				compound_statement_exit = function_starting_block;
 			}
 
 		/**
