@@ -8632,30 +8632,33 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		//Signify that this is happening inside of an IF
 		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-		//Let the helper emit the entire compound statement
+		/**
+		 * Let the helper emit the compound statement. Retrieve the if entry and exit blocks
+		 * from here
+		 */
 		cfg_result_package_t compound_statement_results = visit_compound_statement(compound_statement_node);
+		basic_block_t* if_body_start = compound_statement_results.starting_block;
+		basic_block_t* if_body_end = compound_statement_results.final_block;
 
-		//Remove the IF nester
+		//Remove the IF nesting level
 		pop_nesting_level(&nesting_stack);
 
 		/**
-		 * If we have an empty if statement(possible), then we'll just go about creating
-		 * a block here so we don't have any weird behavior
-		 *
-		 * TODO IF EMPTY, WOULDN'T THIS JUST BE THE OVERALL EXIT???
+		 * If we have a completely empty if block, then in reality the "body" is really just the end of
+		 * the if statement. We'll reassign this to match that
 		 */
-		if(compound_statement_results.starting_block == NULL){
-			compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-			compound_statement_results.final_block = compound_statement_results.starting_block;
+		if(if_body_start == NULL){
+			if_body_start = overall_exit_block;
+			if_body_end = overall_exit_block;
 		}
 
 		/**
-		 * If the compound statement final block does not end in a return, we'll need to make
+		 * If the compound statement final block does is not the exit and not end in a return, we'll need to make
 		 * it jump to the exit block. This is the overall exit block, not the current exit block
 		 * which is just where we go if something didn't work
 		 */
-		if(does_block_end_in_terminal_statement(compound_statement_results.final_block) == FALSE){
-			emit_jump(compound_statement_results.final_block, overall_exit_block);
+		if(if_body_end != overall_exit_block && does_block_end_in_terminal_statement(if_body_end) == FALSE){
+			emit_jump(if_body_end, overall_exit_block);
 		}
 
 		//Bump the cursor up to the next statement
@@ -8689,7 +8692,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * Branch out using the "jump-to-else" methodology. The conditional jump target here is the
 					 * else block(current entry block), and the direct block here if's inner results
 					 */
-					emit_branch(old_entry_block, conditional_node, current_entry_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+					emit_branch(old_entry_block, conditional_node, current_entry_block, if_body_start, BRANCH_CATEGORY_INVERSE);
 
 					//Next iteration of the loop, break out of switch
 					break;
@@ -8704,19 +8707,24 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					//Push the if nesting level
 					push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-					//Get the results for the else statement
+					/**
+					 * Get the results for the else statement and assign the start and end blocks
+					 * accordingly
+					 */
 					cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
+					basic_block_t* else_body_start = else_compound_statement_values.starting_block;
+					basic_block_t* else_body_end = else_compound_statement_values.final_block;
 
 					//Pop it off
 					pop_nesting_level(&nesting_stack);
 
 					/**
-					 * If we have an empty if statement(possible), then we'll just go about creating
-					 * a block here so we don't have any weird behavior
+					 * We have a completely empty else body, so the real else body is just the exit
+					 * block of the loop
 					 */
-					if(else_compound_statement_values.starting_block == NULL){
-						else_compound_statement_values.starting_block = basic_block_alloc_and_estimate();
-						else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
+					if(else_body_start == NULL){
+						else_body_start = overall_exit_block;
+						else_body_end = overall_exit_block;
 					}
 
 					/**
@@ -8724,14 +8732,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * as our conditional jump target and the compund statement result's starting block as our direct
 					 * target
 					 */
-					emit_branch(current_entry_block, conditional_node, else_compound_statement_values.starting_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+					emit_branch(current_entry_block, conditional_node, else_body_start, if_body_start, BRANCH_CATEGORY_INVERSE);
 
 					/**
-					 * If the else if compound statement final block does not end in a return, we'll need to make
+					 * If the else if compound statement final block exists and does not end in a return, we'll need to make
 					 * it jump to the overall exit block
 					 */
-					if(does_block_end_in_terminal_statement(else_compound_statement_values.final_block) == FALSE){
-						emit_jump(else_compound_statement_values.final_block, overall_exit_block);
+					if(else_body_end != overall_exit_block && does_block_end_in_terminal_statement(else_body_end) == FALSE){
+						emit_jump(else_body_end, overall_exit_block);
 					}
 
 					/**
@@ -8750,7 +8758,6 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 				default:{
 					trigger_ice_panic("Invalid node found in if statement processor");
-
 				}
 			}
 		
@@ -8776,9 +8783,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			 * the if
 			 */
 			if(is_if_path_likely_to_execute(&compound_statement_results) == TRUE){
-				emit_branch(current_entry_block, conditional_node, overall_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+				emit_branch(current_entry_block, conditional_node, overall_exit_block, if_body_start, BRANCH_CATEGORY_INVERSE);
 			} else {
-				emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+				emit_branch(current_entry_block, conditional_node, if_body_start, overall_exit_block, BRANCH_CATEGORY_NORMAL);
 			}
 
 			if_results_package.final_block = overall_exit_block;
