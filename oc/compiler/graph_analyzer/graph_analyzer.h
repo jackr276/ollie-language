@@ -19,7 +19,7 @@
  *
  * This function returns TRUE if there was at least one unreachable block found
  */
-static u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks);
+u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks);
 
 /**
  * Special exposes post order traversal API. The postorder traversal is needed

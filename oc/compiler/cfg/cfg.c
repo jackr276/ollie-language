@@ -14272,7 +14272,7 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 		 * Once we are fully complete, we will go through and search for any/all useless
 		 * statements to delete
 		 */
-		delete_all_unreachable_blocks(&(function->function_blocks));
+		delete_all_unreachable_blocks(function_entry, &(function->function_blocks));
 
 		/**
 		 * Let's now use the helper to compute all of the USE/DEF sets for each

@@ -79,7 +79,7 @@ static void dfs_flag_block_reachability_rec(basic_block_t* block){
  *
  * This function returns TRUE if there was at least one unreachable block found
  */
-static u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
 	/**
 	 * Did we do any block deletion? By default assume that we did not
 	 */

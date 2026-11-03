@@ -65,16 +65,6 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
- * A helper function that makes a new block id. This ensures we have an atomically
- * increasing block ID
- */
-static inline int32_t get_next_block_id(){
-	(cfg_reference->block_id)++;
-	return cfg_reference->block_id;
-}
-
-
-/**
  * Is a given variable SSA eligible? We do this by looking at the type of the
  * variable and whether or not the linked var is NULL. If the linked var is NULL
  * we would get segfaults
@@ -2140,6 +2130,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * block set
 		 */
 		u_int8_t deleted_blocks = delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
+		//TODO WHAT DO WE NEED TO DO FOR THIS???
 
 		/**
 		 * Once we get here, we have an array that is full of all of the blocks belonging
