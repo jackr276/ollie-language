@@ -8610,21 +8610,23 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			 * For the else if we'll need to go into the child nodes
 			 * of the current cursor
 			 */
-			case AST_NODE_TYPE_ELSE_IF_STMT:
+			case AST_NODE_TYPE_ELSE_IF_STMT: {
 				conditional_node = cursor->first_child;
 				compound_statement_node = conditional_node->next_sibling;
 				break;
+			}
 
 			/**
 			 * Otherwise we have our if statement. The conditional is the first
 			 * child, compound statement is the next one. Advance the cursor as 
 			 * we go
 			 */
-			default:
+			default: {
 				conditional_node = cursor;
 				cursor = cursor->next_sibling;
 				compound_statement_node = cursor;
 				break;
+			}
 		}
 
 		//Signify that this is happening inside of an IF
@@ -8639,6 +8641,8 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 		/**
 		 * If we have an empty if statement(possible), then we'll just go about creating
 		 * a block here so we don't have any weird behavior
+		 *
+		 * TODO IF EMPTY, WOULDN'T THIS JUST BE THE OVERALL EXIT???
 		 */
 		if(compound_statement_results.starting_block == NULL){
 			compound_statement_results.starting_block = basic_block_alloc_and_estimate();
@@ -8674,7 +8678,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 				 * We have an else-if statement. If this is the case, we are safe to emit
 				 * a new block for the next conditional and jump to that
 				 */
-				case AST_NODE_TYPE_ELSE_IF_STMT:
+				case AST_NODE_TYPE_ELSE_IF_STMT: {
 					//Hang onto the old "entry"
 					old_entry_block = current_entry_block;
 
@@ -8689,13 +8693,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 
 					//Next iteration of the loop, break out of switch
 					break;
+				}
 
 				/**
 				 * We have an if-else statement. If this is the case, we'll just emit the else here for ourselves
 				 * and then leave when it is appropriate. Note that this is a terminal case, we are out of here 
 				 * when this happens
 				 */
-				case AST_NODE_TYPE_COMPOUND_STMT:
+				case AST_NODE_TYPE_COMPOUND_STMT: {
 					//Push the if nesting level
 					push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
@@ -8741,11 +8746,12 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					}
 
 					return if_results_package;
+				}
 
-				//Should never happen
-				default:
-					fprintf(stderr, "Fatal internal compiler error: invalid node found in if statement processor\n");
-					exit(1);
+				default:{
+					trigger_ice_panic("Invalid node found in if statement processor");
+
+				}
 			}
 		
 		/**
