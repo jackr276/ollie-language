@@ -8818,9 +8818,10 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	//Grab the compound statement out of here
 	cfg_result_package_t default_compound_statement_results = visit_compound_statement(default_stmt_cursor->first_child);
 
-	//Let this take care of it if we have an actual compound statement here
+	/**
+	 * If we had an actual compound statement we'll just copy the results over
+	 */
 	if(default_compound_statement_results.starting_block != NULL){
-		//Otherwise, we'll just copy over the starting and ending block into our results
 		results.starting_block = default_compound_statement_results.starting_block;
 		results.final_block = default_compound_statement_results.final_block;
 
@@ -8858,18 +8859,18 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	 * done by the parser, so we're guaranteed to see something
 	 * correct here
 	 */
-	
 	generic_ast_node_t* case_stmt_cursor = root_node;
 
 	//Let this take care of it
 	cfg_result_package_t case_compound_statement_results = visit_compound_statement(case_stmt_cursor->first_child);
 
-	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
+	/**
+	 * If we have an actual compound statement body, then we'll the returned blocks
+	 * to the overall result. Otherwise, we'll need to allocate our own block and add
+	 * it as the case block
+	 */
 	if(case_compound_statement_results.starting_block != NULL){
-		//Once we get this back, we'll add it in to the main block
 		results.starting_block = case_compound_statement_results.starting_block;
-
-		//Add this in as the final block
 		results.final_block = case_compound_statement_results.final_block;
 
 		//Be sure that we copy over the case statement value as well
@@ -8878,13 +8879,10 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	} else {
 		//We need to make the block first
 		basic_block_t* case_stmt = basic_block_alloc_and_estimate();
-
-		//Grab the value -- this should've already been done by the parser
-		case_stmt->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
-
-		//We'll set the front and end block to both be this
 		results.starting_block = case_stmt;
 		results.final_block = case_stmt;
+
+		case_stmt->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
 	}
 
 	//Nesting here is no longer in a case statement
@@ -10461,17 +10459,26 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 
 			case AST_NODE_TYPE_DEFER_STMT:
-				//Grab a cursor here
+				/**
+				 * So long as this cursor is not null, we'll keep processing and adding
+				 * compound statements
+				 */
 				defer_statement_cursor = ast_cursor->first_child;
-
-				//So long as this cursor is not null, we'll keep processing and adding
-				//compound statements
 				while(defer_statement_cursor != NULL){
-					//Let the helper process this
+					/**
+					 * Let the helper process this. If it ends up being empty, we'll emit a dummy
+					 * block for this
+					 */
 					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
+					if(compound_statement_results.starting_block == NULL){
+						compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+						compound_statement_results.final_block = compound_statement_results.starting_block;
+					}
 
-					//The successor to the current block is this block
-					//If it's null then this is this block
+					/**
+					 * The successor to the current block is this block, unless it's NULL, in
+					 * which case this is the starting block
+					 */
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
@@ -10593,8 +10600,14 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 
 			case AST_NODE_TYPE_COMPOUND_STMT:
-				//We'll simply recall this function and let it handle it
+				/**
+				 * Call the compound statement converter and let it run. If this 
+				 * block is empty we just get out
+				 */
 				generic_results = visit_compound_statement(ast_cursor);
+				if(generic_results.starting_block == NULL){
+					break;
+				}
 
 				//Add in everything appropriately here
 				if(starting_block == NULL){
@@ -10969,8 +10982,15 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				 */
 				generic_ast_node_t* defer_statement_cursor = ast_cursor->first_child;
 				while(defer_statement_cursor != NULL){
-					//Let the helper process this
+					/**
+					 * Let the helper process this. If it's completely empty then just emit
+					 * a dummy block
+					 */
 					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
+					if(compound_statement_results.starting_block == NULL){
+						compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+						compound_statement_results.final_block = compound_statement_results.starting_block;
+					}
 
 					/**
 					 * The successor to the current block is this block
@@ -11099,8 +11119,14 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			}
 
 			case AST_NODE_TYPE_COMPOUND_STMT: {
-				//We'll simply recall this function and let it handle it
+				/**
+				 * Call the compound statement helper. If it's empty
+				 * then ignore it
+				 */
 				generic_results = visit_compound_statement(ast_cursor);
+				if(generic_results.starting_block == NULL){
+					break;
+				}
 
 				//Add in everything appropriately here
 				if(starting_block == NULL){
@@ -11531,6 +11557,7 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 		//Once we get here, we know that func cursor is the compound statement that we want
 		cfg_result_package_t compound_statement_results = visit_compound_statement(func_cursor);
 
+		//TODO HERE
 		//Holder for the exit block
 		basic_block_t* compound_statement_exit_block;
 
