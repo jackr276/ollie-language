@@ -2148,7 +2148,12 @@ static void dfs_flag_block_reachability_rec(basic_block_t* block){
  * 		if B is not flagged as reachable then:
  * 			delete B
  */
-static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+static inline u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+	/**
+	 * Did we do any block deletion? By default assume that we did not
+	 */
+	u_int8_t deleted_blocks = FALSE;
+
 	/**
 	 * For each block reset visited flag to false
 	 */
@@ -2180,6 +2185,11 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 		if(block->visited == FALSE){
 			to_be_deleted[to_be_deleted_next_index] = block;
 			to_be_deleted_next_index++;
+
+			/**
+			 * Flag that we did find at least one block to remove
+			 */
+			deleted_blocks = TRUE;
 		}
 	}
 
@@ -2216,6 +2226,11 @@ static inline void delete_all_unreachable_blocks(basic_block_t* function_entry, 
 		//Once we've fully decoupled we can then remove this block from the function
 		dynamic_array_delete(function_blocks, to_be_deleted[i]);
 	}
+
+	/**
+	 * Give back the boolean flag determining whether or not we deleted anything
+	 */
+	return deleted_blocks;
 }
 
 
@@ -2247,6 +2262,12 @@ cfg_t* optimize(cfg_t* cfg){
 
 		//The current function blocks are stored in the symtab
 		dynamic_array_t* current_function_blocks = &(current_function->function_blocks);
+
+		/**
+		 * PASS 0: Normalize the function CFG by removing all unreachable blocks from it's
+		 * block set
+		 */
+		u_int8_t deleted_blocks = delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 		/**
 		 * Once we get here, we have an array that is full of all of the blocks belonging
