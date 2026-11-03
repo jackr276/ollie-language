@@ -8317,16 +8317,21 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	//Any/all continues go to the starting block
 	push(&continue_stack, loop_start_block);
 
-	//Emit the compound statement interior
+	/**
+	 * Emit the given compound statement interior and grab references to the given
+	 * loop start and loop end blocks
+	 */
 	cfg_result_package_t compound_statement_results = visit_compound_statement(root_node->first_child);
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
 
 	/**
-	 * If it's null, that means that we were given an empty while loop here.
-	 * We'll just allocate our own and use that
+	 * In the event that these are NULL, we will just model these as being
+	 * the loop start block itself
 	 */
-	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
+	if(loop_body_start == NULL){
+		loop_body_start = loop_start_block;
+		loop_body_end = loop_start_block;
 	}
 
 	/**
@@ -8337,16 +8342,21 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	 * In theory due to the way that this works, we have no direct connection
 	 * to the loop exit block from here. Any/all exit would have to be internal
 	 * to the loop itself
+	 *
+	 * *IF* the loop was not empty, we'll emit a jump from the start of loop control
+	 * to the inner compound statement
 	 */
-	emit_jump(loop_start_block, compound_statement_results.starting_block);
+	if(loop_start_block != loop_body_start){
+		emit_jump(loop_start_block, loop_body_start);
+	}
 
 	/**
 	 * IF AND ONLY IF our block does not already end in some kind of terminal statement
 	 * here(branch, jump, ret or raise), then we will emit a jump from the final block to
 	 * the loop start
 	 */
-	if(does_block_end_in_terminal_statement(compound_statement_results.final_block) == FALSE){
-		emit_jump(compound_statement_results.final_block, loop_start_block);
+	if(does_block_end_in_terminal_statement(loop_body_end) == FALSE){
+		emit_jump(loop_body_end, loop_start_block);
 	}
 
 	//Remove these from the continue stack before returning
