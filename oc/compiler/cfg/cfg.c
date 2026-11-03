@@ -11549,50 +11549,58 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	//Setup the function parameters. The helper does all of this
 	setup_function_parameters(func_record, function_starting_block, func_record->line_number); 
 
-	//We don't care about anything until we reach the compound statement
-	generic_ast_node_t* func_cursor = function_node->first_child;
-
-
-
-
-	//TODO BAD
-
-	
-	//Once we get here, we know that func cursor is the compound statement that we want
-	cfg_result_package_t compound_statement_results = visit_compound_statement(func_cursor);
-
-	//TODO HERE
-	//Holder for the exit block
-	basic_block_t* compound_statement_exit_block;
+	/**
+	 * Following the parameter setup, we can emit the function's body. The body
+	 * of the function is always a compound statement node that is the first
+	 * child of the overall function node
+	 */
+	cfg_result_package_t compound_statement_results = visit_compound_statement(function_node->first_child);
+	basic_block_t* compound_statement_entry = compound_statement_results.starting_block;
+	basic_block_t* compound_statement_exit = compound_statement_results.final_block;
 
 	/**
-	 * If we are able to merge these two blocks, then we will. If we are not, then we will
-	 * emit a jump from the function's start to the compound statement start
+	 *
 	 */
-	if(can_blocks_be_merged(function_starting_block, compound_statement_results.starting_block) == TRUE){
-		//Merge the two since we can
-		compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
+	if(compound_statement_entry != NULL){
+		/**
+		 * If we are able to merge these two blocks, then we will. If we are not, then we will
+		 * emit a jump from the function's start to the compound statement start
+		 */
+		if(can_blocks_be_merged(function_starting_block, compound_statement_entry) == TRUE){
+			//Merge the two since we can
+			compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
+
+			/**
+			 * Due to the way that the merging works, we need to make sure that the reassignment
+			 * is valid. If it's just one big block, then the prior assignment above is actually
+			 * fine
+			 */
+			if(compound_statement_results.starting_block != compound_statement_results.final_block){
+				compound_statement_exit_block = compound_statement_results.final_block;
+			}
 
 		/**
-		 * Due to the way that the merging works, we need to make sure that the reassignment
-		 * is valid. If it's just one big block, then the prior assignment above is actually
-		 * fine
+		 * We could not merge them, so jump from the function entry to the start block
 		 */
-		if(compound_statement_results.starting_block != compound_statement_results.final_block){
-			compound_statement_exit_block = compound_statement_results.final_block;
+		} else {
+			emit_jump(function_starting_block, compound_statement_entry);
 		}
 
+		/**
+		 * If this is not already the function exit block(which it may be if a function has a bunch
+		 * of return paths), then add the successor now
+		 */
+		if(compound_statement_exit != function_exit_block){
+			add_successor(compound_statement_exit, function_exit_block);
+		}
+
+	/**
+	 * Otherwise, it was entirely empty. If this is the case, we'll just add the exit
+	 * block as a successor to the entry block. There is a separate process that will
+	 * insert return statements as needed
+	 */
 	} else {
-		//Could not merge, just jump into this block
-		emit_jump(function_starting_block, compound_statement_results.starting_block);
-
-		//We can just straight assign here
-		compound_statement_exit_block = compound_statement_results.final_block;
-	}
-
-	//If these two are not equal, we'll add a successor as the exit block
-	if(compound_statement_exit_block != function_exit_block){
-		add_successor(compound_statement_exit_block, function_exit_block);
+		add_successor(function_starting_block, function_exit_block);
 	}
 
 	//Add the start and end blocks to their respective arrays
