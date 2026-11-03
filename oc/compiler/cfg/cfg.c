@@ -10645,40 +10645,32 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 /**
  * A compound statement also acts as a sort of multiplexing block. It runs through all of it's statements, calling
  * the appropriate functions and making the appropriate additions
- *
- * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node){
 	//Everything to begin with is completely null'd out
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 	//A generic results package that we can use in any of our processing
 	cfg_result_package_t generic_results;
-	//A defer statement cursor
-	generic_ast_node_t* defer_statement_cursor;
 
-	//The global starting block
+	/**
+	 * Hang onto a starting block and whatever our current block is
+	 */
 	basic_block_t* starting_block = NULL;
-	//The current block
 	basic_block_t* current_block = starting_block;
-	//A holder that we'll use for labeled statements
-	basic_block_t* labeled_block = NULL;
 
-	//Grab the initial node
-	generic_ast_node_t* compound_stmt_node = root_node;
-
-	//Grab our very first thing here
-	generic_ast_node_t* ast_cursor = compound_stmt_node->first_child;
-	
-	//Roll through the entire subtree
+	/**
+	 * Grab a cursor and start running through the entire
+	 * subtree processing as we go
+	 */
+	generic_ast_node_t* ast_cursor = root_node->first_child;
 	while(ast_cursor != NULL){
-		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
 			/**
 			 * A raise statement is what allows a function to effectively
 			 * throw errors. Raise statements are final and unrecoverable,
 			 * the function must and will exit when one of these is hit
 			 */
-			case AST_NODE_TYPE_RAISE_STMT:
+			case AST_NODE_TYPE_RAISE_STMT: {
 				//Allocate if we don't have
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -10700,8 +10692,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//We're done here - get out
 				return results;
+			}
 
-			case AST_NODE_TYPE_RET_STMT:
+			case AST_NODE_TYPE_RET_STMT: {
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
@@ -10727,8 +10720,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//We're completely done here
 				return results;
+			}
 		
-			case AST_NODE_TYPE_IF_STMT:
+			case AST_NODE_TYPE_IF_STMT: {
 				//We'll now enter the if statement
 				generic_results = visit_if_statement(ast_cursor);
 			
@@ -10743,8 +10737,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_WHILE_STMT:
+			case AST_NODE_TYPE_WHILE_STMT: {
 				//Visit the while statement
 				generic_results = visit_while_statement(ast_cursor);
 
@@ -10761,8 +10756,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 	
 				break;
+			}
 
-			case AST_NODE_TYPE_DO_WHILE_STMT:
+			case AST_NODE_TYPE_DO_WHILE_STMT: {
 				//Visit the statement
 				generic_results = visit_do_while_statement(ast_cursor);
 
@@ -10779,8 +10775,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_LOOP_STMT:
+			case AST_NODE_TYPE_LOOP_STMT: {
 				generic_results = visit_loop_statement(ast_cursor);
 
 				//We'll now add it in
@@ -10796,8 +10793,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_FOR_STMT:
+			case AST_NODE_TYPE_FOR_STMT: {
 				//First visit the statement
 				generic_results = visit_for_statement(ast_cursor);
 
@@ -10814,8 +10812,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_CONTINUE_STMT:
+			case AST_NODE_TYPE_CONTINUE_STMT: {
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
@@ -10869,8 +10868,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_BREAK_STMT:
+			case AST_NODE_TYPE_BREAK_STMT: {
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -10919,15 +10919,14 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_DEFER_STMT:
-				//Grab a cursor here
-				defer_statement_cursor = ast_cursor->first_child;
-
+			case AST_NODE_TYPE_DEFER_STMT: {
 				/**
 				 * So long as this cursor is not null, we'll keep processing and adding
 				 * compound statements
 				 */
+				generic_ast_node_t* defer_statement_cursor = ast_cursor->first_child;
 				while(defer_statement_cursor != NULL){
 					//Let the helper process this
 					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
@@ -10951,6 +10950,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
 			/**
 			 * A label statement is special because it creates an entirely
@@ -10959,9 +10959,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			 * Since a label statement will be jumped to, we need to have it 
 			 * as the start of a separate block
 			 */
-			case AST_NODE_TYPE_LABEL_STMT:
+			case AST_NODE_TYPE_LABEL_STMT: {
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->optional_storage.label_record);
+				basic_block_t* labeled_block = labeled_block_alloc(ast_cursor->optional_storage.label_record);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -10973,11 +10973,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block now is this labeled block
 				current_block = labeled_block;
-
 				break;
+			}
 
 			//A straight unconditional jump statement
-			case AST_NODE_TYPE_JUMP_STMT:
+			case AST_NODE_TYPE_JUMP_STMT: {
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -10992,11 +10992,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				 * be completely disconnected(at least on paper)
 				 */
 				current_block = basic_block_alloc_and_estimate();
-
 				break;
+			}
 
 			//A conditional user-defined jump works somewhat like a break
-			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
+			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT: {
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -11018,10 +11018,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block now is said jumping to block
 				current_block = else_block;
-
 				break;
+			}
 
-			case AST_NODE_TYPE_SWITCH_STMT:
+			case AST_NODE_TYPE_SWITCH_STMT: {
 				//Visit the switch statement
 				generic_results = visit_switch_statement(ast_cursor);
 
@@ -11036,10 +11036,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block is always what's directly at the end
 				current_block = generic_results.final_block;
-
 				break;
+			}
 
-			case AST_NODE_TYPE_C_STYLE_SWITCH_STMT:
+			case AST_NODE_TYPE_C_STYLE_SWITCH_STMT: {
 				//Visit the switch statement
 				generic_results = visit_c_style_switch_statement(ast_cursor);
 
@@ -11054,10 +11054,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block is always what's directly at the end
 				current_block = generic_results.final_block;
-
 				break;
+			}
 
-			case AST_NODE_TYPE_COMPOUND_STMT:
+			case AST_NODE_TYPE_COMPOUND_STMT: {
 				//We'll simply recall this function and let it handle it
 				generic_results = visit_compound_statement(ast_cursor);
 
@@ -11070,11 +11070,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//Current is just the end of this block
 				current_block = generic_results.final_block;
-
 				break;
-		
+			}
 
-			case AST_NODE_TYPE_ASM_INLINE_STMT:
+			case AST_NODE_TYPE_ASM_INLINE_STMT: {
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
@@ -11084,8 +11083,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				instruction_t* asm_inline = emit_asm_inline_instruction(ast_cursor, ast_cursor->line_number);
 				add_statement(current_block, asm_inline);
 				break;
+			}
 
-			case AST_NODE_TYPE_IDLE_STMT:
+			case AST_NODE_TYPE_IDLE_STMT: {
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
@@ -11095,9 +11095,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				instruction_t* idle_statement = emit_idle_instruction(ast_cursor->line_number);
 				add_statement(current_block, idle_statement);
 				break;
+			}
 
 			//This means that we have some kind of expression statement
-			case AST_NODE_TYPE_EXPR_CHAIN:
+			case AST_NODE_TYPE_EXPR_CHAIN: {
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -11109,19 +11110,19 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//Update the end block
 				current_block = generic_results.final_block;
-				
 				break;
+			}
 				
-			//Shouldn't ever happen
-			default:
-				printf("Fatal internal compiler error: unreachable path hit in CFG\n");
-				exit(1);
+			default: {
+				trigger_ice_panic("Unreachable path hit in compound statement builder");
+			}
 		}
 
-		//If this is the exit block, it means that we returned through every control path
-		//in here and there is no point in moving forward. We'll simply return
+		/**
+		 * If this is the exit block, it means that we returned through every control path
+		 * in here and there is no point in moving forward. We'll simply return
+		 */
 		if(current_block == function_exit_block){
-			//Warn that we have unreachable code here
 			if(ast_cursor->next_sibling != NULL){
 				print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
 			}
@@ -11137,6 +11138,8 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 	 * Account for the case where we have a completely
 	 * empty compound statement. In this case we'll
 	 * just allocate a dummy block and get out
+	 *
+	 * TODO BAD!
 	 */
 	if(starting_block == NULL){
 		starting_block = basic_block_alloc_and_estimate();
