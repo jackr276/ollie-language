@@ -8233,35 +8233,42 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	result_package.starting_block = do_while_stmt_entry_block;
 	result_package.final_block = do_while_stmt_exit_block;
 
-	//Grab the initial node
-	generic_ast_node_t* do_while_stmt_node = root_node;
-
-	//Grab a cursor for walking the subtree
-	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
-
-	//We go right into the compound statement here
+	/**
+	 * Grab a cursor for walking the subtree and go right into this
+	 */
+	generic_ast_node_t* ast_cursor = root_node->first_child;
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
+
+	/**
+	 * Grab references to the start and end of the loop body. If either of these is
+	 * NULL, it means that we had an empty loop body and we'll have to update
+	 * accordingly
+	 */
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
+	if(loop_body_start == NULL){
+		loop_body_start = do_while_stmt_entry_block;
+		loop_body_end = do_while_stmt_entry_block;
+	}
 
 	//Once we're done pop the nesting level
 	pop_nesting_level(&nesting_stack);
 
-	//It being NULL is ok, we'll just insert a dummy
-	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
+	/**
+	 * If we did *NOT* have an empty loop body, then we'll emit a jump
+	 * from the entry block to the loop body start
+	 */
+	if(loop_body_start != do_while_stmt_entry_block){
+		emit_jump(do_while_stmt_entry_block, loop_body_start);
 	}
 
-	//Now we'll jump to it
-	emit_jump(do_while_stmt_entry_block, compound_statement_results.starting_block);
-
-	//We will drill to the bottom of the compound statement
-	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
-
-	//If we get this, we can't go forward. Just give it back
-	if(does_block_end_in_function_termination_statement(compound_stmt_end) == TRUE){
-		//Since we have a return block here, we know that everything else is unreachable
-		result_package.final_block = compound_stmt_end;
-		//And give it back
+	/**
+	 * Rare case here, but if the loop body's end ends in a function termination
+	 * statement like ret or raise, there's no point in keeping it around, so we
+	 * can just give it back
+	 */
+	if(does_block_end_in_function_termination_statement(loop_body_end) == TRUE){
+		result_package.final_block = loop_body_end;
 		return result_package;
 	}
 
@@ -8275,13 +8282,14 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * else
 	 * 	exit
 	 */
-	emit_branch(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
+	emit_branch(loop_body_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
 
-	//Now that we're done here, pop the break/continue stacks to remove these blocks
+	/**
+	 * Now that we're done here, pop the break/continue stacks to remove these blocks and
+	 * give back the given return package
+	 */
 	pop(&continue_stack);
 	pop(&break_stack);
-
-	//Always return the entry block
 	return result_package;
 }
 
