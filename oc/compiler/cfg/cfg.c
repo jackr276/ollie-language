@@ -7693,6 +7693,8 @@ void dealloc_cfg(cfg_t* cfg){
 
 /**
  * Exclusively add a successor to target. The predecessors of successor will not be touched
+ *
+ * TODO DELETE THIS
  */
 void add_successor_only(basic_block_t* target, basic_block_t* successor){
 	//If this is null, we'll perform the initial allocation
@@ -7714,6 +7716,9 @@ void add_successor_only(basic_block_t* target, basic_block_t* successor){
 /**
  * Exclusively add a predecessor to target. Nothing with successors
  * will be touched
+ *
+ *
+ * TODO DELETE THIS
  */
 void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 	//If this is NULL, we'll allocate here
@@ -7737,6 +7742,9 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  * Since "successor" comes after "target", "target" will be added as a predecessor
  * of "successor". If you wish to ONLY add a successor or predecessor(very rare),
  * then use the "only" methods
+ *
+ *
+ * TODO DELETE THIS
  */
  void add_successor(basic_block_t* target, basic_block_t* successor){
 	//This is possible, and if it happens we just leave
@@ -7759,6 +7767,8 @@ void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  *
  * Target: the block that has the successor
  * Successor: the successor itself
+ *
+ * TODO DELETE IS
  */
 void delete_successor_only(basic_block_t* target, basic_block_t* successor){
 	dynamic_array_delete(&(target->successors), successor);
@@ -7772,6 +7782,8 @@ void delete_successor_only(basic_block_t* target, basic_block_t* successor){
  *
  * Target: the block that has the predecessor
  * Predecessor: the predecessor itself
+ *
+ * TODO DELETE THIS
  */
 void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
 	dynamic_array_delete(&(target->predecessors), predecessor);
@@ -7782,6 +7794,8 @@ void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  * Delete a successor from the target block's list. This function is
  * entirely comprehensive. Since target used to be a predecessor
  * of the deleted successor, that will also be deleted
+ *
+ * TODO DELETE THIS
  */
 void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
 	//Bail out if this happens
@@ -7801,6 +7815,8 @@ void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
  *
  * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
+ *
+ * TODO MOVE TO NEW BASIC BLOCK AREA
  */
 static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//If b is null, we just return a
