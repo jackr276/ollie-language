@@ -17,6 +17,8 @@
 typedef struct basic_block_t basic_block_t;
 //An edge struct for successor/predecessor relationships
 typedef struct cfg_edge_t cfg_edge_t;
+//A set of edges. This is used for predecessor/successor sets
+typedef struct edge_set_t edge_set_t;
 
 /**
  * What is the general type of the block. Again most
@@ -55,6 +57,17 @@ typedef enum {
 struct cfg_edge_t {
 	edge_type_t edge_type;
 	basic_block_t* block;
+};
+
+
+/**
+ * An edge set is, in reality, a dynamic array that contains
+ * cfg_edge_t structs as its members
+ */
+struct edge_set_t {
+	cfg_edge_t* edges;
+	int32_t current_index;
+	int32_t max_index;
 };
 
 
