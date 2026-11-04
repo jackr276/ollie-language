@@ -11,11 +11,12 @@
 
 #include "./dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
-#include "cfg_edge.h"
 #include "ollie_instruction.h"
 
 //Basic blocks in our CFG
 typedef struct basic_block_t basic_block_t;
+//An edge struct for successor/predecessor relationships
+typedef struct cfg_edge_t cfg_edge_t;
 
 /**
  * What is the general type of the block. Again most
@@ -33,6 +34,28 @@ typedef enum{
 	BLOCK_TYPE_LOOP_EXIT, //Loop exit block
 	BLOCK_TYPE_LABEL, //This block comes from a user-defined label
 } block_type_t;
+
+
+/**
+ * What kind of edge is this? Currently we have real
+ * edges(default and most common) and analysis only
+ * edges
+ */
+typedef enum {
+	EDGE_TYPE_REAL,
+	EDGE_TYPE_VIRTUAL
+} edge_type_t;
+
+
+/**
+ * A CFG edge contains of a block and an edge type. The Ollie compiler
+ * allows us to have real edges and so-called virtual or analysis only
+ * edges
+ */
+struct cfg_edge_t {
+	edge_type_t edge_type;
+	basic_block_t* block;
+};
 
 
 /**
