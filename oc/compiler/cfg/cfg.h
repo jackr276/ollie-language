@@ -7,13 +7,12 @@
 #ifndef CFG_H
 #define CFG_H
 #include <sys/types.h>
-#include "../utils/basic_block.h"
+#include "../utils/basic_block/basic_block.h"
 #include "../ast/ast.h"
 #include "../parser/parser.h"
 #include "../utils/stack/heapstack.h"
 #include "../instruction/instruction.h"
 #include "../utils/dynamic_array/dynamic_array.h"
-#include "../jump_table/jump_table.h"
 
 //The overall structure holder
 typedef struct cfg_t cfg_t;
