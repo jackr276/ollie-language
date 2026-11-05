@@ -53,6 +53,36 @@ void edge_set_dynamic_resize_if_needed(edge_set_t* edge_set, int32_t index){
 
 
 /**
+ * Delete the edge value at the given index inside of the edge set
+ */
+void edge_set_delete_at_index(edge_set_t* edge_set, int32_t index){
+	/**
+	 * If we're at or above the current index then this is an impossible
+	 * deletion. We will exit silently
+	 */
+	if(index >= edge_set->current_index){
+		return;
+	}
+	
+	/**
+	 * Shift every value to the left by one, starting at the given index.
+	 * This will overwrite the original value at said index and perform the
+	 * deletion
+	 */
+	for(int32_t i = index; i < edge_set->current_index - 1; i++){
+		edge_set->edges[i] = edge_set->edges[i + 1];
+	}
+
+	/**
+	 * One final thing - the current index is now 1 too high. We'll wipe
+	 * out whatever was in the highest spot and decrement that current index
+	 */
+	edge_set->edges[edge_set->current_index - 1] = EMPTY_CFG_EDGE;
+	(edge_set->current_index)--;
+}
+
+
+/**
  * Deallocate a CFG edge set
  */
 void edge_set_dealloc(edge_set_t* edge_set){

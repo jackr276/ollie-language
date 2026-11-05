@@ -274,6 +274,9 @@ static inline int32_t edge_set_index_of(edge_set_t* edge_set, basic_block_t* bas
 }
 
 
+/**
+ * Delete the edge value at the given index inside of the edge set
+ */
 void edge_set_delete_at_index(edge_set_t* edge_set, int32_t index);
 
 
