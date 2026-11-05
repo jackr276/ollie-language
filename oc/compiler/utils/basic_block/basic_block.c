@@ -5,6 +5,7 @@
 
 #include "basic_block.h"
 #include <stdlib.h>
+#include <string.h>
 
 /**
  * Most normal blocks will rarely exceed 8 predecessors/successors, so this is our default size
@@ -28,6 +29,27 @@ edge_set_t edge_set_alloc(){
 	set.edges = calloc(DEFAULT_EDGE_SET_SIZE, sizeof(cfg_edge_t));
 	set.max_index = DEFAULT_EDGE_SET_SIZE;
 	set.current_index = 0;
+	return set;
+}
+
+
+/**
+ * Clone the given edge set into an entirely separate memory region
+ */
+edge_set_t clone_edge_set(edge_set_t* source){
+	edge_set_t set = EMPTY_EDGE_SET;
+
+	/**
+	 * First allocate/initialize what is needed
+	 */
+	set.edges = calloc(source->max_index, sizeof(cfg_edge_t));
+	set.max_index = source->max_index;
+	set.current_index = 0;
+
+	/**
+	 * Then copy everything over and return out
+	 */
+	memcpy(set.edges, source->edges, source->max_index * sizeof(cfg_edge_t));
 	return set;
 }
 

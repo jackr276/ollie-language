@@ -8726,7 +8726,7 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	 * of using the ending block, we can change it to be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -9309,7 +9309,7 @@ static cfg_result_package_t visit_non_exhaustive_ollie_switch_statement(generic_
 	 * If the end block has no predecessors, that means that every case statement ended in a return statement.
 	 * If this is the case, then the final block should not be the ending block, it should be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -9480,7 +9480,7 @@ static cfg_result_package_t visit_exhaustive_ollie_switch_statement(generic_ast_
 	 * If the end block has no predecessors, that means that every case statement ended in a return statement.
 	 * If this is the case, then the final block should not be the ending block, it should be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -10612,11 +10612,12 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	//For accurate error printing
 	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
-	//Run through all of the predecessors
-	for(int32_t i = 0; i < function_exit_block->predecessors.current_index; i++){
-		//Grab the predecessor out
-		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
-
+	/**
+	 * Run through all of the *REAL* predecessors
+	 */
+	int32_t i = 0;
+	basic_block_t* block = NULL;
+	while((block = get_next_real_predecessor(block, &i)) != NULL){
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
 		if(does_block_end_in_function_termination_statement(block) == FALSE){
 			function_type_t* defined_in_signature = function_defined_in->signature->internal_types.function_type;
@@ -11986,8 +11987,8 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 	 * to achieve this. After we clone, wipe out the source block's successors
 	 * because it now has none
 	 */
-	new_block->successors = clone_dynamic_array((&source_block->successors));
-	clear_dynamic_array(&(source_block->successors));
+	new_block->successors = clone_edge_set((&source_block->successors));
+	clear_edge_set(&(source_block->successors));
 
 	/**
 	 * Step 3: for the successors that we just cloned, we need to replace all
@@ -11995,15 +11996,15 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 	 * to the new successor
 	 */
 	for(int32_t i = 0; i < new_block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(new_block->successors), i);
+		basic_block_t* successor = (get_edge_at_index(&(new_block->successors), i))->block;
 
 		for(int32_t j= 0; j < successor->predecessors.current_index; j++){
 			/**
 			 * If this successor's predecessor is the old block, we need to 
 			 * make it the new block. Once we find it we can also break out
 			 */
-			if(successor->predecessors.internal_array[j] == source_block){
-				successor->predecessors.internal_array[j] = new_block;
+			if((get_edge_at_index(&(successor->predecessors), j))->block == source_block){
+				successor->predecessors.edges[j].block = new_block;
 				break;
 			}
 		}
@@ -13456,7 +13457,7 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 		 * block
 		 */
 		for(int32_t i = 0; i < reference_block->successors.current_index; i++){
-			basic_block_t* old_successor = dynamic_array_get_at(&(reference_block->successors), i);
+			basic_block_t* old_successor = get_edge_at_index(&(reference_block->successors), i)->block;
 
 			//Get the new cloned block that it maps to and add that as a successor
 			basic_block_t* new_successor = old_successor->mapping_info.maps_to;

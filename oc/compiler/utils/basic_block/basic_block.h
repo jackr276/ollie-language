@@ -210,6 +210,10 @@ struct basic_block_t{
  */
 edge_set_t edge_set_alloc();
 
+/**
+ * Clone the given edge set into an entirely separate memory region
+ */
+edge_set_t clone_edge_set(edge_set_t* source);
 
 /**
  * Dynamically resize an edge set to accomodate the given index if need be
