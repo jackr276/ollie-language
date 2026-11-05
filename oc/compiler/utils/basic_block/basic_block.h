@@ -231,6 +231,14 @@ static inline cfg_edge_t* get_edge_at_index(edge_set_t* edge_set, int32_t index)
  */
 static inline void add_edge(edge_set_t* edge_set, basic_block_t* block, edge_type_t edge_type){
 	/**
+	 * We should never be trying to do this so panic if we are
+	 */
+	if(block == NULL){
+		fprintf(stderr, "Fatal internal compiler error. Attempt to add a NULL edge\n");
+		exit(1);
+	}
+
+	/**
 	 * Scan the entirety of the current edge set. If this block already exists in the
 	 * edge set then we will just leave and not add it
 	 */
@@ -326,10 +334,121 @@ static inline void clear_edge_set(edge_set_t* edge_set){
 void edge_set_dealloc(edge_set_t* edge_set);
 
 //======================================================== CFG Edge Set Utility ==============================================
+//======================================================== Basic Block Utilities =============================================
+
+/**
+ * Exclusively add a successor to the target block. The predecessor set will not be touched
+ */
+static inline void add_successor_only(basic_block_t* target, basic_block_t* successor, edge_type_t type){
+	/**
+	 * Allocate the edge set if need be
+	 */
+	if(target->successors.edges == NULL){
+		target->successors = edge_set_alloc();
+	}
+
+	/**
+	 * Now add the edge into the successor set. The add_edge function
+	 * handles all duplicate checking already
+	 */
+	add_edge(&(target->successors), successor, type);
+}
+
+
+/**
+ * Exclusively add a predecessor to the target block. The successor set will not be touched
+ */
+static inline void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor, edge_type_t type){
+	/**
+	 * Allocate the edge set if need be
+	 */
+	if(target->predecessors.edges == NULL){
+		target->predecessors = edge_set_alloc();
+	}
+
+	/**
+	 * Now add the edge into the successor set. The add_edge function
+	 * handles all duplicate checking already
+	 */
+	add_edge(&(target->predecessors), predecessor, type);
+}
+
+
+/**
+ * Add a successor to the target block. This method is entirely comprehensive.
+ * Since "successor" comes after "target", "target" will be added as a predecessor
+ * of "successor". If you wish to ONLY add a successor or predecessor(very rare),
+ * then use the "only" methods
+ */
+static inline void add_successor(basic_block_t* target, basic_block_t* successor, edge_type_t type){
+	/**
+	 * First we'll add successor as a successor of target
+	 */
+	add_successor_only(target, successor, type);
+
+	/**
+	 * Then add the target as a predecessor of successor
+	 */
+	add_predecessor_only(successor, target, type);
+}
+
+
+/**
+ * Delete a successor from a block
+ *
+ * This is mainly just a wrapper for a dynamic_array_delete, for readability
+ *
+ * Target: the block that has the successor
+ * Successor: the successor itself
+ *
+ * TODO DELETE IS
+ */
+void delete_successor_only(basic_block_t* target, basic_block_t* successor){
+	dynamic_array_delete(&(target->successors), successor);
+}
+
+
+/**
+ * Delete a predecessor from a block
+ *
+ * This is mainly just a wrapper for a dynamic_array_delete, for readability
+ *
+ * Target: the block that has the predecessor
+ * Predecessor: the predecessor itself
+ *
+ * TODO DELETE THIS
+ */
+void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
+	dynamic_array_delete(&(target->predecessors), predecessor);
+}
+
+
+/**
+ * Delete a successor from the target block's list. This function is
+ * entirely comprehensive. Since target used to be a predecessor
+ * of the deleted successor, that will also be deleted
+ *
+ * TODO DELETE THIS
+ */
+void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
+	//Bail out if this happens
+	if(deleted_successor == NULL){
+		return;
+	}
+
+	//The target is no longer a predecessor of said successor
+	delete_predecessor_only(deleted_successor, target);
+
+	//The said successor is no longer a successor of the target
+	delete_successor_only(target, deleted_successor);
+}
+
+
 
 /**
  * Utility for deallocating a basic block
  */
 void basic_block_dealloc(basic_block_t* block);
+//======================================================== Basic Block Utilities =============================================
 
 #endif /* BASIC_BLOCK_H */

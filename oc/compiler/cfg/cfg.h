@@ -102,36 +102,6 @@ void move_statement(instruction_t* target, basic_block_t* destination);
 void delete_statement(instruction_t* stmt);
 
 /**
- * Delete a successor from a block
- */
-void delete_successor_only(basic_block_t* target, basic_block_t* successor);
-
-/**
- * Delete a predecessor from a block
- */
-void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
-
-/**
- * Delete a successor from a block
- */
-void delete_successor(basic_block_t* target, basic_block_t* deleted_successor);
-
-/**
- * Add a successor to the block
- */
-void add_successor(basic_block_t* target, basic_block_t* successor);
-
-/**
- * Add a predecessor to the block
- */
-void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor);
-
-/**
- * Exclusively add a successor to the block
- */
- void add_successor_only(basic_block_t* target, basic_block_t* successor);
-
-/**
  * Deallocate the entire CFG
  */
 void dealloc_cfg(cfg_t* cfg);
