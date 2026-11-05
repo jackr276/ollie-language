@@ -12,6 +12,7 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 #include "../ollie_instruction.h"
+#include <string.h>
 #include <sys/types.h>
 
 //Basic blocks in our CFG
@@ -223,8 +224,54 @@ static inline cfg_edge_t* get_edge_at_index(edge_set_t* edge_set, int32_t index)
 }
 
 
-static inline cfg_edge_t add_edge(edge_set_t edge_set, basic_block_t* block, edge_type_t edge_type){
+/**
+ * Add a block to an edge set. There can be *no* duplicates inside of the edge set, even if they
+ * were to have edge types that are different. This means that if you try to add a virtual edge
+ * to block .L4, but a real edge to .L4 already exists, we will silently add nothing
+ */
+static inline void add_edge(edge_set_t* edge_set, basic_block_t* block, edge_type_t edge_type){
+	/**
+	 * Scan the entirety of the current edge set. If this block already exists in the
+	 * edge set then we will just leave and not add it
+	 */
+	for(int32_t i = 0; i < edge_set->current_index; i++){
+		if(edge_set->edges[i].block == block){
+			return;
+		}
+	}
 
+	/**
+	 * Dynamically resize this if we need to
+	 */
+	edge_set_dynamic_resize_if_needed(edge_set, edge_set->current_index);
+
+	/**
+	 * Grab a pointer to this edge and add the block and edge type requested
+	 */
+	cfg_edge_t* edge_to_add = &(edge_set->edges[edge_set->current_index]);
+	edge_to_add->block = block;
+	edge_to_add->edge_type = edge_type;
+
+	//Bump this up for the next go around
+	(edge_set->current_index)++;
+}
+
+
+/**
+ * Is the given edge set entirely empty?
+ */
+static inline u_int8_t edge_set_empty(edge_set_t* edge_set){
+	return edge_set->current_index == 0 ? TRUE : FALSE;
+}
+
+
+/**
+ * Completely erase the values in the edge set while still keeping it allocated.
+ * This allows us to reuse edge sets without having to reallocate memory
+ */
+static inline void clear_edge_set(edge_set_t* edge_set){
+	memset(edge_set->edges, 0, sizeof(cfg_edge_t) * edge_set->max_index);
+	edge_set->current_index = 0;
 }
 
 
