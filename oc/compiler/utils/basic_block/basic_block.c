@@ -44,7 +44,7 @@ edge_set_t clone_edge_set(edge_set_t* source){
 	 */
 	set.edges = calloc(source->max_index, sizeof(cfg_edge_t));
 	set.max_index = source->max_index;
-	set.current_index = 0;
+	set.current_index = source->current_index;
 
 	/**
 	 * Then copy everything over and return out

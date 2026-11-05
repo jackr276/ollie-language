@@ -11995,7 +11995,7 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 	 * to achieve this. After we clone, wipe out the source block's successors
 	 * because it now has none
 	 */
-	new_block->successors = clone_edge_set((&source_block->successors));
+	new_block->successors = clone_edge_set(&(source_block->successors));
 	clear_edge_set(&(source_block->successors));
 
 	/**
@@ -12006,7 +12006,7 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 	for(int32_t i = 0; i < new_block->successors.current_index; i++){
 		basic_block_t* successor = (get_edge_at_index(&(new_block->successors), i))->block;
 
-		for(int32_t j= 0; j < successor->predecessors.current_index; j++){
+		for(int32_t j = 0; j < successor->predecessors.current_index; j++){
 			/**
 			 * If this successor's predecessor is the old block, we need to 
 			 * make it the new block. Once we find it we can also break out
@@ -13731,6 +13731,7 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 */
 	visit_prog_node(cfg, results->root);
 
+	print_all_cfg_blocks(cfg);
 	/**
 	 * Invoke the helper to perform all function inlining if there are inlined
 	 * functions at all
