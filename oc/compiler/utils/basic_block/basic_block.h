@@ -394,32 +394,35 @@ static inline void add_successor(basic_block_t* target, basic_block_t* successor
 
 
 /**
- * Delete a successor from a block
- *
- * This is mainly just a wrapper for a dynamic_array_delete, for readability
- *
- * Target: the block that has the successor
- * Successor: the successor itself
- *
- * TODO DELETE IS
+ * This helper is just a clone of add_successor that always adds a real successor. This was made for
+ * simplicity in the CFG since we're always adding real successors there
  */
-void delete_successor_only(basic_block_t* target, basic_block_t* successor){
-	dynamic_array_delete(&(target->successors), successor);
+static inline void add_real_successor(basic_block_t* target, basic_block_t* successor){
+	/**
+	 * First we'll add successor as a successor of target
+	 */
+	add_successor_only(target, successor, EDGE_TYPE_REAL);
+
+	/**
+	 * Then add the target as a predecessor of successor
+	 */
+	add_predecessor_only(successor, target, EDGE_TYPE_REAL);
+}
+
+
+/**
+ * Delete a successor from a block
+ */
+static inline void delete_successor_only(basic_block_t* target, basic_block_t* successor){
+	edge_set_delete(&(target->successors), successor);
 }
 
 
 /**
  * Delete a predecessor from a block
- *
- * This is mainly just a wrapper for a dynamic_array_delete, for readability
- *
- * Target: the block that has the predecessor
- * Predecessor: the predecessor itself
- *
- * TODO DELETE THIS
  */
-void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	dynamic_array_delete(&(target->predecessors), predecessor);
+static inline void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
+	edge_set_delete(&(target->predecessors), predecessor);
 }
 
 
@@ -427,19 +430,16 @@ void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
  * Delete a successor from the target block's list. This function is
  * entirely comprehensive. Since target used to be a predecessor
  * of the deleted successor, that will also be deleted
- *
- * TODO DELETE THIS
  */
-void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
-	//Bail out if this happens
-	if(deleted_successor == NULL){
-		return;
-	}
-
-	//The target is no longer a predecessor of said successor
+static inline void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
+	/**
+	 * The target is no longer a predecessor of said successor
+	 */
 	delete_predecessor_only(deleted_successor, target);
 
-	//The said successor is no longer a successor of the target
+	/**
+	 * The said successor is no longer a successor of the target
+	 */
 	delete_successor_only(target, deleted_successor);
 }
 

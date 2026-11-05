@@ -2003,7 +2003,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	add_statement(current, ret_stmt);
 
 	//This is always a predecessor of the function exit statement
-	add_successor(current, function_exit_block);
+	add_real_successor(current, function_exit_block);
 
 	//Update the final & starting blocks
 	return_package.starting_block = basic_block;
@@ -2031,7 +2031,7 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 	add_statement(basic_block, stmt);
 
 	//The destination block is by definition a successor here
-	add_successor(basic_block, destination_block);
+	add_real_successor(basic_block, destination_block);
 
 	//And we give it back
 	return stmt;
@@ -2327,13 +2327,13 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * functionality, purely visual
 		 */
 		if(branch_category == BRANCH_CATEGORY_NORMAL){
-			add_successor(current_block, if_block);
-			add_successor(current_block, else_block);
+			add_real_successor(current_block, if_block);
+			add_real_successor(current_block, else_block);
 			branch_statement->inverse_branch = FALSE;
 
 		} else {
-			add_successor(current_block, else_block);
-			add_successor(current_block, if_block);
+			add_real_successor(current_block, else_block);
+			add_real_successor(current_block, if_block);
 			branch_statement->inverse_branch = TRUE;
 		}
 
@@ -5345,8 +5345,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * adding successors above. We know that the only two successors of the
 	 * switch block are the true block and the false block
 	 */
-	add_successor(switch_entry, true_block);
-	add_successor(switch_entry, false_block);
+	add_real_successor(switch_entry, true_block);
+	add_real_successor(switch_entry, false_block);
 
 	/**
 	 * Step 5: emit the temp assignment, then emit the adjustment to get the index for the jump calculation down to 0 
@@ -6837,8 +6837,8 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
 
-	add_successor(basic_block, if_destination);
-	add_successor(basic_block, else_destination);
+	add_real_successor(basic_block, if_destination);
+	add_real_successor(basic_block, else_destination);
 
 	//These are always normal branches
 	branch_instruction->inverse_branch = FALSE;
@@ -6942,7 +6942,7 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 	add_jump_table_entry(jump_calculation_block->jump_table, NO_ERROR, no_error_block);
 
 	//This is also a successor of the jump calculation block
-	add_successor(jump_calculation_block, no_error_block);
+	add_real_successor(jump_calculation_block, no_error_block);
 
 	/**
 	 * Run through every single error handle clause inside
@@ -6961,7 +6961,7 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 		add_jump_table_entry(jump_calculation_block->jump_table, error_handle_value, handle_results.starting_block);
 
 		//Add it in as a successor to the start block as well
-		add_successor(jump_calculation_block, handle_results.starting_block);
+		add_real_successor(jump_calculation_block, handle_results.starting_block);
 
 		//Grab a pointer to the last instruction here(this could be NULL!)
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
@@ -7616,8 +7616,6 @@ void dealloc_cfg(cfg_t* cfg){
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
  *
  * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
- *
- * TODO MOVE TO NEW BASIC BLOCK AREA
  */
 static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	//If b is null, we just return a
@@ -7645,16 +7643,20 @@ static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
 	/**
 	 * If we're gonna merge two blocks, then they'll share all the same successors and predecessors
 	 * Let's merge predecessors first if we have any
+	 *
+	 * NOTE: at this point we only have real edges, so hardcode the edge type to real
 	 */
 	for(int32_t i = 0; i < b->predecessors.current_index; i++){
-		//Add b's predecessor as one to a
-		add_predecessor_only(a, b->predecessors.internal_array[i]);
+		add_predecessor_only(a, b->predecessors.edges[i].block, EDGE_TYPE_REAL);
 	}
 
-	//Now merge successors if we have any
+	/**
+	 * Now merge successors if we have any
+	 *
+	 * NOTE: at this point we only have real edges, so hardcode the edge type to real
+	 */
 	for(int32_t i = 0; i < b->successors.current_index; i++){
-		//Add b's successors to be a's successors
-		add_successor_only(a, b->successors.internal_array[i]);
+		add_successor_only(a, b->successors.edges[i].block, EDGE_TYPE_REAL);
 	}
 
 	/**
@@ -8782,7 +8784,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 				add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				//A case statement is always a successor to the jump calculation block
-				add_successor(jump_calculation_block, case_default_results.starting_block);
+				add_real_successor(jump_calculation_block, case_default_results.starting_block);
 
 				break;
 
@@ -8854,7 +8856,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 			emit_jump(default_block, result_package.final_block);
 
 		} else {
-			add_successor(default_block, function_exit_block);
+			add_real_successor(default_block, function_exit_block);
 		}
 	}
 
@@ -8883,7 +8885,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	 * avoid any issues with unneeded successors if it is exhaustive
 	 */
 	if(switch_has_default_jumps == TRUE){
-		add_successor(jump_calculation_block, default_block);
+		add_real_successor(jump_calculation_block, default_block);
 	}
 
 	//We'll need both of these as constants for our computation
@@ -9038,7 +9040,7 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 		add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_results.starting_block);
 
 		//A case statement is always a successor to the jump calculation block
-		add_successor(jump_calculation_block, case_results.starting_block);
+		add_real_successor(jump_calculation_block, case_results.starting_block);
 
 		//Reassign current block
 		current_block = case_results.final_block;
@@ -9243,8 +9245,8 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
-				add_successor(current_conditional_block, new_conditional_block);
-				add_successor(current_conditional_block, case_default_results.starting_block);
+				add_real_successor(current_conditional_block, new_conditional_block);
+				add_real_successor(current_conditional_block, case_default_results.starting_block);
 
 				//The current conditional block is now the new one
 				current_conditional_block = new_conditional_block;
@@ -9462,8 +9464,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
-				add_successor(current_conditional_block, new_conditional_block);
-				add_successor(current_conditional_block, case_default_results.starting_block);
+				add_real_successor(current_conditional_block, new_conditional_block);
+				add_real_successor(current_conditional_block, case_default_results.starting_block);
 
 				//Set the current conditional to be this new one
 				current_conditional_block = new_conditional_block;
@@ -9583,7 +9585,7 @@ static cfg_result_package_t visit_non_exhaustive_ollie_switch_statement(generic_
 				add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				//The starting block is a successor to the root block
-				add_successor(jump_calculation_block, case_default_results.starting_block);
+				add_real_successor(jump_calculation_block, case_default_results.starting_block);
 
 				break;
 
@@ -9648,7 +9650,7 @@ static cfg_result_package_t visit_non_exhaustive_ollie_switch_statement(generic_
 	 * of the jump calculation which is why we've waited until now to add this
 	 */
 	if(switch_has_default_jumps == TRUE){
-		add_successor(jump_calculation_block, default_block);
+		add_real_successor(jump_calculation_block, default_block);
 	}
 
 	/**
@@ -9808,7 +9810,7 @@ static cfg_result_package_t visit_exhaustive_ollie_switch_statement(generic_ast_
 		add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_results.starting_block);
 
 		//The starting block is a successor to the root block
-		add_successor(jump_calculation_block, case_results.starting_block);
+		add_real_successor(jump_calculation_block, case_results.starting_block);
 
 		/**
 		 * If we don't have a terminal statement in the final block, we jump to the
@@ -9916,7 +9918,7 @@ static inline void handle_raise_statement(basic_block_t* basic_block, generic_as
 	add_statement(basic_block, raise_statement);
 
 	//The successor of this block is now the function end block(remember that raise = ret)
-	add_successor(basic_block, function_exit_block);
+	add_real_successor(basic_block, function_exit_block);
 }
 
 
@@ -10345,7 +10347,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					add_successor(current_block, generic_results.starting_block);
+					add_real_successor(current_block, generic_results.starting_block);
 				}
 
 				//Current is just the end of this block
@@ -10864,7 +10866,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					add_successor(current_block, generic_results.starting_block);
+					add_real_successor(current_block, generic_results.starting_block);
 				}
 
 				//Current is just the end of this block
@@ -11052,11 +11054,11 @@ static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* us
 		instruction->if_block = jumping_to_label->block;
 
 		//Add this in as a successor
-		add_successor(instruction->block_contained_in, instruction->if_block);
+		add_real_successor(instruction->block_contained_in, instruction->if_block);
 
 		//If it was a branch, add the else block as a successor too
 		if(instruction->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-			add_successor(instruction->block_contained_in, instruction->else_block);
+			add_real_successor(instruction->block_contained_in, instruction->else_block);
 		}
 	}
 }
@@ -11329,7 +11331,7 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 		 * of return paths), then add the successor now
 		 */
 		if(compound_statement_exit != function_exit_block){
-			add_successor(compound_statement_exit, function_exit_block);
+			add_real_successor(compound_statement_exit, function_exit_block);
 		}
 
 	/**
@@ -11338,7 +11340,7 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	 * insert return statements as needed
 	 */
 	} else {
-		add_successor(function_starting_block, function_exit_block);
+		add_real_successor(function_starting_block, function_exit_block);
 	}
 
 	//Add the start and end blocks to their respective arrays
@@ -13806,7 +13808,7 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 
 			//Get the new cloned block that it maps to and add that as a successor
 			basic_block_t* new_successor = old_successor->mapping_info.maps_to;
-			add_successor(new_block, new_successor);
+			add_real_successor(new_block, new_successor);
 		}
 	}
 }
