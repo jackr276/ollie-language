@@ -12,6 +12,7 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 #include "../ollie_instruction.h"
+#include <sys/types.h>
 
 //Basic blocks in our CFG
 typedef struct basic_block_t basic_block_t;
@@ -179,5 +180,12 @@ struct basic_block_t{
 	//Does this block already have a phi function for the given variable?
 	u_int8_t already_has_phi_func;
 };
+
+
+
+/**
+ * Utility for deallocating a basic block
+ */
+void basic_block_dealloc(basic_block_t* block);
 
 #endif /* BASIC_BLOCK_H */
