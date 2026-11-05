@@ -22,6 +22,11 @@ typedef struct cfg_edge_t cfg_edge_t;
 typedef struct edge_set_t edge_set_t;
 
 /**
+ * Initializing an empty edge
+ */
+#define EMPTY_CFG_EDGE (cfg_edge_t){EDGE_TYPE_REAL, NULL};
+
+/**
  * What is the general type of the block. Again most
  * blocks are normal, but there are exceptions
  */
@@ -182,6 +187,28 @@ struct basic_block_t{
 };
 
 
+/**
+ * Allocate a CFG edge set using the default size
+ */
+edge_set_t edge_set_alloc();
+
+
+/**
+ * Get the edge at a given index. If the index is invalid then NULL is returned
+ */
+static inline cfg_edge_t get_edge_at_index(edge_set_t* edge_set, int32_t index){
+
+}
+
+
+static inline cfg_edge_t add_edge(edge_set_t edge_set, basic_block_t* block, edge_type_t edge_type){
+
+}
+
+/**
+ * Deallocate a CFG edge set
+ */
+void edge_set_dealloc(edge_set_t* edge_set);
 
 /**
  * Utility for deallocating a basic block

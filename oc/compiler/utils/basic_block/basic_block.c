@@ -4,6 +4,33 @@
  */
 
 #include "basic_block.h"
+#include <stdlib.h>
+
+//================================== CFG Edge Set Utility ========================================
+
+
+
+/**
+ * Deallocate a CFG edge set
+ */
+void edge_set_dealloc(edge_set_t* edge_set){
+	/**
+	 * Free the underlying edge set array
+	 */
+	if(edge_set->edges != NULL){
+		free(edge_set->edges);
+	}
+
+	/**
+	 * Zero these out for safety
+	 */
+	edge_set->edges = NULL;
+	edge_set->current_index = 0;
+	edge_set->max_index = 0;
+}
+
+//================================== CFG Edge Set Utility ========================================
+
 
 
 
