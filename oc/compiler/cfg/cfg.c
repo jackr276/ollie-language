@@ -1544,7 +1544,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 			 * sets
 			 */
 			int32_t k = 0;
-			basic_block_t* successor;
+			basic_block_t* successor = NULL;
 			while((successor = get_next_real_successor(current, &k)) != NULL){
 				//If it has a live in set
 				if(successor->live_in.internal_array != NULL){

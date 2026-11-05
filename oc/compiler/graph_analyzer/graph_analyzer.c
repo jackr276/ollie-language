@@ -38,6 +38,8 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
  *
  * NOTE: we only ever use REAL edges for DFS reachability, we do not ever
  * consider synthetic(analysis edges)
+ *
+ * TODO LOOK AT AFTER CHANGES
  */
 static void dfs_flag_block_reachability_rec(basic_block_t* block){
 	/**
@@ -54,7 +56,7 @@ static void dfs_flag_block_reachability_rec(basic_block_t* block){
 	 * For each of the successors recursively flag as reachable
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
-		dfs_flag_block_reachability_rec(dynamic_array_get_at(&(block->successors), i));
+		dfs_flag_block_reachability_rec(get_edge_at_index(&(block->successors), i)->block);
 	}
 }
 
@@ -136,9 +138,11 @@ u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_ar
 		/**
 		 * For each predecessor of the target, remove the target as
 		 * a successor
+		 *
+		 * TODO LOOK AT AFTER FIX
 		 */
 		for(int32_t j = 0; j < target->predecessors.current_index; j++){
-			basic_block_t* predecessor = target->predecessors.internal_array[j];
+			basic_block_t* predecessor = target->predecessors.edges[j].block;
 			delete_successor_only(predecessor, target);
 		}
 
@@ -147,7 +151,7 @@ u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_ar
 		 * as a predecessor
 		 */
 		for(int32_t j = 0; j < target->successors.current_index; j++){
-			basic_block_t* successor = target->successors.internal_array[j];
+			basic_block_t* successor = target->successors.edges[j].block;
 			delete_predecessor_only(successor, target);
 		}
 
@@ -266,9 +270,11 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 	/**
 	 * Now for every successor of this block, we need to perform
 	 * a DFS and do the parent bookkeeping
+	 *
+	 * TODO LOOK AT AFTER FIX
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
 
 		/**
 		 * If our successor does not yet have a DFS number, then we'll need to 
@@ -337,9 +343,11 @@ static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** rever
 	/**
 	 * Now for every predecessor of this block, we need to perform
 	 * a reverse DFS and do the parent bookkeeping
+	 *
+	 * TODO LOOK AT AFTER FIX
 	 */
 	for(int32_t i = 0; i < block->predecessors.current_index; i++){
-		basic_block_t* predecessor = dynamic_array_get_at(&(block->predecessors), i);
+		basic_block_t* predecessor = get_edge_at_index(&(block->predecessors), i)->block;
 
 		/**
 		 * If our predecessor does not yet have a DFS number, then we'll need to 
@@ -604,11 +612,13 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		/**
 		 * Compute the semidominators for each given block. Remember that semidominators
 		 * are the earliest DFS ancestor that can "almost" dominate a given block
+		 *
+		 * TODO LOOK AT AFTER CHANGES
 		 */
 		for(int32_t j = 0; j < working_block->predecessors.current_index; j++){
 			//Our semidominator candidate
 			basic_block_t* candidate = NULL;
-			basic_block_t* predecessor = dynamic_array_get_at(&(working_block->predecessors), j);
+			basic_block_t* predecessor = get_edge_at_index(&(working_block->predecessors), j)->block;
 
 			/**
 			 * Just something to account for - if this is somehow unreachable
@@ -855,11 +865,13 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 		 * Run through all of this block's successors to compute the semipostdominators.
 		 * Remember that a semipostdominator is a block that just barely does not postdominate
 		 * this one
+		 *
+		 * TODO LOOK AT AFTER FIX
 		 */
 		for(int32_t j = 0; j < working_block->successors.current_index; j++){
 			//Our semipostdominator candidate
 			basic_block_t* candidate;
-			basic_block_t* successor = dynamic_array_get_at(&(working_block->successors), j);
+			basic_block_t* successor = get_edge_at_index(&(working_block->successors), j)->block;
 
 			/**
 			 * Rare case but something we will account for just to be safe - we will
@@ -1080,6 +1092,7 @@ static inline void add_block_to_dominance_frontier(basic_block_t* block, basic_b
  * 					add b to cursor DF set
  * 					cursor = IDOM(cursor)
  * 	
+ * 	TODO LOOK AT AFTER FIX
  */
 static inline void calculate_dominance_frontiers(dynamic_array_t* function_blocks){
 	//Run through every block
@@ -1088,13 +1101,13 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//If we have less than 2 successors,the rest of the search here is useless
-		if(block->predecessors.internal_array == NULL || block->predecessors.current_index < 2){
+		if(block->predecessors.current_index < 2){
 			continue;
 		}
 
 		//Now we run through every predecessor of the block
 		for(int32_t j = 0; j < block->predecessors.current_index; j++){
-			basic_block_t* cursor = dynamic_array_get_at(&(block->predecessors), j);
+			basic_block_t* cursor = get_edge_at_index(&(block->predecessors), j)->block;
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != block->dominator_info.immediate_dominator){
@@ -1162,14 +1175,14 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//If we have less than 2 successors,the rest of the search here is useless
-		if(block->successors.internal_array == NULL || block->successors.current_index < 2){
+		if(block->successors.current_index < 2){
 			continue;
 		}
 
 		//Now we run through every successor of the block
 		for(int32_t j  = 0; j  < block->successors.current_index; j++){
 			//Extract the successor
-			basic_block_t* cursor = dynamic_array_get_at(&(block->successors), j);
+			basic_block_t* cursor = get_edge_at_index(&(block->successors), j)->block;
 
 			//While cursor is not the immediate postdominator of block
 			while(cursor != block->dominator_info.immediate_postdominator){
@@ -1189,6 +1202,8 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 
 /**
  * A recursive post order simplifies the code, so it's what we'll use here
+ *
+ * TODO LOOK AT AGAIN AFTER CHANGES
  */
 static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry){
 	//If we've visited this one before, skip
@@ -1202,7 +1217,7 @@ static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basi
 	//Run through every successor
 	for(int32_t i = 0; i < entry->successors.current_index; i++){
 		//Recursive call to every child first
-		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), i));
+		post_order_traversal_rec(post_order_traversal, get_edge_at_index(&(entry->successors), i)->block);
 	}
 	
 	//Now we'll finally visit the node
@@ -1228,6 +1243,8 @@ void get_post_order_traversal(dynamic_array_t* function_blocks, basic_block_t* f
 /**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
+ *
+ * TODO LOOk AT AFTER CHANGES
  */
 static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, basic_block_t* block){
 	//If we've already seen this then we're done
@@ -1240,7 +1257,7 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 
 	//For every child(predecessor-it's reverse), we visit it as well
 	for(int32_t i = 0; i < block->predecessors.current_index; i++){
-		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(block->predecessors), i));
+		reverse_post_order_traversal_reverse_cfg_rec(stack, get_edge_at_index(&(block->predecessors), i)->block);
 	}
 
 	//Now we can push entry onto the stack
