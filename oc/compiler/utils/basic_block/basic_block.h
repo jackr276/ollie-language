@@ -486,8 +486,6 @@ static inline void delete_successor(basic_block_t* target, basic_block_t* delete
  * is a real edge, not a virtual edge. If no real predecessors remain we return NULL
  */
 static inline basic_block_t* get_next_real_predecessor(basic_block_t* block, int32_t* index){
-	printf("INDEX IS %d\n", *index);
-	printf("PRED CURRENT INDEX IS %d", block->predecessors.current_index);
 	/**
 	 * Run through until we either hit the end or we find a real predecessor
 	 */

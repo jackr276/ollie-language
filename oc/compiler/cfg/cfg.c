@@ -13731,14 +13731,11 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 */
 	visit_prog_node(cfg, results->root);
 
-	print_all_cfg_blocks(cfg);
 	/**
 	 * Invoke the helper to perform all function inlining if there are inlined
 	 * functions at all
 	 */
 	perform_all_function_inlining(results->function_symtab);
-
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Once we know that all function inlining has been completed, we are now able
@@ -13846,7 +13843,6 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
-	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static
