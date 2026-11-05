@@ -10625,7 +10625,6 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	int32_t i = 0;
 	basic_block_t* predecessor = NULL;
 	while((predecessor = get_next_real_predecessor(function_exit_block, &i)) != NULL){
-		printf("HERE WITH .L%d\n\n\n", predecessor->block_id);
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
 		if(does_block_end_in_function_termination_statement(predecessor) == FALSE){
 			function_type_t* defined_in_signature = function_defined_in->signature->internal_types.function_type;

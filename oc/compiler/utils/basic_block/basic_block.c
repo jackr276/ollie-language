@@ -322,7 +322,7 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 	printf("Predecessors: {");
 	for(int32_t i = 0; i < block->predecessors.current_index; i++){
 		cfg_edge_t* edge = get_edge_at_index(&(block->predecessors), i);
-		print_cfg_edge(fl, edge);
+		print_cfg_edge_no_stylization(fl, edge);
 
 		if(i != block->predecessors.current_index - 1){
 			printf(", ");
@@ -336,7 +336,7 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 	printf("Successors: {");
 	for(int32_t i = 0; i < block->successors.current_index; i++){
 		cfg_edge_t* edge = get_edge_at_index(&(block->successors), i);
-		print_cfg_edge(fl, edge);
+		print_cfg_edge_no_stylization(fl, edge);
 
 		if(i != block->successors.current_index - 1){
 			printf(", ");
