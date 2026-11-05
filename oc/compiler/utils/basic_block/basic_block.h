@@ -258,6 +258,48 @@ static inline void add_edge(edge_set_t* edge_set, basic_block_t* block, edge_typ
 
 
 /**
+ * Get the index of the given block in an edge set. If the block is not found, -1 is returned
+ */
+static inline int32_t edge_set_index_of(edge_set_t* edge_set, basic_block_t* basic_block){
+	/**
+	 * Linear scan through the whole thing to find the requested index
+	 */
+	for(int32_t i = 0; i < edge_set->current_index; i++){
+		if(edge_set->edges[i].block == basic_block){
+			return i;
+		}
+	}
+
+	return NOT_FOUND;
+}
+
+
+void edge_set_delete_at_index(edge_set_t* edge_set, int32_t index);
+
+
+/**
+ * Remove the given block from the edge set. This is in reality a wrapper
+ * for edge_set_index_of and edge_set_delete_at_index, but combined here
+ * for convenience. If the block is not in the edge set then nothing will
+ * be deleted
+ */
+static inline void edge_set_delete(edge_set_t* edge_set, basic_block_t* block){
+	/**
+	 * Get the deletion index. If it's NOT_FOUND then just get out
+	 */
+	int32_t deletion_index = edge_set_index_of(edge_set, block);
+	if(deletion_index == NOT_FOUND){
+		return;
+	}
+
+	/**
+	 * Invoke the real deletion function to actually do this
+	 */
+	edge_set_delete_at_index(edge_set, deletion_index);
+}
+
+
+/**
  * Is the given edge set entirely empty?
  */
 static inline u_int8_t edge_set_empty(edge_set_t* edge_set){
