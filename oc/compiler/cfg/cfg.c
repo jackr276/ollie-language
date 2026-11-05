@@ -946,6 +946,8 @@ static inline void print_function_inlining_order(dynamic_integer_array_t* inlini
 
 /**
  * Add a statement to the target block, following all standard linked-list protocol
+ *
+ * TODO MOVE THIS
  */
 void add_statement(basic_block_t* target, instruction_t* statement_node){
 	//Generic fail case
@@ -985,6 +987,9 @@ void add_statement(basic_block_t* target, instruction_t* statement_node){
  * destination block. This will not update the use/assignment counts like
  * a regular remove still but it will still operate in much the same way.
  * The statement will always be added directly at the end of the block
+ *
+ *
+ * TODO MOVE THIS
  */
 void move_statement(instruction_t* target, basic_block_t* destination){
 	//Grab the block out
@@ -1041,6 +1046,8 @@ void move_statement(instruction_t* target, basic_block_t* destination){
 
 /**
  * Delete a statement from the CFG - handling any/all edge cases that may arise
+ *
+ * TODO MOVE THIS
  */
 void delete_statement(instruction_t* stmt){
 	//Grab the block out
@@ -10616,10 +10623,11 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	 * Run through all of the *REAL* predecessors
 	 */
 	int32_t i = 0;
-	basic_block_t* block = NULL;
-	while((block = get_next_real_predecessor(block, &i)) != NULL){
+	basic_block_t* predecessor = NULL;
+	while((predecessor = get_next_real_predecessor(function_exit_block, &i)) != NULL){
+		printf("HERE WITH .L%d\n\n\n", predecessor->block_id);
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
-		if(does_block_end_in_function_termination_statement(block) == FALSE){
+		if(does_block_end_in_function_termination_statement(predecessor) == FALSE){
 			function_type_t* defined_in_signature = function_defined_in->signature->internal_types.function_type;
 
 			//If this isn't void, then we need to throw a warning
@@ -10659,13 +10667,13 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				instruction_t* assignment = emit_assignment_with_const_instruction(emit_temp_var(return_var_type), ret_const, 0);
 			
 				//This goes into the block
-				add_statement(block, assignment); 
+				add_statement(predecessor, assignment); 
 
 				//We'll now manually insert a ret 0 based on whatever the return type of the function is
 				instruction_t* return_instruction = emit_ret_instruction(assignment->operands.oir.assignee, 0);
 				
 				//We'll now add this at the very end of the block
-				add_statement(block, return_instruction);
+				add_statement(predecessor, return_instruction);
 
 			//Otherwise it is void, so we just emit a plain "ret"
 			} else {
@@ -10673,7 +10681,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				instruction_t* return_instruction = emit_ret_instruction(NULL, 0);
 				
 				//We'll now add this at the very end of the block
-				add_statement(block, return_instruction);
+				add_statement(predecessor, return_instruction);
 			}
 		}
 	}
@@ -13729,6 +13737,8 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 	 */
 	perform_all_function_inlining(results->function_symtab);
 
+	print_all_cfg_blocks(cfg);
+
 	/**
 	 * Once we know that all function inlining has been completed, we are now able
 	 * to go through all functions(regardless of inlining status) and do the 
@@ -13835,6 +13845,7 @@ cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_
 	 * for us
 	 */
 	convert_ast_to_cfg(cfg, results);
+	print_all_cfg_blocks(cfg);
 
 	/**
 	 * Now that the CFG has been fully constructed, we will perform all static

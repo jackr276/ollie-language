@@ -486,12 +486,19 @@ static inline void delete_successor(basic_block_t* target, basic_block_t* delete
  * is a real edge, not a virtual edge. If no real predecessors remain we return NULL
  */
 static inline basic_block_t* get_next_real_predecessor(basic_block_t* block, int32_t* index){
+	printf("INDEX IS %d\n", *index);
+	printf("PRED CURRENT INDEX IS %d", block->predecessors.current_index);
 	/**
 	 * Run through until we either hit the end or we find a real predecessor
 	 */
 	for(; *index < block->predecessors.current_index; (*index)++){
 		cfg_edge_t* predecessor = get_edge_at_index(&(block->predecessors), *index);	
+
+		/**
+		 * If it's real we can return it, *BUT WE STILL MUST BUMP THIS INDEX UP BY 1*
+		 */
 		if(predecessor->edge_type == EDGE_TYPE_REAL){
+			(*index)++;
 			return predecessor->block;
 		}
 	}
@@ -510,7 +517,12 @@ static inline basic_block_t* get_next_real_successor(basic_block_t* block, int32
 	 */
 	for(; *index < block->successors.current_index; (*index)++){
 		cfg_edge_t* successor = get_edge_at_index(&(block->successors), *index);	
+
+		/**
+		 * If it's real we can return it, *BUT WE STILL MUST BUMP THIS INDEX UP BY 1*
+		 */
 		if(successor->edge_type == EDGE_TYPE_REAL){
+			(*index)++;
 			return successor->block;
 		}
 	}

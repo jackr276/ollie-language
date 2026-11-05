@@ -59,9 +59,9 @@ edge_set_t clone_edge_set(edge_set_t* source){
  */
 void edge_set_dynamic_resize_if_needed(edge_set_t* edge_set, int32_t index){
 	/**
-	 * No need to resize here if we're smaller than the current index
+	 * No need to resize here if we're smaller than the maximum index
 	 */
-	if(index < edge_set->current_index){
+	if(index < edge_set->max_index){
 		return;
 	}
 
