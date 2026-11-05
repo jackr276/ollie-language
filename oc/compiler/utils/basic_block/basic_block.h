@@ -24,7 +24,12 @@ typedef struct edge_set_t edge_set_t;
 /**
  * Initializing an empty edge
  */
-#define EMPTY_CFG_EDGE (cfg_edge_t){EDGE_TYPE_REAL, NULL};
+#define EMPTY_CFG_EDGE (cfg_edge_t){EDGE_TYPE_REAL, NULL}
+
+/**
+ * Initializing an empty edge set
+ */
+#define EMPTY_EDGE_SET (edge_set_t){NULL, 0, 0}
 
 /**
  * What is the general type of the block. Again most
@@ -186,12 +191,17 @@ struct basic_block_t{
 	u_int8_t already_has_phi_func;
 };
 
+//======================================================== CFG Edge Set Utility ==============================================
 
 /**
  * Allocate a CFG edge set using the default size
  */
 edge_set_t edge_set_alloc();
 
+/**
+ * Dynamically resize an edge set to accomodate the given index if need be
+ */
+void edge_set_dynamic_resize_if_needed(edge_set_t* edge_set, int32_t index);
 
 /**
  * Get the edge at a given index. If the index is invalid then NULL is returned
@@ -209,6 +219,8 @@ static inline cfg_edge_t add_edge(edge_set_t edge_set, basic_block_t* block, edg
  * Deallocate a CFG edge set
  */
 void edge_set_dealloc(edge_set_t* edge_set);
+
+//======================================================== CFG Edge Set Utility ==============================================
 
 /**
  * Utility for deallocating a basic block

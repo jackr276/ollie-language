@@ -6,8 +6,30 @@
 #include "basic_block.h"
 #include <stdlib.h>
 
-//================================== CFG Edge Set Utility ========================================
+/**
+ * Most normal blocks will rarely exceed 8 predecessors/successors, so this is our default size
+ */
+#define DEFAULT_EDGE_SET_SIZE 8
 
+
+//================================== CFG Edge Set Utility ========================================
+/**
+ * Allocate a CFG edge set using the default size
+ */
+edge_set_t edge_set_alloc(){
+	/**
+	 * Stack allocate an empty edge set
+	 */
+	edge_set_t set = EMPTY_EDGE_SET;
+
+	/**
+	 * Allocate the underlying array and set the other values
+	 */
+	set.edges = calloc(DEFAULT_EDGE_SET_SIZE, sizeof(cfg_edge_t));
+	set.max_index = DEFAULT_EDGE_SET_SIZE;
+	set.current_index = 0;
+	return set;
+}
 
 
 /**
@@ -78,35 +100,16 @@ void basic_block_dealloc(basic_block_t* block){
 		dynamic_array_dealloc(&(block->live_in));
 	}
 
-	//Deallocate the successors
-	//TODO
-	if(block->successors.edges != NULL){
-		dynamic_array_dealloc(&(block->));
-	}
-
-	//Deallocate the predecessors
-	if(block->predecessors.internal_array != NULL){
-		dynamic_array_dealloc(&(block->predecessors));
-	}
+	/**
+	 * Deallocate both of the edge sets
+	 */
+	edge_set_dealloc(&(block->predecessors));
+	edge_set_dealloc(&(block->successors));
 
 	//If this is a switch statement entry block, then it will have a jump table
 	if(block->jump_table != NULL){
 		jump_table_dealloc(block->jump_table);
 	}
-
-	//Grab a statement cursor here
-	instruction_t* cursor = block->leader_statement;
-	//We'll need a temp block too
-	instruction_t* temp = cursor;
-
-	//So long as the cursor is not NULL
-	while(cursor != NULL){
-		temp = cursor;
-		cursor = cursor->next_statement;
-		//Destroy temp
-		instruction_dealloc(temp);
-	}
-	
 
 	//Otherwise its fine so
 	free(block);
