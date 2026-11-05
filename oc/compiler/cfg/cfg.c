@@ -22,7 +22,6 @@
 #include "../utils/variable_mapping/variable_mapping.h"
 #include "../utils/queue/heap_queue.h"
 #include "../static_analyzer/static_analyzer.h"
-#include "../jump_table/jump_table.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
 #include "../utils/parameter_result_array/parameter_result_array.h"
