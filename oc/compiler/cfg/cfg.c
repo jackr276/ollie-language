@@ -1538,12 +1538,14 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 
 			//Set live out to be a new array
 			current->live_out = dynamic_array_alloc();
-			
-			//Run through all of the successors
-			for(int32_t k = 0; k < current->successors.current_index; k++){
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
 
+			/**
+			 * Run through all REAL successors of the given block and their liveness
+			 * sets
+			 */
+			int32_t k = 0;
+			basic_block_t* successor;
+			while((successor = get_next_real_successor(current, &k)) != NULL){
 				//If it has a live in set
 				if(successor->live_in.internal_array != NULL){
 					//Add everything in his live_in set into the live_out set
@@ -1555,6 +1557,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 					}
 				}
 			}
+
 
 			/**
 			 * The live in is a combination of the variables used
@@ -7318,11 +7321,13 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			//Now we'll mark this as visited
 			block->visited = TRUE;
 
-			//And finally we'll add all of these onto the queue
-			for(int32_t j = 0; j < block->successors.current_index; j++){
-				//Add the successor into the queue, if it has not yet been visited
-				basic_block_t* successor = block->successors.internal_array[j];
-
+			/**
+			 * Now run through all of the successors and enqueue them if they
+			 * are unvisited
+			 */
+			int32_t j = 0;
+			basic_block_t* successor = NULL;
+			while((successor = get_next_real_successor(block, &j)) != NULL){
 				if(successor->visited == FALSE){
 					enqueue(&traversal_queue, successor);
 				}
@@ -8128,7 +8133,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * control path. In this instance, we need to set the result package's final block to be the
 					 * exit block
 					 */
-					if(dynamic_array_is_empty(&(overall_exit_block->predecessors)) == TRUE){
+					if(edge_set_empty(&(overall_exit_block->predecessors)) == TRUE){
 						if_results_package.final_block = function_exit_block;
 					} else {
 						if_results_package.final_block = overall_exit_block;
@@ -8480,7 +8485,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	 * of using the ending block, we can change it to be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 

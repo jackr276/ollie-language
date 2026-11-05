@@ -476,6 +476,45 @@ static inline void delete_successor(basic_block_t* target, basic_block_t* delete
 	delete_successor_only(target, deleted_successor);
 }
 
+
+/**
+ * Traverse the predecessor set, starting at the index, until we get the next predecessor that
+ * is a real edge, not a virtual edge. If no real predecessors remain we return NULL
+ */
+static inline basic_block_t* get_next_real_predecessor(basic_block_t* block, int32_t* index){
+	/**
+	 * Run through until we either hit the end or we find a real predecessor
+	 */
+	for(; *index < block->predecessors.current_index; (*index)++){
+		cfg_edge_t* predecessor = get_edge_at_index(&(block->predecessors), *index);	
+		if(predecessor->edge_type == EDGE_TYPE_REAL){
+			return predecessor->block;
+		}
+	}
+
+	return NULL;
+}
+
+
+/**
+ * Traverse the successor set, starting at the index, until we get the next successor that
+ * is a real edge, not a virtual edge
+ */
+static inline basic_block_t* get_next_real_successor(basic_block_t* block, int32_t* index){
+	/**
+	 * Run through until we either hit the end or we find a real successor 
+	 */
+	for(; *index < block->successors.current_index; (*index)++){
+		cfg_edge_t* successor = get_edge_at_index(&(block->successors), *index);	
+		if(successor->edge_type == EDGE_TYPE_REAL){
+			return successor->block;
+		}
+	}
+
+	return NULL;
+}
+
+
 /**
  * Print a block with OIR inside of it
  */
