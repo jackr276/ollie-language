@@ -340,6 +340,28 @@ static inline void clear_edge_set(edge_set_t* edge_set){
 
 
 /**
+ * Print the given edge to the file in a stylized manner
+ */
+static inline void print_cfg_edge(FILE* fl, cfg_edge_t* edge){
+	/**
+	 * Based on whether or not we have a function entry block
+	 * we print accordingly
+	 */
+	if(edge->block->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		fprintf(fl,
+				"{.L%d : %s}", 
+				edge->block->block_id,
+				edge->edge_type == EDGE_TYPE_REAL ? "REAL" : "VIRTUAL");
+	} else {
+		fprintf(fl,
+				"{%s : %s}", 
+				edge->block->function_defined_in->func_name.string,
+				edge->edge_type == EDGE_TYPE_REAL ? "REAL" : "VIRTUAL");
+	}
+}
+
+
+/**
  * Deallocate a CFG edge set
  */
 void edge_set_dealloc(edge_set_t* edge_set);

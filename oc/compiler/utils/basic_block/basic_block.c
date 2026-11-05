@@ -294,53 +294,39 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 	 */
 	printf("Estimated Execution Frequency: %d\n", block->estimated_execution_frequency);
 
+	/**
+	 * Print out all predecessors
+	 */
 	printf("Predecessors: {");
+	for(int32_t i = 0; i < block->predecessors.current_index; i++){
+		cfg_edge_t* edge = get_edge_at_index(&(block->predecessors), i);
+		print_cfg_edge(fl, edge);
 
-	//If we have predecessors
-	if(block->predecessors.internal_array != NULL){
-		for(int32_t i = 0; i < block->predecessors.current_index; i++){
-			basic_block_t* predecessor = block->predecessors.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", predecessor->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", predecessor->block_id);
-			}
-
-			if(i != block->predecessors.current_index - 1){
-				printf(", ");
-			}
+		if(i != block->predecessors.current_index - 1){
+			printf(", ");
 		}
 	}
-
 	printf("}\n");
 
+	/**
+	 * Now print out all successor edges
+	 */
 	printf("Successors: {");
-	//If we have successor
-	if(block->successors.internal_array != NULL){
-		for(int32_t i = 0; i < block->successors.current_index; i++){
-			basic_block_t* successor = block->successors.internal_array[i];
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		cfg_edge_t* edge = get_edge_at_index(&(block->successors), i);
+		print_cfg_edge(fl, edge);
 
-			//Print the block's ID or the function name
-			if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", successor->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", successor->block_id);
-			}
-
-			if(i != block->successors.current_index - 1){
-				printf(", ");
-			}
+		if(i != block->successors.current_index - 1){
+			printf(", ");
 		}
 	}
-
 	printf("}\n");
 
-	//If we have some assigned variables, we will dislay those for debugging
+	/**
+	 * Print out all assigned variables if any exist
+	 */
 	if(block->assigned_variables.current_index != 0){
 		printf("Assigned: (");
-
 		for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
 			print_variable(stdout, block->assigned_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
@@ -352,10 +338,11 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 		printf(")\n");
 	}
 
-	//Now if we have LIVE_IN variables, we'll print those out
+	/**
+	 * Print LIVE_IN variables if we have any
+	 */
 	if(block->live_in.internal_array != NULL){
 		printf("LIVE_IN: (");
-
 		for(int32_t i = 0; i < block->live_in.current_index; i++){
 			print_variable(stdout, block->live_in.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
@@ -364,15 +351,14 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 				printf(", ");
 			}
 		}
-
-		//Close it out
 		printf(")\n");
 	}
 
-	//Now if we have LIVE_IN variables, we'll print those out
+	/**
+	 * Print LIVE_OUT variables if we have any
+	 */
 	if(block->live_out.internal_array != NULL){
 		printf("LIVE_OUT: (");
-
 		for(int32_t i = 0; i < block->live_out.current_index; i++){
 			print_variable(stdout, block->live_out.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
 
@@ -381,17 +367,14 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 				printf(", ");
 			}
 		}
-
-		//Close it out
 		printf(")\n");
 	}
 
-
-	//Print out the dominance frontier if we're in DEBUG mode
+	/**
+	 * Print out the dominance frontier if we're in DEBUG mode
+	 */
 	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier.internal_array != NULL){
 		printf("Dominance frontier: {");
-
-		//Run through and print them all out
 		for(int32_t i = 0; i < block->dominance_frontier.current_index; i++){
 			basic_block_t* printing_block = block->dominance_frontier.internal_array[i];
 
@@ -407,16 +390,14 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 				printf(", ");
 			}
 		}
-
-		//And close it out
 		printf("}\n");
 	}
-
-	//Print out the reverse dominance frontier if we're in DEBUG mode
+	//
+	/**
+	 * Print out the reverse dominance frontier if we're in DEBUG mode
+	 */
 	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier.internal_array != NULL){
 		printf("Reverse Dominance frontier: {");
-
-		//Run through and print them all out
 		for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
 			basic_block_t* printing_block = block->reverse_dominance_frontier.internal_array[i];
 
@@ -432,24 +413,21 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 				printf(", ");
 			}
 		}
-
-		//And close it out
 		printf("}\n");
 	}
 
-	//Now grab a cursor and print out every statement that we 
-	//have
+	/**
+	 * Now run through and print out every statement in order
+	 */
 	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
 	while(cursor != NULL){
-		//Hand off to printing method
 		print_three_addr_code_stmt(stdout, cursor);
-		//Move along to the next one
 		cursor = cursor->next_statement;
 	}
 
-	//Some spacing
+	/**
+	 * Newline for extra spacing
+	 */
 	printf("\n");
 }
 
