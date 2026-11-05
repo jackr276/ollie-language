@@ -103,7 +103,152 @@ void edge_set_dealloc(edge_set_t* edge_set){
 
 //================================== CFG Edge Set Utility ========================================
 
+//================================== Basic Block Utilities =======================================
+/**
+ * Merge two basic blocks. We always return a pointer to a, b will be deallocated
+ *
+ * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
+ */
+basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b, variable_symtab_t* variable_symtab, dynamic_array_t* function_blocks){
+	//If b is null, we just return a
+	if(b->leader_statement == NULL){
+		return a;
+	}
 
+	//What function are we in - will be important for updates
+	symtab_function_record_t* function_contained_in = a->function_defined_in;
+
+	/**
+	 * Merge entry and exit statements int
+	 */
+	if(a->exit_statement == NULL){
+		a->leader_statement = b->leader_statement;
+		a->exit_statement = b->exit_statement;
+	} else {
+		//Chain the old exit to the start of b
+		a->exit_statement->next_statement = b->leader_statement;
+		//B's leader is now chained to the xit
+		b->leader_statement->previous_statement = a->exit_statement;
+		a->exit_statement = b->exit_statement;
+	}
+
+	/**
+	 * If we're gonna merge two blocks, then they'll share all the same successors and predecessors
+	 * Let's merge predecessors first if we have any
+	 *
+	 * NOTE: at this point we only have real edges, so hardcode the edge type to real
+	 */
+	for(int32_t i = 0; i < b->predecessors.current_index; i++){
+		add_predecessor_only(a, b->predecessors.edges[i].block, EDGE_TYPE_REAL);
+	}
+
+	/**
+	 * Now merge successors if we have any
+	 *
+	 * NOTE: at this point we only have real edges, so hardcode the edge type to real
+	 */
+	for(int32_t i = 0; i < b->successors.current_index; i++){
+		add_successor_only(a, b->successors.edges[i].block, EDGE_TYPE_REAL);
+	}
+
+	/**
+	 * FOR EACH Successor of B, it will have a reference to B as a predecessor.
+	 * This is now wrong though. So, for each successor of B, it will need
+	 * to have A as predecessor
+	 */
+	for(int32_t i = 0; i < b->successors.current_index; i++){
+		/**
+		 * Grab the successor block first
+		 */
+		basic_block_t* successor_block = b->successors.edges[i].block;
+
+		/**
+		 * Now for each of the predecessors that equals b, it needs to now point to A
+		 */
+		for(int32_t j = 0; j < successor_block->predecessors.current_index; j++){
+			/**
+			 * If it's pointing to b, it needs to be updated
+			 */
+			if(successor_block->predecessors.edges[j].block == b){
+				successor_block->predecessors.edges[j].block = a;
+			}
+		}
+	}
+
+	//Copy over the block type and terminal type
+	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		a->block_type = b->block_type;
+	}
+
+	//If b has a jump table, we'll need to add this in as well
+	a->jump_table = b->jump_table;
+	b->jump_table = NULL;
+
+	/**
+	 * For each statement in B, we need to flag that it's
+	 * now defined inside of a
+	 */
+	instruction_t* b_stmt = b->leader_statement;
+	while(b_stmt != NULL){
+		b_stmt->block_contained_in = a;
+		b_stmt = b_stmt->next_statement;
+	}
+
+	/**
+	 * All variables maintain a "block declared in" tag that tells us
+	 * where the variable was literally declared by the user. This is
+	 * very important to us for mutability checking. Since block B is
+	 * now block A, any variables that were declared in B now becom
+	 * declared in A. We will crawl all sheafs related to this function
+	 * and update any "declared in" tags from B to a
+	 */
+	for(int32_t i = 0; i < variable_symtab->sheafs.current_index; i++){
+		symtab_variable_sheaf_t* sheaf = variable_symtab->sheafs.internal_array[i];
+
+		//Not in the function skip it
+		if(sheaf->function_contained_in != function_contained_in){
+			continue;
+		}
+
+		//Run through the kespace
+		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
+			//Remember records may be chained
+			symtab_variable_record_t* cursor = sheaf->records[j];
+			while(cursor != NULL){
+				/**
+				 * If the cursor was declared in block b, update
+				 * it to now point to block a
+				 */
+				if(cursor->block_declared_in == b){
+					cursor->block_declared_in = a;
+				}
+
+				//Bump up to the next one
+				cursor = cursor->next;
+			}
+
+		}
+	}
+	
+	//IMPORTANT--wipe b's statements out
+	b->leader_statement = NULL;
+	b->exit_statement = NULL;
+
+	//Update the instruction counts
+	a->number_of_instructions += b->number_of_instructions;
+
+	/**
+	 * Remove this block from the set of all function blocks in the
+	 * current function
+	 */
+	dynamic_array_delete(function_blocks, b);
+
+	//And finally we'll deallocate b
+	basic_block_dealloc(b);
+
+	//Give back the pointer to a
+	return a;
+}
 
 
 /**
@@ -164,3 +309,5 @@ void basic_block_dealloc(basic_block_t* block){
 	//Otherwise its fine so
 	free(block);
 }
+
+//================================== Basic Block Utilities =======================================

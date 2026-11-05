@@ -12,6 +12,7 @@
 #include "../dynamic_array/dynamic_array.h"
 #include "../jump_table/jump_table.h"
 #include "../ollie_instruction.h"
+#include "../../symtab/symtab.h"
 #include <string.h>
 #include <sys/types.h>
 
@@ -443,6 +444,13 @@ static inline void delete_successor(basic_block_t* target, basic_block_t* delete
 	delete_successor_only(target, deleted_successor);
 }
 
+
+/**
+ * Merge two basic blocks. We always return a pointer to a, b will be deallocated
+ *
+ * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
+ */
+basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b, variable_symtab_t* variable_symtab, dynamic_array_t* function_blocks);
 
 
 /**
