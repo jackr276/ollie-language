@@ -17,12 +17,6 @@
 //The overall structure holder
 typedef struct cfg_t cfg_t;
 
-//Are we emitting the dominance frontier or not?
-typedef enum{
-	EMIT_DOMINANCE_FRONTIER,
-	DO_NOT_EMIT_DOMINANCE_FRONTIER
-} emit_dominance_frontier_selection_t;
-
 /**
  * What result do we have from this CFG? This will
  * determine if/how callers continue to process
@@ -117,11 +111,6 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* dest_block);
  * via the header file
  */
 void print_all_cfg_blocks(cfg_t* cfg);
-
-/**
- * Print a block our for reading
-*/
-void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df);
 
 /**
  * Deallocate a block

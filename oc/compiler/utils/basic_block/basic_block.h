@@ -13,6 +13,7 @@
 #include "../jump_table/jump_table.h"
 #include "../ollie_instruction.h"
 #include "../../symtab/symtab.h"
+#include "../../instruction/instruction.h"
 #include <string.h>
 #include <sys/types.h>
 
@@ -49,6 +50,15 @@ typedef enum{
 	BLOCK_TYPE_LOOP_EXIT, //Loop exit block
 	BLOCK_TYPE_LABEL, //This block comes from a user-defined label
 } block_type_t;
+
+
+/**
+ * For block printing - do we or do we not print the dominance frontier
+ */
+typedef enum{
+	EMIT_DOMINANCE_FRONTIER,
+	DO_NOT_EMIT_DOMINANCE_FRONTIER
+} emit_dominance_frontier_selection_t;
 
 
 /**
@@ -443,6 +453,11 @@ static inline void delete_successor(basic_block_t* target, basic_block_t* delete
 	 */
 	delete_successor_only(target, deleted_successor);
 }
+
+/**
+ * Print a block with OIR inside of it
+ */
+void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_selection_t print_df);
 
 
 /**

@@ -252,6 +252,209 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b, variable_symtab_
 
 
 /**
+ * Print a block with OIR inside of it
+ */
+void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_selection_t print_df){
+	/**
+	 * If this is some kind of switch block, we first print the jump table
+	 */
+	if(block->jump_table != NULL){
+		print_jump_table(fl, block->jump_table);
+	}
+
+	/**
+	 * If it's not a function block print the number. Otherwise we need
+	 * the function name
+	 */
+	if(block->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		fprintf(fl, ".L%d", block->block_id);
+	} else {
+		fprintf(fl, "%s", block->function_defined_in->func_name.string);
+	}
+
+	/**
+	 * Print out all variables that are "used before definition"
+	 */
+	if(block->used_before_definition.current_index != 0){
+		printf("(");
+		for(int32_t i = 0; i < block->used_before_definition.current_index; i++){
+			print_variable(stdout, block->used_before_definition.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+
+			if(i != block->used_before_definition.current_index - 1){
+				printf(", ");
+			}
+		}
+		printf(")");
+	}
+
+	printf(":\n");
+
+	/**
+	 * Now the estimated execution frequency
+	 */
+	printf("Estimated Execution Frequency: %d\n", block->estimated_execution_frequency);
+
+	printf("Predecessors: {");
+
+	//If we have predecessors
+	if(block->predecessors.internal_array != NULL){
+		for(int32_t i = 0; i < block->predecessors.current_index; i++){
+			basic_block_t* predecessor = block->predecessors.internal_array[i];
+
+			//Print the block's ID or the function name
+			if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", predecessor->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", predecessor->block_id);
+			}
+
+			if(i != block->predecessors.current_index - 1){
+				printf(", ");
+			}
+		}
+	}
+
+	printf("}\n");
+
+	printf("Successors: {");
+	//If we have successor
+	if(block->successors.internal_array != NULL){
+		for(int32_t i = 0; i < block->successors.current_index; i++){
+			basic_block_t* successor = block->successors.internal_array[i];
+
+			//Print the block's ID or the function name
+			if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", successor->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", successor->block_id);
+			}
+
+			if(i != block->successors.current_index - 1){
+				printf(", ");
+			}
+		}
+	}
+
+	printf("}\n");
+
+	//If we have some assigned variables, we will dislay those for debugging
+	if(block->assigned_variables.current_index != 0){
+		printf("Assigned: (");
+
+		for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
+			print_variable(stdout, block->assigned_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->assigned_variables.current_index - 1){
+				printf(", ");
+			}
+		}
+		printf(")\n");
+	}
+
+	//Now if we have LIVE_IN variables, we'll print those out
+	if(block->live_in.internal_array != NULL){
+		printf("LIVE_IN: (");
+
+		for(int32_t i = 0; i < block->live_in.current_index; i++){
+			print_variable(stdout, block->live_in.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, print out a comma
+			if(i != block->live_in.current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//Close it out
+		printf(")\n");
+	}
+
+	//Now if we have LIVE_IN variables, we'll print those out
+	if(block->live_out.internal_array != NULL){
+		printf("LIVE_OUT: (");
+
+		for(int32_t i = 0; i < block->live_out.current_index; i++){
+			print_variable(stdout, block->live_out.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
+
+			//If it isn't the very last one, print out a comma
+			if(i != block->live_out.current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//Close it out
+		printf(")\n");
+	}
+
+
+	//Print out the dominance frontier if we're in DEBUG mode
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier.internal_array != NULL){
+		printf("Dominance frontier: {");
+
+		//Run through and print them all out
+		for(int32_t i = 0; i < block->dominance_frontier.current_index; i++){
+			basic_block_t* printing_block = block->dominance_frontier.internal_array[i];
+
+			//Print the block's ID or the function name
+			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", printing_block->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", printing_block->block_id);
+			}
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->dominance_frontier.current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//And close it out
+		printf("}\n");
+	}
+
+	//Print out the reverse dominance frontier if we're in DEBUG mode
+	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier.internal_array != NULL){
+		printf("Reverse Dominance frontier: {");
+
+		//Run through and print them all out
+		for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
+			basic_block_t* printing_block = block->reverse_dominance_frontier.internal_array[i];
+
+			//Print the block's ID or the function name
+			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
+				printf("%s", printing_block->function_defined_in->func_name.string);
+			} else {
+				printf(".L%d", printing_block->block_id);
+			}
+
+			//If it isn't the very last one, we need a comma
+			if(i != block->reverse_dominance_frontier.current_index - 1){
+				printf(", ");
+			}
+		}
+
+		//And close it out
+		printf("}\n");
+	}
+
+	//Now grab a cursor and print out every statement that we 
+	//have
+	instruction_t* cursor = block->leader_statement;
+
+	//So long as it isn't null
+	while(cursor != NULL){
+		//Hand off to printing method
+		print_three_addr_code_stmt(stdout, cursor);
+		//Move along to the next one
+		cursor = cursor->next_statement;
+	}
+
+	//Some spacing
+	printf("\n");
+}
+
+
+/**
  * Utility for deallocating a basic block
  */
 void basic_block_dealloc(basic_block_t* block){
