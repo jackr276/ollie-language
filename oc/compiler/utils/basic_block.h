@@ -82,10 +82,13 @@ struct edge_set_t {
 struct basic_block_t{
 	instruction_t* leader_statement;
 	instruction_t* exit_statement;
-	//Predecessor nodes
-	dynamic_array_t predecessors;
-	//Successor nodes
-	dynamic_array_t successors;
+	/**
+	 * Predecessors and successors are represented by the cfg_edge_t struct. This
+	 * is necessary because we can have both real and virtual(analysis only) succesors
+	 * and predecessors, so we need to not only store the block but also the edge type
+	 */
+	edge_set_t predecessors;
+	edge_set_t successors;
 	//The "LIVE_IN" variables for this node
 	dynamic_array_t live_in;
 	//The "LIVE_OUT" variables for this node
