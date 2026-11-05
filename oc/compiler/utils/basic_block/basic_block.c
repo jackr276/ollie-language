@@ -33,6 +33,26 @@ edge_set_t edge_set_alloc(){
 
 
 /**
+ * Dynamically resize an edge set to accomodate the given index if need be
+ */
+void edge_set_dynamic_resize_if_needed(edge_set_t* edge_set, int32_t index){
+	/**
+	 * No need to resize here if we're smaller than the current index
+	 */
+	if(index < edge_set->current_index){
+		return;
+	}
+
+	/**
+	 * Otherwise we need a resize. We will resize to be double the size of
+	 * the requested index
+	 */
+	edge_set->max_index = index * 2;
+	edge_set->edges = realloc(edge_set->edges, sizeof(cfg_edge_t) * edge_set->max_index);
+}
+
+
+/**
  * Deallocate a CFG edge set
  */
 void edge_set_dealloc(edge_set_t* edge_set){

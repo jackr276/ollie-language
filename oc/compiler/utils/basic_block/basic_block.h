@@ -198,22 +198,35 @@ struct basic_block_t{
  */
 edge_set_t edge_set_alloc();
 
+
 /**
  * Dynamically resize an edge set to accomodate the given index if need be
  */
 void edge_set_dynamic_resize_if_needed(edge_set_t* edge_set, int32_t index);
 
+
 /**
  * Get the edge at a given index. If the index is invalid then NULL is returned
  */
-static inline cfg_edge_t get_edge_at_index(edge_set_t* edge_set, int32_t index){
+static inline cfg_edge_t* get_edge_at_index(edge_set_t* edge_set, int32_t index){
+	/**
+	 * This makes no sense so we return NULL
+	 */
+	if(index >= edge_set->current_index){
+		return NULL;
+	}
 
+	/**
+	 * Otherwise return a poiner to the requested edge
+	 */
+	return &(edge_set->edges[index]);
 }
 
 
 static inline cfg_edge_t add_edge(edge_set_t edge_set, basic_block_t* block, edge_type_t edge_type){
 
 }
+
 
 /**
  * Deallocate a CFG edge set
