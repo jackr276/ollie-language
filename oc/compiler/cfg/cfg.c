@@ -945,60 +945,6 @@ static inline void print_function_inlining_order(dynamic_integer_array_t* inlini
 
 
 /**
- * Delete a statement from the CFG - handling any/all edge cases that may arise
- *
- * TODO MOVE THIS
- */
-void delete_statement(instruction_t* stmt){
-	//Grab the block out
-	basic_block_t* block = stmt->block_contained_in;
-
-	//No matter what, we are reducing the number of statements in this block
-	block->number_of_instructions--;
-
-	//If it's the leader statement, we'll just update the references
-	if(block->leader_statement == stmt){
-		//Special case - it's the only statement. We'll just delete it here
-		if(block->leader_statement->next_statement == NULL){
-			//Just remove it entirely
-			block->leader_statement = NULL;
-			block->exit_statement = NULL;
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			block->leader_statement = stmt->next_statement;
-			//Set this to NULL
-			block->leader_statement->previous_statement = NULL;
-		}
-
-	//What if it's the exit statement?
-	} else if(block->exit_statement == stmt){
-		instruction_t* previous = stmt->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		block->exit_statement = previous;
-		
-	//Otherwise, we have one in the middle
-	} else {
-		//Regular middle deletion here
-		instruction_t* previous = stmt->previous_statement;
-		instruction_t* next = stmt->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-
-	/**
-	 * Remove all of these values now as we're no longer in any block
-	 */
-	stmt->previous_statement = NULL;
-	stmt->next_statement = NULL;
-	stmt->block_contained_in = NULL;
-}
-
-
-/**
  * A special helper function that we use for dynamic arrays of variables. Since variables
  * can be duplicated, we need to compare the symtab variable record, not the three address
  * variable itself

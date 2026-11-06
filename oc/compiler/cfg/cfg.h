@@ -78,11 +78,6 @@ static inline int32_t get_next_block_id(cfg_t* cfg){
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 /**
- * Delete a statement from the CFG - handling any/all edge cases that may arise
- */
-void delete_statement(instruction_t* stmt);
-
-/**
  * Deallocate the entire CFG
  */
 void dealloc_cfg(cfg_t* cfg);

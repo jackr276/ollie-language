@@ -301,6 +301,70 @@ void add_statement(basic_block_t* block, instruction_t* statement){
 
 
 /**
+ * Remove a statement from the basic block that it's in
+ */
+void delete_statement(instruction_t* statement){
+	basic_block_t* block = statement->block_contained_in;
+
+	/**
+	 * Case 1: we're deleting the leader statement
+	 */
+	if(block->leader_statement == statement){
+		/**
+		 * Case 1.1: this is the leader statement and also the only statement, we'll
+		 * just clear the block out
+		 */
+		if(block->leader_statement->next_statement == NULL){
+			block->leader_statement = NULL;
+			block->exit_statement = NULL;
+
+		/**
+		 * Case 1.2: it is the leader statement and there is stuff after
+		 * it
+		 */
+		} else {
+			block->leader_statement = statement->next_statement;
+			block->leader_statement->previous_statement = NULL;
+		}
+
+	/**
+	 * Case 2: we're deleting the exit statement
+	 */
+	} else if(block->exit_statement == statement){
+		/**
+		 * Unlink this from where it came from prior
+		 */
+		instruction_t* previous = statement->previous_statement;
+		previous->next_statement = NULL;
+
+		/**
+		 * The prior statement is now the exit statement
+		 */
+		block->exit_statement = previous;
+		
+	/**
+	 * Case 3: we're deleting and ordinary statement that's just in the
+	 * middle of the block
+	 */
+	} else {
+		instruction_t* previous = statement->previous_statement;
+		instruction_t* next = statement->next_statement;
+		previous->next_statement = next;
+		next->previous_statement = previous;
+	}
+
+	/**
+	 * Remove all of these values now as we're no longer in any block, and
+	 * decrement the block's instruction count
+	 */
+	block->number_of_instructions--;
+	statement->previous_statement = NULL;
+	statement->next_statement = NULL;
+	statement->block_contained_in = NULL;
+}
+
+
+/**
  * Print a block with OIR inside of it
  */
 void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_selection_t print_df){

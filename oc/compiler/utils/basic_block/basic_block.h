@@ -556,6 +556,11 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
  */
 void add_statement(basic_block_t* basic_block, instruction_t* statement);
 
+/**
+ * Remove a statement from the basic block that it's in
+ */
+void delete_statement(instruction_t* statement);
+
 
 /**
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
