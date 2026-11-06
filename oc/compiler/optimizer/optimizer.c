@@ -189,7 +189,8 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 /**
  * Combine two blocks into one
  *
- * TODO VERIFY THIS WITH SYNETHETIC EDGES
+ * NOTE: we should never have any synthetic edges when doing this, so we are safe to blindly
+ * copy edge sets over as needed
  */
 static void combine(basic_block_t* a, basic_block_t* b){
 	//If b is null, we just return a. This in reality should never happen
@@ -214,10 +215,10 @@ static void combine(basic_block_t* a, basic_block_t* b){
 		a->exit_statement = b->exit_statement;
 	}
 
-	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
-	//As such, we won't even bother looking at the predecessors
-
-	//Now merge successors
+	/**
+	 * In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
+	 * As such, we won't even bother looking at the predecessors
+	 */
 	for(u_int16_t i = 0; i < b->successors.current_index; i++){
 		basic_block_t* successor = get_edge_at_index(&(b->successors), i)->block;
 
@@ -822,7 +823,8 @@ static void mark(dynamic_array_t* function_blocks){
  * Replace all targets that jump to "empty block" with "replacement". This is a helper 
  * function for the "Empty Block Removal" step of clean()
  *
- * TODO LOOK AT THIS WHEN WE HAVE VIRTUAL EDGES
+ * NOTE: we should never be dealing with analysis edges once we get here, so we'll blindly
+ * go through the edge sets as needed
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
 	//Use a clone since we are mutating
@@ -1829,7 +1831,8 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * We will also be checking if each one of these predecessors has *one*
 		 * unified branching predecessor itself. If it does not then we're also disqualified
 		 *
-		 * TODO LOOK AT AFTER ANALYSIS EDGES
+		 * NOTE: by the time we get here, analysis edges are not a thing. As such, we'll run
+		 * through all edges indiscriminantly
 		 */
 		for(int32_t i = 0; i < candidate_block->predecessors.current_index; i++){
 			//Extract the predecessor
