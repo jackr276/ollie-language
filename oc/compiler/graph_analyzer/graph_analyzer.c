@@ -1448,7 +1448,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * now allows us to avoid confusion elsewhere when we're iterating over
 	 * edge sets
 	 */
-	remove_all_analysis_edges(function_blocks);
+	remove_all_virtual_successor_and_predecessors(function_blocks);
 }
 
 

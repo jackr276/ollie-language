@@ -562,15 +562,12 @@ static inline void remove_all_analysis_edges(edge_set_t* edge_set){
 
 }
 
-
-
 /**
  * Print a block with OIR inside of it
  */
 void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_selection_t print_df);
 
-
-/**
+/*
  * Add a statement to the basic block
  */
 void add_statement(basic_block_t* basic_block, instruction_t* statement);
@@ -579,7 +576,6 @@ void add_statement(basic_block_t* basic_block, instruction_t* statement);
  * Remove a statement from the basic block that it's in
  */
 void delete_statement(instruction_t* statement);
-
 
 /**
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated

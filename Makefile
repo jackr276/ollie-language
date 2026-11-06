@@ -259,7 +259,7 @@ basic_block.o: $(BASIC_BLOCK_PATH)/basic_block.c
 	$(CC) $(CFLAGS) $(BASIC_BLOCK_PATH)/basic_block.c -o $(OUT_LOCAL)/basic_block.o
 
 basic_blockd.o: $(BASIC_BLOCK_PATH)/basic_block.c
-	$(CC) $(CFLAGS) -g $(BASIC_BLOCK_PATH)/basic_block.c -o $(OUT_LOCAL)/basic_block.o
+	$(CC) $(CFLAGS) -g $(BASIC_BLOCK_PATH)/basic_block.c -o $(OUT_LOCAL)/basic_blockd.o
 
 static_analyzer.o: $(STATIC_ANALYZER_PATH)/static_analyzer.c
 	$(CC) $(CFLAGS) $(STATIC_ANALYZER_PATH)/static_analyzer.c -o $(OUT_LOCAL)/static_analyzer.o
@@ -762,7 +762,7 @@ basic_block-CI.o: $(BASIC_BLOCK_PATH)/basic_block.c
 	$(CC) $(CFLAGS) $(BASIC_BLOCK_PATH)/basic_block.c -o $(OUT_CI)/basic_block.o
 
 basic_block-CId.o: $(BASIC_BLOCK_PATH)/basic_block.c
-	$(CC) $(CFLAGS) -g $(BASIC_BLOCK_PATH)/basic_block.c -o $(OUT_CI)/basic_block.o
+	$(CC) $(CFLAGS) -g $(BASIC_BLOCK_PATH)/basic_block.c -o $(OUT_CI)/basic_blockd.o
 
 static_analyzer-CI.o: $(STATIC_ANALYZER_PATH)/static_analyzer.c
 	$(CC) $(CFLAGS) $(STATIC_ANALYZER_PATH)/static_analyzer.c -o $(OUT_CI)/static_analyzer.o

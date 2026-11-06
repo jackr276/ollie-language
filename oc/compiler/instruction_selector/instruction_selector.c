@@ -6052,9 +6052,12 @@ static inline void remove_memory_region_init_statement_if_found(instruction_wind
 		return;
 	}
 
-	//Delete and rework as needed
-	delete_statement(window->instruction1);
+	/**
+	 * Rework the window first, then delete the statement. Deleting the statement completely
+	 * wipes the relationship links so we can't delete first
+	 */
 	reconstruct_window(window, window->instruction1->next_statement);
+	delete_statement(window->instruction1);
 	*changed = TRUE;
 }
 
