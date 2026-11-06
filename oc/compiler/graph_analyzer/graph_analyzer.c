@@ -1383,6 +1383,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * graph relations: dominator trees and dominance frontiers. These
 	 * *must* be computed upon every run
 	 */
+	//TODO MUST BE VIRTUAL EDGE AWARE
 	compute_immediate_dominators(function_entry_block, function_blocks);
 
 	/**
@@ -1392,6 +1393,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * Dominator trees are used for SSA form conversion. It is absolutely
 	 * essential that these be computed upon every run
 	 */
+	//TODO MUST BE VIRTUAL EDGE AWARE
 	build_dominator_trees(function_blocks);
 
 	/**
@@ -1399,6 +1401,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * an SSA conversion. It is for this reason that we must calculate them upon every 
 	 * run of the control flow calculator
 	 */
+	//TODO MUST BE VIRTUAL EDGE AWARE
 	calculate_dominance_frontiers(function_blocks);
 
 	/**
@@ -1407,6 +1410,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * frontier, and they're also used when we perform branch reduction in the 
 	 * optimizer(see nearest_marked_postdominator)
 	 */
+	//TODO MUST BE VIRTUAL EDGE AWARE
 	compute_immediate_postdominators(function_exit_block, function_blocks);
 
 	/**
@@ -1416,6 +1420,8 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * time we do this. The algorithm relies on immediate postdominators, which is
 	 * why this comes last
 	 */
+
+	//TODO MUST BE VIRTUAL EDGE AWARE
 	calculate_reverse_dominance_frontiers(function_blocks);
 
 	/**

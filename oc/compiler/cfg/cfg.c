@@ -1400,12 +1400,16 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 			current->live_out = dynamic_array_alloc();
 
 			/**
-			 * Run through all REAL successors of the given block and their liveness
-			 * sets
+			 * Run through all successors. At this point we'll only be dealing
+			 * with real successors so we don't need to worry about filtering
+			 * out ANALSYSIS_ONLY edges
 			 */
-			int32_t k = 0;
-			basic_block_t* successor = NULL;
-			while((successor = get_next_real_successor(current, &k)) != NULL){
+			for(int32_t k = 0; k < current->successors.current_index; k++){
+				/**
+				 * Extract the block associated with it
+				 */
+				basic_block_t* successor = get_edge_at_index(&(current->successors), k)->block;
+
 				//If it has a live in set
 				if(successor->live_in.internal_array != NULL){
 					//Add everything in his live_in set into the live_out set
@@ -7183,11 +7187,12 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 			/**
 			 * Now run through all of the successors and enqueue them if they
-			 * are unvisited
+			 * are unvisited. We're only dealing with real successors here so
+			 * we don't need to worry about filtering
 			 */
-			int32_t j = 0;
-			basic_block_t* successor = NULL;
-			while((successor = get_next_real_successor(block, &j)) != NULL){
+			for(int32_t j = 0; j < block->successors.current_index; j++){
+				basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
+
 				if(successor->visited == FALSE){
 					enqueue(&traversal_queue, successor);
 				}
@@ -10473,11 +10478,15 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
 	/**
-	 * Run through all of the *REAL* predecessors
+	 * Run through all predecessors. At this point, we should only be dealing with real
+	 * predecessors so we don't need to worry about any analysis only edges
 	 */
-	int32_t i = 0;
-	basic_block_t* predecessor = NULL;
-	while((predecessor = get_next_real_predecessor(function_exit_block, &i)) != NULL){
+	for(int32_t i = 0; i < function_exit_block->predecessors.current_index; i++){
+		/**
+		 * Get the block from the predecessor
+		 */
+		basic_block_t* predecessor = get_edge_at_index(&(function_exit_block->predecessors), i)->block;
+
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
 		if(does_block_end_in_function_termination_statement(predecessor) == FALSE){
 			function_type_t* defined_in_signature = function_defined_in->signature->internal_types.function_type;
