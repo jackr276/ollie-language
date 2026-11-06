@@ -567,6 +567,16 @@ static inline void remove_all_analysis_edges(edge_set_t* edge_set){
  */
 void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_selection_t print_df);
 
+/**
+ * Print out the instructions in a block with their live ranges
+ */
+void print_block_with_live_ranges(basic_block_t* block);
+
+/**
+ * Print a block and the instructions in it with registers
+ */
+void print_block_with_registers(basic_block_t* block);
+
 /*
  * Add a statement to the basic block
  */
