@@ -1205,14 +1205,25 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
  * edges are only useful for analysis and they do *NOT* represent real edges. As such, after
  * the analysis is done we'll delete them
  */
-static inline void remove_all_analysis_edges(dynamic_array_t* function_blocks){
+static inline void remove_all_virtual_successor_and_predecessors(dynamic_array_t* function_blocks){
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
-		//TODO REMOVE ALL SYNETHIC EDGES PREDECESSOR
-		//
-		//TODO REMOVE ALL SYNETHIC EDGES SUCCESSOR
+		/**
+		 * If and only if we have virtual predecessors, invoke the helper
+		 * to go through and remove them all
+		 */
+		if(block->predecessors.virtual_edge_count > 0){
+			remove_all_analysis_edges(&(block->predecessors));
+		}
 
+		/**
+		 * If and only if we have virtual successors, invoke the helper
+		 * to go through and remove them all
+		 */
+		if(block->successors.virtual_edge_count > 0){
+			remove_all_analysis_edges(&(block->successors));
+		}
 	}
 }
 
