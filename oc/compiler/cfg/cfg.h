@@ -78,11 +78,6 @@ static inline int32_t get_next_block_id(cfg_t* cfg){
 cfg_t* build_cfg(front_end_results_package_t* results, u_int32_t* num_errors, u_int32_t* num_warnings);
 
 /**
- * Add a statement to the basic block
- */
-void add_statement(basic_block_t* target, instruction_t* statement_node);
-
-/**
  * Take a statement and move it from its current blcok over to the provided
  * destination block. This will not update the use/assignment counts like
  * a regular remove still but it will still operate in much the same way.

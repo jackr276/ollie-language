@@ -945,44 +945,6 @@ static inline void print_function_inlining_order(dynamic_integer_array_t* inlini
 
 
 /**
- * Add a statement to the target block, following all standard linked-list protocol
- *
- * TODO MOVE THIS
- */
-void add_statement(basic_block_t* target, instruction_t* statement_node){
-	//Generic fail case
-	if(target == NULL){
-		fprintf(stderr, "Fatal internal compiler error: NULL basic block found");
-		exit(1);
-	}
-
-	//No matter what - we are adding a statement to this block
-	target->number_of_instructions++;
-
-	//Special case--we're adding the head
-	if(target->leader_statement == NULL || target->exit_statement == NULL){
-		//Assign this to be the head and the tail
-		target->leader_statement = statement_node;
-		target->exit_statement = statement_node;
-		//Save what block we're in
-		statement_node->block_contained_in = target;
-		return;
-	}
-
-	//Otherwise, we are not dealing with the head. We'll simply tack this on to the tail
-	target->exit_statement->next_statement = statement_node;
-	//Mark this as the prior statement
-	statement_node->previous_statement = target->exit_statement;
-
-	//Update the tail reference
-	target->exit_statement = statement_node;
-
-	//Save what block we're in
-	statement_node->block_contained_in = target;
-}
-
-
-/**
  * Take a statement and move it from its current blcok over to the provided
  * destination block. This will not update the use/assignment counts like
  * a regular remove still but it will still operate in much the same way.

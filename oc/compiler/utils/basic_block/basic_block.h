@@ -552,6 +552,12 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 
 
 /**
+ * Add a statement to the basic block
+ */
+void add_statement(basic_block_t* basic_block, instruction_t* statement);
+
+
+/**
  * Merge two basic blocks. We always return a pointer to a, b will be deallocated
  *
  * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE

@@ -274,6 +274,33 @@ basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b, variable_symtab_
 
 
 /**
+ * Add a statement to the target block, following all standard linked-list protocol
+ */
+void add_statement(basic_block_t* block, instruction_t* statement){
+	/**
+	 * Bump the instruction count up by 1 and save what block we're in
+	 */
+	block->number_of_instructions++;
+	statement->block_contained_in = block;
+
+	/**
+	 * If this is the first statement in the block we'll set it to be the
+	 * entry and exit statements. Otherwise we just tack it onto the end
+	 */
+	if(block->leader_statement != NULL){
+		block->exit_statement->next_statement = statement;
+		statement->previous_statement = block->exit_statement;
+
+		block->exit_statement = statement;
+
+	} else {
+		block->leader_statement = statement;
+		block->exit_statement = statement;
+	}
+}
+
+
+/**
  * Print a block with OIR inside of it
  */
 void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_selection_t print_df){
