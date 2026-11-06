@@ -6053,11 +6053,12 @@ static inline void remove_memory_region_init_statement_if_found(instruction_wind
 	}
 
 	/**
-	 * Rework the window first, then delete the statement. Deleting the statement completely
-	 * wipes the relationship links so we can't delete first
+	 * Take care to store what comes after first, then delete the initialization statement,
+	 * then rebuild the window in that order
 	 */
-	reconstruct_window(window, window->instruction1->next_statement);
+	instruction_t* after_memory_init = window->instruction2;
 	delete_statement(window->instruction1);
+	reconstruct_window(window, after_memory_init);
 	*changed = TRUE;
 }
 
