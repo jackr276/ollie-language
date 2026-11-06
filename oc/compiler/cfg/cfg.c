@@ -945,68 +945,6 @@ static inline void print_function_inlining_order(dynamic_integer_array_t* inlini
 
 
 /**
- * Take a statement and move it from its current blcok over to the provided
- * destination block. This will not update the use/assignment counts like
- * a regular remove still but it will still operate in much the same way.
- * The statement will always be added directly at the end of the block
- *
- *
- * TODO MOVE THIS
- */
-void move_statement(instruction_t* target, basic_block_t* destination){
-	//Grab the block out
-	basic_block_t* source_block = target->block_contained_in;
-
-	//No matter what, we are reducing the number of statements in this block
-	source_block->number_of_instructions--;
-
-	/**
-	 * Case 1: target is the leader statemenet
-	 */
-	if(source_block->leader_statement == target){
-		//Special case - it's the only statement. We'll just delete it here
-		if(source_block->leader_statement->next_statement == NULL){
-			source_block->leader_statement = NULL;
-			source_block->exit_statement = NULL;
-
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			source_block->leader_statement = target->next_statement;
-			source_block->leader_statement->previous_statement = NULL;
-		}
-
-	/**
-	 * Case 2: target is the exit statement
-	 */
-	} else if(source_block->exit_statement == target){
-		instruction_t* previous = target->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		source_block->exit_statement = previous;
-		
-	/**
-	 * Case 3: target is a regualr middle of the road statement
-	 */
-	} else {
-		//Regular middle deletion here
-		instruction_t* previous = target->previous_statement;
-		instruction_t* next = target->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-
-	/**
-	 * Once we've removed this statement from the source block, we will add it
-	 * into the target block with a regular add_statement call
-	 */
-	add_statement(destination, target);
-}
-
-
-/**
  * Delete a statement from the CFG - handling any/all edge cases that may arise
  *
  * TODO MOVE THIS
@@ -1050,6 +988,13 @@ void delete_statement(instruction_t* stmt){
 		previous->next_statement = next;
 		next->previous_statement = previous;
 	}
+
+	/**
+	 * Remove all of these values now as we're no longer in any block
+	 */
+	stmt->previous_statement = NULL;
+	stmt->next_statement = NULL;
+	stmt->block_contained_in = NULL;
 }
 
 
@@ -11848,58 +11793,6 @@ static inline void get_function_inlining_order(function_symtab_t* function_symta
 
 
 /**
- * Remove a statement from a block. This is more like a soft deletion, we are
- * not actually deleting the statement, just moving it from once place to another
- */
-static void remove_statement(instruction_t* stmt){
-	//Grab the block out
-	basic_block_t* block = stmt->block_contained_in;
-
-	//We are losing a statement here
-	block->number_of_instructions--;
-
-	//If it's the leader statement, we'll just update the references
-	if(block->leader_statement == stmt){
-		//Special case - it's the only statement. We'll just delete it here
-		if(block->leader_statement->next_statement == NULL){
-			//Just remove it entirely
-			block->leader_statement = NULL;
-			block->exit_statement = NULL;
-
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			block->leader_statement = stmt->next_statement;
-			//Set this to NULL
-			block->leader_statement->previous_statement = NULL;
-		}
-
-	//What if it's the exit statement?
-	} else if(block->exit_statement == stmt){
-		instruction_t* previous = stmt->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		block->exit_statement = previous;
-		
-	//Otherwise, we have one in the middle
-	} else {
-		//Regular middle deletion here
-		instruction_t* previous = stmt->previous_statement;
-		instruction_t* next = stmt->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-
-	//This statement is listless(for now)
-	stmt->previous_statement = NULL;
-	stmt->next_statement = NULL;
-	stmt->block_contained_in = NULL;
-}
-
-
-/**
  * Split a block, taking all statements beginning at start(exclusive) until
  * the end and putting them into the new block. We will also be updating all
  * of the successors as well. When we are done, the starting block will not
@@ -11944,7 +11837,7 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 		cursor = cursor->next_statement;
 
 		//Remove the holder from the original block
-		remove_statement(holder);
+		delete_statement(holder);
 
 		//Add it to the new block
 		add_statement(new_block, holder);
@@ -13514,7 +13407,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	 * We no longer need this statement at all so remove it. It still
 	 * exists in memory for us to reference
 	 */
-	remove_statement(call_to_inline);
+	delete_statement(call_to_inline);
 
 	/**
 	 * If we do have something that we return, we'll need
