@@ -45,6 +45,7 @@ edge_set_t clone_edge_set(edge_set_t* source){
 	set.edges = calloc(source->max_index, sizeof(cfg_edge_t));
 	set.max_index = source->max_index;
 	set.current_index = source->current_index;
+	set.virtual_edge_count = source->virtual_edge_count;
 
 	/**
 	 * Then copy everything over and return out
@@ -84,6 +85,14 @@ void edge_set_delete_at_index(edge_set_t* edge_set, int32_t index){
 	 */
 	if(index >= edge_set->current_index){
 		return;
+	}
+
+	/**
+	 * If we're deleting a virtual edge then knock this count down
+	 * by 1
+	 */
+	if(edge_set->edges[index].edge_type == EDGE_TYPE_VIRTUAL){
+		(edge_set->virtual_edge_count)--;
 	}
 	
 	/**

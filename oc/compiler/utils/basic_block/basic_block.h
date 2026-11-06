@@ -32,7 +32,7 @@ typedef struct edge_set_t edge_set_t;
 /**
  * Initializing an empty edge set
  */
-#define EMPTY_EDGE_SET (edge_set_t){NULL, 0, 0}
+#define EMPTY_EDGE_SET (edge_set_t){NULL, 0, 0, 0}
 
 /**
  * What is the general type of the block. Again most
@@ -91,6 +91,7 @@ struct edge_set_t {
 	cfg_edge_t* edges;
 	int32_t current_index;
 	int32_t max_index;
+	int32_t virtual_edge_count;
 };
 
 
@@ -277,6 +278,11 @@ static inline void add_edge(edge_set_t* edge_set, basic_block_t* block, edge_typ
 
 	//Bump this up for the next go around
 	(edge_set->current_index)++;
+
+	/**
+	 * If this is a virtual edge, bump the virtual edge count
+	 */
+	(edge_set->virtual_edge_count)++;
 }
 
 
@@ -340,6 +346,7 @@ static inline u_int8_t edge_set_empty(edge_set_t* edge_set){
 static inline void clear_edge_set(edge_set_t* edge_set){
 	memset(edge_set->edges, 0, sizeof(cfg_edge_t) * edge_set->max_index);
 	edge_set->current_index = 0;
+	edge_set->virtual_edge_count = 0;
 }
 
 
@@ -543,6 +550,18 @@ static inline basic_block_t* get_next_real_successor(basic_block_t* block, int32
 
 	return NULL;
 }
+
+
+/**
+ * Run through an edge set and delete all edges that are flagged as 
+ * EDGE_TYPE_VIRTUAL. The given edge set will be modified inplace
+ */
+static inline void remove_all_analysis_edges(edge_set_t* edge_set){
+	cfg_edge_t all_edges[edge_set->current_index];
+	memcpy(all_edges, edge_set->edges, sizeof(cfg_edge_t) * edge_set->current_index);
+
+}
+
 
 
 /**

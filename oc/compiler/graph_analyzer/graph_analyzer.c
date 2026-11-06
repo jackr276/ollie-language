@@ -1206,7 +1206,14 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
  * the analysis is done we'll delete them
  */
 static inline void remove_all_analysis_edges(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
+		//TODO REMOVE ALL SYNETHIC EDGES PREDECESSOR
+		//
+		//TODO REMOVE ALL SYNETHIC EDGES SUCCESSOR
+
+	}
 }
 
 
