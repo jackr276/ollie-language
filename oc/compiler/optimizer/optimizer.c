@@ -188,6 +188,8 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 
 /**
  * Combine two blocks into one
+ *
+ * TODO VERIFY THIS WITH SYNETHETIC EDGES
  */
 static void combine(basic_block_t* a, basic_block_t* b){
 	//If b is null, we just return a. This in reality should never happen
@@ -217,17 +219,17 @@ static void combine(basic_block_t* a, basic_block_t* b){
 
 	//Now merge successors
 	for(u_int16_t i = 0; i < b->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
+		basic_block_t* successor = get_edge_at_index(&(b->successors), i)->block;
 
 		//Add b's successors to be a's successors
-		add_successor_only(a, successor);
+		add_successor_only(a, successor, EDGE_TYPE_REAL);
 
 		//Now for each of the predecessors that equals b, it needs to now point to A
 		for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
 			//If it's pointing to b, it needs to be updated
-			if(successor->predecessors.internal_array[j] == b){
+			if(successor->predecessors.edges[j].block == b){
 				//Update it to now be correct
-				successor->predecessors.internal_array[j] = a;
+				successor->predecessors.edges[j].block = a;
 			}
 		}
 	}
@@ -819,15 +821,17 @@ static void mark(dynamic_array_t* function_blocks){
 /**
  * Replace all targets that jump to "empty block" with "replacement". This is a helper 
  * function for the "Empty Block Removal" step of clean()
+ *
+ * TODO LOOK AT THIS WHEN WE HAVE VIRTUAL EDGES
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
 	//Use a clone since we are mutating
-	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
+	edge_set_t clone = clone_edge_set(&(empty_block->predecessors));
 
 	//For everything in the predecessor set of the empty block
 	for(int32_t i = 0; i < clone.current_index; i++){
 		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(&clone, i);
+		basic_block_t* predecessor = get_edge_at_index(&clone, i)->block;
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
@@ -843,7 +847,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, jump_table_index);
 
 					//The replacement is now a successor of this predecessor
-					add_successor(predecessor, replacement);
+					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
 			}
 		}
@@ -865,7 +869,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 				if(exit_statement->if_block == empty_block){
 					exit_statement->if_block = replacement;
 					//Counts as a successor
-					add_successor(predecessor, replacement);
+					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
 
 				break;
@@ -876,14 +880,14 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 				if(exit_statement->if_block == empty_block){
 					exit_statement->if_block = replacement;
 					//Counts as a successor
-					add_successor(predecessor, replacement);
+					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
 
 				//Same for the else block
 				if(exit_statement->else_block == empty_block){
 					exit_statement->else_block = replacement;
 					//Counts as a successor
-					add_successor(predecessor, replacement);
+					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
 
 				break;
@@ -899,7 +903,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	delete_successor(empty_block, replacement);
 
 	//Destroy the clone array
-	dynamic_array_dealloc(&clone);
+	edge_set_dealloc(&clone);
 }
 
 
@@ -1284,7 +1288,7 @@ static inline void remove_all_successors(basic_block_t* block){
 
 	//Run through everything here and populate the removal array
 	for(int32_t i = 0; i < number_of_successors; i++){
-		successors_to_remove[i] = dynamic_array_get_at(&(block->successors), i);
+		successors_to_remove[i] = get_edge_at_index(&(block->successors), i)->block;
 	}
 
 	//Now we'll run through the array again and do our deletion
@@ -1824,10 +1828,12 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 *
 		 * We will also be checking if each one of these predecessors has *one*
 		 * unified branching predecessor itself. If it does not then we're also disqualified
+		 *
+		 * TODO LOOK AT AFTER ANALYSIS EDGES
 		 */
 		for(int32_t i = 0; i < candidate_block->predecessors.current_index; i++){
 			//Extract the predecessor
-			basic_block_t* predecessor = dynamic_array_get_at(&(candidate_block->predecessors), i);
+			basic_block_t* predecessor = get_edge_at_index(&(candidate_block->predecessors), i)->block;
 
 			/**
 			 * Let the helper perform all validations. If at least one of these blocks fails then we are done with
@@ -2129,8 +2135,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 * PASS 0: Normalize the function CFG by removing all unreachable blocks from it's
 		 * block set
 		 */
-		u_int8_t deleted_blocks = delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
-		//TODO WHAT DO WE NEED TO DO FOR THIS???
+		delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
 
 		/**
 		 * Once we get here, we have an array that is full of all of the blocks belonging
