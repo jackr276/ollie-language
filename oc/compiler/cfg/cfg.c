@@ -7191,7 +7191,7 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 			 * we don't need to worry about filtering
 			 */
 			for(int32_t j = 0; j < block->successors.current_index; j++){
-				basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
+				basic_block_t* successor = get_edge_at_index(&(block->successors), j)->block;
 
 				if(successor->visited == FALSE){
 					enqueue(&traversal_queue, successor);
