@@ -1201,6 +1201,16 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 
 
 /**
+ * Remove any edges in the predecessor or successor sets that are marked as "virtual". These
+ * edges are only useful for analysis and they do *NOT* represent real edges. As such, after
+ * the analysis is done we'll delete them
+ */
+static inline void remove_all_analysis_edges(dynamic_array_t* function_blocks){
+
+}
+
+
+/**
  * A recursive post order simplifies the code, so it's what we'll use here
  *
  * TODO LOOK AT AGAIN AFTER CHANGES
@@ -1361,6 +1371,9 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block){
  * the complexity behind it
  */
 void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
+	//TODO UP HERE
+
+
 	/**
 	 * Before going forward, we must know the immediate dominator for every
 	 * single block. We use the efficient Lengauer-Tarjan algorithm to 
@@ -1404,6 +1417,14 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * why this comes last
 	 */
 	calculate_reverse_dominance_frontiers(function_blocks);
+
+	/**
+	 * Now that we've done all of our analysis, we can completely remove all
+	 * of the analysis edges that we've inserted for loop detection. Doing this
+	 * now allows us to avoid confusion elsewhere when we're iterating over
+	 * edge sets
+	 */
+	remove_all_analysis_edges(function_blocks);
 }
 
 
