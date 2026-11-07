@@ -562,7 +562,7 @@ void print_block_with_live_ranges(FILE* fl, basic_block_t* block){
 	 * If this is some kind of switch block, we first print the jump table
 	 */
 	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
+		print_jump_table(fl, block->jump_table);
 	}
 
 	/**
@@ -570,9 +570,9 @@ void print_block_with_live_ranges(FILE* fl, basic_block_t* block){
 	 * and the function name. Otherwise, we'll just print out the block id
 	 */
 	if(block->block_type != BLOCK_TYPE_FUNC_ENTRY){
-		printf(".L%d:\n", block->block_id);
+		fprintf(fl, ".L%d:\n", block->block_id);
 	} else {
-		printf("%s:\n", block->function_defined_in->func_name.string);
+		fprintf(fl, "%s:\n", block->function_defined_in->func_name.string);
 		print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
 		print_local_stack_data_area(&(block->function_defined_in->local_stack));
 	}
@@ -581,100 +581,98 @@ void print_block_with_live_ranges(FILE* fl, basic_block_t* block){
 	 * Print out all live ranges that were assigned in this block
 	 */
 	if(block->assigned_variables.internal_array != NULL){
-		printf("Assigned: (");
+		fprintf(fl, "Assigned: (");
 		for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->assigned_variables), i));
+			print_live_range(fl, dynamic_array_get_at(&(block->assigned_variables), i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->assigned_variables.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
-		printf(")\n");
+		fprintf(fl, ")\n");
 	}
 
 	/**
 	 * Print all live ranges that were used before definition
 	 */
 	if(block->used_before_definition.internal_array != NULL){
-		printf("Used: (");
+		fprintf(fl, "Used: (");
 		for(int32_t i = 0; i < block->used_before_definition.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->used_before_definition), i));
+			print_live_range(fl, dynamic_array_get_at(&(block->used_before_definition), i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->used_before_definition.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
-		printf(")\n");
+		fprintf(fl, ")\n");
 	}
 
 	/**
 	 * Print all live ranges that are considered LIVE_IN
 	 */
 	if(block->live_in.internal_array != NULL){
-		printf("LIVE IN: (");
+		fprintf(fl, "LIVE IN: (");
 		for(int32_t i = 0; i < block->live_in.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->live_in), i));
+			print_live_range(fl, dynamic_array_get_at(&(block->live_in), i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->live_in.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
-		printf(")\n");
+		fprintf(fl, ")\n");
 	}
 
 	/**
 	 * Print all live ranges that are considered LIVE_OUT
 	 */
 	if(block->live_out.internal_array != NULL){
-		printf("LIVE OUT: (");
+		fprintf(fl, "LIVE OUT: (");
 		for(int32_t i = 0; i < block->live_out.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->live_out), i));
+			print_live_range(fl, dynamic_array_get_at(&(block->live_out), i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->live_out.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
-		printf(")\n");
+		fprintf(fl, ")\n");
 	}
 
 	/**
 	 * Display all predecessors
 	 */
 	if(block->predecessors.edges != NULL){
-		printf("Predecessors: (");
+		fprintf(fl, "Predecessors: (");
 		for(int32_t i = 0; i < block->predecessors.current_index; i++){
-			print_cfg_edge_no_stylization(fl, cfg_edge_t *edge)
-			basic_block_t* predecessor = dynamic_array_get_at(&(block->predecessors), i);
-
-			printf(".L%d", predecessor->block_id);
+			print_cfg_edge_no_stylization(fl, get_edge_at_index(&(block->predecessors), i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->predecessors.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
 
-		printf(")\n");
+		fprintf(fl, ")\n");
 	}
 
-	if(block->successors.internal_array != NULL){
-		printf("Successors: (");
-		for(u_int16_t i = 0; i < block->successors.current_index; i++){
-			basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
-
-			printf(".L%d", successor->block_id);
+	/**
+	 * Print all successors
+	 */
+	if(block->successors.edges != NULL){
+		fprintf(fl, "Successors: (");
+		for(int32_t i = 0; i < block->successors.current_index; i++){
+			print_cfg_edge_no_stylization(fl, get_edge_at_index(&(block->successors), i));
 
 			//If it isn't the very last one, we need a comma
 			if(i != block->successors.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
 
-		printf(")\n");
+		fprintf(fl, ")\n");
 	}
 
 	/**
@@ -683,59 +681,52 @@ void print_block_with_live_ranges(FILE* fl, basic_block_t* block){
 	instruction_t* cursor = block->leader_statement;
 	while(cursor != NULL){
 		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(stdout, cursor, PRINTING_LIVE_RANGES);
+			print_instruction(fl, cursor, PRINTING_LIVE_RANGES);
 		}
 
 		cursor = cursor->next_statement;
 	}
 
-	printf("\n");
+	fprintf(fl, "\n");
 }
 
 
 /**
  * Print a block and the instructions in it with registers
- *
- * TODO CLEAN IT UP
  */
-void print_block_with_registers(basic_block_t* block){
-	//If this is some kind of switch block, we first print the jump table
+void print_block_with_registers(FILE* fl, basic_block_t* block){
+	/**
+	 * Print out the jump table if one exists
+	 */
 	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
+		print_jump_table(fl, block->jump_table);
 	}
 
-	//Switch here based on the type of block that we have
-	switch(block->block_type){
-		//Function entry blocks need extra printing
-		case BLOCK_TYPE_FUNC_ENTRY:
-			//Then the name
-			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
-			print_local_stack_data_area(&(block->function_defined_in->local_stack));
-			break;
-
-		//By default just print the name
-		default:
-			printf(".L%d:\n", block->block_id);
-			break;
+	/**
+	 * If we have a function entry block then print out the stack data areas. Otherwise
+	 * just print out the block ID
+	 */
+	if(block->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		fprintf(fl, ".L%d:\n", block->block_id);
+	} else {
+		fprintf(fl, "%s:\n", block->function_defined_in->func_name.string);
+		print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
+		print_local_stack_data_area(&(block->function_defined_in->local_stack));
 	}
 
-	//Now grab a cursor and print out every statement that we 
-	//have
+	/**
+	 * Run through the block and print everything that
+	 * is not a phi function
+	 */
 	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
 	while(cursor != NULL){
-		//We actually no longer need these
 		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(stdout, cursor, PRINTING_REGISTERS);
+			print_instruction(fl, cursor, PRINTING_REGISTERS);
 		}
 
-		//Move along to the next one
 		cursor = cursor->next_statement;
 	}
 
-	//For spacing
 	printf("\n");
 }
 
