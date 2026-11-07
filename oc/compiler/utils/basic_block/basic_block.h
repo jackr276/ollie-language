@@ -570,12 +570,12 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 /**
  * Print out the instructions in a block with their live ranges
  */
-void print_block_with_live_ranges(basic_block_t* block);
+void print_block_with_live_ranges(FILE* fl, basic_block_t* block);
 
 /**
  * Print a block and the instructions in it with registers
  */
-void print_block_with_registers(basic_block_t* block);
+void print_block_with_registers(FILE* fl, basic_block_t* block);
 
 /*
  * Add a statement to the basic block
