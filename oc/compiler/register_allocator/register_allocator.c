@@ -113,87 +113,87 @@ static inline void print_blocks_with_registers(FILE* fl, cfg_t* cfg){
  * live ranges and our SSE live ranges
  */
 static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
-	printf("============= All Live Ranges ==============\n");
-	printf("=============== GENERAL PURPOSE ============\n");
-	printf("There are %d general purpose live ranges\n", general_purpose_live_ranges->current_index);
+	fprintf(fl, "============= All Live Ranges ==============\n");
+	fprintf(fl, "=============== GENERAL PURPOSE ============\n");
+	fprintf(fl, "There are %d general purpose live ranges\n", general_purpose_live_ranges->current_index);
 	for(int32_t i = 0; i < general_purpose_live_ranges->current_index; i++){
 		/**
 		 * Get and print out the live range first
 		 */
 		live_range_t* current = dynamic_array_get_at(general_purpose_live_ranges, i);
-		printf("LR%d: {", current->live_range_id);
+		fprintf(fl, "LR%d: {", current->live_range_id);
 
 		/**
 		 * Now print out all variables who are members of this live range
 		 */
 		for(int32_t j = 0; j < current->variables.current_index; j++){
-			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
+			print_variable(fl, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
 			if(j != current->variables.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
 
 		/**
 		 * Now run through and print out all of its neighbors
 		 */
-		printf("} Neighbors: {");
+		fprintf(fl, "} Neighbors: {");
 		for(int32_t k = 0; k < current->neighbors.current_index; k++){
 			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
-			printf("LR%d", neighbor->live_range_id);
+			fprintf(fl, "LR%d", neighbor->live_range_id);
  
 			//Print a comma if appropriate
 			if(k != current->neighbors.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
 		
-		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
+		fprintf(fl, "}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
-	printf("=============== GENERAL PURPOSE ============\n");
+	fprintf(fl, "=============== GENERAL PURPOSE ============\n");
 
-	printf("==================== SSE ===================\n");
-	printf("There are %d SSE live ranges\n", sse_live_ranges->current_index);
+	fprintf(fl, "==================== SSE ===================\n");
+	fprintf(fl, "There are %d SSE live ranges\n", sse_live_ranges->current_index);
 	for(int32_t i = 0; i < sse_live_ranges->current_index; i++){
 		/**
 		 * Get and print the LR out first
 		 */
 		live_range_t* current = dynamic_array_get_at(sse_live_ranges, i);
-		printf("LR%d: {", current->live_range_id);
+		fprintf(fl, "LR%d: {", current->live_range_id);
 
 		/**
 		 * Print all variables that are members of this live range
 		 */
 		for(int32_t j = 0; j < current->variables.current_index; j++){
-			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
+			print_variable(fl, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
 			if(j != current->variables.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
 
 		/**
 		 * Now print out all of its neighbors
 		 */
-		printf("} Neighbors: {");
+		fprintf(fl, "} Neighbors: {");
 		for(int32_t k = 0; k < current->neighbors.current_index; k++){
 			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
-			printf("LR%d", neighbor->live_range_id);
+			fprintf(fl, "LR%d", neighbor->live_range_id);
  
 			//Print a comma if appropriate
 			if(k != current->neighbors.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 
 		}
 		
-		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
+		fprintf(fl, "}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
 
-	printf("==================== SSE ===================\n");
-	printf("============= All Live Ranges ==============\n");
+	fprintf(fl, "==================== SSE ===================\n");
+	fprintf(fl, "============= All Live Ranges ==============\n");
 }
 
 
@@ -1091,10 +1091,12 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 			//Set live out to be a new array
 			current->live_out = dynamic_array_alloc();
 
-			//Run through all of the successors
+			/**
+			 * Run through all successors. We should only have real successors
+			 * at this point so we do not have to deal wtih filtering by edge type
+			 */
 			for(int32_t k = 0; k < current->successors.current_index; k++){
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
+				basic_block_t* successor = get_edge_at_index(&(current->successors), k)->block;
 
 				//Add everything in his live_in set into the live_out set
 				for(int32_t l = 0; l < successor->live_in.current_index; l++){
@@ -4185,12 +4187,12 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 	 * Now that we've added all of the callee saving logic at the function entry, we'll need to
 	 * go through and add it at the exit(s) as well. Note that we're given the function exit block
 	 * as an input value here
+	 *
+	 * NOTE: we only have real predecessors here, so we don't need to worry about filtering by edge type
 	 */
-	
-	//For each and every predecessor of the function exit block
-	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
+	for(int32_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
+		basic_block_t* predecessor = get_edge_at_index(&(function_exit->predecessors), i)->block;
 
 		/**
 		 * If we have a non 16-byte aligned amount, we've already emitted a dummy push at the
@@ -4417,10 +4419,13 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			insert_instruction_before_given(stack_allocation, after_stack_allocation);
 		}
 		
-		//Now we need to go through every exit block and emit the stack deallocation
+		/**
+		 * Run through every predecessor of the exit block to give them a stack deallocation. Note
+		 * that by this point, we do not have any virtual successors, so that's not something that we
+		 * need to be concerned by
+		 */
 		for(int32_t i = 0; i < function_exit->predecessors.current_index; i++){
-			//Get the predecessor out
-			basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
+			basic_block_t* predecessor = get_edge_at_index(&(function_exit->predecessors), i)->block;
 
 			/**
 			 * We need to get this deallocation to happen right after we're done returning/callee-saving
@@ -4740,7 +4745,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 	//Show our live ranges once again if requested
 	if(print_irs == TRUE){
-		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+		print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 		printf("================= After Coalescing =======================\n");
 		print_blocks_with_live_ranges(stdout, function_entry);
 		printf("================= After Coalescing =======================\n");
@@ -4813,7 +4818,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE){
-			print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+			print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 			printf("================= After Interference =======================\n");
 			print_blocks_with_live_ranges(stdout, function_entry);
 			printf("================= After Interference =======================\n");
