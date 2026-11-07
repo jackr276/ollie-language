@@ -33,82 +33,6 @@ static heap_queue_t bfs_queue;
 
 
 /**
- * Combine two blocks into one. This is different than other combine methods,
- * because post register-allocation, we do not really care about anything like
- * used variables, dominance relations, etc.
- *
- * Combine B into A
- *
- * After this happens, B no longer exists
- */
-static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
-	//What if a was never even assigned?
-	if(a->exit_statement == NULL){
-		a->leader_statement = b->leader_statement;
-		a->exit_statement = b->exit_statement;
-
-	//If the leader statement is NULL - we really don't need to do anything. If it's not however, we
-	//will need to add everything in
-	} else if(b->leader_statement != NULL){
-		//Otherwise it's a "true merge"
-		//The leader statement in b will be connected to a's tail
-		a->exit_statement->next_statement = b->leader_statement;
-		//Connect backwards too
-		b->leader_statement->previous_statement = a->exit_statement;
-		//Now once they're connected we'll set a's exit to be b's exit
-		a->exit_statement = b->exit_statement;
-	}
-
-	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
-	//As such, we won't even bother looking at the predecessors
-
-	//Now merge successors
-	for(u_int16_t i = 0; i < b->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
-
-		//Add b's successors to be a's successors
-		add_successor_only(a, successor);
-
-		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
-			//If it's pointing to b, it needs to be updated
-			if(successor->predecessors.internal_array[j] == b){
-				//Update it to now be correct
-				successor->predecessors.internal_array[j] = a;
-			}
-		}
-	}
-
-	//Copy over the block type and terminal type
-	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
-		a->block_type = b->block_type;
-	}
-
-	//If b is a switch statment start block, we'll copy the jump table
-	if(b->jump_table != NULL){
-		a->jump_table = b->jump_table;
-	}
-
-	//For each statement in b, all of it's old statements are now "defined" in a
-	instruction_t* b_stmt = b->leader_statement;
-
-	//Modify these "block contained in" references to be A
-	while(b_stmt != NULL){
-		b_stmt->block_contained_in = a;
-
-		//Push it up
-		b_stmt = b_stmt->next_statement;
-	}
-
-	//Delete b from the function blocks
-	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
-
-	//Always return b's leader
-	return b->leader_statement;
-}
-
-
-/**
  * A helper function to determine if something is or is not
  * a jump
  */
@@ -747,7 +671,7 @@ static void copy_block(basic_block_t* destination, basic_block_t* source){
  * 				remove j as a successor to i
  * 				copy the ret from j to it's predecessor i
  */
-static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
+static u_int8_t branch_reduce_postprocess(dynamic_array_t* function_blocks, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
 	u_int8_t changed = FALSE;
 
@@ -840,8 +764,12 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
 					//Decouple these as predecessors/successors
 					delete_successor(current, jumping_to_block);
 
-					//Combine the two
-					combine_blocks(current, jumping_to_block);
+					/**
+					 * Use the merge block utility to combine the two. We pass NULL in for
+					 * the variable symtab because we do not need to update the "block declared in"
+					 * at this point in the process for any symtab variables caught up in the merge
+					 */
+					merge_blocks(current, jumping_to_block, NULL, function_blocks);
 
 					//Counts as a change 
 					changed = TRUE;
