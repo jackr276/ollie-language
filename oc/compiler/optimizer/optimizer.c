@@ -1064,7 +1064,7 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * 			if j has only one predecessor then
  * 				merge i and j
  */
-static u_int8_t branch_reduce(dynamic_array_t* postorder){
+static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
 	u_int8_t changed = FALSE;
 
@@ -1152,8 +1152,12 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
 				//Decouple these as predecessors/successors
 				delete_successor(current, jumping_to_block);
 
-				//Combine the two
-				merge_blocks(current, jumping_to_block);
+				/**
+				 * Combine these two blocks. We intentionally pass NULL in for
+				 * the variable symtab because we no longer care about "block declared in"
+				 * updates in the symtab
+				 */
+				merge_blocks(current, jumping_to_block, NULL, function_blocks);
 
 				//Counts as a change 
 				changed = TRUE;
