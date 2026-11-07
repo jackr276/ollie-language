@@ -187,84 +187,6 @@ static inline void reset_all_marks(dynamic_array_t* function_blocks){
 
 
 /**
- * Combine two blocks into one
- *
- * NOTE: we should never have any synthetic edges when doing this, so we are safe to blindly
- * copy edge sets over as needed
- */
-static void combine(basic_block_t* a, basic_block_t* b){
-	//If b is null, we just return a. This in reality should never happen
-	if(b == NULL){
-		return;
-	}
-
-	//What if a was never even assigned?
-	if(a->exit_statement == NULL){
-		a->leader_statement = b->leader_statement;
-		a->exit_statement = b->exit_statement;
-
-	//If the leader statement is NULL - we really don't need to do anything. If it's not however, we
-	//will need to add everything in
-	} else if(b->leader_statement != NULL){
-		//Otherwise it's a "true merge"
-		//The leader statement in b will be connected to a's tail
-		a->exit_statement->next_statement = b->leader_statement;
-		//Connect backwards too
-		b->leader_statement->previous_statement = a->exit_statement;
-		//Now once they're connected we'll set a's exit to be b's exit
-		a->exit_statement = b->exit_statement;
-	}
-
-	/**
-	 * In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
-	 * As such, we won't even bother looking at the predecessors
-	 */
-	for(u_int16_t i = 0; i < b->successors.current_index; i++){
-		basic_block_t* successor = get_edge_at_index(&(b->successors), i)->block;
-
-		//Add b's successors to be a's successors
-		add_successor_only(a, successor, EDGE_TYPE_REAL);
-
-		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
-			//If it's pointing to b, it needs to be updated
-			if(successor->predecessors.edges[j].block == b){
-				//Update it to now be correct
-				successor->predecessors.edges[j].block = a;
-			}
-		}
-	}
-
-	//Copy over the block type and terminal type
-	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
-		a->block_type = b->block_type;
-	}
-
-	//If b is a switch statment start block, we'll copy the jump table
-	if(b->jump_table != NULL){
-		a->jump_table = b->jump_table;
-	}
-
-	//Increment the number of instructions in here
-	a->number_of_instructions += b->number_of_instructions;
-
-	//For each statement in b, all of it's old statements are now "defined" in a
-	instruction_t* b_stmt = b->leader_statement;
-
-	//Modify these "block contained in" references to be A
-	while(b_stmt != NULL){
-		b_stmt->block_contained_in = a;
-
-		//Push it up
-		b_stmt = b_stmt->next_statement;
-	}
-
-	//Remove this from the function blocks
-	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
-}
-
-
-/**
  * Mark definitions(assignment) of a three address variable within a given
  * function. The current_function parameter is an optimization step designed to help
  * us weed out useless blocks. Note that the variable passed in may be null. If it is,
@@ -1231,7 +1153,7 @@ static u_int8_t branch_reduce(dynamic_array_t* postorder){
 				delete_successor(current, jumping_to_block);
 
 				//Combine the two
-				combine(current, jumping_to_block);
+				merge_blocks(current, jumping_to_block);
 
 				//Counts as a change 
 				changed = TRUE;
@@ -2077,7 +1999,7 @@ static inline void clean(dynamic_array_t* current_function_blocks, basic_block_t
 		get_post_order_traversal(current_function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
-		changed = branch_reduce(&postorder);
+		changed = branch_reduce(current_function_blocks, &postorder);
 
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
