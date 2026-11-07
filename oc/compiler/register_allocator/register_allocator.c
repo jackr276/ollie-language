@@ -116,17 +116,17 @@ static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_liv
 	printf("============= All Live Ranges ==============\n");
 	printf("=============== GENERAL PURPOSE ============\n");
 	printf("There are %d general purpose live ranges\n", general_purpose_live_ranges->current_index);
-	//For each live range in the array
-	for(u_int16_t i = 0; i < general_purpose_live_ranges->current_index; i++){
-		//Grab it out
+	for(int32_t i = 0; i < general_purpose_live_ranges->current_index; i++){
+		/**
+		 * Get and print out the live range first
+		 */
 		live_range_t* current = dynamic_array_get_at(general_purpose_live_ranges, i);
-
-		//We'll print out it's id first
 		printf("LR%d: {", current->live_range_id);
 
-		//Now we'll run through and print out all of its variables
-		for(u_int16_t j = 0; j < current->variables.current_index; j++){
-			//Print the variable name
+		/**
+		 * Now print out all variables who are members of this live range
+		 */
+		for(int32_t j = 0; j < current->variables.current_index; j++){
 			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
@@ -135,10 +135,11 @@ static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_liv
 			}
 		}
 
+		/**
+		 * Now run through and print out all of its neighbors
+		 */
 		printf("} Neighbors: {");
-
-		//Now we'll print out all of it's neighbors
-		for(u_int16_t k = 0; k < current->neighbors.current_index; k++){
+		for(int32_t k = 0; k < current->neighbors.current_index; k++){
 			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
 			printf("LR%d", neighbor->live_range_id);
  
@@ -146,29 +147,25 @@ static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_liv
 			if(k != current->neighbors.current_index - 1){
 				printf(", ");
 			}
-
 		}
 		
-		//And we'll close it out
 		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
 	printf("=============== GENERAL PURPOSE ============\n");
 
-
-	//Repeat for SSE
 	printf("==================== SSE ===================\n");
 	printf("There are %d SSE live ranges\n", sse_live_ranges->current_index);
-	//For each live range in the array
-	for(u_int16_t i = 0; i < sse_live_ranges->current_index; i++){
-		//Grab it out
+	for(int32_t i = 0; i < sse_live_ranges->current_index; i++){
+		/**
+		 * Get and print the LR out first
+		 */
 		live_range_t* current = dynamic_array_get_at(sse_live_ranges, i);
-
-		//We'll print out it's id first
 		printf("LR%d: {", current->live_range_id);
 
-		//Now we'll run through and print out all of its variables
-		for(u_int16_t j = 0; j < current->variables.current_index; j++){
-			//Print the variable name
+		/**
+		 * Print all variables that are members of this live range
+		 */
+		for(int32_t j = 0; j < current->variables.current_index; j++){
 			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
@@ -177,10 +174,11 @@ static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_liv
 			}
 		}
 
+		/**
+		 * Now print out all of its neighbors
+		 */
 		printf("} Neighbors: {");
-
-		//Now we'll print out all of it's neighbors
-		for(u_int16_t k = 0; k < current->neighbors.current_index; k++){
+		for(int32_t k = 0; k < current->neighbors.current_index; k++){
 			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
 			printf("LR%d", neighbor->live_range_id);
  
@@ -191,7 +189,6 @@ static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_liv
 
 		}
 		
-		//And we'll close it out
 		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
 
@@ -207,7 +204,7 @@ static void print_live_range_array(dynamic_array_t* live_ranges){
 	printf("{");
 
 	//Print everything out
-	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+	for(int32_t i = 0; i < live_ranges->current_index; i++){
 		live_range_t* range = dynamic_array_get_at(live_ranges, i);
 
 		printf("LR%d(%d)", range->live_range_id, range->spill_cost);
@@ -228,7 +225,7 @@ static void print_live_range_array(dynamic_array_t* live_ranges){
  * match, then NULL will be returned
  */
 static inline stack_region_t* get_stack_region_for_live_range(stack_data_area_t* data_area, live_range_t* lr){
-	for(u_int16_t i = 0; i < data_area->stack_regions.current_index; i++){
+	for(int32_t i = 0; i < data_area->stack_regions.current_index; i++){
 		//Extract it
 		stack_region_t* region = dynamic_array_get_at(&(data_area->stack_regions), i);
 
