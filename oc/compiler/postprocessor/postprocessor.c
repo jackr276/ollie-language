@@ -243,28 +243,28 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
 	//Use a clone since we are mutating
-	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
+	edge_set_t clone = clone_edge_set(&(empty_block->predecessors));
 
-	//For everything in the predecessor set of the empty block
-	for(u_int16_t _ = 0; _ < clone.current_index; _++){
-		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(&clone, _);
+	/**
+	 * Run through everything in the predecessor set of the empty block. We only need
+	 * to worry about real predecessors at this point in the process
+	 */
+	for(int32_t i = 0; i < clone.current_index; i++){
+		basic_block_t* predecessor = get_edge_at_index(&clone, i)->block;
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
-		
-		//Run through the jump table and replace all of those targets as well. Most of the time,
-		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
-		//what will ensure that switch statements are not corrupted by the optimization process
-		if(predecessor->jump_table != NULL){
-			for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
-				//If this equals the other node, we'll need to replace it
-				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
-					//This now points to the replacement
-					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
 
-					//The replacement is now a successor of this predecessor
-					add_successor(predecessor, replacement);
+		/**
+		 * Run through the jump table and replace all of those targets as well. Most of the time,
+		 * we won't hit this because num_nodes will be 0. In the times that we do though, this is
+		 * what will ensure that switch statements are not corrupted by the optimization process
+		 */
+		if(predecessor->jump_table != NULL){
+			for(int32_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
+				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
+					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
+					add_real_successor(predecessor, replacement);
 				}
 			}
 		}
@@ -297,7 +297,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 					if(current_statement->if_block == empty_block){
 						current_statement->if_block = replacement;
 						//This is now a successor
-						add_successor(predecessor, replacement);
+						add_real_successor(predecessor, replacement);
 					}
 
 					break;
@@ -316,8 +316,8 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	//The empty block now no longer has the replacement as a successor
 	delete_successor(empty_block, replacement);
 
-	//Destroy the clone array
-	dynamic_array_dealloc(&clone);
+	//Destroy the clone set
+	edge_set_dealloc(&clone);
 }
 
 
@@ -803,7 +803,7 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* function_blocks, dyna
 
 					//Add the successor of the jumping to block(which will be the function end block) to
 					//the current block
-					add_successor(current, dynamic_array_get_at(&(jumping_to_block->successors), 0));
+					add_real_successor(current, get_edge_at_index(&(jumping_to_block->successors), 0)->block);
 
 					//This is a change
 					changed = TRUE;
@@ -851,7 +851,7 @@ static void condense(dynamic_array_t* function_blocks, basic_block_t* function_e
 		get_post_order_traversal(function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
-		changed = branch_reduce_postprocess(&postorder);
+		changed = branch_reduce_postprocess(function_blocks, &postorder);
 		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
@@ -939,13 +939,16 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 			enqueue(&bfs_queue, direct_end_jump);
 		}
 
-		//Now we'll go through each of the successors in this node
+		/**
+		 * Run through all successors. At this point in the process only
+		 * real successors exist, so we don't need to worry about virtual edges
+		 */
 		for(int32_t idx = 0; idx < current->successors.current_index; idx++){
 			//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
 			//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 
 			//Grab the successor
-			basic_block_t* successor = dynamic_array_get_at(&(current->successors), idx);
+			basic_block_t* successor = get_edge_at_index(&(current->successors), idx)->block;
 
 			//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
 			if(successor == direct_end_jump){
