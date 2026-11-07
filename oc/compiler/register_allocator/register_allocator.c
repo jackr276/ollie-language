@@ -74,15 +74,10 @@ typedef enum {
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_function_blocks_with_live_ranges(basic_block_t* function_entry){
-	//Extract the given function block
+static inline void print_blocks_with_live_ranges(FILE* fl, basic_block_t* function_entry){
 	basic_block_t* current = function_entry;
-
-	//So long as this one isn't NULL
 	while(current != NULL){
-		//Print it
-		print_block_with_live_ranges(current);
-		//Advance to the direct successor
+		print_block_with_live_ranges(fl, current);
 		current = current->direct_successor;
 	}
 }
@@ -92,26 +87,24 @@ static void print_function_blocks_with_live_ranges(basic_block_t* function_entry
  * Run through using the direct successor strategy and print all
  * ordered blocks with their registers after allocation
  */
-static void print_blocks_with_registers(cfg_t* cfg){
-	//Run through all of the functions individually
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the given function block
+static inline void print_blocks_with_registers(FILE* fl, cfg_t* cfg){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		/**
+		 * The function should be ordered so run through it
+		 * in so called "direct successor" order
+		 */
 		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-
-		//So long as this one isn't NULL
 		while(current != NULL){
-			//Print it
-			print_block_with_registers(current);
-			//Advance to the direct successor
+			print_block_with_registers(fl, current);
 			current = current->direct_successor;
 		}
 	}
 
-	//Now we'll print all global variables
-	print_all_global_variables(stdout, &(cfg->global_variables));
-
-	//Print all of the local constants too
-	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+	/**
+	 * Now print out all global variables and local constants at the very end
+	 */
+	print_all_global_variables(fl, &(cfg->global_variables));
+	print_local_constants(fl, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 
@@ -119,7 +112,7 @@ static void print_blocks_with_registers(cfg_t* cfg){
  * Print all live ranges that we have. This includes our general purpose
  * live ranges and our SSE live ranges
  */
-static void print_all_live_ranges(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
+static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
 	printf("============= All Live Ranges ==============\n");
 	printf("=============== GENERAL PURPOSE ============\n");
 	printf("There are %d general purpose live ranges\n", general_purpose_live_ranges->current_index);
@@ -4542,7 +4535,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= Before Liveness ==============\n");
-		print_function_blocks_with_live_ranges(function_entry);
+		print_blocks_with_live_ranges(stdout, function_entry);
 		printf("============= Before Liveness ==============\n");
 	}
 
@@ -4562,7 +4555,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("=============== After Cost Update ============\n");
-		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+		print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 		printf("=============== After Cost Update ============\n");
 	}
 
@@ -4584,7 +4577,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//Show our IR's here
 	if(print_irs == TRUE){
 		//Show our live ranges once again
-		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+		print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 	}
 
 
@@ -4610,7 +4603,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= After Live Range Determination ==============\n");
-		print_function_blocks_with_live_ranges(function_entry);
+		print_blocks_with_live_ranges(stdout, function_entry);
 		printf("============= After Live Range Determination ==============\n");
 	}
 	
@@ -4752,7 +4745,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	if(print_irs == TRUE){
 		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 		printf("================= After Coalescing =======================\n");
-		print_function_blocks_with_live_ranges(function_entry);
+		print_blocks_with_live_ranges(stdout, function_entry);
 		printf("================= After Coalescing =======================\n");
 	}
 
@@ -4781,7 +4774,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	while(colorable_general_purpose == FALSE){
 		if(print_irs == TRUE){
 			printf("============ After Spilling =============== \n");
-			print_function_blocks_with_live_ranges(function_entry);
+			print_blocks_with_live_ranges(stdout, function_entry);
 			printf("============ After Spilling =============== \n");
 		}
 
@@ -4825,7 +4818,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 		if(print_irs == TRUE){
 			print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
 			printf("================= After Interference =======================\n");
-			print_function_blocks_with_live_ranges(function_entry);
+			print_blocks_with_live_ranges(stdout, function_entry);
 			printf("================= After Interference =======================\n");
 		}
 
@@ -4860,7 +4853,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 			//Dev printing only
 			if(print_irs == TRUE){
 				printf("============ After Spilling =============== \n");
-				print_function_blocks_with_live_ranges(function_entry);
+				print_blocks_with_live_ranges(stdout, function_entry);
 				printf("============ After Spilling =============== \n");
 			}
 
@@ -4900,9 +4893,9 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 			//Show our live ranges once again if requested
 			if(print_irs == TRUE){
-				print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+				print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 				printf("================= After Interference =======================\n");
-				print_function_blocks_with_live_ranges(function_entry);
+				print_blocks_with_live_ranges(stdout, function_entry);
 				printf("================= After Interference =======================\n");
 			}
 
@@ -4989,7 +4982,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//One final print post allocation
 	if(print_irs == TRUE || print_post_allocation == TRUE){
 		printf("================= After Allocation =======================\n");
-		print_blocks_with_registers(cfg);
+		print_blocks_with_registers(stdout, cfg);
 		printf("================= After Allocation =======================\n");
 	}
 }
