@@ -2020,7 +2020,12 @@ static inline void clean(dynamic_array_t* current_function_blocks, basic_block_t
  */
 static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
 	/**
-	 * First clean up all of the existing control relations
+	 * We must first now delete all unreachable blocks that may have now been orphanced
+	 */
+	delete_all_unreachable_blocks(function_entry_block, function_blocks);
+
+	/**
+	 * Then clean up all of the existing control relations
 	 */
 	cleanup_all_control_relations(function_blocks);
 
@@ -2111,17 +2116,6 @@ cfg_t* optimize(cfg_t* cfg){
 			//Reset all of the marks in the function
 			reset_all_marks(current_function_blocks);
 
-			/**
-			 * Optimizing branches and and then trying to run mark & sweep will not work because
-			 * we have fundamentally changed the structure & dominance in the CFG by doing
-			 * that. 
-			 *
-			 * We are going to need to delete all unreachable blocks *at this stage* and
-			 * then we are going to have to recompute all of the dominance relations. Mark
-			 * specifically relies on the "RDF"(reverse dominance frontier).
-			 */
-			delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
-
 			//Recalculate all dominance relations
 			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 
@@ -2150,17 +2144,6 @@ cfg_t* optimize(cfg_t* cfg){
 			//Reset all of the marks in the function
 			reset_all_marks(current_function_blocks);
 
-			/**
-			 * Optimizing branches and and then trying to run mark & sweep will not work because
-			 * we have fundamentally changed the structure & dominance in the CFG by doing
-			 * that. 
-			 *
-			 * We are going to need to delete all unreachable blocks *at this stage* and
-			 * then we are going to have to recompute all of the dominance relations. Mark
-			 * specifically relies on the "RDF"(reverse dominance frontier).
-			 */
-			delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
-
 			//Recalculate all dominance relations
 			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 
@@ -2180,15 +2163,7 @@ cfg_t* optimize(cfg_t* cfg){
 		clean(current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 6: Delete all unreachable blocks
-		 * There is a chance that we have some blocks who are now unreachable. We will
-		 * remove them now. This step is absolutely essential. If we do not do this,
-		 * then the dominance relation computation will not work
-		 */
-		delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
-
-		/**
-		 * PASS 7: Recalculate everything
+		 * PASS 6: Recalculate everything
 		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end

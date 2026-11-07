@@ -572,6 +572,8 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *			set b's IDOM to be IDOM(IDOM(b))
  *
  * Property: Every node *except* the entry node has exactly one immediate dominator
+ *
+ * NOTE: IMMEDIATE DOMINATORS MUST NEVER CONSIDER VIRTUAL EDGES
  */
 static void compute_immediate_dominators(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	//The number of blocks is static
@@ -1020,15 +1022,14 @@ static inline void add_dominator_child(basic_block_t* dominator, basic_block_t* 
  *
  * Dominator trees are used for SSA form conversion. It is absolutely
  * essential that these be computed upon every run
+ *
+ * NOTE: DOMINATOR TREES MUST NEVER CONSIDER VIRTUAL EDGES
  */
 static inline void build_dominator_trees(dynamic_array_t* function_blocks){
-	//Hold the current block
-	basic_block_t* current;
-
 	//For each block in the CFG
 	for(int32_t i = function_blocks->current_index - 1; i >= 0; i--){
 		//Grab out whatever block we're on
-		current = dynamic_array_get_at(function_blocks, i);
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
 		/**
 		 * We will find this block's "immediate dominator". Once we have that,
@@ -1092,7 +1093,7 @@ static inline void add_block_to_dominance_frontier(basic_block_t* block, basic_b
  * 					add b to cursor DF set
  * 					cursor = IDOM(cursor)
  * 	
- * 	TODO LOOK AT AFTER FIX
+ * NOTE: DOMINANCE FRONTIERS MUST NEVER CONSIDER VIRTUAL EDGES
  */
 static inline void calculate_dominance_frontiers(dynamic_array_t* function_blocks){
 	//Run through every block
@@ -1382,16 +1383,19 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block){
  *  1.) Immediate dominators
  *  2.) Dominator Trees
  *  3.) Dominance Frontiers
+ *  ----- Virtual Edge Aware
  *  4.) Immediate Postdominators
  *  5.) Reverse Dominance frontiers
+ *  ----- Remove virtual edges
  *
  * For every block in the given function. This externally facing API hides all of
  * the complexity behind it
+ *
+ * TODO SHOULD WE EVER DELETE FUNCTION EXIT BLOCKS IF THEYRE UNREACHABLE I SAY NO!!!
+ *
+ * NOTE: this function expects to be operating on a set of function blocks that has had unreachable blocks eliminated
  */
 void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
-	//TODO UP HERE
-
-
 	/**
 	 * Before going forward, we must know the immediate dominator for every
 	 * single block. We use the efficient Lengauer-Tarjan algorithm to 
@@ -1400,8 +1404,9 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * Immediate dominators are a prerequisite for two other essential
 	 * graph relations: dominator trees and dominance frontiers. These
 	 * *must* be computed upon every run
+	 *
+	 * NOTE: IMMEDIATE DOMINATORS MUST NEVER CONSIDER VIRTUAL EDGES
 	 */
-	//TODO MUST BE VIRTUAL EDGE AWARE
 	compute_immediate_dominators(function_entry_block, function_blocks);
 
 	/**
@@ -1410,17 +1415,21 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 *
 	 * Dominator trees are used for SSA form conversion. It is absolutely
 	 * essential that these be computed upon every run
+	 *
+	 * NOTE: DOMINATOR TREES MUST NEVER CONSIDER VIRTUAL EDGES
 	 */
-	//TODO MUST BE VIRTUAL EDGE AWARE
 	build_dominator_trees(function_blocks);
 
 	/**
 	 * Dominance frontiers are essential for inserting phi functions when performing
 	 * an SSA conversion. It is for this reason that we must calculate them upon every 
 	 * run of the control flow calculator
+	 *
+	 * NOTE: DOMINANCE FRONTIERS MUST NEVER CONSIDER VIRTUAL EDGES
 	 */
-	//TODO MUST BE VIRTUAL EDGE AWARE
 	calculate_dominance_frontiers(function_blocks);
+
+	//TODO INSERT VIRTUAL EDGES
 
 	/**
 	 * Immediate postdominators are also computed with the Lengauer-Tarjan linear
@@ -1441,6 +1450,8 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 
 	//TODO MUST BE VIRTUAL EDGE AWARE
 	calculate_reverse_dominance_frontiers(function_blocks);
+
+	//TODO REMOVE VIRTUAL EDGES
 
 	/**
 	 * Now that we've done all of our analysis, we can completely remove all
