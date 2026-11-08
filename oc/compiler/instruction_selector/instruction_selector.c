@@ -9986,6 +9986,16 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		trigger_ice_panic("Branch was found to rely on statement that cannot set condition codes");
 	}
 
+	/**
+	 * If we make it to here, we now have a branch statement and the statement that sets the condition
+	 * codes for this given branch statement. There is now a good chance that we can cheaply determine
+	 * whether or not we know if this branch will always execute. It is important that we're doing this
+	 * now after a large amount of simplification has occurred, because we should be able to knock out
+	 * a lot of constant statements that we otherwise couldn't
+	 */
+	//TODO HERE
+
+
 
 	//TODO
 	return FALSE;
