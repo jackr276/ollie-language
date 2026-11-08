@@ -1296,7 +1296,7 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 	dynamic_array_t strongly_connected_components = dynamic_array_alloc_initial_size(function_blocks->current_index);
 
 	/**
-	 * Initialize Tarjan's SCC algorithm
+	 * Step 1: Initialize Tarjan's SCC algorithm
 	 * For each function block, we need to initialize the following:
 	 * 	1.) Set the index to be unnumbered. The index represents the order in which the
 	 * 	  	DFS visits this node
@@ -1313,7 +1313,7 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 	}
 
 	/**
-	 * For each function block, we'll now compute the strongly connected component that contains
+	 * Step 2: For each function block, we'll now compute the strongly connected component that contains
 	 * this given block. We'll only do this if the block's SCC index has a value of "Unnumbered", 
 	 * meaning that it is not yet part of a strongly connected component
 	 */
@@ -1324,12 +1324,27 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 		}
 	}
 
-	//TODO DEBUG ONLY 
-	print_strongly_connected_components(stdout, &strongly_connected_components);
-	
+	/**
+	 * Step 3: For each strongly connected component, we will detect which cyclic blocks
+	 * exist and compile a list of them. An SCC is considered to be cyclic if:
+	 * 	1.) It has more than one block. This is because all blocks in an SCC can reach
+	 * 		all other blocks in the same SCC. For this to be true, there must be a cycle
+	 * 	2.) It has exactly one block with a self-edge. This is self explanatory
+	 */
 
 
 
+
+	/**
+	 * Cleanup: we'll deallocate all of the SCC sets, the overall SCC list, and the heap
+	 * stack that we used
+	 */
+	for(int32_t i = 0; i < strongly_connected_components.current_index; i++){
+		dynamic_array_t* scc_array = dynamic_array_get_at(&strongly_connected_components, i);
+		dynamic_array_heap_dealloc(&scc_array);
+	}
+
+	dynamic_array_dealloc(&strongly_connected_components);
 	heap_stack_dealloc(&stack);
 }
 
