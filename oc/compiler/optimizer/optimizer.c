@@ -506,15 +506,18 @@ static void mark(dynamic_array_t* function_blocks){
 		}
 	}
 
-	//Now that we've marked everything that is initially critical, we'll go through and trace
-	//these values back through the code
+	/**
+	 * Now that we've marked everything that is initially critical, we'll go through and trace
+	 * these values back through the code
+	 */
 	while(dynamic_array_is_empty(&worklist) == FALSE){
 		//Grab out the operation from the worklist(delete from back-most efficient)
 		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
 
-		//There are several unique cases that require extra attention
 		switch(stmt->statement_type){
-			//If it's a phi function, now we need to go back and mark everything that it came from
+			/**
+			 * All phi function parameters are considered to be important
+			 */
 			case THREE_ADDR_CODE_PHI_STMT: {
 				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
@@ -523,20 +526,39 @@ static void mark(dynamic_array_t* function_blocks){
 				break;
 			}
 
-			//If we have a function call, everything in the function call is important
+			/**
+			 * All componenets of a function call are important. Note that function calls
+			 * store parameters in two different regions depending on whether or not they've
+			 * been fully lowered into OIR. We will mark appropriately based on what is given
+			 */
 			case THREE_ADDR_CODE_FUNC_CALL: {
-				for(int32_t i = 0; i < stmt->call_storage.parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->call_storage.parameter_results), i);
+				/**
+				 * If this has not been lowered we will need to use the parameter results array, which
+				 * can contain variables, constants and initializers as potential values
+				 */
+				if(stmt->call_storage.has_been_lowered == FALSE){
+					for(int32_t i = 0; i < stmt->call_storage.parameter_results.current_index; i++){
+						parameter_result_t* result = get_result_at_index(&(stmt->call_storage.parameter_results), i);
 
-					switch(result->result_type){
-						case PARAM_RESULT_TYPE_VAR:
-							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_INITIALIZER:
-							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_CONST:
-							break;
+						switch(result->result_type){
+							case PARAM_RESULT_TYPE_VAR:
+								mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+								break;
+							case PARAM_RESULT_TYPE_INITIALIZER:
+								mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+								break;
+							case PARAM_RESULT_TYPE_CONST:
+								break;
+						}
+					}
+
+				/**
+				 * If it has been lowered, we will need to use the regular parameter array which will
+				 * only ever contain variables
+				 */
+				} else {
+					for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+						mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
 					}
 				}
 

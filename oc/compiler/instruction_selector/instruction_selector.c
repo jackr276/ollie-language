@@ -9676,6 +9676,8 @@ static void mark(dynamic_array_t* function_blocks){
 			 * regular parameter array
 			 */
 			case THREE_ADDR_CODE_FUNC_CALL: {
+				//TODO MAKE THIS GENERALIZABLE FOR LOWERED VS UNLOWERED FUNCTION CALLS
+
 				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
 					three_addr_var_t* parameter = dynamic_array_get_at(&(stmt->parameters), i);
 					mark_and_add_definition(function_blocks, parameter, &worklist);
