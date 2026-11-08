@@ -302,7 +302,9 @@ static inline void add_edge(edge_set_t* edge_set, basic_block_t* block, edge_typ
 	/**
 	 * If this is a virtual edge, bump the virtual edge count
 	 */
-	(edge_set->virtual_edge_count)++;
+	if(edge_type == EDGE_TYPE_VIRTUAL){
+		(edge_set->virtual_edge_count)++;
+	}
 }
 
 
@@ -577,10 +579,36 @@ static inline basic_block_t* get_next_real_successor(basic_block_t* block, int32
  * EDGE_TYPE_VIRTUAL. The given edge set will be modified inplace
  */
 static inline void remove_all_analysis_edges(edge_set_t* edge_set){
-	cfg_edge_t all_edges[edge_set->current_index];
-	memcpy(all_edges, edge_set->edges, sizeof(cfg_edge_t) * edge_set->current_index);
+	/**
+	 * Extract the current edge count and stack allocate an array for us
+	 * to use as temporary storage
+	 */
+	int32_t edge_count = edge_set->current_index;
+	cfg_edge_t all_edges[edge_count];
 
+	/**
+	 * Clone all values from the old edge set into the new one. Following that,
+	 * completely reset the old edge set
+	 */
+	memcpy(all_edges, edge_set->edges, sizeof(cfg_edge_t) * edge_set->current_index);
+	clear_edge_set(edge_set);
+
+	/**
+	 * Now run through the edges in temp storage. Only add the edges that are real
+	 * back into the edge set
+	 */
+	for(int32_t i = 0; i < edge_count; i++){
+		cfg_edge_t* edge = &(all_edges[i]);
+
+		/**
+		 * We'll only add real edges back to the given edge set
+		 */
+		if(edge->edge_type == EDGE_TYPE_REAL){
+			add_edge(edge_set, edge->block, EDGE_TYPE_REAL);
+		}
+	}
 }
+
 
 /**
  * Print a block with OIR inside of it
