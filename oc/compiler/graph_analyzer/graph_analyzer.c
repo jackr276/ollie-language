@@ -1153,7 +1153,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
  *
  * 		SCCS.append(SCC)
  */
-static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dynamic_array_t* strong_connected_components, int32_t* scc_index){
+static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dynamic_array_t* strongly_connected_components, int32_t* scc_index){
 	/**
 	 * First stamp this block with the current SCC index. Also, as of right now,
 	 * the scc_index is the lowest possible known index that we can reach in the
@@ -1164,7 +1164,8 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 	(*scc_index)++;
 
 	/**
-	 * Now push this block onto the tarjan stack
+	 * Push this block onto the stack. This stack will eventually represent our SCC. We push
+	 * the block on now because we've reached it, so it must be part of the SCC
 	 */
 	push(tarjan_stack, block);
 	block->scc_computation_info.on_stack = TRUE;
@@ -1190,7 +1191,7 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 		 * SCC. We'll need to recursively explore this successor
 		 */
 		if(successor->scc_computation_info.index == LT_UNNUMBERED){
-			strong_connect(successor, tarjan_stack, strong_connected_components, scc_index);
+			strong_connect(successor, tarjan_stack, strongly_connected_components, scc_index);
 
 			/**
 			 * After the recursive exploration, we'll need to update this block's lowlink. The lowlink
@@ -1218,9 +1219,32 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 		}
 	}
 
+	/**
+	 * If we reach the end of this computation and the block's index is equal to it's
+	 * lowlink, it means that this block itself is the farthest point back in the DFS subtree that
+	 * we can reach. This means that this block is the *ROOT* of a strongly connected component
+	 */
+	if(block->scc_computation_info.index == block->scc_computation_info.lowlink){
+		/**
+		 * We'll need this to be heap allocated due to how we store dynamic arrays
+		 */
+		dynamic_array_t* strongly_connected_component = dynamic_array_heap_alloc();
 
+		/**
+		 * Keep popping values off of the tarjan stack until find
+		 * the original block. These members on the stack represent our
+		 * strongly connected component
+		 */
+		basic_block_t* member;
+		do {
+			member = pop(tarjan_stack);
+			member->scc_computation_info.on_stack = FALSE;
+			dynamic_array_add(strongly_connected_component, member);
+		} while(member != block);
+
+		dynamic_array_add(strongly_connected_components, strongly_connected_component);
+	}
 }
-
 
 
 /**
