@@ -1909,12 +1909,9 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		if(branch_category == BRANCH_CATEGORY_NORMAL){
 			add_real_successor(current_block, if_block);
 			add_real_successor(current_block, else_block);
-			branch_statement->inverse_branch = FALSE;
-
 		} else {
 			add_real_successor(current_block, else_block);
 			add_real_successor(current_block, if_block);
-			branch_statement->inverse_branch = TRUE;
 		}
 
 	/**
@@ -6418,11 +6415,12 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
 
+	/**
+	 * Add the if and else destination in that order in as real
+	 * successors to the given block
+	 */
 	add_real_successor(basic_block, if_destination);
 	add_real_successor(basic_block, else_destination);
-
-	//These are always normal branches
-	branch_instruction->inverse_branch = FALSE;
 }
 
 /**
