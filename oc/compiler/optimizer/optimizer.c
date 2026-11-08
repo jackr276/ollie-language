@@ -571,21 +571,38 @@ static void mark(dynamic_array_t* function_blocks){
 			 * the memory address of the function that we're calling
 			 */
 			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
-				//Mark the op1 of this function as being important
+				/**
+				 * The function that we're calling out to is always important
+				 */
 				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
 
-				for(int32_t i = 0; i < stmt->call_storage.parameter_results.current_index; i++){
-					parameter_result_t* result = get_result_at_index(&(stmt->call_storage.parameter_results), i);
+				/**
+				 * If this has not been lowered we will need to use the parameter results array, which
+				 * can contain variables, constants and initializers as potential values
+				 */
+				if(stmt->call_storage.has_been_lowered == FALSE){
+					for(int32_t i = 0; i < stmt->call_storage.parameter_results.current_index; i++){
+						parameter_result_t* result = get_result_at_index(&(stmt->call_storage.parameter_results), i);
 
-					switch(result->result_type){
-						case PARAM_RESULT_TYPE_VAR:
-							mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_INITIALIZER:
-							mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
-							break;
-						case PARAM_RESULT_TYPE_CONST:
-							break;
+						switch(result->result_type){
+							case PARAM_RESULT_TYPE_VAR:
+								mark_and_add_definition(function_blocks, result->param_result.variable_result, &worklist);
+								break;
+							case PARAM_RESULT_TYPE_INITIALIZER:
+								mark_initializer_values(result->param_result.initializer_result, function_blocks, &worklist);
+								break;
+							case PARAM_RESULT_TYPE_CONST:
+								break;
+						}
+					}
+
+				/**
+				 * If it has been lowered, we will need to use the regular parameter array which will
+				 * only ever contain variables
+				 */
+				} else {
+					for(int32_t i = 0; i < stmt->parameters.current_index; i++){
+						mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
 					}
 				}
 
