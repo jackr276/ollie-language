@@ -17,6 +17,16 @@
 #include <sys/types.h>
 
 /**
+ * Determine what kind of simplification that we need to do. Some simplifications
+ * require a complete rework of the control flow
+ */
+typedef enum {
+	NO_SIMPLIFICATION,
+	SIMPLIFICATION_INSTRUCTIONS_ONLY,
+	SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW,
+} simplification_type_t;
+
+/**
  * Invoke the ollie optimizer
  */
 cfg_t* optimize(cfg_t* cfg);

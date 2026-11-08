@@ -872,29 +872,32 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
  * 			if i is not a jump then:
  * 			  delete i
  *
+ * This function will return a simplification_type_t that tells us what kind of simplification we ended
+ * up doing. This will allow us to efficiently recompute only what is needed based on what we simplified
  */
-static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
-	//For each and every operation in every basic block
+static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
+	/**
+	 * By default assume that we simplified nothing for this entire function
+	 */
+	simplification_type_t result = NO_SIMPLIFICATION;
+
 	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the block out
 		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
 
-		//Holder for the postdom
-		basic_block_t* nearest_marked_postdom;
-
-		//Grab the statement out
+		/**
+		 * Run through every statement inside of the block starting
+		 * at the leader statement
+		 */
 		instruction_t* stmt = block->leader_statement;
-
-		//For each statement in the block
 		while(stmt != NULL){
-			//If it's useful, ignore it
+			/**
+			 * If the statement is useful then we need to skip it
+			 */
 			if(stmt->mark == TRUE){
 				stmt = stmt->next_statement;
 				continue;
 			}
 
-			//A holder for when we perform deletions
-			instruction_t* temp;
 
 			/**
 			 * Some statements like jumps and branches
@@ -907,19 +910,23 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 				 * may be cleaned up by other optimizations, but for
 				 * here we leave them
 				 */
-				case THREE_ADDR_CODE_JUMP_STMT:
+				case THREE_ADDR_CODE_JUMP_STMT: {
 					stmt = stmt->next_statement;
-
 					break;
+				}
 
 				/**
 				 * If we have a branch that is now useless,
 				 * we'll need to replace it with a jump to
 				 * it's nearest marked postdominator
 				 */
-				case THREE_ADDR_CODE_BRANCH_STMT:
+				case THREE_ADDR_CODE_BRANCH_STMT: {
 					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = get_nearest_marked_postdominator(block);
+					basic_block_t* nearest_marked_postdom = get_nearest_marked_postdominator(block);
+
+					//We now need to unlink the successors that were in this branch
+					delete_successor(block, stmt->if_block);
+					delete_successor(block, stmt->else_block);
 
 					//This is now useless
 					delete_statement(stmt);
@@ -931,14 +938,16 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 					 */
 					stmt = emit_jump(block, nearest_marked_postdom);
 
+					//We have done instructions and control flow here
+					result = SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW;
 					break;
+				}
 
 				/**
 				 * By default no special treatment, we're just deleting
 				 */
-				default:
-					//Perform the deletion and advancement
-					temp = stmt;
+				default: {
+					instruction_t* temp = stmt;
 
 					/**
 					 * If we are deleting an indirect jump address calculation statement,
@@ -952,12 +961,19 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 						block->jump_table = NULL;
 					}
 					
-					//Advance the statement
+					/**
+					 * Advance and then delete the temp holder
+					 */
 					stmt = stmt->next_statement;
-					//Delete the statement, now that we know it is not a jump
 					delete_statement(temp);
 
+					//If we havent' flagged already, not that we did instructions
+					if(result == NO_SIMPLIFICATION){
+						result = SIMPLIFICATION_INSTRUCTIONS_ONLY;
+					}
+
 					break;
+				}
 			}
 		}
 	}
@@ -973,8 +989,10 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 	 * that have been flagged as unimportant
 	 */
 	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
-}
 
+	//Give back the simplification result
+	return result;
+}
 
 /**
  * Are blocks eligible for branch hoisting checks to make sure we aren't trying to 
