@@ -678,8 +678,6 @@ static void mark(dynamic_array_t* function_blocks){
 			//Grab out the exit statement
 			instruction_t* exit_statement = rdf_block->exit_statement;
 
-			printf("EXAMINING EXIT STATEMENT IN BLOCK .L%d\n", rdf_block->block_id);
-
 			//We'll now go based on what the exit statement is
 			switch(exit_statement->statement_type){
 				/**
@@ -701,33 +699,12 @@ static void mark(dynamic_array_t* function_blocks){
 				}
 
 				/**
-				 * TODO
-				 *
-				 * TODO I DONT THINK WE REALLY NEED THIS
-				 */
-				case THREE_ADDR_CODE_JUMP_STMT: {
-					//Avoids infinite loops
-					if(exit_statement->mark == FALSE){
-						//Mark it
-						exit_statement->mark = TRUE;
-						//Add it to the worklist
-						dynamic_array_add(&worklist, exit_statement);
-						//This now has a mark
-						rdf_block->contains_mark = TRUE;
-					}
-
-					break;
-				}
-
-				/**
 				 * This is the most common case, we'll have a branch that
 				 * ends the predecessor
 				 */
 				case THREE_ADDR_CODE_BRANCH_STMT: {
 					//Avoids infinite loops
 					if(exit_statement->mark == FALSE){
-						printf("MARKING BRANCH IN BLOCK .L%d\n", block->block_id);
-
 						//Mark it
 						exit_statement->mark = TRUE;
 						//Add it to the worklist
@@ -759,9 +736,6 @@ static void mark(dynamic_array_t* function_blocks){
  * go through the edge sets as needed
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
-	printf("HERE FOR BLOCK .L%d\n\n", empty_block->block_id);
-
-
 	//Use a clone since we are mutating
 	edge_set_t clone = clone_edge_set(&(empty_block->predecessors));
 
@@ -804,8 +778,6 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 		switch(exit_statement->statement_type){
 			//One type of block exit
 			case THREE_ADDR_CODE_JUMP_STMT: {
-				printf("ADDING .L%d AS A SUCCESSOR OF .L%d\n", replacement->block_id, predecessor->block_id);
-
 				//If this is the right target, then replace it
 				if(exit_statement->if_block == empty_block){
 					exit_statement->if_block = replacement;
@@ -820,20 +792,13 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 			case THREE_ADDR_CODE_BRANCH_STMT: {
 				//If this is the right target, then replace it
 				if(exit_statement->if_block == empty_block){
-					printf("ADDING .L%d AS A SUCCESSOR OF .L%d\n", replacement->block_id, predecessor->block_id);
-
 					exit_statement->if_block = replacement;
-					//Counts as a successor
 					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
 
 				//Same for the else block
 				if(exit_statement->else_block == empty_block){
-					printf("ADDING .L%d AS A SUCCESSOR OF .L%d\n", replacement->block_id, predecessor->block_id);
-
-					
 					exit_statement->else_block = replacement;
-					//Counts as a successor
 					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
 
@@ -914,7 +879,6 @@ static void sweep(dynamic_array_t* function_blocks, basic_block_t* function_entr
 				 * it's nearest marked postdominator
 				 */
 				case THREE_ADDR_CODE_BRANCH_STMT:
-					printf("BLOCK .L%d BRANCH IS USELESS\n", block->block_id);
 					//We'll first find the nearest marked postdominator
 					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
@@ -1120,8 +1084,6 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 			 * 	replace branch with a jump to j
 			 */
 			if(branch->if_block == branch->else_block){
-				printf("HERE2 FOR BLOCK .L%d\n", current->block_id);
-
 				//Delete the branch statement afterwards 
 				delete_statement(branch);
 
@@ -1170,8 +1132,6 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 			/**
 			 * If j only has one predecessor then
 			 * 	merge i and j
-			 *
-			 * 	TODO WHAT IF ITS ITS OWN PREDECESSOR????
 			 */
 			if(jumping_to_block->predecessors.current_index == 1){
 				//Delete the jump statement because it's now useless
@@ -1194,8 +1154,6 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 				continue;
 			}
 		}
-
-	print_all_cfg_blocks(cfg_reference);
 	}
 
 
@@ -1815,36 +1773,7 @@ cfg_t* optimize(cfg_t* cfg){
 		sweep(current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 3: always true/false optimization
-		 * Now that we've swept everything, let's figure out if there are
-		 * any branches that are always true or always false. We'll need to 
-		 * elminate these before we go through and do anything with conditional
-		 * movement
-		 */
-		u_int8_t found_branches_to_optimize = optimize_always_true_false_paths(current_function_blocks);
-
-		/**
-		 * PASS 3.5: if we did find branches to optimize, we now potentially have a lot
-		 * of orphaned code that is no longer useful. This would not have been picked up by
-		 * the original mark and sweep, but it will be now. So, we will rerun mark/sweep
-		 * *if* we've found branches that were optimzied. Otherwise, this would just be a waste
-		 */
-		if(found_branches_to_optimize == TRUE){
-			//Reset all of the marks in the function
-			reset_all_marks(current_function_blocks);
-
-			//Recalculate all dominance relations
-			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
-
-			//Invoke the marker
-			mark(current_function_blocks);
-
-			//Invoke the sweeper
-			sweep(current_function_blocks, function_entry_block);
-		}
-
-		/**
-		 * PASS 4: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
+		 * PASS 3: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
 		 * a dedicated pass that will crawl the function once and look for them. If it is able to find them, then
 		 * it will optimize them into a conditional move pattern. If this is to happen, it will require a full
 		 * redo of the mark, sweep, block deletion and control flow recalculation passes
@@ -1880,7 +1809,7 @@ cfg_t* optimize(cfg_t* cfg){
 		clean(current_function_blocks, function_entry_block);
 
 		/**
-		 * PASS 6: Recalculate everything
+		 * PASS 5: Recalculate everything
 		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
