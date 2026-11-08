@@ -1351,7 +1351,7 @@ static inline void add_cyclic_blocks_from_scc(dynamic_array_t* scc, dynamic_arra
  *
  * NOTE: by the time we get here, the function_blocks set should already contain exclusively reachable blocks
  */
-static inline void insert_virtual_edges_for_potentially_inifinite_execution(dynamic_array_t* function_blocks, basic_block_t* function_exit){
+static inline void insert_virtual_edges_for_potentially_infinite_execution(dynamic_array_t* function_blocks, basic_block_t* function_exit){
 	/**
 	 * Initialize a heap stack and a dynamic array of strongly connected components. Each strongly
 	 * connected component is itself a dynamic array so this is a dynamic array of dynamic arrays.
@@ -1401,6 +1401,16 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 		add_cyclic_blocks_from_scc(dynamic_array_get_at(&strongly_connected_components, i), &cyclic_blocks);
 	}
 
+	/**
+	 * Step 4: now that we have a set of all cyclic blocks, for each cyclic block, we'll emit
+	 * a virtual(analysis only) edge from said block to the virtual exit block(function exit block)
+	 * This virtual edge symbolically represents potential nontermination as a valid path to the exit,
+	 * which is how Ollie will preserve nontermination behavior as important
+	 */
+	for(int32_t i = 0; i < cyclic_blocks.current_index; i++){
+		basic_block_t* cyclic_block = dynamic_array_get_at(&cyclic_blocks, i);
+		add_successor(cyclic_block, function_exit, EDGE_TYPE_VIRTUAL);
+	}
 
 	/**
 	 * Cleanup: we'll deallocate all of the SCC sets, the overall SCC list, and the heap
@@ -1718,7 +1728,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	/**
 	 * TODO DOC
 	 */
-	insert_virtual_edges_for_potentially_inifinite_execution(function_blocks, function_exit_block);
+	insert_virtual_edges_for_potentially_infinite_execution(function_blocks, function_exit_block);
 	
 
 
