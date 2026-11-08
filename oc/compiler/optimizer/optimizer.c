@@ -1766,9 +1766,13 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
 
 
 /**
- * TODO DOCUMENT
+ * Perform a mark and sweep dead code elimination pass over the entire function CFG. This will remove all
+ * OIR statements and control flow that is not deemed to be necessary by the mark() algorithm. In the event
+ * that control flow was altered(branch changes, etc), we will recompute all control flow relations for this
+ * function. This guarantees that values like dominators, dominance frontiers, reverse dominance frontiers, etc
+ * remain accurate after DCE runs
  */
-simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+simplification_type_t perform_mark_and_sweep_pass(dynamic_array_t* function_blocks, basic_block_t* function_entry, basic_block_t* function_exit){
 	/**
 	 * Step 1: reset the visited status for the entire function
 	 */
@@ -1790,7 +1794,19 @@ simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry,
 	 */
 	simplification_type_t sweep_result = sweep(function_blocks, function_entry);
 
+	/**
+	 * Step 5(optional): in the event that we had a control flow simplification, we will go through and
+	 * recompute all of the control flow relations for the function to ensure that those fields remain
+	 * accurate for future traversals
+	 */
+	if(sweep_result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
+		recompute_all_control_flow_relations_for_function(function_blocks, function_entry, function_exit);
+	}
 
+	/**
+	 * Give this back so that the caller can see what happened
+	 */
+	return sweep_result;
 }
 
 
@@ -1811,40 +1827,27 @@ cfg_t* optimize(cfg_t* cfg){
 	 * there may be instances where we need to use our "while changed" type processing, causing us to iterate
 	 * over entire sets of blocks repeatedly. 
 	 */
-	//Run through all of the functions
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the entry and exit blocks
+		/**
+		 * Extract the entry and exit blocks
+		 */
 		basic_block_t* function_entry_block = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		basic_block_t* function_exit_block = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 
-		//What function are we in?
+		/**
+		 * Extract the function record that we're in and the set of all function blocks
+		 */
 		symtab_function_record_t* current_function = function_entry_block->function_defined_in;
-
-		//The current function blocks are stored in the symtab
 		dynamic_array_t* current_function_blocks = &(current_function->function_blocks);
 
 		/**
-		 * First thing we'll do is reset the visited status of the CFG. This just ensures
-		 * that we won't have any issues with the CFG in terms of traversal
+		 * PASS 1: perform mark and sweep dead code elimination over the entire CFG. This will
+		 * remove code that is provably useless in the overall execution of the program
 		 */
-		reset_visit_status_for_function(current_function_blocks);
+		perform_mark_and_sweep_pass(current_function_blocks, function_entry_block, function_exit_block);
 
 		/**
-		 * PASS 1: Mark algorithm
-		 * The mark algorithm marks all useful operations. It will perform one full pass of the program
-		 */
-		mark(current_function_blocks);
-
-		/**
-		 * PASS 2: Sweep algorithm
-		 * Sweep follows directly after mark because it eliminates anything that is unmarked. If sweep
-		 * comes across branch ending statements that are unmarked, it will replace them with a jump to the
-		 * nearest marked postdominator
-		 */
-		sweep(current_function_blocks, function_entry_block);
-
-		/**
-		 * PASS 3: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
+		 * PASS 2: certain common if-else assignments are good candidates for conditional moves in Ollie. We have
 		 * a dedicated pass that will crawl the function once and look for them. If it is able to find them, then
 		 * it will optimize them into a conditional move pattern. If this is to happen, it will require a full
 		 * redo of the mark, sweep, block deletion and control flow recalculation passes
@@ -1859,6 +1862,7 @@ cfg_t* optimize(cfg_t* cfg){
 		 */
 		if(branching_assignments_optimized == TRUE){
 			//Reset all of the marks in the function
+			//TODO DONT NEED
 			reset_all_marks(current_function_blocks);
 
 			//Recalculate all dominance relations
@@ -1872,15 +1876,17 @@ cfg_t* optimize(cfg_t* cfg){
 		}
 
 		/**
-		 * PASS 4: Clean algorithm
+		 * PASS 3: Clean algorithm
 		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
 		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
 		 * that has been made useless by sweep()
 		 */
 		clean(current_function_blocks, function_entry_block);
 
+		//TODO CAN WE MAKE THE BELOW OPTIONAL AND ONLY IF NEEDED???
+
 		/**
-		 * PASS 5: Recalculate everything
+		 * PASS 4: Recalculate everything
 		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end

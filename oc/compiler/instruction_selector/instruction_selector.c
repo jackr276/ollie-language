@@ -9156,39 +9156,6 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 
 
 /**
- * Perform a mark and sweep pass on the given function blocks. This will only
- * be triggered if we discover areas that we are able to simplify
- * using value numbering. The mark and sweep will happen first, followed
- * by the simplifier
- */
-static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
-	/**
-	 * First thing we'll do is reset the visited status of the CFG. This just ensures
-	 * that we won't have any issues with the CFG in terms of traversal
-	 */
-	reset_visited_status_for_function(function_blocks);
-
-	/**
-	 * Reset the marks for all of our blocks
-	 */
-	reset_all_marks(function_blocks);
-
-	/**
-	 * Now we will let the mark algorithm go through and flag instructions as important
-	 * as need be
-	 */
-	mark(function_blocks);
-
-	/**
-	 * Finally we can run sweep(). We will not run any clean() operation because we already
-	 * do that later on down the road regardless. Running this mark and sweep alone should
-	 * take care of any extra assignments that we don't want/need
-	 */
-	return sweep(function_blocks, function_entry);
-}
-
-
-/**
  * Eliminate the given branch if at all possible
  *
  * TODO DOC
@@ -10096,11 +10063,11 @@ static void simplify(cfg_t* cfg){
 	 * functions along with it in each pass
 	 */
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract it
+		/**
+		 * Extract the function entry, function exit and function record
+		 */
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
-
-		//Extract the function record too
 		symtab_function_record_t* function = function_entry->function_defined_in;
 
 		/**
