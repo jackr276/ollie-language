@@ -1729,32 +1729,26 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * TODO DOC
 	 */
 	insert_virtual_edges_for_potentially_infinite_execution(function_blocks, function_exit_block);
-	
-
-
-	//TODO INSERT VIRTUAL EDGES
 
 	/**
 	 * Immediate postdominators are also computed with the Lengauer-Tarjan linear
-	 * time algorithm, just on the reversed CFG. These are needed to find the reverse dominance
-	 * frontier, and they're also used when we perform branch reduction in the 
-	 * optimizer(see nearest_marked_postdominator)
+	 * time algorithm, just on the reversed CFG *WITH ANALYSIS EDGES*. The IPDOMS are needed
+	 * to find the reverse dominance frontier, and they're also used when we perform branch 
+	 * reduction in the optimizer(see nearest_marked_postdominator). The immediate postdominators
+	 * make use of analysis only edges as well as real edges because we need to model that 
+	 * potential nontermination is a valid potential exit scenario
 	 */
-	//TODO MUST BE VIRTUAL EDGE AWARE
 	compute_immediate_postdominators(function_exit_block, function_blocks);
 
 	/**
 	 * Reverse dominance frontiers are the same as regular dominance frontiers(just
 	 * barely not *post*dominated by a block X) and are used when we are doint
 	 * mark and sweep. The reverse dominance frontier is thus calculated every
-	 * time we do this. The algorithm relies on immediate postdominators, which is
-	 * why this comes last
+	 * time we do this. The reverse dominance frontiers also consider virtual edges, because
+	 * we need to model potential nontermination as a valid "end case" for a CFG The algorithm 
+	 * relies on immediate postdominators, which is why this comes last
 	 */
-
-	//TODO MUST BE VIRTUAL EDGE AWARE
 	calculate_reverse_dominance_frontiers(function_blocks);
-
-	//TODO REMOVE VIRTUAL EDGES
 
 	/**
 	 * Now that we've done all of our analysis, we can completely remove all
