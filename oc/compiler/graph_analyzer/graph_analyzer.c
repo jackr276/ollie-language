@@ -1279,6 +1279,24 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 
 
 /**
+ * Add all cyclic blocks from the given strongly connected component into our
+ * set of all cyclic blocks. Remember that an SCC is considered cyclic if 
+ * either is true:
+ * 	1.) The SCC contains more than one block. By definition, since all blocks in an SCC
+ * 		must be reachable from eachother this must form a cycle.
+ * 			Example: SCC {a c}
+ * 						a -> c
+ * 						c -> a
+ * 			Therefore we have a cycle
+ * 	2.) The SCC contains exactly one block that contains a self-edge. This is pretty
+ * 		self explanatory
+ */
+static inline void add_cyclic_blocks_from_scc(dynamic_array_t* scc, dynamic_array_t* cyclic_blocks){
+
+}
+
+
+/**
  * 
  * TODO DOC
  *
@@ -1290,10 +1308,12 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 static inline void insert_virtual_edges_for_potentially_inifinite_execution(dynamic_array_t* function_blocks, basic_block_t* function_exit){
 	/**
 	 * Initialize a heap stack and a dynamic array of strongly connected components. Each strongly
-	 * connected component is itself a dynamic array so this is a dynamic array of dynamic arrays
+	 * connected component is itself a dynamic array so this is a dynamic array of dynamic arrays.
+	 * We will also compile a list of cyclic blocks that we'll populate later on in the process
 	 */
 	heap_stack_t stack = heap_stack_alloc();
 	dynamic_array_t strongly_connected_components = dynamic_array_alloc_initial_size(function_blocks->current_index);
+	dynamic_array_t cyclic_blocks = dynamic_array_alloc();
 
 	/**
 	 * Step 1: Initialize Tarjan's SCC algorithm
@@ -1331,8 +1351,9 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 	 * 		all other blocks in the same SCC. For this to be true, there must be a cycle
 	 * 	2.) It has exactly one block with a self-edge. This is self explanatory
 	 */
-
-
+	for(int32_t i = 0; i < strongly_connected_components.current_index; i++){
+		add_cyclic_blocks_from_scc(dynamic_array_get_at(&strongly_connected_components, i), &cyclic_blocks);
+	}
 
 
 	/**
@@ -1344,6 +1365,7 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 		dynamic_array_heap_dealloc(&scc_array);
 	}
 
+	dynamic_array_dealloc(&cyclic_blocks);
 	dynamic_array_dealloc(&strongly_connected_components);
 	heap_stack_dealloc(&stack);
 }
