@@ -12,7 +12,7 @@
 
 #include <sys/types.h>
 #include <stdio.h>
-#include "../utils/dynamic_array/dynamic_array.h"
+#include "../dynamic_array/dynamic_array.h"
 
 //Jump table structure
 typedef struct jump_table_t jump_table_t;

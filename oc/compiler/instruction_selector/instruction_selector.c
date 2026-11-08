@@ -948,15 +948,16 @@ static void order_blocks(cfg_t* cfg){
 				enqueue(&queue, direct_end_jump);
 			}
 
-			//Now we'll go through each of the successors in this node
+			/**
+			 * Run through all of the successors. Note that we guarantee that all
+			 * successors here are real, so we don't need to filter
+			 */
 			for(int32_t idx = 0; idx < current->successors.current_index; idx++){
 				/**
 				 * Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
 				 * want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 				 */
-
-				//Grab the successor
-				basic_block_t* successor = dynamic_array_get_at(&(current->successors), idx);
+				basic_block_t* successor = get_edge_at_index(&(current->successors), idx)->block;
 
 				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
 				if(successor == direct_end_jump){
@@ -1498,6 +1499,9 @@ static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, 
 	 * If we get here then we found nothing in this block. We'll need to work
 	 * our way through all of it's descendants recursively until we do find
 	 * something
+	 *
+	 * NOTE: by the time we're here, we know that all edges are real edges, so we
+	 * don't need to filter by synthetic edges
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
 		/**
@@ -1507,7 +1511,7 @@ static instruction_t* search_for_rrf_result_copy_in_block(basic_block_t* block, 
 		 *
 		 * If we do find something, return it and propogate it up the chain
 		 */
-		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
 		instruction_t* result = search_for_rrf_result_copy_in_block(successor, successor->leader_statement, source_memory_address_var);
 
 		//Send the result up the chain
@@ -1818,9 +1822,12 @@ static void replace_all_references_in_block(basic_block_t* block, instruction_t*
 
 	/**
 	 * Run through all of this block's successors and perform the exact same replacement with them
+	 *
+	 * NOTE: by the time we get here, we know that all edges are real edges, so we do not need to
+	 * worry about fitlering virtual edges out
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
 		replace_all_references_in_block(successor, successor->leader_statement, replaced_region_variable, replacement_address_expression);
 	}
 }
@@ -6045,9 +6052,13 @@ static inline void remove_memory_region_init_statement_if_found(instruction_wind
 		return;
 	}
 
-	//Delete and rework as needed
+	/**
+	 * Take care to store what comes after first, then delete the initialization statement,
+	 * then rebuild the window in that order
+	 */
+	instruction_t* after_memory_init = window->instruction2;
 	delete_statement(window->instruction1);
-	reconstruct_window(window, window->instruction1->next_statement);
+	reconstruct_window(window, after_memory_init);
 	*changed = TRUE;
 }
 
@@ -9020,10 +9031,13 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 	 * For each successor of this block, we will replace any/all values 
 	 * in the underlying phi functions with their value names that
 	 * we've computed in this block
+	 *
+	 * NOTE: by the time we get here, we know that all edges are real edges, so
+	 * we don't need to worry about filtering by virtual edges
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
 		//Grab the successor
-		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
 
 		//Grab a leader statement
 		instruction_t* phi_cursor = successor->leader_statement;

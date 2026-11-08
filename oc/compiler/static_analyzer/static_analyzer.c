@@ -1489,17 +1489,17 @@ static void rename_block(basic_block_t* entry){
 	}
 
 	/**
-	 * For each successor of i, we'll need to update the phi functions with the new names
+	 * For each *REAL* successor of i, we'll need to update the phi functions with the new names
 	 * that we've given for variables in this block
 	 */
-	for(int32_t i = 0; i < entry->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(entry->successors), i);
-		instruction_t* succ_cursor = successor->leader_statement;
-
+	int32_t i = 0;
+	basic_block_t* successor = NULL;
+	while((successor = get_next_real_successor(entry, &i)) != NULL){
 		/**
 		 * Crawl through every phi function in the successor(they're all at the top) and
 		 * for each one generate a new variable and add it in
 		 */
+		instruction_t* succ_cursor = successor->leader_statement;
 		while(succ_cursor != NULL && succ_cursor->statement_type == THREE_ADDR_CODE_PHI_STMT){
 			//We have a phi function, so what are we assigning to it?
 			symtab_variable_record_t* phi_func_assignee = succ_cursor->operands.oir.assignee->linked_var;

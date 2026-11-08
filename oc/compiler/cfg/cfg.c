@@ -14,7 +14,6 @@
 
 #include "cfg.h"
 #include <assert.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +21,6 @@
 #include "../utils/variable_mapping/variable_mapping.h"
 #include "../utils/queue/heap_queue.h"
 #include "../static_analyzer/static_analyzer.h"
-#include "../jump_table/jump_table.h"
 #include "../utils/stack/nesting_stack.h"
 #include "../utils/constants.h"
 #include "../utils/parameter_result_array/parameter_result_array.h"
@@ -640,16 +638,6 @@ static inline u_int8_t does_type_require_copy_assignment(generic_type_t* type){
 
 
 /**
- * Delete a block, including all of the needed internal
- * bookkeeping
- */
-static inline void delete_block(basic_block_t* block){
-	//And delete it from this function's blocks too
-	dynamic_array_delete(current_function_blocks, block);
-}
-
-
-/**
  * Determine the number of parameters that do not count as elaborative
  *
  * NOTE: this purely takes into account symtab variables that you would see
@@ -671,84 +659,6 @@ static inline int32_t get_non_elaborative_parameter_count(function_type_t* funct
 	}
 
 	return count;
-}
-
-
-/**
- * For any blocks that are completely impossible to reach, we will scrap them all now
- * to avoid any confusion later in the process
- *
- * We consider any block with no predecessors that *is not* a function entry block
- * to be unreachable. We must also be mindful that, once we start deleting blocks, we may
- * be creating even more unreachable blocks, so we need to take care of those too 
- */
-static inline void delete_all_unreachable_blocks(dynamic_array_t* function_blocks){
-	//Array of all blocks that are to be deleted
-	dynamic_array_t to_be_deleted = dynamic_array_alloc();
-	dynamic_array_t to_be_deleted_successors = dynamic_array_alloc();
-
-	//First bulid the array of things that need to go. A block is considered
-	//unreachable if it has no predecessors and it is *not* an entry block
-	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		basic_block_t* current_block = dynamic_array_get_at(function_blocks, i);
-
-		//Doesn't count
-		if(current_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-			continue;
-		}
-
-		//This is our case for something that has to go
-		if(current_block->predecessors.current_index == 0){
-			dynamic_array_add(&to_be_deleted, current_block);
-		}
-	}
-
-	//Run through all of the blocks that need to be deleted
-	while(dynamic_array_is_empty(&to_be_deleted) == FALSE){
-		//O(1) removal
-		basic_block_t* target = dynamic_array_delete_from_back(&to_be_deleted);
-
-		//Every successor needs to be uncoupled
-		for(int32_t i = 0; i < target->successors.current_index; i++){
-			//Extract it
-			basic_block_t* successor = dynamic_array_get_at(&(target->successors), i);
-
-			//Add this link in
-			dynamic_array_add(&to_be_deleted_successors, successor);
-		}
-
-		//Now run through all of the successors that we need to delete. This is done to avoid
-		//any funniness with the indices
-		while(dynamic_array_is_empty(&to_be_deleted_successors) == FALSE){
-			//Extract the successor
-			basic_block_t* successor = dynamic_array_delete_from_back(&(to_be_deleted_successors));
-
-			//Undo the link
-			delete_successor(target, successor);
-
-			//What if the successor now has now predecessors? That means it needs to go too
-			if(successor->predecessors.current_index == 0){
-				dynamic_array_add(&to_be_deleted, successor);
-			}
-		}
-
-		//Delete the target block now
-		delete_block(target);
-	}
-
-	//Deallocate this once we're done
-	dynamic_array_dealloc(&to_be_deleted);
-	dynamic_array_dealloc(&to_be_deleted_successors);
-}
-
-
-/**
- * A helper function that makes a new block id. This ensures we have an atomically
- * increasing block ID
- */
-static inline int32_t get_next_block_id(){
-	(cfg->block_id)++;
-	return cfg->block_id;
 }
 
 
@@ -927,7 +837,7 @@ static basic_block_t* basic_block_alloc_no_estimate(){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in
-	created->block_id = get_next_block_id();
+	created->block_id = get_next_block_id(cfg);
 
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
@@ -956,7 +866,7 @@ static basic_block_t* basic_block_alloc_and_estimate(){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in
-	created->block_id = get_next_block_id();
+	created->block_id = get_next_block_id(cfg);
 
 	//By default we're normal here
 	created->block_type = BLOCK_TYPE_NORMAL;
@@ -984,7 +894,7 @@ static basic_block_t* labeled_block_alloc(symtab_label_record_t* label){
 	basic_block_t* created = calloc(1, sizeof(basic_block_t));
 
 	//Put the block ID in even though it is a labeled block
-	created->block_id = get_next_block_id();
+	created->block_id = get_next_block_id(cfg);
 
 	//We'll mark this to indicate that this is a labeled block
 	created->block_type = BLOCK_TYPE_LABEL;
@@ -1030,354 +940,6 @@ static inline void print_function_inlining_order(dynamic_integer_array_t* inlini
 	}
 
 	fprintf(stdout, "]\n");
-}
-
-
-/**
- * Print a block our for reading
-*/
-void print_block_three_addr_code(basic_block_t* block, emit_dominance_frontier_selection_t print_df){
-	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
-	}
-
-	//Different blocks have different printing rules
-	switch(block->block_type){
-		case BLOCK_TYPE_FUNC_ENTRY:
-			//Now the block name
-			printf("%s", block->function_defined_in->func_name.string);
-			break;
-
-		//By default it's just the .L printing
-		default:
-			printf(".L%d", block->block_id);
-	
-	}
-
-
-	//Now, we will print all of the active variables that this block has
-	if(block->used_before_definition.current_index != 0){
-		printf("(");
-
-		//Run through all of the live variables and print them out
-		for(int32_t i = 0; i < block->used_before_definition.current_index; i++){
-			//Print it out
-			print_variable(stdout, block->used_before_definition.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->used_before_definition.current_index - 1){
-				printf(", ");
-			}
-		}
-
-		//Close it out here
-		printf(")");
-	}
-
-	//We always need the colon and newline
-	printf(":\n");
-
-	//First print out the estimate frequency of execution
-	printf("Estimated Execution Frequency: %d\n", block->estimated_execution_frequency);
-
-	printf("Predecessors: {");
-
-	//If we have predecessors
-	if(block->predecessors.internal_array != NULL){
-		for(int32_t i = 0; i < block->predecessors.current_index; i++){
-			basic_block_t* predecessor = block->predecessors.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(predecessor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", predecessor->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", predecessor->block_id);
-			}
-
-			if(i != block->predecessors.current_index - 1){
-				printf(", ");
-			}
-		}
-	}
-
-	printf("}\n");
-
-	printf("Successors: {");
-	//If we have successor
-	if(block->successors.internal_array != NULL){
-		for(int32_t i = 0; i < block->successors.current_index; i++){
-			basic_block_t* successor = block->successors.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(successor->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", successor->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", successor->block_id);
-			}
-
-			if(i != block->successors.current_index - 1){
-				printf(", ");
-			}
-		}
-	}
-
-	printf("}\n");
-
-	//If we have some assigned variables, we will dislay those for debugging
-	if(block->assigned_variables.current_index != 0){
-		printf("Assigned: (");
-
-		for(int32_t i = 0; i < block->assigned_variables.current_index; i++){
-			print_variable(stdout, block->assigned_variables.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->assigned_variables.current_index - 1){
-				printf(", ");
-			}
-		}
-		printf(")\n");
-	}
-
-	//Now if we have LIVE_IN variables, we'll print those out
-	if(block->live_in.internal_array != NULL){
-		printf("LIVE_IN: (");
-
-		for(int32_t i = 0; i < block->live_in.current_index; i++){
-			print_variable(stdout, block->live_in.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
-
-			//If it isn't the very last one, print out a comma
-			if(i != block->live_in.current_index - 1){
-				printf(", ");
-			}
-		}
-
-		//Close it out
-		printf(")\n");
-	}
-
-	//Now if we have LIVE_IN variables, we'll print those out
-	if(block->live_out.internal_array != NULL){
-		printf("LIVE_OUT: (");
-
-		for(int32_t i = 0; i < block->live_out.current_index; i++){
-			print_variable(stdout, block->live_out.internal_array[i], PRINTING_VAR_BLOCK_HEADER);
-
-			//If it isn't the very last one, print out a comma
-			if(i != block->live_out.current_index - 1){
-				printf(", ");
-			}
-		}
-
-		//Close it out
-		printf(")\n");
-	}
-
-
-	//Print out the dominance frontier if we're in DEBUG mode
-	if(print_df == EMIT_DOMINANCE_FRONTIER && block->dominance_frontier.internal_array != NULL){
-		printf("Dominance frontier: {");
-
-		//Run through and print them all out
-		for(int32_t i = 0; i < block->dominance_frontier.current_index; i++){
-			basic_block_t* printing_block = block->dominance_frontier.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", printing_block->block_id);
-			}
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->dominance_frontier.current_index - 1){
-				printf(", ");
-			}
-		}
-
-		//And close it out
-		printf("}\n");
-	}
-
-	//Print out the reverse dominance frontier if we're in DEBUG mode
-	if(print_df == EMIT_DOMINANCE_FRONTIER && block->reverse_dominance_frontier.internal_array != NULL){
-		printf("Reverse Dominance frontier: {");
-
-		//Run through and print them all out
-		for(int32_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
-			basic_block_t* printing_block = block->reverse_dominance_frontier.internal_array[i];
-
-			//Print the block's ID or the function name
-			if(printing_block->block_type == BLOCK_TYPE_FUNC_ENTRY){
-				printf("%s", printing_block->function_defined_in->func_name.string);
-			} else {
-				printf(".L%d", printing_block->block_id);
-			}
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->reverse_dominance_frontier.current_index - 1){
-				printf(", ");
-			}
-		}
-
-		//And close it out
-		printf("}\n");
-	}
-
-	//Now grab a cursor and print out every statement that we 
-	//have
-	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
-	while(cursor != NULL){
-		//Hand off to printing method
-		print_three_addr_code_stmt(stdout, cursor);
-		//Move along to the next one
-		cursor = cursor->next_statement;
-	}
-
-	//Some spacing
-	printf("\n");
-}
-
-
-/**
- * Add a statement to the target block, following all standard linked-list protocol
- */
-void add_statement(basic_block_t* target, instruction_t* statement_node){
-	//Generic fail case
-	if(target == NULL){
-		fprintf(stderr, "Fatal internal compiler error: NULL basic block found");
-		exit(1);
-	}
-
-	//No matter what - we are adding a statement to this block
-	target->number_of_instructions++;
-
-	//Special case--we're adding the head
-	if(target->leader_statement == NULL || target->exit_statement == NULL){
-		//Assign this to be the head and the tail
-		target->leader_statement = statement_node;
-		target->exit_statement = statement_node;
-		//Save what block we're in
-		statement_node->block_contained_in = target;
-		return;
-	}
-
-	//Otherwise, we are not dealing with the head. We'll simply tack this on to the tail
-	target->exit_statement->next_statement = statement_node;
-	//Mark this as the prior statement
-	statement_node->previous_statement = target->exit_statement;
-
-	//Update the tail reference
-	target->exit_statement = statement_node;
-
-	//Save what block we're in
-	statement_node->block_contained_in = target;
-}
-
-
-/**
- * Take a statement and move it from its current blcok over to the provided
- * destination block. This will not update the use/assignment counts like
- * a regular remove still but it will still operate in much the same way.
- * The statement will always be added directly at the end of the block
- */
-void move_statement(instruction_t* target, basic_block_t* destination){
-	//Grab the block out
-	basic_block_t* source_block = target->block_contained_in;
-
-	//No matter what, we are reducing the number of statements in this block
-	source_block->number_of_instructions--;
-
-	/**
-	 * Case 1: target is the leader statemenet
-	 */
-	if(source_block->leader_statement == target){
-		//Special case - it's the only statement. We'll just delete it here
-		if(source_block->leader_statement->next_statement == NULL){
-			source_block->leader_statement = NULL;
-			source_block->exit_statement = NULL;
-
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			source_block->leader_statement = target->next_statement;
-			source_block->leader_statement->previous_statement = NULL;
-		}
-
-	/**
-	 * Case 2: target is the exit statement
-	 */
-	} else if(source_block->exit_statement == target){
-		instruction_t* previous = target->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		source_block->exit_statement = previous;
-		
-	/**
-	 * Case 3: target is a regualr middle of the road statement
-	 */
-	} else {
-		//Regular middle deletion here
-		instruction_t* previous = target->previous_statement;
-		instruction_t* next = target->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-
-	/**
-	 * Once we've removed this statement from the source block, we will add it
-	 * into the target block with a regular add_statement call
-	 */
-	add_statement(destination, target);
-}
-
-
-/**
- * Delete a statement from the CFG - handling any/all edge cases that may arise
- */
-void delete_statement(instruction_t* stmt){
-	//Grab the block out
-	basic_block_t* block = stmt->block_contained_in;
-
-	//No matter what, we are reducing the number of statements in this block
-	block->number_of_instructions--;
-
-	//If it's the leader statement, we'll just update the references
-	if(block->leader_statement == stmt){
-		//Special case - it's the only statement. We'll just delete it here
-		if(block->leader_statement->next_statement == NULL){
-			//Just remove it entirely
-			block->leader_statement = NULL;
-			block->exit_statement = NULL;
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			block->leader_statement = stmt->next_statement;
-			//Set this to NULL
-			block->leader_statement->previous_statement = NULL;
-		}
-
-	//What if it's the exit statement?
-	} else if(block->exit_statement == stmt){
-		instruction_t* previous = stmt->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		block->exit_statement = previous;
-		
-	//Otherwise, we have one in the middle
-	} else {
-		//Regular middle deletion here
-		instruction_t* previous = stmt->previous_statement;
-		instruction_t* next = stmt->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
 }
 
 
@@ -1835,11 +1397,17 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 
 			//Set live out to be a new array
 			current->live_out = dynamic_array_alloc();
-			
-			//Run through all of the successors
+
+			/**
+			 * Run through all successors. At this point we'll only be dealing
+			 * with real successors so we don't need to worry about filtering
+			 * out ANALSYSIS_ONLY edges
+			 */
 			for(int32_t k = 0; k < current->successors.current_index; k++){
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
+				/**
+				 * Extract the block associated with it
+				 */
+				basic_block_t* successor = get_edge_at_index(&(current->successors), k)->block;
 
 				//If it has a live in set
 				if(successor->live_in.internal_array != NULL){
@@ -1852,6 +1420,7 @@ static void calculate_liveness_sets(dynamic_array_t* function_blocks, basic_bloc
 					}
 				}
 			}
+
 
 			/**
 			 * The live in is a combination of the variables used
@@ -2092,7 +1661,7 @@ static cfg_result_package_t emit_return(basic_block_t* basic_block, generic_ast_
 	add_statement(current, ret_stmt);
 
 	//This is always a predecessor of the function exit statement
-	add_successor(current, function_exit_block);
+	add_real_successor(current, function_exit_block);
 
 	//Update the final & starting blocks
 	return_package.starting_block = basic_block;
@@ -2120,7 +1689,7 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 	add_statement(basic_block, stmt);
 
 	//The destination block is by definition a successor here
-	add_successor(basic_block, destination_block);
+	add_real_successor(basic_block, destination_block);
 
 	//And we give it back
 	return stmt;
@@ -2416,13 +1985,13 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * functionality, purely visual
 		 */
 		if(branch_category == BRANCH_CATEGORY_NORMAL){
-			add_successor(current_block, if_block);
-			add_successor(current_block, else_block);
+			add_real_successor(current_block, if_block);
+			add_real_successor(current_block, else_block);
 			branch_statement->inverse_branch = FALSE;
 
 		} else {
-			add_successor(current_block, else_block);
-			add_successor(current_block, if_block);
+			add_real_successor(current_block, else_block);
+			add_real_successor(current_block, if_block);
 			branch_statement->inverse_branch = TRUE;
 		}
 
@@ -5434,8 +5003,8 @@ static inline cfg_result_package_t lower_in_expression_to_oir_switch(basic_block
 	 * adding successors above. We know that the only two successors of the
 	 * switch block are the true block and the false block
 	 */
-	add_successor(switch_entry, true_block);
-	add_successor(switch_entry, false_block);
+	add_real_successor(switch_entry, true_block);
+	add_real_successor(switch_entry, false_block);
 
 	/**
 	 * Step 5: emit the temp assignment, then emit the adjustment to get the index for the jump calculation down to 0 
@@ -6926,8 +6495,8 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
 
-	add_successor(basic_block, if_destination);
-	add_successor(basic_block, else_destination);
+	add_real_successor(basic_block, if_destination);
+	add_real_successor(basic_block, else_destination);
 
 	//These are always normal branches
 	branch_instruction->inverse_branch = FALSE;
@@ -7031,7 +6600,7 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 	add_jump_table_entry(jump_calculation_block->jump_table, NO_ERROR, no_error_block);
 
 	//This is also a successor of the jump calculation block
-	add_successor(jump_calculation_block, no_error_block);
+	add_real_successor(jump_calculation_block, no_error_block);
 
 	/**
 	 * Run through every single error handle clause inside
@@ -7050,7 +6619,7 @@ static cfg_result_package_t emit_handle_statement(instruction_t* function_call_s
 		add_jump_table_entry(jump_calculation_block->jump_table, error_handle_value, handle_results.starting_block);
 
 		//Add it in as a successor to the start block as well
-		add_successor(jump_calculation_block, handle_results.starting_block);
+		add_real_successor(jump_calculation_block, handle_results.starting_block);
 
 		//Grab a pointer to the last instruction here(this could be NULL!)
 		instruction_t* last_instruction = handle_results.final_block->exit_statement;
@@ -7609,16 +7178,19 @@ static void emit_blocks_bfs(cfg_t* cfg, emit_dominance_frontier_selection_t prin
 
 			//If this wasn't visited, we'll print
 			if(block->visited == FALSE){
-				print_block_three_addr_code(block, print_df);	
+				print_OIR_block(stdout, block, print_df);	
 			}
 
 			//Now we'll mark this as visited
 			block->visited = TRUE;
 
-			//And finally we'll add all of these onto the queue
+			/**
+			 * Now run through all of the successors and enqueue them if they
+			 * are unvisited. We're only dealing with real successors here so
+			 * we don't need to worry about filtering
+			 */
 			for(int32_t j = 0; j < block->successors.current_index; j++){
-				//Add the successor into the queue, if it has not yet been visited
-				basic_block_t* successor = block->successors.internal_array[j];
+				basic_block_t* successor = get_edge_at_index(&(block->successors), j)->block;
 
 				if(successor->visited == FALSE){
 					enqueue(&traversal_queue, successor);
@@ -7643,84 +7215,6 @@ void print_all_cfg_blocks(cfg_t* cfg){
 
 	//Now print all of the local constants
 	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
-}
-
-
-/**
- * Deallocate a basic block
-*/
-void basic_block_dealloc(basic_block_t* block){
-	//Just in case
-	if(block == NULL){
-		printf("ERROR: Attempt to deallocate a null block");
-		exit(1);
-	}
-
-	//Deallocate the live variable array
-	if(block->used_before_definition.internal_array != NULL){
-		dynamic_array_dealloc(&(block->used_before_definition));
-	}
-
-	//Deallocate the assigned variable array
-	if(block->assigned_variables.internal_array != NULL){
-		dynamic_array_dealloc(&(block->assigned_variables));
-	}
-
-	//Deallocate the domninance frontier
-	if(block->dominance_frontier.internal_array != NULL){
-		dynamic_array_dealloc(&(block->dominance_frontier));
-	}
-
-	//Deallocate the reverse dominance frontier
-	if(block->reverse_dominance_frontier.internal_array != NULL){
-		dynamic_array_dealloc(&(block->reverse_dominance_frontier));
-	}
-
-	//Deallocate the dominator children frontier
-	if(block->dominator_children.internal_array != NULL){
-		dynamic_array_dealloc(&(block->dominator_children));
-	}
-
-	//Deallocate the liveness sets
-	if(block->live_out.internal_array != NULL){
-		dynamic_array_dealloc(&(block->live_out));
-	}
-
-	if(block->live_in.internal_array != NULL){
-		dynamic_array_dealloc(&(block->live_in));
-	}
-
-	//Deallocate the successors
-	if(block->successors.internal_array != NULL){
-		dynamic_array_dealloc(&(block->successors));
-	}
-
-	//Deallocate the predecessors
-	if(block->predecessors.internal_array != NULL){
-		dynamic_array_dealloc(&(block->predecessors));
-	}
-
-	//If this is a switch statement entry block, then it will have a jump table
-	if(block->jump_table != NULL){
-		jump_table_dealloc(block->jump_table);
-	}
-
-	//Grab a statement cursor here
-	instruction_t* cursor = block->leader_statement;
-	//We'll need a temp block too
-	instruction_t* temp = cursor;
-
-	//So long as the cursor is not NULL
-	while(cursor != NULL){
-		temp = cursor;
-		cursor = cursor->next_statement;
-		//Destroy temp
-		instruction_dealloc(temp);
-	}
-	
-
-	//Otherwise its fine so
-	free(block);
 }
 
 
@@ -7776,250 +7270,6 @@ void dealloc_cfg(cfg_t* cfg){
 	
 	//At the very end, be sure to destroy this too
 	free(cfg);
-}
-
-
-/**
- * Exclusively add a successor to target. The predecessors of successor will not be touched
- */
-void add_successor_only(basic_block_t* target, basic_block_t* successor){
-	//If this is null, we'll perform the initial allocation
-	if(target->successors.internal_array == NULL){
-		target->successors = dynamic_array_alloc();
-	}
-
-	//Does this block already contain the successor? If so we'll leave
-	if(dynamic_array_contains(&(target->successors), successor) != NOT_FOUND){
-		//We DID find it, so we won't add
-		return;
-	}
-
-	//Otherwise we're set to add it in
-	dynamic_array_add(&(target->successors), successor);
-}
-
-
-/**
- * Exclusively add a predecessor to target. Nothing with successors
- * will be touched
- */
-void add_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	//If this is NULL, we'll allocate here
-	if(target->predecessors.internal_array == NULL){
-		target->predecessors = dynamic_array_alloc();
-	}
-
-	//Does this contain the predecessor block already? If so we won't add
-	if(dynamic_array_contains(&(target->predecessors), predecessor) != NOT_FOUND){
-		//We DID find it, so we won't add
-		return;
-	}
-
-	//Now we can add
-	dynamic_array_add(&(target->predecessors), predecessor);
-}
-
-
-/**
- * Add a successor to the target block. This method is entirely comprehensive.
- * Since "successor" comes after "target", "target" will be added as a predecessor
- * of "successor". If you wish to ONLY add a successor or predecessor(very rare),
- * then use the "only" methods
- */
- void add_successor(basic_block_t* target, basic_block_t* successor){
-	//This is possible, and if it happens we just leave
-	if(successor == NULL){
-		return;
-	}
-
-	//First we'll add successor as a successor of target
-	add_successor_only(target, successor);
-
-	//And then for completeness, we'll add target as a predecessor of successor
-	add_predecessor_only(successor, target);
-}
-
-
-/**
- * Delete a successor from a block
- *
- * This is mainly just a wrapper for a dynamic_array_delete, for readability
- *
- * Target: the block that has the successor
- * Successor: the successor itself
- */
-void delete_successor_only(basic_block_t* target, basic_block_t* successor){
-	dynamic_array_delete(&(target->successors), successor);
-}
-
-
-/**
- * Delete a predecessor from a block
- *
- * This is mainly just a wrapper for a dynamic_array_delete, for readability
- *
- * Target: the block that has the predecessor
- * Predecessor: the predecessor itself
- */
-void delete_predecessor_only(basic_block_t* target, basic_block_t* predecessor){
-	dynamic_array_delete(&(target->predecessors), predecessor);
-}
-
-
-/**
- * Delete a successor from the target block's list. This function is
- * entirely comprehensive. Since target used to be a predecessor
- * of the deleted successor, that will also be deleted
- */
-void delete_successor(basic_block_t* target, basic_block_t* deleted_successor){
-	//Bail out if this happens
-	if(deleted_successor == NULL){
-		return;
-	}
-
-	//The target is no longer a predecessor of said successor
-	delete_predecessor_only(deleted_successor, target);
-
-	//The said successor is no longer a successor of the target
-	delete_successor_only(target, deleted_successor);
-}
-
-
-/**
- * Merge two basic blocks. We always return a pointer to a, b will be deallocated
- *
- * IMPORTANT NOTE: ONCE BLOCKS ARE MERGED, BLOCK B IS GONE
- */
-static basic_block_t* merge_blocks(basic_block_t* a, basic_block_t* b){
-	//If b is null, we just return a
-	if(b->leader_statement == NULL){
-		return a;
-	}
-
-	//What function are we in - will be important for updates
-	symtab_function_record_t* function_contained_in = a->function_defined_in;
-
-	/**
-	 * Merge entry and exit statements int
-	 */
-	if(a->exit_statement == NULL){
-		a->leader_statement = b->leader_statement;
-		a->exit_statement = b->exit_statement;
-	} else {
-		//Chain the old exit to the start of b
-		a->exit_statement->next_statement = b->leader_statement;
-		//B's leader is now chained to the xit
-		b->leader_statement->previous_statement = a->exit_statement;
-		a->exit_statement = b->exit_statement;
-	}
-
-	/**
-	 * If we're gonna merge two blocks, then they'll share all the same successors and predecessors
-	 * Let's merge predecessors first if we have any
-	 */
-	for(int32_t i = 0; i < b->predecessors.current_index; i++){
-		//Add b's predecessor as one to a
-		add_predecessor_only(a, b->predecessors.internal_array[i]);
-	}
-
-	//Now merge successors if we have any
-	for(int32_t i = 0; i < b->successors.current_index; i++){
-		//Add b's successors to be a's successors
-		add_successor_only(a, b->successors.internal_array[i]);
-	}
-
-	/**
-	 * FOR EACH Successor of B, it will have a reference to B as a predecessor.
-	 * This is now wrong though. So, for each successor of B, it will need
-	 * to have A as predecessor
-	 */
-	for(int32_t i = 0; i < b->successors.current_index; i++){
-		//Grab the block first
-		basic_block_t* successor_block = b->successors.internal_array[i];
-
-		//If the successor block has predecessors
-		if(successor_block->predecessors.internal_array != NULL){
-			//Now for each of the predecessors that equals b, it needs to now point to A
-			for(int32_t j = 0; j < successor_block->predecessors.current_index; j++){
-				//If it's pointing to b, it needs to be updated
-				if(successor_block->predecessors.internal_array[j] == b){
-					//Update it to now be correct
-					successor_block->predecessors.internal_array[j] = a;
-				}
-			}
-		}
-	}
-
-	//Copy over the block type and terminal type
-	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
-		a->block_type = b->block_type;
-	}
-
-	//If b has a jump table, we'll need to add this in as well
-	a->jump_table = b->jump_table;
-	b->jump_table = NULL;
-
-	/**
-	 * For each statement in B, we need to flag that it's
-	 * now defined inside of a
-	 */
-	instruction_t* b_stmt = b->leader_statement;
-	while(b_stmt != NULL){
-		b_stmt->block_contained_in = a;
-		b_stmt = b_stmt->next_statement;
-	}
-
-	/**
-	 * All variables maintain a "block declared in" tag that tells us
-	 * where the variable was literally declared by the user. This is
-	 * very important to us for mutability checking. Since block B is
-	 * now block A, any variables that were declared in B now becom
-	 * declared in A. We will crawl all sheafs related to this function
-	 * and update any "declared in" tags from B to a
-	 */
-	for(int32_t i = 0; i < variable_symtab->sheafs.current_index; i++){
-		symtab_variable_sheaf_t* sheaf = variable_symtab->sheafs.internal_array[i];
-
-		//Not in the function skip it
-		if(sheaf->function_contained_in != function_contained_in){
-			continue;
-		}
-
-		//Run through the kespace
-		for(int32_t j = 0; j < VARIABLE_KEYSPACE; j++){
-			//Remember records may be chained
-			symtab_variable_record_t* cursor = sheaf->records[j];
-			while(cursor != NULL){
-				/**
-				 * If the cursor was declared in block b, update
-				 * it to now point to block a
-				 */
-				if(cursor->block_declared_in == b){
-					cursor->block_declared_in = a;
-				}
-
-				//Bump up to the next one
-				cursor = cursor->next;
-			}
-
-		}
-	}
-	
-	//IMPORTANT--wipe b's statements out
-	b->leader_statement = NULL;
-	b->exit_statement = NULL;
-
-	//Update the instruction counts
-	a->number_of_instructions += b->number_of_instructions;
-
-	//Delete block b now
-	delete_block(b);
-
-	//And finally we'll deallocate b
-	basic_block_dealloc(b);
-
-	//Give back the pointer to a
-	return a;
 }
 
 
@@ -8147,18 +7397,24 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	//All continues will go to the update block
 	push(&continue_stack, for_stmt_update_block);
 	
-	//Otherwise, we will allow the subsidiary to handle that. The loop statement here is the condition block,
-	//because that is what repeats on continue
+	/**
+	 * Attempt to emit a compound statement and assign over the loop body start/end
+	 */
 	cfg_result_package_t compound_statement_results = visit_compound_statement(cursor);
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
+
+	/**
+	 * If we have no loop body at all, we'll assign the loop body to just
+	 * be the update block itself and jump to that
+	 */
+	if(loop_body_start == NULL){
+		loop_body_start = for_stmt_update_block;
+		loop_body_end = for_stmt_update_block_end;
+	}
 
 	//Once we're done with the compound statement, we are no longer in the loop
 	pop_nesting_level(&nesting_stack);
-
-	//If we have an empty interior just emit a dummy block. It will be optimized away regardless
-	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
-	}
 
 	/**
 	 * If we have a conditional at all, we will emit appropriate branch
@@ -8169,22 +7425,22 @@ static cfg_result_package_t visit_for_statement(generic_ast_node_t* root_node){
 	 * if not condition 
 	 * 	goto exit
 	 * else
-	 * 	goto update
+	 * 	goto start 
 	 */
 	if(condition_block_node != NULL){
-		emit_branch(condition_block, condition_block_node, for_stmt_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+		emit_branch(condition_block, condition_block_node, for_stmt_exit_block, loop_body_start, BRANCH_CATEGORY_INVERSE);
 
 	//Otherwise - we're doing as the user wants here and just emitting a straight jump from this block to the body
 	} else {
-		emit_jump(condition_block, compound_statement_results.starting_block);
+		emit_jump(condition_block, loop_body_start);
 	}
 
-	//However if it isn't NULL, we'll need to find the end of this compound statement
-	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
-
-	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
-		//We also need an uncoditional jump right to the update block
-		emit_jump(compound_stmt_end, for_stmt_update_block);
+	/**
+	 * If we *DID* have a body(so the loop body is not the same as the update block) and we don't have a terminal
+	 * statement at the end of the loop body, we'll emit a jump from the loop body to the update block
+	 */
+	if(loop_body_start != for_stmt_update_block && does_block_end_in_terminal_statement(loop_body_end) == FALSE){
+		emit_jump(loop_body_end, for_stmt_update_block);
 	}
 
 	//Now that we're done, we'll need to remove these both from the stack
@@ -8227,35 +7483,42 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	result_package.starting_block = do_while_stmt_entry_block;
 	result_package.final_block = do_while_stmt_exit_block;
 
-	//Grab the initial node
-	generic_ast_node_t* do_while_stmt_node = root_node;
-
-	//Grab a cursor for walking the subtree
-	generic_ast_node_t* ast_cursor = do_while_stmt_node->first_child;
-
-	//We go right into the compound statement here
+	/**
+	 * Grab a cursor for walking the subtree and go right into this
+	 */
+	generic_ast_node_t* ast_cursor = root_node->first_child;
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
+
+	/**
+	 * Grab references to the start and end of the loop body. If either of these is
+	 * NULL, it means that we had an empty loop body and we'll have to update
+	 * accordingly
+	 */
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
+	if(loop_body_start == NULL){
+		loop_body_start = do_while_stmt_entry_block;
+		loop_body_end = do_while_stmt_entry_block;
+	}
 
 	//Once we're done pop the nesting level
 	pop_nesting_level(&nesting_stack);
 
-	//It being NULL is ok, we'll just insert a dummy
-	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
+	/**
+	 * If we did *NOT* have an empty loop body, then we'll emit a jump
+	 * from the entry block to the loop body start
+	 */
+	if(loop_body_start != do_while_stmt_entry_block){
+		emit_jump(do_while_stmt_entry_block, loop_body_start);
 	}
 
-	//Now we'll jump to it
-	emit_jump(do_while_stmt_entry_block, compound_statement_results.starting_block);
-
-	//We will drill to the bottom of the compound statement
-	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
-
-	//If we get this, we can't go forward. Just give it back
-	if(does_block_end_in_function_termination_statement(compound_stmt_end) == TRUE){
-		//Since we have a return block here, we know that everything else is unreachable
-		result_package.final_block = compound_stmt_end;
-		//And give it back
+	/**
+	 * Rare case here, but if the loop body's end ends in a function termination
+	 * statement like ret or raise, there's no point in keeping it around, so we
+	 * can just give it back
+	 */
+	if(does_block_end_in_function_termination_statement(loop_body_end) == TRUE){
+		result_package.final_block = loop_body_end;
 		return result_package;
 	}
 
@@ -8269,13 +7532,14 @@ static cfg_result_package_t visit_do_while_statement(generic_ast_node_t* root_no
 	 * else
 	 * 	exit
 	 */
-	emit_branch(compound_stmt_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
+	emit_branch(loop_body_end, ast_cursor->next_sibling, do_while_stmt_entry_block, do_while_stmt_exit_block, BRANCH_CATEGORY_NORMAL);
 
-	//Now that we're done here, pop the break/continue stacks to remove these blocks
+	/**
+	 * Now that we're done here, pop the break/continue stacks to remove these blocks and
+	 * give back the given return package
+	 */
 	pop(&continue_stack);
 	pop(&break_stack);
-
-	//Always return the entry block
 	return result_package;
 }
 
@@ -8303,16 +7567,21 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	//Any/all continues go to the starting block
 	push(&continue_stack, loop_start_block);
 
-	//Emit the compound statement interior
+	/**
+	 * Emit the given compound statement interior and grab references to the given
+	 * loop start and loop end blocks
+	 */
 	cfg_result_package_t compound_statement_results = visit_compound_statement(root_node->first_child);
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
 
 	/**
-	 * If it's null, that means that we were given an empty while loop here.
-	 * We'll just allocate our own and use that
+	 * In the event that these are NULL, we will just model these as being
+	 * the loop start block itself
 	 */
-	if(compound_statement_results.starting_block == NULL){
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
+	if(loop_body_start == NULL){
+		loop_body_start = loop_start_block;
+		loop_body_end = loop_start_block;
 	}
 
 	/**
@@ -8323,16 +7592,21 @@ static cfg_result_package_t visit_loop_statement(generic_ast_node_t* root_node){
 	 * In theory due to the way that this works, we have no direct connection
 	 * to the loop exit block from here. Any/all exit would have to be internal
 	 * to the loop itself
+	 *
+	 * *IF* the loop was not empty, we'll emit a jump from the start of loop control
+	 * to the inner compound statement
 	 */
-	emit_jump(loop_start_block, compound_statement_results.starting_block);
+	if(loop_start_block != loop_body_start){
+		emit_jump(loop_start_block, loop_body_start);
+	}
 
 	/**
 	 * IF AND ONLY IF our block does not already end in some kind of terminal statement
 	 * here(branch, jump, ret or raise), then we will emit a jump from the final block to
 	 * the loop start
 	 */
-	if(does_block_end_in_terminal_statement(compound_statement_results.final_block) == FALSE){
-		emit_jump(compound_statement_results.final_block, loop_start_block);
+	if( does_block_end_in_terminal_statement(loop_body_end) == FALSE){
+		emit_jump(loop_body_end, loop_start_block);
 	}
 
 	//Remove these from the continue stack before returning
@@ -8388,24 +7662,30 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	//We'll need this for later
 	generic_ast_node_t* conditional_cursor = ast_cursor;
 
-	//The very next node is a compound statement
+	/**
+	 * Advance to the next node and process the given compound statement. We will extract
+	 * the loop body entry and exit blocks from this
+	 */
 	ast_cursor = ast_cursor->next_sibling;
-
-	//Now that we know it's a compound statement, we'll let the subsidiary handle it
 	cfg_result_package_t compound_statement_results = visit_compound_statement(ast_cursor);
-
-	//We're out of the compound statement - pop the nesting level
-	pop_nesting_level(&nesting_stack);
+	basic_block_t* loop_body_start = compound_statement_results.starting_block;
+	basic_block_t* loop_body_end = compound_statement_results.final_block;
 
 	/**
-	 * If it's null, that means that we were given an empty while loop here.
-	 * We'll just allocate our own and use that
+	 * EMPTY LOOP BODY - we'll need to model the body as starting at the while statement
+	 * entry block instead
 	 */
-	if(compound_statement_results.starting_block == NULL){
-		//Just give a dummy here
-		compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-		compound_statement_results.final_block = compound_statement_results.starting_block;
+	if(loop_body_start == NULL){
+		loop_body_start = while_statement_entry_block;
+		/**
+		 * This could change with ternary conditionals
+		 */
+		loop_body_end = while_statement_entry_block;
 	}
+
+	
+	//We're out of the compound statement - pop the nesting level
+	pop_nesting_level(&nesting_stack);
 
 	/**
 	 * Inverse jump out of the while loop to the end if bad
@@ -8413,24 +7693,22 @@ static cfg_result_package_t visit_while_statement(generic_ast_node_t* root_node)
 	 * If destination -> end of loop
 	 * Else destination -> loop body
 	 */
-	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
-
-	//Let's now find the end of the compound statement
-	basic_block_t* compound_stmt_end = compound_statement_results.final_block;
+	emit_branch(while_statement_entry_block, conditional_cursor, while_statement_end_block, loop_body_start, BRANCH_CATEGORY_INVERSE);
 
 	/**
-	 * If the block does not end in a termianl statement, we will need to emit a jump right back
-	 * up to the entry block
+	 * *IF* we had a loop body to begin with and the end of the loop does not
+	 * end in a compound statement, we'll jump from the end of the body to the
+	 * entry block
 	 */
-	if(does_block_end_in_terminal_statement(compound_stmt_end) == FALSE){
-		emit_jump(compound_stmt_end, while_statement_entry_block);
+	if(loop_body_end != while_statement_entry_block && does_block_end_in_terminal_statement(loop_body_end) == FALSE){
+		emit_jump(loop_body_end, while_statement_entry_block);
 	}
 
-	//Now that we're done, pop these both off their respective stacks
+	/**
+	 * Package up and return the results
+	 */
 	pop(&break_stack);
 	pop(&continue_stack);
-
-	//Now we're done, so
 	return result_package;
 }
 
@@ -8582,48 +7860,55 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			 * For the else if we'll need to go into the child nodes
 			 * of the current cursor
 			 */
-			case AST_NODE_TYPE_ELSE_IF_STMT:
+			case AST_NODE_TYPE_ELSE_IF_STMT: {
 				conditional_node = cursor->first_child;
 				compound_statement_node = conditional_node->next_sibling;
 				break;
+			}
 
 			/**
 			 * Otherwise we have our if statement. The conditional is the first
 			 * child, compound statement is the next one. Advance the cursor as 
 			 * we go
 			 */
-			default:
+			default: {
 				conditional_node = cursor;
 				cursor = cursor->next_sibling;
 				compound_statement_node = cursor;
 				break;
+			}
 		}
 
 		//Signify that this is happening inside of an IF
 		push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-		//Let the helper emit the entire compound statement
+		/**
+		 * Let the helper emit the compound statement. Retrieve the if entry and exit blocks
+		 * from here
+		 */
 		cfg_result_package_t compound_statement_results = visit_compound_statement(compound_statement_node);
+		basic_block_t* if_body_start = compound_statement_results.starting_block;
+		basic_block_t* if_body_end = compound_statement_results.final_block;
 
-		//Remove the IF nester
+		//Remove the IF nesting level
 		pop_nesting_level(&nesting_stack);
 
 		/**
-		 * If we have an empty if statement(possible), then we'll just go about creating
-		 * a block here so we don't have any weird behavior
+		 * If we have a completely empty if block, then in reality the "body" is really just the end of
+		 * the if statement. We'll reassign this to match that
 		 */
-		if(compound_statement_results.starting_block == NULL){
-			compound_statement_results.starting_block = basic_block_alloc_and_estimate();
-			compound_statement_results.final_block = compound_statement_results.starting_block;
+		if(if_body_start == NULL){
+			if_body_start = overall_exit_block;
+			if_body_end = overall_exit_block;
 		}
 
 		/**
-		 * If the compound statement final block does not end in a return, we'll need to make
+		 * If the compound statement final block does is not the exit and not end in a return, we'll need to make
 		 * it jump to the exit block. This is the overall exit block, not the current exit block
 		 * which is just where we go if something didn't work
 		 */
-		if(does_block_end_in_terminal_statement(compound_statement_results.final_block) == FALSE){
-			emit_jump(compound_statement_results.final_block, overall_exit_block);
+		if(if_body_end != overall_exit_block && does_block_end_in_terminal_statement(if_body_end) == FALSE){
+			emit_jump(if_body_end, overall_exit_block);
 		}
 
 		//Bump the cursor up to the next statement
@@ -8646,7 +7931,7 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 				 * We have an else-if statement. If this is the case, we are safe to emit
 				 * a new block for the next conditional and jump to that
 				 */
-				case AST_NODE_TYPE_ELSE_IF_STMT:
+				case AST_NODE_TYPE_ELSE_IF_STMT: {
 					//Hang onto the old "entry"
 					old_entry_block = current_entry_block;
 
@@ -8657,33 +7942,39 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * Branch out using the "jump-to-else" methodology. The conditional jump target here is the
 					 * else block(current entry block), and the direct block here if's inner results
 					 */
-					emit_branch(old_entry_block, conditional_node, current_entry_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+					emit_branch(old_entry_block, conditional_node, current_entry_block, if_body_start, BRANCH_CATEGORY_INVERSE);
 
 					//Next iteration of the loop, break out of switch
 					break;
+				}
 
 				/**
 				 * We have an if-else statement. If this is the case, we'll just emit the else here for ourselves
 				 * and then leave when it is appropriate. Note that this is a terminal case, we are out of here 
 				 * when this happens
 				 */
-				case AST_NODE_TYPE_COMPOUND_STMT:
+				case AST_NODE_TYPE_COMPOUND_STMT: {
 					//Push the if nesting level
 					push_nesting_level(&nesting_stack, NESTING_IF_STATEMENT);
 
-					//Get the results for the else statement
+					/**
+					 * Get the results for the else statement and assign the start and end blocks
+					 * accordingly
+					 */
 					cfg_result_package_t else_compound_statement_values = visit_compound_statement(cursor);
+					basic_block_t* else_body_start = else_compound_statement_values.starting_block;
+					basic_block_t* else_body_end = else_compound_statement_values.final_block;
 
 					//Pop it off
 					pop_nesting_level(&nesting_stack);
 
 					/**
-					 * If we have an empty if statement(possible), then we'll just go about creating
-					 * a block here so we don't have any weird behavior
+					 * We have a completely empty else body, so the real else body is just the exit
+					 * block of the loop
 					 */
-					if(else_compound_statement_values.starting_block == NULL){
-						else_compound_statement_values.starting_block = basic_block_alloc_and_estimate();
-						else_compound_statement_values.final_block = else_compound_statement_values.starting_block;
+					if(else_body_start == NULL){
+						else_body_start = overall_exit_block;
+						else_body_end = overall_exit_block;
 					}
 
 					/**
@@ -8691,14 +7982,14 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * as our conditional jump target and the compund statement result's starting block as our direct
 					 * target
 					 */
-					emit_branch(current_entry_block, conditional_node, else_compound_statement_values.starting_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+					emit_branch(current_entry_block, conditional_node, else_body_start, if_body_start, BRANCH_CATEGORY_INVERSE);
 
 					/**
-					 * If the else if compound statement final block does not end in a return, we'll need to make
+					 * If the else if compound statement final block exists and does not end in a return, we'll need to make
 					 * it jump to the overall exit block
 					 */
-					if(does_block_end_in_terminal_statement(else_compound_statement_values.final_block) == FALSE){
-						emit_jump(else_compound_statement_values.final_block, overall_exit_block);
+					if(else_body_end != overall_exit_block && does_block_end_in_terminal_statement(else_body_end) == FALSE){
+						emit_jump(else_body_end, overall_exit_block);
 					}
 
 					/**
@@ -8706,18 +7997,18 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 					 * control path. In this instance, we need to set the result package's final block to be the
 					 * exit block
 					 */
-					if(dynamic_array_is_empty(&(overall_exit_block->predecessors)) == TRUE){
+					if(edge_set_empty(&(overall_exit_block->predecessors)) == TRUE){
 						if_results_package.final_block = function_exit_block;
 					} else {
 						if_results_package.final_block = overall_exit_block;
 					}
 
 					return if_results_package;
+				}
 
-				//Should never happen
-				default:
-					fprintf(stderr, "Fatal internal compiler error: invalid node found in if statement processor\n");
-					exit(1);
+				default:{
+					trigger_ice_panic("Invalid node found in if statement processor");
+				}
 			}
 		
 		/**
@@ -8742,9 +8033,9 @@ static cfg_result_package_t visit_if_statement(generic_ast_node_t* root_node){
 			 * the if
 			 */
 			if(is_if_path_likely_to_execute(&compound_statement_results) == TRUE){
-				emit_branch(current_entry_block, conditional_node, overall_exit_block, compound_statement_results.starting_block, BRANCH_CATEGORY_INVERSE);
+				emit_branch(current_entry_block, conditional_node, overall_exit_block, if_body_start, BRANCH_CATEGORY_INVERSE);
 			} else {
-				emit_branch(current_entry_block, conditional_node, compound_statement_results.starting_block, overall_exit_block, BRANCH_CATEGORY_NORMAL);
+				emit_branch(current_entry_block, conditional_node, if_body_start, overall_exit_block, BRANCH_CATEGORY_NORMAL);
 			}
 
 			if_results_package.final_block = overall_exit_block;
@@ -8777,9 +8068,10 @@ static cfg_result_package_t visit_default_statement(generic_ast_node_t* root_nod
 	//Grab the compound statement out of here
 	cfg_result_package_t default_compound_statement_results = visit_compound_statement(default_stmt_cursor->first_child);
 
-	//Let this take care of it if we have an actual compound statement here
+	/**
+	 * If we had an actual compound statement we'll just copy the results over
+	 */
 	if(default_compound_statement_results.starting_block != NULL){
-		//Otherwise, we'll just copy over the starting and ending block into our results
 		results.starting_block = default_compound_statement_results.starting_block;
 		results.final_block = default_compound_statement_results.final_block;
 
@@ -8817,18 +8109,18 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	 * done by the parser, so we're guaranteed to see something
 	 * correct here
 	 */
-	
 	generic_ast_node_t* case_stmt_cursor = root_node;
 
 	//Let this take care of it
 	cfg_result_package_t case_compound_statement_results = visit_compound_statement(case_stmt_cursor->first_child);
 
-	//If this isn't Null, we'll run the analysis. If it is NULL, we have an empty case block
+	/**
+	 * If we have an actual compound statement body, then we'll the returned blocks
+	 * to the overall result. Otherwise, we'll need to allocate our own block and add
+	 * it as the case block
+	 */
 	if(case_compound_statement_results.starting_block != NULL){
-		//Once we get this back, we'll add it in to the main block
 		results.starting_block = case_compound_statement_results.starting_block;
-
-		//Add this in as the final block
 		results.final_block = case_compound_statement_results.final_block;
 
 		//Be sure that we copy over the case statement value as well
@@ -8837,13 +8129,10 @@ static cfg_result_package_t visit_case_statement(generic_ast_node_t* root_node){
 	} else {
 		//We need to make the block first
 		basic_block_t* case_stmt = basic_block_alloc_and_estimate();
-
-		//Grab the value -- this should've already been done by the parser
-		case_stmt->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
-
-		//We'll set the front and end block to both be this
 		results.starting_block = case_stmt;
 		results.final_block = case_stmt;
+
+		case_stmt->case_stmt_val = case_stmt_cursor->constant_value.signed_int_value;
 	}
 
 	//Nesting here is no longer in a case statement
@@ -9011,7 +8300,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 				add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				//A case statement is always a successor to the jump calculation block
-				add_successor(jump_calculation_block, case_default_results.starting_block);
+				add_real_successor(jump_calculation_block, case_default_results.starting_block);
 
 				break;
 
@@ -9060,7 +8349,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	 * of using the ending block, we can change it to be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -9083,7 +8372,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 			emit_jump(default_block, result_package.final_block);
 
 		} else {
-			add_successor(default_block, function_exit_block);
+			add_real_successor(default_block, function_exit_block);
 		}
 	}
 
@@ -9112,7 +8401,7 @@ static cfg_result_package_t visit_non_exhaustive_c_style_switch_statement(generi
 	 * avoid any issues with unneeded successors if it is exhaustive
 	 */
 	if(switch_has_default_jumps == TRUE){
-		add_successor(jump_calculation_block, default_block);
+		add_real_successor(jump_calculation_block, default_block);
 	}
 
 	//We'll need both of these as constants for our computation
@@ -9267,7 +8556,7 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 		add_jump_table_entry(jump_calculation_block->jump_table, cursor->constant_value.signed_int_value - offset, case_results.starting_block);
 
 		//A case statement is always a successor to the jump calculation block
-		add_successor(jump_calculation_block, case_results.starting_block);
+		add_real_successor(jump_calculation_block, case_results.starting_block);
 
 		//Reassign current block
 		current_block = case_results.final_block;
@@ -9301,7 +8590,7 @@ static cfg_result_package_t visit_exhaustive_c_style_switch_statement(generic_as
 	 * If the ending block has no successors at all, that means that we've returned through every control path. Instead
 	 * of using the ending block, we can change it to be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -9472,8 +8761,8 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
-				add_successor(current_conditional_block, new_conditional_block);
-				add_successor(current_conditional_block, case_default_results.starting_block);
+				add_real_successor(current_conditional_block, new_conditional_block);
+				add_real_successor(current_conditional_block, case_default_results.starting_block);
 
 				//The current conditional block is now the new one
 				current_conditional_block = new_conditional_block;
@@ -9691,8 +8980,8 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
-				add_successor(current_conditional_block, new_conditional_block);
-				add_successor(current_conditional_block, case_default_results.starting_block);
+				add_real_successor(current_conditional_block, new_conditional_block);
+				add_real_successor(current_conditional_block, case_default_results.starting_block);
 
 				//Set the current conditional to be this new one
 				current_conditional_block = new_conditional_block;
@@ -9812,7 +9101,7 @@ static cfg_result_package_t visit_non_exhaustive_ollie_switch_statement(generic_
 				add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_default_results.starting_block);
 
 				//The starting block is a successor to the root block
-				add_successor(jump_calculation_block, case_default_results.starting_block);
+				add_real_successor(jump_calculation_block, case_default_results.starting_block);
 
 				break;
 
@@ -9877,14 +9166,14 @@ static cfg_result_package_t visit_non_exhaustive_ollie_switch_statement(generic_
 	 * of the jump calculation which is why we've waited until now to add this
 	 */
 	if(switch_has_default_jumps == TRUE){
-		add_successor(jump_calculation_block, default_block);
+		add_real_successor(jump_calculation_block, default_block);
 	}
 
 	/**
 	 * If the end block has no predecessors, that means that every case statement ended in a return statement.
 	 * If this is the case, then the final block should not be the ending block, it should be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -10037,7 +9326,7 @@ static cfg_result_package_t visit_exhaustive_ollie_switch_statement(generic_ast_
 		add_jump_table_entry(jump_calculation_block->jump_table, case_stmt_cursor->constant_value.signed_int_value - offset, case_results.starting_block);
 
 		//The starting block is a successor to the root block
-		add_successor(jump_calculation_block, case_results.starting_block);
+		add_real_successor(jump_calculation_block, case_results.starting_block);
 
 		/**
 		 * If we don't have a terminal statement in the final block, we jump to the
@@ -10055,7 +9344,7 @@ static cfg_result_package_t visit_exhaustive_ollie_switch_statement(generic_ast_
 	 * If the end block has no predecessors, that means that every case statement ended in a return statement.
 	 * If this is the case, then the final block should not be the ending block, it should be the function ending block
 	 */
-	if(dynamic_array_is_empty(&(ending_block->predecessors)) == TRUE){
+	if(edge_set_empty(&(ending_block->predecessors)) == TRUE){
 		result_package.final_block = function_exit_block;
 	}
 
@@ -10145,7 +9434,7 @@ static inline void handle_raise_statement(basic_block_t* basic_block, generic_as
 	add_statement(basic_block, raise_statement);
 
 	//The successor of this block is now the function end block(remember that raise = ret)
-	add_successor(basic_block, function_exit_block);
+	add_real_successor(basic_block, function_exit_block);
 }
 
 
@@ -10420,17 +9709,26 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 
 			case AST_NODE_TYPE_DEFER_STMT:
-				//Grab a cursor here
+				/**
+				 * So long as this cursor is not null, we'll keep processing and adding
+				 * compound statements
+				 */
 				defer_statement_cursor = ast_cursor->first_child;
-
-				//So long as this cursor is not null, we'll keep processing and adding
-				//compound statements
 				while(defer_statement_cursor != NULL){
-					//Let the helper process this
+					/**
+					 * Let the helper process this. If it ends up being empty, we'll emit a dummy
+					 * block for this
+					 */
 					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
+					if(compound_statement_results.starting_block == NULL){
+						compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+						compound_statement_results.final_block = compound_statement_results.starting_block;
+					}
 
-					//The successor to the current block is this block
-					//If it's null then this is this block
+					/**
+					 * The successor to the current block is this block, unless it's NULL, in
+					 * which case this is the starting block
+					 */
 					if(starting_block == NULL){
 						starting_block = compound_statement_results.starting_block;
 					} else {
@@ -10552,14 +9850,20 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 				break;
 
 			case AST_NODE_TYPE_COMPOUND_STMT:
-				//We'll simply recall this function and let it handle it
+				/**
+				 * Call the compound statement converter and let it run. If this 
+				 * block is empty we just get out
+				 */
 				generic_results = visit_compound_statement(ast_cursor);
+				if(generic_results.starting_block == NULL){
+					break;
+				}
 
 				//Add in everything appropriately here
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					add_successor(current_block, generic_results.starting_block);
+					add_real_successor(current_block, generic_results.starting_block);
 				}
 
 				//Current is just the end of this block
@@ -10645,40 +9949,32 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 /**
  * A compound statement also acts as a sort of multiplexing block. It runs through all of it's statements, calling
  * the appropriate functions and making the appropriate additions
- *
- * We make use of the "direct successor" nodes as a direct path through the compound statement, if such a path exists
  */
 static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_node){
 	//Everything to begin with is completely null'd out
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 	//A generic results package that we can use in any of our processing
 	cfg_result_package_t generic_results;
-	//A defer statement cursor
-	generic_ast_node_t* defer_statement_cursor;
 
-	//The global starting block
+	/**
+	 * Hang onto a starting block and whatever our current block is
+	 */
 	basic_block_t* starting_block = NULL;
-	//The current block
 	basic_block_t* current_block = starting_block;
-	//A holder that we'll use for labeled statements
-	basic_block_t* labeled_block = NULL;
 
-	//Grab the initial node
-	generic_ast_node_t* compound_stmt_node = root_node;
-
-	//Grab our very first thing here
-	generic_ast_node_t* ast_cursor = compound_stmt_node->first_child;
-	
-	//Roll through the entire subtree
+	/**
+	 * Grab a cursor and start running through the entire
+	 * subtree processing as we go
+	 */
+	generic_ast_node_t* ast_cursor = root_node->first_child;
 	while(ast_cursor != NULL){
-		//Using switch/case for the efficiency gain
 		switch(ast_cursor->ast_node_type){
 			/**
 			 * A raise statement is what allows a function to effectively
 			 * throw errors. Raise statements are final and unrecoverable,
 			 * the function must and will exit when one of these is hit
 			 */
-			case AST_NODE_TYPE_RAISE_STMT:
+			case AST_NODE_TYPE_RAISE_STMT: {
 				//Allocate if we don't have
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -10700,8 +9996,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//We're done here - get out
 				return results;
+			}
 
-			case AST_NODE_TYPE_RET_STMT:
+			case AST_NODE_TYPE_RET_STMT: {
 				//If for whatever reason the block is null, we'll create it
 				if(starting_block == NULL){
 					//We assume that this only happens once
@@ -10727,8 +10024,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//We're completely done here
 				return results;
+			}
 		
-			case AST_NODE_TYPE_IF_STMT:
+			case AST_NODE_TYPE_IF_STMT: {
 				//We'll now enter the if statement
 				generic_results = visit_if_statement(ast_cursor);
 			
@@ -10743,8 +10041,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_WHILE_STMT:
+			case AST_NODE_TYPE_WHILE_STMT: {
 				//Visit the while statement
 				generic_results = visit_while_statement(ast_cursor);
 
@@ -10761,8 +10060,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 	
 				break;
+			}
 
-			case AST_NODE_TYPE_DO_WHILE_STMT:
+			case AST_NODE_TYPE_DO_WHILE_STMT: {
 				//Visit the statement
 				generic_results = visit_do_while_statement(ast_cursor);
 
@@ -10779,8 +10079,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_LOOP_STMT:
+			case AST_NODE_TYPE_LOOP_STMT: {
 				generic_results = visit_loop_statement(ast_cursor);
 
 				//We'll now add it in
@@ -10796,8 +10097,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_FOR_STMT:
+			case AST_NODE_TYPE_FOR_STMT: {
 				//First visit the statement
 				generic_results = visit_for_statement(ast_cursor);
 
@@ -10814,8 +10116,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_CONTINUE_STMT:
+			case AST_NODE_TYPE_CONTINUE_STMT: {
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					//We'll assume that this only happens once
@@ -10869,8 +10172,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_BREAK_STMT:
+			case AST_NODE_TYPE_BREAK_STMT: {
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -10919,18 +10223,24 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
-			case AST_NODE_TYPE_DEFER_STMT:
-				//Grab a cursor here
-				defer_statement_cursor = ast_cursor->first_child;
-
+			case AST_NODE_TYPE_DEFER_STMT: {
 				/**
 				 * So long as this cursor is not null, we'll keep processing and adding
 				 * compound statements
 				 */
+				generic_ast_node_t* defer_statement_cursor = ast_cursor->first_child;
 				while(defer_statement_cursor != NULL){
-					//Let the helper process this
+					/**
+					 * Let the helper process this. If it's completely empty then just emit
+					 * a dummy block
+					 */
 					cfg_result_package_t compound_statement_results = visit_compound_statement(defer_statement_cursor);
+					if(compound_statement_results.starting_block == NULL){
+						compound_statement_results.starting_block = basic_block_alloc_and_estimate();
+						compound_statement_results.final_block = compound_statement_results.starting_block;
+					}
 
 					/**
 					 * The successor to the current block is this block
@@ -10951,6 +10261,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				}
 
 				break;
+			}
 
 			/**
 			 * A label statement is special because it creates an entirely
@@ -10959,9 +10270,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 			 * Since a label statement will be jumped to, we need to have it 
 			 * as the start of a separate block
 			 */
-			case AST_NODE_TYPE_LABEL_STMT:
+			case AST_NODE_TYPE_LABEL_STMT: {
 				//Allocate the label statement as the current block
-				labeled_block = labeled_block_alloc(ast_cursor->optional_storage.label_record);
+				basic_block_t* labeled_block = labeled_block_alloc(ast_cursor->optional_storage.label_record);
 
 				//If the starting block is empty, then this is the starting block
 				if(starting_block == NULL){
@@ -10973,11 +10284,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block now is this labeled block
 				current_block = labeled_block;
-
 				break;
+			}
 
 			//A straight unconditional jump statement
-			case AST_NODE_TYPE_JUMP_STMT:
+			case AST_NODE_TYPE_JUMP_STMT: {
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -10992,11 +10303,11 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				 * be completely disconnected(at least on paper)
 				 */
 				current_block = basic_block_alloc_and_estimate();
-
 				break;
+			}
 
 			//A conditional user-defined jump works somewhat like a break
-			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT:
+			case AST_NODE_TYPE_CONDITIONAL_JUMP_STMT: {
 				//This really shouldn't happen, but it can't hurt
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -11018,10 +10329,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block now is said jumping to block
 				current_block = else_block;
-
 				break;
+			}
 
-			case AST_NODE_TYPE_SWITCH_STMT:
+			case AST_NODE_TYPE_SWITCH_STMT: {
 				//Visit the switch statement
 				generic_results = visit_switch_statement(ast_cursor);
 
@@ -11036,10 +10347,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block is always what's directly at the end
 				current_block = generic_results.final_block;
-
 				break;
+			}
 
-			case AST_NODE_TYPE_C_STYLE_SWITCH_STMT:
+			case AST_NODE_TYPE_C_STYLE_SWITCH_STMT: {
 				//Visit the switch statement
 				generic_results = visit_c_style_switch_statement(ast_cursor);
 
@@ -11054,27 +10365,32 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//The current block is always what's directly at the end
 				current_block = generic_results.final_block;
-
 				break;
+			}
 
-			case AST_NODE_TYPE_COMPOUND_STMT:
-				//We'll simply recall this function and let it handle it
+			case AST_NODE_TYPE_COMPOUND_STMT: {
+				/**
+				 * Call the compound statement helper. If it's empty
+				 * then ignore it
+				 */
 				generic_results = visit_compound_statement(ast_cursor);
+				if(generic_results.starting_block == NULL){
+					break;
+				}
 
 				//Add in everything appropriately here
 				if(starting_block == NULL){
 					starting_block = generic_results.starting_block;
 				} else {
-					add_successor(current_block, generic_results.starting_block);
+					add_real_successor(current_block, generic_results.starting_block);
 				}
 
 				//Current is just the end of this block
 				current_block = generic_results.final_block;
-
 				break;
-		
+			}
 
-			case AST_NODE_TYPE_ASM_INLINE_STMT:
+			case AST_NODE_TYPE_ASM_INLINE_STMT: {
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
@@ -11084,8 +10400,9 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				instruction_t* asm_inline = emit_asm_inline_instruction(ast_cursor, ast_cursor->line_number);
 				add_statement(current_block, asm_inline);
 				break;
+			}
 
-			case AST_NODE_TYPE_IDLE_STMT:
+			case AST_NODE_TYPE_IDLE_STMT: {
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
 					current_block = starting_block;
@@ -11095,9 +10412,10 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 				instruction_t* idle_statement = emit_idle_instruction(ast_cursor->line_number);
 				add_statement(current_block, idle_statement);
 				break;
+			}
 
 			//This means that we have some kind of expression statement
-			case AST_NODE_TYPE_EXPR_CHAIN:
+			case AST_NODE_TYPE_EXPR_CHAIN: {
 				//This could happen where we have nothing here
 				if(starting_block == NULL){
 					starting_block = basic_block_alloc_and_estimate();
@@ -11109,19 +10427,19 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 				//Update the end block
 				current_block = generic_results.final_block;
-				
 				break;
+			}
 				
-			//Shouldn't ever happen
-			default:
-				printf("Fatal internal compiler error: unreachable path hit in CFG\n");
-				exit(1);
+			default: {
+				trigger_ice_panic("Unreachable path hit in compound statement builder");
+			}
 		}
 
-		//If this is the exit block, it means that we returned through every control path
-		//in here and there is no point in moving forward. We'll simply return
+		/**
+		 * If this is the exit block, it means that we returned through every control path
+		 * in here and there is no point in moving forward. We'll simply return
+		 */
 		if(current_block == function_exit_block){
-			//Warn that we have unreachable code here
 			if(ast_cursor->next_sibling != NULL){
 				print_cfg_message(MESSAGE_TYPE_WARNING, "Unreachable code detected after segment that returns in all control paths", ast_cursor->next_sibling->line_number);
 			}
@@ -11131,16 +10449,6 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 
 		//Advance to the next child
 		ast_cursor = ast_cursor->next_sibling;
-	}
-
-	/**
-	 * Account for the case where we have a completely
-	 * empty compound statement. In this case we'll
-	 * just allocate a dummy block and get out
-	 */
-	if(starting_block == NULL){
-		starting_block = basic_block_alloc_and_estimate();
-		current_block = starting_block;
 	}
 
 	//If we make it down here - we still need to ensure that results are packaged properly
@@ -11168,13 +10476,18 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 	//For accurate error printing
 	u_int8_t is_main_function = strcmp(function_defined_in->func_name.string, "main") == 0 ? TRUE : FALSE;
 
-	//Run through all of the predecessors
+	/**
+	 * Run through all predecessors. At this point, we should only be dealing with real
+	 * predecessors so we don't need to worry about any analysis only edges
+	 */
 	for(int32_t i = 0; i < function_exit_block->predecessors.current_index; i++){
-		//Grab the predecessor out
-		basic_block_t* block = dynamic_array_get_at(&(function_exit_block->predecessors), i);
+		/**
+		 * Get the block from the predecessor
+		 */
+		basic_block_t* predecessor = get_edge_at_index(&(function_exit_block->predecessors), i)->block;
 
 		//If the exit statement is not a return statement or is null, we need to know what's happening here
-		if(does_block_end_in_function_termination_statement(block) == FALSE){
+		if(does_block_end_in_function_termination_statement(predecessor) == FALSE){
 			function_type_t* defined_in_signature = function_defined_in->signature->internal_types.function_type;
 
 			//If this isn't void, then we need to throw a warning
@@ -11214,13 +10527,13 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				instruction_t* assignment = emit_assignment_with_const_instruction(emit_temp_var(return_var_type), ret_const, 0);
 			
 				//This goes into the block
-				add_statement(block, assignment); 
+				add_statement(predecessor, assignment); 
 
 				//We'll now manually insert a ret 0 based on whatever the return type of the function is
 				instruction_t* return_instruction = emit_ret_instruction(assignment->operands.oir.assignee, 0);
 				
 				//We'll now add this at the very end of the block
-				add_statement(block, return_instruction);
+				add_statement(predecessor, return_instruction);
 
 			//Otherwise it is void, so we just emit a plain "ret"
 			} else {
@@ -11228,7 +10541,7 @@ static void determine_and_insert_return_statements(basic_block_t* function_exit_
 				instruction_t* return_instruction = emit_ret_instruction(NULL, 0);
 				
 				//We'll now add this at the very end of the block
-				add_statement(block, return_instruction);
+				add_statement(predecessor, return_instruction);
 			}
 		}
 	}
@@ -11262,11 +10575,11 @@ static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* us
 		instruction->if_block = jumping_to_label->block;
 
 		//Add this in as a successor
-		add_successor(instruction->block_contained_in, instruction->if_block);
+		add_real_successor(instruction->block_contained_in, instruction->if_block);
 
 		//If it was a branch, add the else block as a successor too
 		if(instruction->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-			add_successor(instruction->block_contained_in, instruction->else_block);
+			add_real_successor(instruction->block_contained_in, instruction->else_block);
 		}
 	}
 }
@@ -11491,53 +10804,64 @@ static void visit_function_definition(cfg_t* cfg, generic_ast_node_t* function_n
 	//Setup the function parameters. The helper does all of this
 	setup_function_parameters(func_record, function_starting_block, func_record->line_number); 
 
-	//We don't care about anything until we reach the compound statement
-	generic_ast_node_t* func_cursor = function_node->first_child;
+	/**
+	 * Following the parameter setup, we can emit the function's body. The body
+	 * of the function is always a compound statement node that is the first
+	 * child of the overall function node
+	 */
+	cfg_result_package_t compound_statement_results = visit_compound_statement(function_node->first_child);
+	basic_block_t* compound_statement_entry = compound_statement_results.starting_block;
+	basic_block_t* compound_statement_exit = compound_statement_results.final_block;
 
-	//It could be null, though it usually is not
-	if(func_cursor != NULL){
-		//Once we get here, we know that func cursor is the compound statement that we want
-		cfg_result_package_t compound_statement_results = visit_compound_statement(func_cursor);
-
-		//Holder for the exit block
-		basic_block_t* compound_statement_exit_block;
-
+	/**
+	 * If we have an actual function body, we can either merge the function start block with said
+	 * body *OR* we can emit a jump from the function start to the body. Whether or not we can depends
+	 * on the mergeability of the two blocks
+	 */
+	if(compound_statement_entry != NULL){
 		/**
 		 * If we are able to merge these two blocks, then we will. If we are not, then we will
 		 * emit a jump from the function's start to the compound statement start
 		 */
-		if(can_blocks_be_merged(function_starting_block, compound_statement_results.starting_block) == TRUE){
-			//Merge the two since we can
- 			compound_statement_exit_block = merge_blocks(function_starting_block, compound_statement_results.starting_block);
+		if(can_blocks_be_merged(function_starting_block, compound_statement_entry) == TRUE){
+			/**
+			 * Merge these two blocks together
+			 */
+			merge_blocks(function_starting_block, compound_statement_entry, variable_symtab, current_function_blocks);
 
 			/**
-			 * Due to the way that the merging works, we need to make sure that the reassignment
-			 * is valid. If it's just one big block, then the prior assignment above is actually
-			 * fine
+			 * If we merged these blocks together *AND* it turns out that the block was
+			 * just one body, we'll need to reassign the compound statement exit block
+			 * to be the function starting block, as the exit block will no longer
+			 * exist after the merge if it's one in the same with the compound statement
+			 * entry
 			 */
-			if(compound_statement_results.starting_block != compound_statement_results.final_block){
-				compound_statement_exit_block = compound_statement_results.final_block;
+			if(compound_statement_entry == compound_statement_exit){
+				compound_statement_exit = function_starting_block;
 			}
 
+		/**
+		 * We could not merge them, so jump from the function entry to the start block
+		 */
 		} else {
-			//Could not merge, just jump into this block
-			emit_jump(function_starting_block, compound_statement_results.starting_block);
-
-			//We can just straight assign here
-			compound_statement_exit_block = compound_statement_results.final_block;
+			emit_jump(function_starting_block, compound_statement_entry);
 		}
 
-		//If these two are not equal, we'll add a successor as the exit block
-		if(compound_statement_exit_block != function_exit_block){
-			add_successor(compound_statement_exit_block, function_exit_block);
+		/**
+		 * If this is not already the function exit block(which it may be if a function has a bunch
+		 * of return paths), then add the successor now
+		 */
+		if(compound_statement_exit != function_exit_block){
+			add_real_successor(compound_statement_exit, function_exit_block);
 		}
-	
+
 	/**
-	 * Otherwise, we have an empty function definition. If this is the case, then the only
-	 * predecessor to the exit block is the entry block
+	 * Otherwise, it was entirely empty. If this is the case, we'll just add the exit
+	 * block as a successor to the entry block. There is a separate process that will
+	 * insert return statements as needed
 	 */
 	} else {
-		add_successor(function_starting_block, function_exit_block);
+		add_real_successor(function_starting_block, function_exit_block);
 	}
 
 	//Add the start and end blocks to their respective arrays
@@ -12423,58 +11747,6 @@ static inline void get_function_inlining_order(function_symtab_t* function_symta
 
 
 /**
- * Remove a statement from a block. This is more like a soft deletion, we are
- * not actually deleting the statement, just moving it from once place to another
- */
-static void remove_statement(instruction_t* stmt){
-	//Grab the block out
-	basic_block_t* block = stmt->block_contained_in;
-
-	//We are losing a statement here
-	block->number_of_instructions--;
-
-	//If it's the leader statement, we'll just update the references
-	if(block->leader_statement == stmt){
-		//Special case - it's the only statement. We'll just delete it here
-		if(block->leader_statement->next_statement == NULL){
-			//Just remove it entirely
-			block->leader_statement = NULL;
-			block->exit_statement = NULL;
-
-		//Otherwise it is the leader, but we have more
-		} else {
-			//Update the reference
-			block->leader_statement = stmt->next_statement;
-			//Set this to NULL
-			block->leader_statement->previous_statement = NULL;
-		}
-
-	//What if it's the exit statement?
-	} else if(block->exit_statement == stmt){
-		instruction_t* previous = stmt->previous_statement;
-		//Nothing at the end
-		previous->next_statement = NULL;
-
-		//This now is the exit statement
-		block->exit_statement = previous;
-		
-	//Otherwise, we have one in the middle
-	} else {
-		//Regular middle deletion here
-		instruction_t* previous = stmt->previous_statement;
-		instruction_t* next = stmt->next_statement;
-		previous->next_statement = next;
-		next->previous_statement = previous;
-	}
-
-	//This statement is listless(for now)
-	stmt->previous_statement = NULL;
-	stmt->next_statement = NULL;
-	stmt->block_contained_in = NULL;
-}
-
-
-/**
  * Split a block, taking all statements beginning at start(exclusive) until
  * the end and putting them into the new block. We will also be updating all
  * of the successors as well. When we are done, the starting block will not
@@ -12519,7 +11791,7 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 		cursor = cursor->next_statement;
 
 		//Remove the holder from the original block
-		remove_statement(holder);
+		delete_statement(holder);
 
 		//Add it to the new block
 		add_statement(new_block, holder);
@@ -12531,8 +11803,8 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 	 * to achieve this. After we clone, wipe out the source block's successors
 	 * because it now has none
 	 */
-	new_block->successors = clone_dynamic_array((&source_block->successors));
-	clear_dynamic_array(&(source_block->successors));
+	new_block->successors = clone_edge_set(&(source_block->successors));
+	clear_edge_set(&(source_block->successors));
 
 	/**
 	 * Step 3: for the successors that we just cloned, we need to replace all
@@ -12540,15 +11812,15 @@ static inline void split_block_around_instruction(basic_block_t* source_block, b
 	 * to the new successor
 	 */
 	for(int32_t i = 0; i < new_block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(new_block->successors), i);
+		basic_block_t* successor = (get_edge_at_index(&(new_block->successors), i))->block;
 
-		for(int32_t j= 0; j < successor->predecessors.current_index; j++){
+		for(int32_t j = 0; j < successor->predecessors.current_index; j++){
 			/**
 			 * If this successor's predecessor is the old block, we need to 
 			 * make it the new block. Once we find it we can also break out
 			 */
-			if(successor->predecessors.internal_array[j] == source_block){
-				successor->predecessors.internal_array[j] = new_block;
+			if((get_edge_at_index(&(successor->predecessors), j))->block == source_block){
+				successor->predecessors.edges[j].block = new_block;
 				break;
 			}
 		}
@@ -14001,11 +13273,11 @@ static void clone_entire_function_for_inlining(instruction_t* original_call_stat
 		 * block
 		 */
 		for(int32_t i = 0; i < reference_block->successors.current_index; i++){
-			basic_block_t* old_successor = dynamic_array_get_at(&(reference_block->successors), i);
+			basic_block_t* old_successor = get_edge_at_index(&(reference_block->successors), i)->block;
 
 			//Get the new cloned block that it maps to and add that as a successor
 			basic_block_t* new_successor = old_successor->mapping_info.maps_to;
-			add_successor(new_block, new_successor);
+			add_real_successor(new_block, new_successor);
 		}
 	}
 }
@@ -14089,7 +13361,7 @@ static void inline_function_call(instruction_t* call_to_inline, variable_map_t* 
 	 * We no longer need this statement at all so remove it. It still
 	 * exists in memory for us to reference
 	 */
-	remove_statement(call_to_inline);
+	delete_statement(call_to_inline);
 
 	/**
 	 * If we do have something that we return, we'll need
@@ -14288,7 +13560,7 @@ static inline void convert_ast_to_cfg(cfg_t* cfg, front_end_results_package_t* r
 		 * Once we are fully complete, we will go through and search for any/all useless
 		 * statements to delete
 		 */
-		delete_all_unreachable_blocks(&(function->function_blocks));
+		delete_all_unreachable_blocks(function_entry, &(function->function_blocks));
 
 		/**
 		 * Let's now use the helper to compute all of the USE/DEF sets for each

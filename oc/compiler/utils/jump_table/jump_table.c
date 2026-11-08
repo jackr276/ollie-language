@@ -11,8 +11,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <sys/types.h>
-#include "../utils/basic_block.h"
-#include "../utils/dynamic_array/dynamic_array.h"
+#include "../basic_block/basic_block.h"
 
 //If at any point a block has an ID of (-1), that means that it is in error and can be dealt with as such
 static int32_t current_jump_block_id = 0;
