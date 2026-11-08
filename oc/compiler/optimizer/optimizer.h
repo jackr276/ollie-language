@@ -27,6 +27,11 @@ typedef enum {
 } simplification_type_t;
 
 /**
+ * TODO DOCUMENT
+ */
+simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks);
+
+/**
  * Invoke the ollie optimizer
  */
 cfg_t* optimize(cfg_t* cfg);

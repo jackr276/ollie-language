@@ -124,6 +124,19 @@ static inline void reset_marks_for_block(basic_block_t* block){
 
 
 /**
+ * Run through and reset all of the marks on every instruction in a given
+ * function. This is done in anticipation of us using the mark/sweep algorithm
+ * again after branch optimizations
+ */
+static inline void reset_all_marks(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
+		reset_marks_for_block(current);
+	}
+}
+
+
+/**
  * Does the given statement have block external side effects?
  *
  * What counts as a block external side effect:
@@ -155,23 +168,6 @@ static inline u_int8_t does_statement_have_block_external_side_effects(instructi
 
 			//Otherwise we are fine
 			return FALSE;
-	}
-}
-
-
-/**
- * Run through and reset all of the marks on every instruction in a given
- * function. This is done in anticipation of us using the mark/sweep algorithm
- * again after branch optimizations
- */
-static inline void reset_all_marks(dynamic_array_t* function_blocks){
-	//Run through every block
-	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		//Block to work on
-		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
-
-		//Let the helper do it
-		reset_marks_for_block(current);
 	}
 }
 
@@ -1713,6 +1709,8 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
  * 			merge i and j
  * 		if j is empty and ends in a conditional branch then
  * 			overwrite i's jump with a copy of j's branch
+ *
+ * TODO CAN WE MAKE THIS AN "AT LEAST ONE CHANGE" RETURN AS WELL???
  */
 static inline void clean(dynamic_array_t* current_function_blocks, basic_block_t* function_entry_block){
 	//Have we seen a change?
@@ -1764,6 +1762,35 @@ static inline void recompute_all_control_flow_relations_for_function(dynamic_arr
 	 * Now let the graph analyzer go through and recalculate everything else
 	 */
 	calculate_all_control_flow_relations_for_function(function_entry_block, function_exit_block, function_blocks);
+}
+
+
+/**
+ * TODO DOCUMENT
+ */
+simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+	/**
+	 * Step 1: reset the visited status for the entire function
+	 */
+	reset_visit_status_for_function(function_blocks);
+
+	/**
+	 * Step 2: reset the marks for all instructions and blocks
+	 */
+	reset_all_marks(function_blocks);
+
+	/**
+	 * Step 3: run the mark algorithm to mark all instructions that we consider to be important
+	 */
+	mark(function_blocks);
+
+	/**
+	 * Step 4: after everything has been marked we can run sweep. Sweep will return a simplification
+	 * type that tells us what level of simplification occurred in the sweep pass
+	 */
+	simplification_type_t sweep_result = sweep(function_blocks, function_entry);
+
+
 }
 
 
