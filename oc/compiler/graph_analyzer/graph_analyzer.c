@@ -1270,6 +1270,9 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 			dynamic_array_add(strongly_connected_component, member);
 		} while(member != block);
 
+		/**
+		 * Finally add this to our list of all strongly connected components
+		 */
 		dynamic_array_add(strongly_connected_components, strongly_connected_component);
 	}
 }
