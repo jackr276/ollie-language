@@ -271,8 +271,6 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 	/**
 	 * Now for every successor of this block, we need to perform
 	 * a DFS and do the parent bookkeeping
-	 *
-	 * TODO LOOK AT AFTER FIX
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
 		basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
@@ -344,8 +342,6 @@ static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** rever
 	/**
 	 * Now for every predecessor of this block, we need to perform
 	 * a reverse DFS and do the parent bookkeeping
-	 *
-	 * TODO LOOK AT AFTER FIX
 	 */
 	for(int32_t i = 0; i < block->predecessors.current_index; i++){
 		basic_block_t* predecessor = get_edge_at_index(&(block->predecessors), i)->block;
@@ -615,8 +611,6 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		/**
 		 * Compute the semidominators for each given block. Remember that semidominators
 		 * are the earliest DFS ancestor that can "almost" dominate a given block
-		 *
-		 * TODO LOOK AT AFTER CHANGES
 		 */
 		for(int32_t j = 0; j < working_block->predecessors.current_index; j++){
 			//Our semidominator candidate
@@ -868,8 +862,6 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 		 * Run through all of this block's successors to compute the semipostdominators.
 		 * Remember that a semipostdominator is a block that just barely does not postdominate
 		 * this one
-		 *
-		 * TODO LOOK AT AFTER FIX
 		 */
 		for(int32_t j = 0; j < working_block->successors.current_index; j++){
 			//Our semipostdominator candidate
@@ -1232,8 +1224,6 @@ static inline void remove_all_virtual_successor_and_predecessors(dynamic_array_t
 
 /**
  * A recursive post order simplifies the code, so it's what we'll use here
- *
- * TODO LOOK AT AGAIN AFTER CHANGES
  */
 static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basic_block_t* entry){
 	//If we've visited this one before, skip
@@ -1273,8 +1263,6 @@ void get_post_order_traversal(dynamic_array_t* function_blocks, basic_block_t* f
 /**
  * We'll go through in the regular traversal, pushing each node onto the stack in
  * postorder. 
- *
- * TODO LOOk AT AFTER CHANGES
  */
 static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, basic_block_t* block){
 	//If we've already seen this then we're done
@@ -1381,18 +1369,17 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block){
 
 /**
  * We will calculate:
- *  1.) Immediate dominators
+ *  1.) Immediate dominators using Lengauer-Tarjan
  *  2.) Dominator Trees
  *  3.) Dominance Frontiers
- *  ----- Virtual Edge Aware
- *  4.) Immediate Postdominators
- *  5.) Reverse Dominance frontiers
- *  ----- Remove virtual edges
+ *  4.) Identify potential infinitie execution with Tarjan SCCs
+ *  5.) Add analysis only edges on infinite SCCs
+ *  6.) Immediate Postdominators with analysis edges
+ *  7.) Reverse Dominance frontiers with analysis edgse
+ *  8.) Remove all virtual edges
  *
  * For every block in the given function. This externally facing API hides all of
  * the complexity behind it
- *
- * TODO SHOULD WE EVER DELETE FUNCTION EXIT BLOCKS IF THEYRE UNREACHABLE I SAY NO!!!
  *
  * NOTE: this function expects to be operating on a set of function blocks that has had unreachable blocks eliminated
  */

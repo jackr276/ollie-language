@@ -45,14 +45,19 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block);
 
 /**
  * We will calculate:
- *  1.) Immediate dominators
+ *  1.) Immediate dominators using Lengauer-Tarjan
  *  2.) Dominator Trees
  *  3.) Dominance Frontiers
- *  4.) Immediate Postdominators
- *  5.) Reverse Dominance frontiers
+ *  4.) Identify potential infinitie execution with Tarjan SCCs
+ *  5.) Add analysis only edges on infinite SCCs
+ *  6.) Immediate Postdominators with analysis edges
+ *  7.) Reverse Dominance frontiers with analysis edgse
+ *  8.) Remove all virtual edges
  *
  * For every block in the given function. This externally facing API hides all of
  * the complexity behind it
+ *
+ * NOTE: this function expects to be operating on a set of function blocks that has had unreachable blocks eliminated
  */
 void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, basic_block_t* function_exit_block, dynamic_array_t* function_blocks);
 
