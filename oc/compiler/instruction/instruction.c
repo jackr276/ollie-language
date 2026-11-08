@@ -10,8 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
-#include "../utils/basic_block.h"
-#include "../jump_table/jump_table.h"
+#include "../utils/basic_block/basic_block.h"
 #include "../utils/dynamic_string/dynamic_string.h"
 #include "../utils/constants.h"
 

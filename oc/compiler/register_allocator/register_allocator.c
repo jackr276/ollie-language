@@ -70,203 +70,16 @@ typedef enum {
 
 // ============================================================= Printing Utilities =====================================================
 /**
- * Print out the live ranges in a block
-*/
-static void print_block_with_live_ranges(basic_block_t* block){
-	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
-	}
-
-	//Switch here based on the type of block that we have
-	switch(block->block_type){
-		//Function entry blocks need extra printing
-		case BLOCK_TYPE_FUNC_ENTRY:
-			//Then the name
-			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
-			print_local_stack_data_area(&(block->function_defined_in->local_stack));
-			break;
-
-		//By default just print the name
-		default:
-			printf(".L%d:\n", block->block_id);
-			break;
-	}
-
-	//If we have some assigned variables, we will dislay those for debugging
-	if(block->assigned_variables.internal_array != NULL){
-		printf("Assigned: (");
-
-		for(u_int16_t i = 0; i < block->assigned_variables.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->assigned_variables), i));
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->assigned_variables.current_index - 1){
-				printf(", ");
-			}
-		}
-		printf(")\n");
-	}
-
-	//If we have some used variables, we will dislay those for debugging
-	if(block->used_before_definition.internal_array != NULL){
-		printf("Used: (");
-
-		for(u_int16_t i = 0; i < block->used_before_definition.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->used_before_definition), i));
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->used_before_definition.current_index - 1){
-				printf(", ");
-			}
-		}
-		printf(")\n");
-	}
-
-	//If we have some assigned variables, we will dislay those for debugging
-	if(block->live_in.internal_array != NULL){
-		printf("LIVE IN: (");
-
-		for(u_int16_t i = 0; i < block->live_in.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->live_in), i));
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->live_in.current_index - 1){
-				printf(", ");
-			}
-		}
-		printf(")\n");
-	}
-
-	//If we have some assigned variables, we will dislay those for debugging
-	if(block->live_out.internal_array != NULL){
-		printf("LIVE OUT: (");
-
-		for(u_int16_t i = 0; i < block->live_out.current_index; i++){
-			print_live_range(stdout, dynamic_array_get_at(&(block->live_out), i));
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->live_out.current_index - 1){
-				printf(", ");
-			}
-		}
-		printf(")\n");
-	}
-
-	if(block->predecessors.internal_array != NULL){
-		printf("Predecessors: (");
-		for(u_int16_t i = 0; i < block->predecessors.current_index; i++){
-			basic_block_t* predecessor = dynamic_array_get_at(&(block->predecessors), i);
-
-			printf(".L%d", predecessor->block_id);
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->predecessors.current_index - 1){
-				printf(", ");
-			}
-		}
-
-		printf(")\n");
-	}
-
-	if(block->successors.internal_array != NULL){
-		printf("Successors: (");
-		for(u_int16_t i = 0; i < block->successors.current_index; i++){
-			basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
-
-			printf(".L%d", successor->block_id);
-
-			//If it isn't the very last one, we need a comma
-			if(i != block->successors.current_index - 1){
-				printf(", ");
-			}
-		}
-
-		printf(")\n");
-	}
-
-	//Now grab a cursor and print out every statement that we 
-	//have
-	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
-	while(cursor != NULL){
-		//We actually no longer need these
-		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(stdout, cursor, PRINTING_LIVE_RANGES);
-		}
-
-		//Move along to the next one
-		cursor = cursor->next_statement;
-	}
-
-	//For spacing
-	printf("\n");
-}
-
-
-/**
  * Run through using the direct successor strategy and print all ordered blocks.
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_function_blocks_with_live_ranges(basic_block_t* function_entry){
-	//Extract the given function block
+static inline void print_blocks_with_live_ranges(FILE* fl, basic_block_t* function_entry){
 	basic_block_t* current = function_entry;
-
-	//So long as this one isn't NULL
 	while(current != NULL){
-		//Print it
-		print_block_with_live_ranges(current);
-		//Advance to the direct successor
+		print_block_with_live_ranges(fl, current);
 		current = current->direct_successor;
 	}
-}
-
-
-/**
- * Print instructions with registers
-*/
-static void print_block_with_registers(basic_block_t* block){
-	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
-	}
-
-	//Switch here based on the type of block that we have
-	switch(block->block_type){
-		//Function entry blocks need extra printing
-		case BLOCK_TYPE_FUNC_ENTRY:
-			//Then the name
-			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
-			print_local_stack_data_area(&(block->function_defined_in->local_stack));
-			break;
-
-		//By default just print the name
-		default:
-			printf(".L%d:\n", block->block_id);
-			break;
-	}
-
-	//Now grab a cursor and print out every statement that we 
-	//have
-	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
-	while(cursor != NULL){
-		//We actually no longer need these
-		if(cursor->instruction_type != PHI_FUNCTION){
-			print_instruction(stdout, cursor, PRINTING_REGISTERS);
-		}
-
-		//Move along to the next one
-		cursor = cursor->next_statement;
-	}
-
-	//For spacing
-	printf("\n");
 }
 
 
@@ -274,26 +87,24 @@ static void print_block_with_registers(basic_block_t* block){
  * Run through using the direct successor strategy and print all
  * ordered blocks with their registers after allocation
  */
-static void print_blocks_with_registers(cfg_t* cfg){
-	//Run through all of the functions individually
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the given function block
+static inline void print_blocks_with_registers(FILE* fl, cfg_t* cfg){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		/**
+		 * The function should be ordered so run through it
+		 * in so called "direct successor" order
+		 */
 		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-
-		//So long as this one isn't NULL
 		while(current != NULL){
-			//Print it
-			print_block_with_registers(current);
-			//Advance to the direct successor
+			print_block_with_registers(fl, current);
 			current = current->direct_successor;
 		}
 	}
 
-	//Now we'll print all global variables
-	print_all_global_variables(stdout, &(cfg->global_variables));
-
-	//Print all of the local constants too
-	print_local_constants(stdout, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+	/**
+	 * Now print out all global variables and local constants at the very end
+	 */
+	print_all_global_variables(fl, &(cfg->global_variables));
+	print_local_constants(fl, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 }
 
 
@@ -301,91 +112,88 @@ static void print_blocks_with_registers(cfg_t* cfg){
  * Print all live ranges that we have. This includes our general purpose
  * live ranges and our SSE live ranges
  */
-static void print_all_live_ranges(dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
-	printf("============= All Live Ranges ==============\n");
-	printf("=============== GENERAL PURPOSE ============\n");
-	printf("There are %d general purpose live ranges\n", general_purpose_live_ranges->current_index);
-	//For each live range in the array
-	for(u_int16_t i = 0; i < general_purpose_live_ranges->current_index; i++){
-		//Grab it out
+static void print_all_live_ranges(FILE* fl, dynamic_array_t* general_purpose_live_ranges, dynamic_array_t* sse_live_ranges){
+	fprintf(fl, "============= All Live Ranges ==============\n");
+	fprintf(fl, "=============== GENERAL PURPOSE ============\n");
+	fprintf(fl, "There are %d general purpose live ranges\n", general_purpose_live_ranges->current_index);
+	for(int32_t i = 0; i < general_purpose_live_ranges->current_index; i++){
+		/**
+		 * Get and print out the live range first
+		 */
 		live_range_t* current = dynamic_array_get_at(general_purpose_live_ranges, i);
+		fprintf(fl, "LR%d: {", current->live_range_id);
 
-		//We'll print out it's id first
-		printf("LR%d: {", current->live_range_id);
-
-		//Now we'll run through and print out all of its variables
-		for(u_int16_t j = 0; j < current->variables.current_index; j++){
-			//Print the variable name
-			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
+		/**
+		 * Now print out all variables who are members of this live range
+		 */
+		for(int32_t j = 0; j < current->variables.current_index; j++){
+			print_variable(fl, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
 			if(j != current->variables.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
 
-		printf("} Neighbors: {");
-
-		//Now we'll print out all of it's neighbors
-		for(u_int16_t k = 0; k < current->neighbors.current_index; k++){
+		/**
+		 * Now run through and print out all of its neighbors
+		 */
+		fprintf(fl, "} Neighbors: {");
+		for(int32_t k = 0; k < current->neighbors.current_index; k++){
 			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
-			printf("LR%d", neighbor->live_range_id);
+			fprintf(fl, "LR%d", neighbor->live_range_id);
  
 			//Print a comma if appropriate
 			if(k != current->neighbors.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
-
 		}
 		
-		//And we'll close it out
-		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
+		fprintf(fl, "}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
-	printf("=============== GENERAL PURPOSE ============\n");
+	fprintf(fl, "=============== GENERAL PURPOSE ============\n");
 
-
-	//Repeat for SSE
-	printf("==================== SSE ===================\n");
-	printf("There are %d SSE live ranges\n", sse_live_ranges->current_index);
-	//For each live range in the array
-	for(u_int16_t i = 0; i < sse_live_ranges->current_index; i++){
-		//Grab it out
+	fprintf(fl, "==================== SSE ===================\n");
+	fprintf(fl, "There are %d SSE live ranges\n", sse_live_ranges->current_index);
+	for(int32_t i = 0; i < sse_live_ranges->current_index; i++){
+		/**
+		 * Get and print the LR out first
+		 */
 		live_range_t* current = dynamic_array_get_at(sse_live_ranges, i);
+		fprintf(fl, "LR%d: {", current->live_range_id);
 
-		//We'll print out it's id first
-		printf("LR%d: {", current->live_range_id);
-
-		//Now we'll run through and print out all of its variables
-		for(u_int16_t j = 0; j < current->variables.current_index; j++){
-			//Print the variable name
-			print_variable(stdout, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
+		/**
+		 * Print all variables that are members of this live range
+		 */
+		for(int32_t j = 0; j < current->variables.current_index; j++){
+			print_variable(fl, dynamic_array_get_at(&(current->variables), j), PRINTING_VAR_BLOCK_HEADER);
 
 			//Print a comma if appropriate
 			if(j != current->variables.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 		}
 
-		printf("} Neighbors: {");
-
-		//Now we'll print out all of it's neighbors
-		for(u_int16_t k = 0; k < current->neighbors.current_index; k++){
+		/**
+		 * Now print out all of its neighbors
+		 */
+		fprintf(fl, "} Neighbors: {");
+		for(int32_t k = 0; k < current->neighbors.current_index; k++){
 			live_range_t* neighbor = dynamic_array_get_at(&(current->neighbors), k);
-			printf("LR%d", neighbor->live_range_id);
+			fprintf(fl, "LR%d", neighbor->live_range_id);
  
 			//Print a comma if appropriate
 			if(k != current->neighbors.current_index - 1){
-				printf(", ");
+				fprintf(fl, ", ");
 			}
 
 		}
 		
-		//And we'll close it out
-		printf("}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
+		fprintf(fl, "}\tSpill Cost: %d\tDegree: %d\n", current->spill_cost, current->degree);
 	}
 
-	printf("==================== SSE ===================\n");
-	printf("============= All Live Ranges ==============\n");
+	fprintf(fl, "==================== SSE ===================\n");
+	fprintf(fl, "============= All Live Ranges ==============\n");
 }
 
 
@@ -396,7 +204,7 @@ static void print_live_range_array(dynamic_array_t* live_ranges){
 	printf("{");
 
 	//Print everything out
-	for(u_int16_t i = 0; i < live_ranges->current_index; i++){
+	for(int32_t i = 0; i < live_ranges->current_index; i++){
 		live_range_t* range = dynamic_array_get_at(live_ranges, i);
 
 		printf("LR%d(%d)", range->live_range_id, range->spill_cost);
@@ -417,7 +225,7 @@ static void print_live_range_array(dynamic_array_t* live_ranges){
  * match, then NULL will be returned
  */
 static inline stack_region_t* get_stack_region_for_live_range(stack_data_area_t* data_area, live_range_t* lr){
-	for(u_int16_t i = 0; i < data_area->stack_regions.current_index; i++){
+	for(int32_t i = 0; i < data_area->stack_regions.current_index; i++){
 		//Extract it
 		stack_region_t* region = dynamic_array_get_at(&(data_area->stack_regions), i);
 
@@ -1283,10 +1091,12 @@ static void calculate_live_range_liveness_sets(dynamic_array_t* function_blocks,
 			//Set live out to be a new array
 			current->live_out = dynamic_array_alloc();
 
-			//Run through all of the successors
+			/**
+			 * Run through all successors. We should only have real successors
+			 * at this point so we do not have to deal wtih filtering by edge type
+			 */
 			for(int32_t k = 0; k < current->successors.current_index; k++){
-				//Grab the successor out
-				basic_block_t* successor = dynamic_array_get_at(&(current->successors), k);
+				basic_block_t* successor = get_edge_at_index(&(current->successors), k)->block;
 
 				//Add everything in his live_in set into the live_out set
 				for(int32_t l = 0; l < successor->live_in.current_index; l++){
@@ -4377,12 +4187,12 @@ static void insert_callee_saving_logic(basic_block_t* function_entry, basic_bloc
 	 * Now that we've added all of the callee saving logic at the function entry, we'll need to
 	 * go through and add it at the exit(s) as well. Note that we're given the function exit block
 	 * as an input value here
+	 *
+	 * NOTE: we only have real predecessors here, so we don't need to worry about filtering by edge type
 	 */
-	
-	//For each and every predecessor of the function exit block
-	for(u_int16_t i = 0; i < function_exit->predecessors.current_index; i++){
+	for(int32_t i = 0; i < function_exit->predecessors.current_index; i++){
 		//Grab the given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
+		basic_block_t* predecessor = get_edge_at_index(&(function_exit->predecessors), i)->block;
 
 		/**
 		 * If we have a non 16-byte aligned amount, we've already emitted a dummy push at the
@@ -4609,10 +4419,13 @@ static inline void finalize_local_and_parameter_stack_logic(cfg_t* cfg, basic_bl
 			insert_instruction_before_given(stack_allocation, after_stack_allocation);
 		}
 		
-		//Now we need to go through every exit block and emit the stack deallocation
+		/**
+		 * Run through every predecessor of the exit block to give them a stack deallocation. Note
+		 * that by this point, we do not have any virtual successors, so that's not something that we
+		 * need to be concerned by
+		 */
 		for(int32_t i = 0; i < function_exit->predecessors.current_index; i++){
-			//Get the predecessor out
-			basic_block_t* predecessor = dynamic_array_get_at(&(function_exit->predecessors), i);
+			basic_block_t* predecessor = get_edge_at_index(&(function_exit->predecessors), i)->block;
 
 			/**
 			 * We need to get this deallocation to happen right after we're done returning/callee-saving
@@ -4724,7 +4537,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= Before Liveness ==============\n");
-		print_function_blocks_with_live_ranges(function_entry);
+		print_blocks_with_live_ranges(stdout, function_entry);
 		printf("============= Before Liveness ==============\n");
 	}
 
@@ -4744,7 +4557,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("=============== After Cost Update ============\n");
-		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+		print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 		printf("=============== After Cost Update ============\n");
 	}
 
@@ -4766,7 +4579,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//Show our IR's here
 	if(print_irs == TRUE){
 		//Show our live ranges once again
-		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+		print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 	}
 
 
@@ -4792,7 +4605,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	//If we are printing these now is the time to display
 	if(print_irs == TRUE){
 		printf("============= After Live Range Determination ==============\n");
-		print_function_blocks_with_live_ranges(function_entry);
+		print_blocks_with_live_ranges(stdout, function_entry);
 		printf("============= After Live Range Determination ==============\n");
 	}
 	
@@ -4932,9 +4745,9 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 	//Show our live ranges once again if requested
 	if(print_irs == TRUE){
-		print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+		print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 		printf("================= After Coalescing =======================\n");
-		print_function_blocks_with_live_ranges(function_entry);
+		print_blocks_with_live_ranges(stdout, function_entry);
 		printf("================= After Coalescing =======================\n");
 	}
 
@@ -4963,7 +4776,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 	while(colorable_general_purpose == FALSE){
 		if(print_irs == TRUE){
 			printf("============ After Spilling =============== \n");
-			print_function_blocks_with_live_ranges(function_entry);
+			print_blocks_with_live_ranges(stdout, function_entry);
 			printf("============ After Spilling =============== \n");
 		}
 
@@ -5005,9 +4818,9 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 		//Show our live ranges once again if requested
 		if(print_irs == TRUE){
-			print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+			print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 			printf("================= After Interference =======================\n");
-			print_function_blocks_with_live_ranges(function_entry);
+			print_blocks_with_live_ranges(stdout, function_entry);
 			printf("================= After Interference =======================\n");
 		}
 
@@ -5042,7 +4855,7 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 			//Dev printing only
 			if(print_irs == TRUE){
 				printf("============ After Spilling =============== \n");
-				print_function_blocks_with_live_ranges(function_entry);
+				print_blocks_with_live_ranges(stdout, function_entry);
 				printf("============ After Spilling =============== \n");
 			}
 
@@ -5082,9 +4895,9 @@ static void allocate_registers_for_function(compiler_options_t* options, cfg_t* 
 
 			//Show our live ranges once again if requested
 			if(print_irs == TRUE){
-				print_all_live_ranges(&general_purpose_live_ranges, &sse_live_ranges);
+				print_all_live_ranges(stdout, &general_purpose_live_ranges, &sse_live_ranges);
 				printf("================= After Interference =======================\n");
-				print_function_blocks_with_live_ranges(function_entry);
+				print_blocks_with_live_ranges(stdout, function_entry);
 				printf("================= After Interference =======================\n");
 			}
 
@@ -5171,7 +4984,7 @@ void allocate_all_registers(compiler_options_t* options, cfg_t* cfg){
 	//One final print post allocation
 	if(print_irs == TRUE || print_post_allocation == TRUE){
 		printf("================= After Allocation =======================\n");
-		print_blocks_with_registers(cfg);
+		print_blocks_with_registers(stdout, cfg);
 		printf("================= After Allocation =======================\n");
 	}
 }

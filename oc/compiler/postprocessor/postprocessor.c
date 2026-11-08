@@ -33,82 +33,6 @@ static heap_queue_t bfs_queue;
 
 
 /**
- * Combine two blocks into one. This is different than other combine methods,
- * because post register-allocation, we do not really care about anything like
- * used variables, dominance relations, etc.
- *
- * Combine B into A
- *
- * After this happens, B no longer exists
- */
-static instruction_t* combine_blocks(basic_block_t* a, basic_block_t* b){
-	//What if a was never even assigned?
-	if(a->exit_statement == NULL){
-		a->leader_statement = b->leader_statement;
-		a->exit_statement = b->exit_statement;
-
-	//If the leader statement is NULL - we really don't need to do anything. If it's not however, we
-	//will need to add everything in
-	} else if(b->leader_statement != NULL){
-		//Otherwise it's a "true merge"
-		//The leader statement in b will be connected to a's tail
-		a->exit_statement->next_statement = b->leader_statement;
-		//Connect backwards too
-		b->leader_statement->previous_statement = a->exit_statement;
-		//Now once they're connected we'll set a's exit to be b's exit
-		a->exit_statement = b->exit_statement;
-	}
-
-	//In our case for "combine" - we know for a fact that "b" only had one predecessor - which is "a"
-	//As such, we won't even bother looking at the predecessors
-
-	//Now merge successors
-	for(u_int16_t i = 0; i < b->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(b->successors), i);
-
-		//Add b's successors to be a's successors
-		add_successor_only(a, successor);
-
-		//Now for each of the predecessors that equals b, it needs to now point to A
-		for(u_int16_t j = 0; j < successor->predecessors.current_index; j++){
-			//If it's pointing to b, it needs to be updated
-			if(successor->predecessors.internal_array[j] == b){
-				//Update it to now be correct
-				successor->predecessors.internal_array[j] = a;
-			}
-		}
-	}
-
-	//Copy over the block type and terminal type
-	if(a->block_type != BLOCK_TYPE_FUNC_ENTRY){
-		a->block_type = b->block_type;
-	}
-
-	//If b is a switch statment start block, we'll copy the jump table
-	if(b->jump_table != NULL){
-		a->jump_table = b->jump_table;
-	}
-
-	//For each statement in b, all of it's old statements are now "defined" in a
-	instruction_t* b_stmt = b->leader_statement;
-
-	//Modify these "block contained in" references to be A
-	while(b_stmt != NULL){
-		b_stmt->block_contained_in = a;
-
-		//Push it up
-		b_stmt = b_stmt->next_statement;
-	}
-
-	//Delete b from the function blocks
-	dynamic_array_delete(&(b->function_defined_in->function_blocks), b);
-
-	//Always return b's leader
-	return b->leader_statement;
-}
-
-
-/**
  * A helper function to determine if something is or is not
  * a jump
  */
@@ -319,28 +243,28 @@ static void perform_instruction_level_remediations(basic_block_t* function_entry
  */
 static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t* replacement){
 	//Use a clone since we are mutating
-	dynamic_array_t clone = clone_dynamic_array(&(empty_block->predecessors));
+	edge_set_t clone = clone_edge_set(&(empty_block->predecessors));
 
-	//For everything in the predecessor set of the empty block
-	for(u_int16_t _ = 0; _ < clone.current_index; _++){
-		//Grab a given predecessor out
-		basic_block_t* predecessor = dynamic_array_get_at(&clone, _);
+	/**
+	 * Run through everything in the predecessor set of the empty block. We only need
+	 * to worry about real predecessors at this point in the process
+	 */
+	for(int32_t i = 0; i < clone.current_index; i++){
+		basic_block_t* predecessor = get_edge_at_index(&clone, i)->block;
 
 		//The empty block is no longer a successor of this predecessor
 		delete_successor(predecessor, empty_block);
-		
-		//Run through the jump table and replace all of those targets as well. Most of the time,
-		//we won't hit this because num_nodes will be 0. In the times that we do though, this is
-		//what will ensure that switch statements are not corrupted by the optimization process
-		if(predecessor->jump_table != NULL){
-			for(u_int16_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
-				//If this equals the other node, we'll need to replace it
-				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
-					//This now points to the replacement
-					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
 
-					//The replacement is now a successor of this predecessor
-					add_successor(predecessor, replacement);
+		/**
+		 * Run through the jump table and replace all of those targets as well. Most of the time,
+		 * we won't hit this because num_nodes will be 0. In the times that we do though, this is
+		 * what will ensure that switch statements are not corrupted by the optimization process
+		 */
+		if(predecessor->jump_table != NULL){
+			for(int32_t idx = 0; idx < predecessor->jump_table->num_nodes; idx++){
+				if(dynamic_array_get_at(&(predecessor->jump_table->nodes), idx) == empty_block){
+					dynamic_array_set_at(&(predecessor->jump_table->nodes), replacement, idx);
+					add_real_successor(predecessor, replacement);
 				}
 			}
 		}
@@ -373,7 +297,7 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 					if(current_statement->if_block == empty_block){
 						current_statement->if_block = replacement;
 						//This is now a successor
-						add_successor(predecessor, replacement);
+						add_real_successor(predecessor, replacement);
 					}
 
 					break;
@@ -392,8 +316,8 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 	//The empty block now no longer has the replacement as a successor
 	delete_successor(empty_block, replacement);
 
-	//Destroy the clone array
-	dynamic_array_dealloc(&clone);
+	//Destroy the clone set
+	edge_set_dealloc(&clone);
 }
 
 
@@ -747,19 +671,16 @@ static void copy_block(basic_block_t* destination, basic_block_t* source){
  * 				remove j as a successor to i
  * 				copy the ret from j to it's predecessor i
  */
-static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
+static u_int8_t branch_reduce_postprocess(dynamic_array_t* function_blocks, dynamic_array_t* postorder){
 	//Have we seen a change? By default we assume not
 	u_int8_t changed = FALSE;
-
-	//Our current block
-	basic_block_t* current;
 
 	/**
 	 * For each block in postorder
 	 */
 	for(int32_t _ = 0; _ < postorder->current_index; _++){
 		//Grab the current block out
-		current = dynamic_array_get_at(postorder, _);
+		basic_block_t* current = dynamic_array_get_at(postorder, _);
 
 		/**
 		 * If block i ends in a jump to j then..
@@ -840,8 +761,12 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
 					//Decouple these as predecessors/successors
 					delete_successor(current, jumping_to_block);
 
-					//Combine the two
-					combine_blocks(current, jumping_to_block);
+					/**
+					 * Use the merge block utility to combine the two. We pass NULL in for
+					 * the variable symtab because we do not need to update the "block declared in"
+					 * at this point in the process for any symtab variables caught up in the merge
+					 */
+					merge_blocks(current, jumping_to_block, NULL, function_blocks);
 
 					//Counts as a change 
 					changed = TRUE;
@@ -875,7 +800,7 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* postorder){
 
 					//Add the successor of the jumping to block(which will be the function end block) to
 					//the current block
-					add_successor(current, dynamic_array_get_at(&(jumping_to_block->successors), 0));
+					add_real_successor(current, get_edge_at_index(&(jumping_to_block->successors), 0)->block);
 
 					//This is a change
 					changed = TRUE;
@@ -923,7 +848,7 @@ static void condense(dynamic_array_t* function_blocks, basic_block_t* function_e
 		get_post_order_traversal(function_blocks, function_entry_block, &postorder);
 
 		//Call onepass() for the reduction
-		changed = branch_reduce_postprocess(&postorder);
+		changed = branch_reduce_postprocess(function_blocks, &postorder);
 		
 	//We keep going so long as branch_reduce changes something 
 	} while(changed == TRUE);
@@ -1011,13 +936,16 @@ static void reorder_blocks(basic_block_t* function_entry_block){
 			enqueue(&bfs_queue, direct_end_jump);
 		}
 
-		//Now we'll go through each of the successors in this node
+		/**
+		 * Run through all successors. At this point in the process only
+		 * real successors exist, so we don't need to worry about virtual edges
+		 */
 		for(int32_t idx = 0; idx < current->successors.current_index; idx++){
 			//Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
 			//want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
 
 			//Grab the successor
-			basic_block_t* successor = dynamic_array_get_at(&(current->successors), idx);
+			basic_block_t* successor = get_edge_at_index(&(current->successors), idx)->block;
 
 			//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
 			if(successor == direct_end_jump){

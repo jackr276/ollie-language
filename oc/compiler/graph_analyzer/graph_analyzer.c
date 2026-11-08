@@ -5,7 +5,6 @@
  */
 
 #include "graph_analyzer.h"
-#include <stdint.h>
 #include <sys/types.h>
 
 /**
@@ -19,14 +18,179 @@
  * that the blocks inside of the array are really the correct blocks
  */
 static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
-	//Run through all of the blocks
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
-
-		//Flag it as false
 		current->visited = FALSE;
 	}
+}
+
+
+/**
+ * This simple helper will go through and print SCCs for debugging
+ */
+static inline void print_strongly_connected_components(FILE* fl, dynamic_array_t* strongly_connected_components){
+	fprintf(fl, "===================== Strongly Connected Components =========================\n");
+	for(int32_t i = 0; i < strongly_connected_components->current_index; i++){
+		dynamic_array_t* scc = dynamic_array_get_at(strongly_connected_components, i);
+
+		fprintf(fl, "{");
+		for(int32_t j = 0; j < scc->current_index; j++){
+			basic_block_t* block = dynamic_array_get_at(scc, j);
+			if(block->block_type != BLOCK_TYPE_FUNC_ENTRY){
+				fprintf(fl, ".L%d", block->block_id);
+			} else {
+				fprintf(fl, "%s", block->function_defined_in->func_name.string);
+			}
+
+			if(j != scc->current_index - 1){
+				fprintf(fl, ", ");
+			}
+		}
+		fprintf(fl, "}\n");
+	}
+
+	fprintf(fl, "===================== Strongly Connected Components =========================\n");
+}
+
+
+/**
+ * Perform a DFS reachability traversal based on this block
+ * We use the "visited" flag to represent reachable/unreachable
+ *
+ * This function is recursive
+ *
+ * NOTE: This function should only be called using the REAL CFG. It does
+ * not distinguish virtual edges
+ */
+static void dfs_flag_block_reachability_rec(basic_block_t* block){
+	/**
+	 * This has been dealt with so we do not need to reconsider it
+	 */
+	if(block->visited == TRUE){
+		return;
+	}
+
+	//It is reachable
+	block->visited = TRUE;
+
+	/**
+	 * For each of the successors recursively flag as reachable
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		dfs_flag_block_reachability_rec(get_edge_at_index(&(block->successors), i)->block);
+	}
+}
+
+
+/**
+ * Delete all blocks that are not reachable from the function entry blocks. To do this, 
+ * we will perform a DFS from the function block and flag every block that can be reached. 
+ * Follwoing that, if we see that there are any blocks with a value of (-1), then we delete
+ * them because they cannot be reached from the function entry
+ *
+ * Here we will hijack the visited flag and use it to mean reachable(TRUE) or unreachable(FALSE)
+ *
+ * Algorithm remove unreachable blocks:
+ * 	for each block B:
+ * 		reset the visited flag to false
+ *
+ * 	perform DFS reachability starting at the function entry(see above)
+ *
+ * 	for each block B in the function:
+ * 		if B is not flagged as reachable then:
+ * 			delete B
+ *
+ * This function returns TRUE if there was at least one unreachable block found
+ *
+ * NOTE: we should only be deleting unreachable blocks in the REAL cfg. The virtual CFG should
+ * not be used for this
+ */
+u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
+	/**
+	 * Did we do any block deletion? By default assume that we did not
+	 */
+	u_int8_t deleted_blocks = FALSE;
+
+	/**
+	 * For each block reset visited flag to false
+	 */
+	reset_visit_status_for_function(function_blocks);
+
+	/**
+	 * Now invoke the flagger to go through, starting at the function entry,
+	 * and flag everything that we are able to reach
+	 */
+	dfs_flag_block_reachability_rec(function_entry);
+
+	//We know the maximum size of how many we'd have to delete so allocate here
+	basic_block_t* to_be_deleted[function_blocks->current_index];
+	u_int32_t to_be_deleted_next_index = 0;
+
+	/**
+	 * Now run through our blocks again. Anything that is not flagged
+	 * as reachable is going to be deleted
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = function_blocks->internal_array[i];
+
+		/**
+		 * Throw it into the temp holding array
+		 */
+		if(block->visited == FALSE){
+			to_be_deleted[to_be_deleted_next_index] = block;
+			to_be_deleted_next_index++;
+
+			/**
+			 * Flag that we did find at least one block to remove
+			 */
+			deleted_blocks = TRUE;
+		}
+	}
+
+	/**
+	 * Now we can go through and delete everything that we need to
+	 * from the temporary holding array
+	 *
+	 * For each block that we do delete, we'll need to also remove
+	 * it from the successor/predecessor lists of all blocks that 
+	 * it is related to
+	 */
+	for(u_int32_t i = 0; i < to_be_deleted_next_index; i++){
+		//Extract the block
+		basic_block_t* target = to_be_deleted[i];
+
+		/**
+		 * For each predecessor of the target, remove the target as
+		 * a successor
+		 */
+		for(int32_t j = 0; j < target->predecessors.current_index; j++){
+			basic_block_t* predecessor = target->predecessors.edges[j].block;
+			delete_successor_only(predecessor, target);
+		}
+
+		/**
+		 * For each successor of the target, remove the target 
+		 * as a predecessor
+		 */
+		for(int32_t j = 0; j < target->successors.current_index; j++){
+			basic_block_t* successor = target->successors.edges[j].block;
+			delete_predecessor_only(successor, target);
+		}
+
+		/**
+		 * So long as this is *NOT* a function exit block, we will delete it.
+		 * We want our function exit block to remain because we'll use it as our synethetic
+		 * exit for infinite loop detection
+		 */
+		if(target->block_type != BLOCK_TYPE_FUNC_EXIT){
+			dynamic_array_delete(function_blocks, target);
+		}
+	}
+
+	/**
+	 * Give back the boolean flag determining whether or not we deleted anything
+	 */
+	return deleted_blocks;
 }
 
 
@@ -136,7 +300,7 @@ static void dfs_number_block(basic_block_t* block, basic_block_t** dfs_number_to
 	 * a DFS and do the parent bookkeeping
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
-		basic_block_t* successor = dynamic_array_get_at(&(block->successors), i);
+		basic_block_t* successor = get_edge_at_index(&(block->successors), i)->block;
 
 		/**
 		 * If our successor does not yet have a DFS number, then we'll need to 
@@ -207,7 +371,7 @@ static void reverse_dfs_number_block(basic_block_t* block, basic_block_t** rever
 	 * a reverse DFS and do the parent bookkeeping
 	 */
 	for(int32_t i = 0; i < block->predecessors.current_index; i++){
-		basic_block_t* predecessor = dynamic_array_get_at(&(block->predecessors), i);
+		basic_block_t* predecessor = get_edge_at_index(&(block->predecessors), i)->block;
 
 		/**
 		 * If our predecessor does not yet have a DFS number, then we'll need to 
@@ -374,7 +538,7 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *		    |
  *		    E
  *
- * Even though E is dominated by A, D and E, it's immediate dominator is E because
+ * Even though E is dominated by A, D and E, it's immediate dominator is D because
  * it is the closes strict dominator
  *
  * The Ollie Compiler uses a version of the Lengauer-Tarjan algorithm to compute
@@ -432,6 +596,8 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *			set b's IDOM to be IDOM(IDOM(b))
  *
  * Property: Every node *except* the entry node has exactly one immediate dominator
+ *
+ * NOTE: IMMEDIATE DOMINATORS MUST NEVER CONSIDER VIRTUAL EDGES
  */
 static void compute_immediate_dominators(basic_block_t* function_entry_block, dynamic_array_t* function_blocks){
 	//The number of blocks is static
@@ -476,7 +642,7 @@ static void compute_immediate_dominators(basic_block_t* function_entry_block, dy
 		for(int32_t j = 0; j < working_block->predecessors.current_index; j++){
 			//Our semidominator candidate
 			basic_block_t* candidate = NULL;
-			basic_block_t* predecessor = dynamic_array_get_at(&(working_block->predecessors), j);
+			basic_block_t* predecessor = get_edge_at_index(&(working_block->predecessors), j)->block;
 
 			/**
 			 * Just something to account for - if this is somehow unreachable
@@ -727,7 +893,7 @@ static void compute_immediate_postdominators(basic_block_t* function_exit_block,
 		for(int32_t j = 0; j < working_block->successors.current_index; j++){
 			//Our semipostdominator candidate
 			basic_block_t* candidate;
-			basic_block_t* successor = dynamic_array_get_at(&(working_block->successors), j);
+			basic_block_t* successor = get_edge_at_index(&(working_block->successors), j)->block;
 
 			/**
 			 * Rare case but something we will account for just to be safe - we will
@@ -876,15 +1042,14 @@ static inline void add_dominator_child(basic_block_t* dominator, basic_block_t* 
  *
  * Dominator trees are used for SSA form conversion. It is absolutely
  * essential that these be computed upon every run
+ *
+ * NOTE: DOMINATOR TREES MUST NEVER CONSIDER VIRTUAL EDGES
  */
 static inline void build_dominator_trees(dynamic_array_t* function_blocks){
-	//Hold the current block
-	basic_block_t* current;
-
 	//For each block in the CFG
 	for(int32_t i = function_blocks->current_index - 1; i >= 0; i--){
 		//Grab out whatever block we're on
-		current = dynamic_array_get_at(function_blocks, i);
+		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
 
 		/**
 		 * We will find this block's "immediate dominator". Once we have that,
@@ -948,6 +1113,7 @@ static inline void add_block_to_dominance_frontier(basic_block_t* block, basic_b
  * 					add b to cursor DF set
  * 					cursor = IDOM(cursor)
  * 	
+ * NOTE: DOMINANCE FRONTIERS MUST NEVER CONSIDER VIRTUAL EDGES
  */
 static inline void calculate_dominance_frontiers(dynamic_array_t* function_blocks){
 	//Run through every block
@@ -956,13 +1122,13 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//If we have less than 2 successors,the rest of the search here is useless
-		if(block->predecessors.internal_array == NULL || block->predecessors.current_index < 2){
+		if(block->predecessors.current_index < 2){
 			continue;
 		}
 
 		//Now we run through every predecessor of the block
 		for(int32_t j = 0; j < block->predecessors.current_index; j++){
-			basic_block_t* cursor = dynamic_array_get_at(&(block->predecessors), j);
+			basic_block_t* cursor = get_edge_at_index(&(block->predecessors), j)->block;
 
 			//While cursor is not the immediate dominator of block
 			while(cursor != block->dominator_info.immediate_dominator){
@@ -977,6 +1143,294 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 			}
 		}
 	}
+}
+
+
+/**
+ * A strongly connected component(SCC) is a maximal set of vertices in a directed graph where every
+ * vertex could reach every other vertex by following the directed graph
+ * 
+ * Algorithm StrongConnect(block, stack, SCCS, scc_index):
+ * 	block.scc_index = scc_index
+ * 	block.lowlink = scc_index
+ * 	scc_index += 1
+ *
+ * 	stack.push(block)
+ * 	block.scc_on_stack = true
+ *
+ *  for each real edge e in v.successors:
+ *  	w = e.block
+ *
+ *  	if w.scc_index == UNDEFINED:
+ *  		StrongConnect(w, stack, SCCS, scc_index)
+ *
+ *  		block.scc_lowlink = min(block.scc_lowlink, w.scc_lowlink)
+ *
+ *  	else if w.scc_on_stack = true:
+ *  		block.scc_lowlink = min(block.scc_lowlink, w.scc_index)
+ *
+ *  if v.scc_lowlink == v.scc_index:
+ *  	SCC = empty set
+ *
+ * 		repeat:
+ * 			w = stack.pop()
+ * 			w.scc_on_stack = false;
+ * 			SCC.add(w)
+ * 		until w == v
+ *
+ * 		SCCS.append(SCC)
+ */
+static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dynamic_array_t* strongly_connected_components, int32_t* scc_index){
+	/**
+	 * First stamp this block with the current SCC index. Also, as of right now,
+	 * the scc_index is the lowest possible known index that we can reach in the
+	 * SCC containing this block, so give that the index as well
+	 *
+	 * The SCC index is another way of DFS numbering, since the recursive flow of this
+	 * function is a DFS
+	 */
+	block->scc_computation_info.index = *scc_index;
+	block->scc_computation_info.lowlink = *scc_index;
+	(*scc_index)++;
+
+	/**
+	 * Push this block onto the stack. This stack will eventually represent our SCC. We push
+	 * the block on now because we've reached it, so it must be part of the SCC
+	 */
+	push(tarjan_stack, block);
+	block->scc_computation_info.on_stack = TRUE;
+
+	/**
+	 * Now run through all executable(real) successors of this block
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		/**
+		 * If it's not a real then skip it, SCCs can only include
+		 * real edges
+		 */
+		cfg_edge_t* successor_edge = get_edge_at_index(&(block->successors), i);
+		if(successor_edge->edge_type != EDGE_TYPE_REAL){
+			continue;
+		}
+
+		basic_block_t* successor = successor_edge->block;
+
+		/**
+		 * Case 1: The successor block has never been visited before. This is
+		 * known as a "tree edge" because we're at the boundary of the current
+		 * SCC. We'll need to recursively explore this successor
+		 */
+		if(successor->scc_computation_info.index == LT_UNNUMBERED){
+			strong_connect(successor, tarjan_stack, strongly_connected_components, scc_index);
+
+			/**
+			 * After the recursive exploration, we'll need to update this block's lowlink. The lowlink
+			 * of this successor after running strong_connect represents how far back the entire
+			 * DFS subtree of the successor can reach. If this is smaller than the current blocks, then
+			 * we'll update the current block's to match it
+			 */
+			if(successor->scc_computation_info.lowlink < block->scc_computation_info.lowlink){
+				block->scc_computation_info.lowlink = successor->scc_computation_info.lowlink;
+			}
+
+		/**
+		 * Case 2: we have an edge to a node that is in the current DFS stack
+		 */
+		} else if(successor->scc_computation_info.on_stack == TRUE){
+			/**
+			 * We've found a visited node(on the stack) that this block directly
+			 * reaches via an edge. Therefore, if this successor's *INDEX* is smaller
+			 * than the current block's *LOWLINK*, we'll set the current block's lowlink to
+			 * be the index because it's a point farther back in the DFS tree that we can reach
+			 */
+			if(successor->scc_computation_info.index < block->scc_computation_info.lowlink){
+				block->scc_computation_info.lowlink = successor->scc_computation_info.index;
+			}
+		}
+	}
+
+	/**
+	 * If we reach the end of this computation and the block's index is equal to it's
+	 * lowlink, it means that this block itself is the farthest point back in the DFS subtree that
+	 * we can reach. This means that this block is the *ROOT* of a strongly connected component
+	 */
+	if(block->scc_computation_info.index == block->scc_computation_info.lowlink){
+		/**
+		 * We'll need this to be heap allocated due to how we store dynamic arrays
+		 */
+		dynamic_array_t* strongly_connected_component = dynamic_array_heap_alloc();
+
+		/**
+		 * Keep popping values off of the tarjan stack until find
+		 * the original block. These members on the stack represent our
+		 * strongly connected component
+		 */
+		basic_block_t* member;
+		do {
+			member = pop(tarjan_stack);
+			member->scc_computation_info.on_stack = FALSE;
+			dynamic_array_add(strongly_connected_component, member);
+		} while(member != block);
+
+		/**
+		 * Finally add this to our list of all strongly connected components
+		 */
+		dynamic_array_add(strongly_connected_components, strongly_connected_component);
+	}
+}
+
+
+/**
+ * Add all cyclic blocks from the given strongly connected component into our
+ * set of all cyclic blocks. Remember that an SCC is considered cyclic if 
+ * either is true:
+ * 	1.) The SCC contains more than one block. By definition, since all blocks in an SCC
+ * 		must be reachable from eachother this must form a cycle.
+ * 			Example: SCC {a c}
+ * 						a -> c
+ * 						c -> a
+ * 			Therefore we have a cycle
+ * 	2.) The SCC contains exactly one block that contains a self-edge. This is pretty
+ * 		self explanatory
+ */
+static inline void add_cyclic_blocks_from_scc(dynamic_array_t* scc, dynamic_array_t* cyclic_blocks){
+	/**
+	 * Case 1: we have an SCC with more than one block in it. By definition this
+	 * is a cyclic SCC and we must add all blocks into the set of cyclic blocks
+	 */
+	if(scc->current_index > 1){
+		for(int32_t i = 0; i < scc->current_index; i++){
+			dynamic_array_add(cyclic_blocks, dynamic_array_get_at(scc, i));
+		}
+
+	/**
+	 * Case 2: we have a so-called singleton SCC. This is cyclicaly *ONLY* if
+	 * the single block contains a *REAL* edge back to itself
+	 */
+	} else {
+		basic_block_t* single_block = dynamic_array_get_from_back(scc);
+
+		/**
+		 * Run through all of our single block's successors trying to find a
+		 * self-edge
+		 */
+		u_int8_t has_self_edge = FALSE;
+		for(int32_t i = 0; i < single_block->successors.current_index; i++){
+			cfg_edge_t* edge = get_edge_at_index(&(single_block->successors), i);
+			
+			/**
+			 * Analysis edges are irrelevant to us in this scenario
+			 */
+			if(edge->edge_type != EDGE_TYPE_REAL){
+				continue;
+			}
+
+			/**
+			 * If we find this, that means that we do have a self edge. We can
+			 * set the flag and there's no point in further exploration
+			 */
+			if(edge->block == single_block){
+				has_self_edge = TRUE;
+				break;
+			}
+		}
+
+		/**
+		 * If we did find a self-edge then this is a cyclic block
+		 */
+		if(has_self_edge == TRUE){
+			dynamic_array_add(cyclic_blocks, single_block);
+		}
+	}
+}
+
+
+/**
+ * Since Ollie considers infinite looping as valid behavior that needs to be preserved just the same
+ * as regular function returns, we will need to go through and emit virtual edges from every cyclical
+ * block that may be infinite to the virtual function exit block. This is done using the Tarjan Strongly
+ * Connected Component algorithm to first identify SCCs, then identifying which SCCs are cyclical and
+ * adding their blocks to a list of cyclic blocks, and finally emitting virtual edges from each cyclic
+ * block to the exit block
+ *
+ * NOTE: obviously due to the halting problem it's not possible to positively identify
+ * infinite execution all of the time. This algorithm just guess as to what *could* be infinite
+ *
+ * NOTE: by the time we get here, the function_blocks set should already contain exclusively reachable blocks
+ */
+static inline void insert_virtual_edges_for_potentially_infinite_execution(dynamic_array_t* function_blocks, basic_block_t* function_exit){
+	/**
+	 * Initialize a heap stack and a dynamic array of strongly connected components. Each strongly
+	 * connected component is itself a dynamic array so this is a dynamic array of dynamic arrays.
+	 * We will also compile a list of cyclic blocks that we'll populate later on in the process
+	 */
+	heap_stack_t stack = heap_stack_alloc();
+	dynamic_array_t strongly_connected_components = dynamic_array_alloc_initial_size(function_blocks->current_index);
+	dynamic_array_t cyclic_blocks = dynamic_array_alloc();
+
+	/**
+	 * Step 1: Initialize Tarjan's SCC algorithm
+	 * For each function block, we need to initialize the following:
+	 * 	1.) Set the index to be unnumbered. The index represents the order in which the
+	 * 	  	DFS visits this node
+	 * 	2.) Set the lowlink to be unnumbered. The lowlink represents the earliest indexed
+	 * 		node that can still be reached while maintaining the current SCC search
+	 * 	3.) Flag that we're not on the stack
+	 */
+	int32_t tarjan_index = 0;
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		block->scc_computation_info.index = LT_UNNUMBERED;
+		block->scc_computation_info.lowlink = LT_UNNUMBERED;
+		block->scc_computation_info.on_stack = FALSE;
+	}
+
+	/**
+	 * Step 2: For each function block, we'll now compute the strongly connected component that contains
+	 * this given block. We'll only do this if the block's SCC index has a value of "Unnumbered", 
+	 * meaning that it is not yet part of a strongly connected component
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		if(block->scc_computation_info.index == LT_UNNUMBERED){
+			strong_connect(block, &stack, &strongly_connected_components, &tarjan_index);
+		}
+	}
+
+	/**
+	 * Step 3: For each strongly connected component, we will detect which cyclic blocks
+	 * exist and compile a list of them. An SCC is considered to be cyclic if:
+	 * 	1.) It has more than one block. This is because all blocks in an SCC can reach
+	 * 		all other blocks in the same SCC. For this to be true, there must be a cycle
+	 * 	2.) It has exactly one block with a self-edge. This is self explanatory
+	 */
+	for(int32_t i = 0; i < strongly_connected_components.current_index; i++){
+		add_cyclic_blocks_from_scc(dynamic_array_get_at(&strongly_connected_components, i), &cyclic_blocks);
+	}
+
+	/**
+	 * Step 4: now that we have a set of all cyclic blocks, for each cyclic block, we'll emit
+	 * a virtual(analysis only) edge from said block to the virtual exit block(function exit block)
+	 * This virtual edge symbolically represents potential nontermination as a valid path to the exit,
+	 * which is how Ollie will preserve nontermination behavior as important
+	 */
+	for(int32_t i = 0; i < cyclic_blocks.current_index; i++){
+		basic_block_t* cyclic_block = dynamic_array_get_at(&cyclic_blocks, i);
+		add_successor(cyclic_block, function_exit, EDGE_TYPE_VIRTUAL);
+	}
+
+	/**
+	 * Cleanup: we'll deallocate all of the SCC sets, the overall SCC list, and the heap
+	 * stack that we used
+	 */
+	for(int32_t i = 0; i < strongly_connected_components.current_index; i++){
+		dynamic_array_t* scc_array = dynamic_array_get_at(&strongly_connected_components, i);
+		dynamic_array_heap_dealloc(&scc_array);
+	}
+
+	dynamic_array_dealloc(&cyclic_blocks);
+	dynamic_array_dealloc(&strongly_connected_components);
+	heap_stack_dealloc(&stack);
 }
 
 
@@ -1030,14 +1484,14 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
 		//If we have less than 2 successors,the rest of the search here is useless
-		if(block->successors.internal_array == NULL || block->successors.current_index < 2){
+		if(block->successors.current_index < 2){
 			continue;
 		}
 
 		//Now we run through every successor of the block
 		for(int32_t j  = 0; j  < block->successors.current_index; j++){
 			//Extract the successor
-			basic_block_t* cursor = dynamic_array_get_at(&(block->successors), j);
+			basic_block_t* cursor = get_edge_at_index(&(block->successors), j)->block;
 
 			//While cursor is not the immediate postdominator of block
 			while(cursor != block->dominator_info.immediate_postdominator){
@@ -1050,6 +1504,34 @@ static inline void calculate_reverse_dominance_frontiers(dynamic_array_t* functi
 				 */
 				cursor = cursor->dominator_info.immediate_postdominator;
 			}
+		}
+	}
+}
+
+
+/**
+ * Remove any edges in the predecessor or successor sets that are marked as "virtual". These
+ * edges are only useful for analysis and they do *NOT* represent real edges. As such, after
+ * the analysis is done we'll delete them
+ */
+static inline void remove_all_virtual_successor_and_predecessors(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		/**
+		 * If and only if we have virtual predecessors, invoke the helper
+		 * to go through and remove them all
+		 */
+		if(block->predecessors.virtual_edge_count > 0){
+			remove_all_analysis_edges(&(block->predecessors));
+		}
+
+		/**
+		 * If and only if we have virtual successors, invoke the helper
+		 * to go through and remove them all
+		 */
+		if(block->successors.virtual_edge_count > 0){
+			remove_all_analysis_edges(&(block->successors));
 		}
 	}
 }
@@ -1070,7 +1552,7 @@ static void post_order_traversal_rec(dynamic_array_t* post_order_traversal, basi
 	//Run through every successor
 	for(int32_t i = 0; i < entry->successors.current_index; i++){
 		//Recursive call to every child first
-		post_order_traversal_rec(post_order_traversal, dynamic_array_get_at(&(entry->successors), i));
+		post_order_traversal_rec(post_order_traversal, get_edge_at_index(&(entry->successors), i)->block);
 	}
 	
 	//Now we'll finally visit the node
@@ -1108,7 +1590,7 @@ static void reverse_post_order_traversal_reverse_cfg_rec(heap_stack_t* stack, ba
 
 	//For every child(predecessor-it's reverse), we visit it as well
 	for(int32_t i = 0; i < block->predecessors.current_index; i++){
-		reverse_post_order_traversal_reverse_cfg_rec(stack, dynamic_array_get_at(&(block->predecessors), i));
+		reverse_post_order_traversal_reverse_cfg_rec(stack, get_edge_at_index(&(block->predecessors), i)->block);
 	}
 
 	//Now we can push entry onto the stack
@@ -1202,14 +1684,19 @@ basic_block_t* get_nearest_marked_postdominator(basic_block_t* block){
 
 /**
  * We will calculate:
- *  1.) Immediate dominators
+ *  1.) Immediate dominators using Lengauer-Tarjan
  *  2.) Dominator Trees
  *  3.) Dominance Frontiers
- *  4.) Immediate Postdominators
- *  5.) Reverse Dominance frontiers
+ *  4.) Identify potential infinitie execution with Tarjan SCCs
+ *  5.) Add analysis only edges on infinite SCCs
+ *  6.) Immediate Postdominators with analysis edges
+ *  7.) Reverse Dominance frontiers with analysis edgse
+ *  8.) Remove all virtual edges
  *
  * For every block in the given function. This externally facing API hides all of
  * the complexity behind it
+ *
+ * NOTE: this function expects to be operating on a set of function blocks that has had unreachable blocks eliminated
  */
 void calculate_all_control_flow_relations_for_function(basic_block_t* function_entry_block, basic_block_t* function_exit_block, dynamic_array_t* function_blocks){
 	/**
@@ -1220,6 +1707,8 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * Immediate dominators are a prerequisite for two other essential
 	 * graph relations: dominator trees and dominance frontiers. These
 	 * *must* be computed upon every run
+	 *
+	 * NOTE: IMMEDIATE DOMINATORS MUST NEVER CONSIDER VIRTUAL EDGES
 	 */
 	compute_immediate_dominators(function_entry_block, function_blocks);
 
@@ -1229,6 +1718,8 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 *
 	 * Dominator trees are used for SSA form conversion. It is absolutely
 	 * essential that these be computed upon every run
+	 *
+	 * NOTE: DOMINATOR TREES MUST NEVER CONSIDER VIRTUAL EDGES
 	 */
 	build_dominator_trees(function_blocks);
 
@@ -1236,25 +1727,52 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * Dominance frontiers are essential for inserting phi functions when performing
 	 * an SSA conversion. It is for this reason that we must calculate them upon every 
 	 * run of the control flow calculator
+	 *
+	 * NOTE: DOMINANCE FRONTIERS MUST NEVER CONSIDER VIRTUAL EDGES
 	 */
 	calculate_dominance_frontiers(function_blocks);
 
 	/**
+	 * Ollie considers all potentially infinite loops as valid "end case" behavior. In other words,
+	 * a function looping infinitely and never returning is considered to be behavior that we need
+	 * to preserve. In order to preserve this behavior, we will need to emit a virtual edge to every
+	 * potentially infinitely looping block to the virtual exit block(our function exit block that all
+	 * functions have). There is a whole process for doing this that involves finding the cyclic SCCs
+	 * in our CFG and adding virtual edges to their members which is detailed in this function
+	 *
+	 * Importantly, we only want virtual edges to exist for the IPDOM and RDF computations. Once these
+	 * computations are complete, all virtual edges are removed. This means that virtual edges exist only
+	 * in the graph analyzer and nowhere else
+	 */
+	insert_virtual_edges_for_potentially_infinite_execution(function_blocks, function_exit_block);
+
+	/**
 	 * Immediate postdominators are also computed with the Lengauer-Tarjan linear
-	 * time algorithm, just on the reversed CFG. These are needed to find the reverse dominance
-	 * frontier, and they're also used when we perform branch reduction in the 
-	 * optimizer(see nearest_marked_postdominator)
+	 * time algorithm, just on the reversed CFG *WITH ANALYSIS EDGES*. The IPDOMS are needed
+	 * to find the reverse dominance frontier, and they're also used when we perform branch 
+	 * reduction in the optimizer(see nearest_marked_postdominator). The immediate postdominators
+	 * make use of analysis only edges as well as real edges because we need to model that 
+	 * potential nontermination is a valid potential exit scenario
 	 */
 	compute_immediate_postdominators(function_exit_block, function_blocks);
 
 	/**
 	 * Reverse dominance frontiers are the same as regular dominance frontiers(just
-	 * barely not *post*dominated by a block X) and are used when we are doint
+	 * barely not *post*dominated by a block X) and are used when we are doing
 	 * mark and sweep. The reverse dominance frontier is thus calculated every
-	 * time we do this. The algorithm relies on immediate postdominators, which is
-	 * why this comes last
+	 * time we do this. The reverse dominance frontiers also consider virtual edges, because
+	 * we need to model potential nontermination as a valid "end case" for a CFG The algorithm 
+	 * relies on immediate postdominators, which is why this comes last
 	 */
 	calculate_reverse_dominance_frontiers(function_blocks);
+
+	/**
+	 * Now that we've done all of our analysis, we can completely remove all
+	 * of the analysis edges that we've inserted for loop detection. Doing this
+	 * now allows us to avoid confusion elsewhere when we're iterating over
+	 * edge sets
+	 */
+	remove_all_virtual_successor_and_predecessors(function_blocks);
 }
 
 
