@@ -27,6 +27,34 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
 
 
 /**
+ * This simple helper will go through and print SCCs for debugging
+ */
+static inline void print_strongly_connected_components(FILE* fl, dynamic_array_t* strongly_connected_components){
+	fprintf(fl, "===================== Strongly Connected Components =========================\n");
+	for(int32_t i = 0; i < strongly_connected_components->current_index; i++){
+		dynamic_array_t* scc = dynamic_array_get_at(strongly_connected_components, i);
+
+		fprintf(fl, "{");
+		for(int32_t j = 0; j < scc->current_index; j++){
+			basic_block_t* block = dynamic_array_get_at(scc, j);
+			if(block->block_type != BLOCK_TYPE_FUNC_ENTRY){
+				fprintf(fl, ".L%d", block->block_id);
+			} else {
+				fprintf(fl, "%s", block->function_defined_in->func_name.string);
+			}
+
+			if(j != scc->current_index - 1){
+				fprintf(fl, ", ");
+			}
+		}
+		fprintf(fl, "}\n");
+	}
+
+	fprintf(fl, "===================== Strongly Connected Components =========================\n");
+}
+
+
+/**
  * Perform a DFS reachability traversal based on this block
  * We use the "visited" flag to represent reachable/unreachable
  *
@@ -1292,6 +1320,9 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 			strong_connect(block, &stack, &strongly_connected_components, &tarjan_index);
 		}
 	}
+
+	//TODO DEBUG ONLY 
+	print_strongly_connected_components(stdout, &strongly_connected_components);
 	
 
 
