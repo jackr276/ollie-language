@@ -19,12 +19,8 @@
  * that the blocks inside of the array are really the correct blocks
  */
 static inline void reset_visit_status_for_function(dynamic_array_t* function_blocks){
-	//Run through all of the blocks
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		//Extract the current block
 		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
-
-		//Flag it as false
 		current->visited = FALSE;
 	}
 }
@@ -36,10 +32,8 @@ static inline void reset_visit_status_for_function(dynamic_array_t* function_blo
  *
  * This function is recursive
  *
- * NOTE: we only ever use REAL edges for DFS reachability, we do not ever
- * consider synthetic(analysis edges)
- *
- * TODO LOOK AT AFTER CHANGES
+ * NOTE: This function should only be called using the REAL CFG. It does
+ * not distinguish virtual edges
  */
 static void dfs_flag_block_reachability_rec(basic_block_t* block){
 	/**
@@ -80,6 +74,9 @@ static void dfs_flag_block_reachability_rec(basic_block_t* block){
  * 			delete B
  *
  * This function returns TRUE if there was at least one unreachable block found
+ *
+ * NOTE: we should only be deleting unreachable blocks in the REAL cfg. The virtual CFG should
+ * not be used for this
  */
 u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_array_t* function_blocks){
 	/**
@@ -138,8 +135,6 @@ u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_ar
 		/**
 		 * For each predecessor of the target, remove the target as
 		 * a successor
-		 *
-		 * TODO LOOK AT AFTER FIX
 		 */
 		for(int32_t j = 0; j < target->predecessors.current_index; j++){
 			basic_block_t* predecessor = target->predecessors.edges[j].block;
@@ -155,8 +150,14 @@ u_int8_t delete_all_unreachable_blocks(basic_block_t* function_entry, dynamic_ar
 			delete_predecessor_only(successor, target);
 		}
 
-		//Once we've fully decoupled we can then remove this block from the function
-		dynamic_array_delete(function_blocks, to_be_deleted[i]);
+		/**
+		 * So long as this is *NOT* a function exit block, we will delete it.
+		 * We want our function exit block to remain because we'll use it as our synethetic
+		 * exit for infinite loop detection
+		 */
+		if(target->block_type != BLOCK_TYPE_FUNC_EXIT){
+			dynamic_array_delete(function_blocks, target);
+		}
 	}
 
 	/**
