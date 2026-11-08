@@ -1140,7 +1140,7 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
  *  		block.scc_lowlink = min(block.scc_lowlink, w.scc_lowlink)
  *
  *  	else if w.scc_on_stack = true:
- *  		block.scc_lowlink = min(block.scc_lowlink, w.scc_lowlink)
+ *  		block.scc_lowlink = min(block.scc_lowlink, w.scc_index)
  *
  *  if v.scc_lowlink == v.scc_index:
  *  	SCC = empty set
@@ -1170,7 +1170,7 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 	block->scc_computation_info.on_stack = TRUE;
 
 	/**
-	 * Now run through all real successors of this given block
+	 * Now run through all executable successors of this block
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
 		/**
@@ -1179,11 +1179,43 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 		 */
 		cfg_edge_t* successor_edge = get_edge_at_index(&(block->successors), i);
 		if(successor_edge->edge_type != EDGE_TYPE_REAL){
-			continue;;
+			continue;
 		}
 
 		basic_block_t* successor = successor_edge->block;
 
+		/**
+		 * Case 1: The successor block has never been visited before. This is
+		 * known as a "tree edge" because we're at the boundary of the current
+		 * SCC. We'll need to recursively explore this successor
+		 */
+		if(successor->scc_computation_info.index == LT_UNNUMBERED){
+			strong_connect(successor, tarjan_stack, strong_connected_components, scc_index);
+
+			/**
+			 * After the recursive exploration, we'll need to update this block's lowlink. The lowlink
+			 * of this successor after running strong_connect represents how far back the entire
+			 * DFS subtree of the successor can reach. If this is smaller than the current blocks, then
+			 * we'll update the current block's to match it
+			 */
+			if(successor->scc_computation_info.lowlink < block->scc_computation_info.lowlink){
+				block->scc_computation_info.lowlink = successor->scc_computation_info.lowlink;
+			}
+
+		/**
+		 * Case 2: we have an edge to a node that is in the current DFS stack
+		 */
+		} else if(successor->scc_computation_info.on_stack == TRUE){
+			/**
+			 * We've found a visited node(on the stack) that this block directly
+			 * reaches via an edge. Therefore, if this successor's *INDEX* is smaller
+			 * than the current block's *LOWLINK*, we'll set the current block's lowlink to
+			 * be the index because it's a point farther back in the DFS tree that we can reach
+			 */
+			if(successor->scc_computation_info.index < block->scc_computation_info.lowlink){
+				block->scc_computation_info.lowlink = successor->scc_computation_info.index;
+			}
+		}
 	}
 
 
