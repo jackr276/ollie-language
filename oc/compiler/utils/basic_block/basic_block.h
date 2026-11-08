@@ -174,6 +174,26 @@ struct basic_block_t{
 	} dominator_info;
 
 	/**
+	 * The SCC computation information is needed when we're finding strongly
+	 * connected components over the CFG inside of the graph_analyzer
+	 */
+	struct {
+		/**
+		 * This is the order that the node was discovered within the current DFS
+		 */
+		int32_t index;
+		/**
+		 * This is the earliest indexed node that can be reached through the paths
+		 * considered while we're still in the same SCC search
+		 */
+		int32_t lowlink;
+		/**
+		 * Is this on the stack or not
+		 */
+		u_int8_t on_stack;
+	} scc_computation_info;
+
+	/**
 	 * When we inline functions(among other things), we may need to maintain
 	 * a 1-to-1 relationship where a block maps to another block. This is wrapped
 	 * in "mapping info" for clarity

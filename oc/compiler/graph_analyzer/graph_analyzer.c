@@ -1129,9 +1129,28 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
  * NOTE: by the time we get here, the function_blocks set should already contain exclusively reachable blocks
  */
 static inline void insert_virtual_edges_for_potentially_inifinite_execution(dynamic_array_t* function_blocks, basic_block_t* function_exit){
+	/**
+	 * Initialize a heap stack and a dynamic array of strongly connected components. Each strongly
+	 * connected component is itself a dynamic array so this is a dynamic array of dynamic arrays
+	 */
+	heap_stack_t stack = heap_stack_alloc();
+	dynamic_array_t strongly_connected_components = dynamic_array_alloc_initial_size(function_blocks->current_index);
+
+
+	/**
+	 * Initialize Tarjan's SCC algorithm
+	 * For each function block, we need to initialize the following:
+	 * 	
+	 */
+	int32_t tarjan_index = 0;
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+	}
 	
 
 
+
+	heap_stack_dealloc(&stack);
 }
 
 
