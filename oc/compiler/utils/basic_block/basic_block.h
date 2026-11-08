@@ -601,11 +601,13 @@ static inline void remove_all_analysis_edges(edge_set_t* edge_set){
 		cfg_edge_t* edge = &(all_edges[i]);
 
 		/**
-		 * We'll only add real edges back to the given edge set
+		 * Skip all non-real edges
 		 */
-		if(edge->edge_type == EDGE_TYPE_REAL){
-			add_edge(edge_set, edge->block, EDGE_TYPE_REAL);
+		if(edge->edge_type != EDGE_TYPE_REAL){
+			continue;
 		}
+
+		add_edge(edge_set, edge->block, edge->edge_type);
 	}
 }
 
