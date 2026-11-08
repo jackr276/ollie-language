@@ -5,7 +5,6 @@
  */
 
 #include "graph_analyzer.h"
-#include <stdint.h>
 #include <sys/types.h>
 
 /**
@@ -1292,7 +1291,54 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
  * 		self explanatory
  */
 static inline void add_cyclic_blocks_from_scc(dynamic_array_t* scc, dynamic_array_t* cyclic_blocks){
+	/**
+	 * Case 1: we have an SCC with more than one block in it. By definition this
+	 * is a cyclic SCC and we must add all blocks into the set of cyclic blocks
+	 */
+	if(scc->current_index > 1){
+		for(int32_t i = 0; i < scc->current_index; i++){
+			dynamic_array_add(cyclic_blocks, dynamic_array_get_at(scc, i));
+		}
 
+	/**
+	 * Case 2: we have a so-called singleton SCC. This is cyclicaly *ONLY* if
+	 * the single block contains a *REAL* edge back to itself
+	 */
+	} else {
+		basic_block_t* single_block = dynamic_array_get_from_back(scc);
+
+		/**
+		 * Run through all of our single block's successors trying to find a
+		 * self-edge
+		 */
+		u_int8_t has_self_edge = FALSE;
+		for(int32_t i = 0; i < single_block->successors.current_index; i++){
+			cfg_edge_t* edge = get_edge_at_index(&(single_block->successors), i);
+			
+			/**
+			 * Analysis edges are irrelevant to us in this scenario
+			 */
+			if(edge->edge_type != EDGE_TYPE_REAL){
+				continue;
+			}
+
+			/**
+			 * If we find this, that means that we do have a self edge. We can
+			 * set the flag and there's no point in further exploration
+			 */
+			if(edge->block == single_block){
+				has_self_edge = TRUE;
+				break;
+			}
+		}
+
+		/**
+		 * If we did find a self-edge then this is a cyclic block
+		 */
+		if(has_self_edge == TRUE){
+			dynamic_array_add(cyclic_blocks, single_block);
+		}
+	}
 }
 
 
