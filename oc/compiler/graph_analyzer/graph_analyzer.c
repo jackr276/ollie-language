@@ -538,7 +538,7 @@ static inline void link_ancestor(basic_block_t* ancestor, basic_block_t* descend
  *		    |
  *		    E
  *
- * Even though E is dominated by A, D and E, it's immediate dominator is E because
+ * Even though E is dominated by A, D and E, it's immediate dominator is D because
  * it is the closes strict dominator
  *
  * The Ollie Compiler uses a version of the Lengauer-Tarjan algorithm to compute
@@ -1758,7 +1758,7 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 
 	/**
 	 * Reverse dominance frontiers are the same as regular dominance frontiers(just
-	 * barely not *post*dominated by a block X) and are used when we are doint
+	 * barely not *post*dominated by a block X) and are used when we are doing
 	 * mark and sweep. The reverse dominance frontier is thus calculated every
 	 * time we do this. The reverse dominance frontiers also consider virtual edges, because
 	 * we need to model potential nontermination as a valid "end case" for a CFG The algorithm 
