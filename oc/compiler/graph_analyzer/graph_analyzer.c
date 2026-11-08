@@ -1120,6 +1120,22 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 
 
 /**
+ * 
+ * TODO DOC
+ *
+ * NOTE: obviously due to the halting problem it's not possible to positively identify
+ * infinite execution all of the time. This algorithm just guess as to what *could* be infinite
+ *
+ * NOTE: by the time we get here, the function_blocks set should already contain exclusively reachable blocks
+ */
+static inline void insert_virtual_edges_for_potentially_inifinite_execution(dynamic_array_t* function_blocks, basic_block_t* function_exit){
+	
+
+
+}
+
+
+/**
  * Add a block to the reverse dominance frontier of the first block
  */
 static inline void add_block_to_reverse_dominance_frontier(basic_block_t* block, basic_block_t* rdf_block){
@@ -1416,6 +1432,13 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	 * NOTE: DOMINANCE FRONTIERS MUST NEVER CONSIDER VIRTUAL EDGES
 	 */
 	calculate_dominance_frontiers(function_blocks);
+
+	/**
+	 * TODO DOC
+	 */
+	insert_virtual_edges_for_potentially_inifinite_execution(function_blocks, function_exit_block);
+	
+
 
 	//TODO INSERT VIRTUAL EDGES
 
