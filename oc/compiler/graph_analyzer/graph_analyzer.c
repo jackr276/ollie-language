@@ -1154,6 +1154,38 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
  * 		SCCS.append(SCC)
  */
 static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dynamic_array_t* strong_connected_components, int32_t* scc_index){
+	/**
+	 * First stamp this block with the current SCC index. Also, as of right now,
+	 * the scc_index is the lowest possible known index that we can reach in the
+	 * SCC containing this block, so give that the index as well
+	 */
+	block->scc_computation_info.index = *scc_index;
+	block->scc_computation_info.lowlink = *scc_index;
+	(*scc_index)++;
+
+	/**
+	 * Now push this block onto the tarjan stack
+	 */
+	push(tarjan_stack, block);
+	block->scc_computation_info.on_stack = TRUE;
+
+	/**
+	 * Now run through all real successors of this given block
+	 */
+	for(int32_t i = 0; i < block->successors.current_index; i++){
+		/**
+		 * If it's not a real then skip it, SCCs can only include
+		 * real edges
+		 */
+		cfg_edge_t* successor_edge = get_edge_at_index(&(block->successors), i);
+		if(successor_edge->edge_type != EDGE_TYPE_REAL){
+			continue;;
+		}
+
+		basic_block_t* successor = successor_edge->block;
+
+	}
+
 
 }
 
