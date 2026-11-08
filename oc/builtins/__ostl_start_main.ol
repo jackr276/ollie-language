@@ -28,8 +28,11 @@ fn ostl_start_main_exit(result:i32) -> void {
 		"
 	    };
 
-	//If that fails then we loop forever
-	while(true){}
+	/**
+	 * In the event that any issue happens, we need to loop forever
+	 * in a trap of sorts
+	 */
+	 loop{}
 }
 
 
