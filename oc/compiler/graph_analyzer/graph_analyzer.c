@@ -1122,8 +1122,36 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 /**
  * A strongly connected component(SCC) is a maximal set of vertices in a directed graph where every
  * vertex could reach every other vertex by following the directed graph
+ * 
+ * Algorithm StrongConnect(block, stack, SCCS, scc_index):
+ * 	block.scc_index = scc_index
+ * 	block.lowlink = scc_index
+ * 	scc_index += 1
  *
- * TODO
+ * 	stack.push(block)
+ * 	block.scc_on_stack = true
+ *
+ *  for each real edge e in v.successors:
+ *  	w = e.block
+ *
+ *  	if w.scc_index == UNDEFINED:
+ *  		StrongConnect(w, stack, SCCS, scc_index)
+ *
+ *  		block.scc_lowlink = min(block.scc_lowlink, w.scc_lowlink)
+ *
+ *  	else if w.scc_on_stack = true:
+ *  		block.scc_lowlink = min(block.scc_lowlink, w.scc_lowlink)
+ *
+ *  if v.scc_lowlink == v.scc_index:
+ *  	SCC = empty set
+ *
+ * 		repeat:
+ * 			w = stack.pop()
+ * 			w.scc_on_stack = false;
+ * 			SCC.add(w)
+ * 		until w == v
+ *
+ * 		SCCS.append(SCC)
  */
 static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dynamic_array_t* strong_connected_components, int32_t* scc_index){
 
