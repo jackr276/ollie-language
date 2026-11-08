@@ -1185,6 +1185,9 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 	 * First stamp this block with the current SCC index. Also, as of right now,
 	 * the scc_index is the lowest possible known index that we can reach in the
 	 * SCC containing this block, so give that the index as well
+	 *
+	 * The SCC index is another way of DFS numbering, since the recursive flow of this
+	 * function is a DFS
 	 */
 	block->scc_computation_info.index = *scc_index;
 	block->scc_computation_info.lowlink = *scc_index;
@@ -1198,7 +1201,7 @@ static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dyn
 	block->scc_computation_info.on_stack = TRUE;
 
 	/**
-	 * Now run through all executable successors of this block
+	 * Now run through all executable(real) successors of this block
 	 */
 	for(int32_t i = 0; i < block->successors.current_index; i++){
 		/**
@@ -1343,8 +1346,12 @@ static inline void add_cyclic_blocks_from_scc(dynamic_array_t* scc, dynamic_arra
 
 
 /**
- * 
- * TODO DOC
+ * Since Ollie considers infinite looping as valid behavior that needs to be preserved just the same
+ * as regular function returns, we will need to go through and emit virtual edges from every cyclical
+ * block that may be infinite to the virtual function exit block. This is done using the Tarjan Strongly
+ * Connected Component algorithm to first identify SCCs, then identifying which SCCs are cyclical and
+ * adding their blocks to a list of cyclic blocks, and finally emitting virtual edges from each cyclic
+ * block to the exit block
  *
  * NOTE: obviously due to the halting problem it's not possible to positively identify
  * infinite execution all of the time. This algorithm just guess as to what *could* be infinite
@@ -1726,7 +1733,16 @@ void calculate_all_control_flow_relations_for_function(basic_block_t* function_e
 	calculate_dominance_frontiers(function_blocks);
 
 	/**
-	 * TODO DOC
+	 * Ollie considers all potentially infinite loops as valid "end case" behavior. In other words,
+	 * a function looping infinitely and never returning is considered to be behavior that we need
+	 * to preserve. In order to preserve this behavior, we will need to emit a virtual edge to every
+	 * potentially infinitely looping block to the virtual exit block(our function exit block that all
+	 * functions have). There is a whole process for doing this that involves finding the cyclic SCCs
+	 * in our CFG and adding virtual edges to their members which is detailed in this function
+	 *
+	 * Importantly, we only want virtual edges to exist for the IPDOM and RDF computations. Once these
+	 * computations are complete, all virtual edges are removed. This means that virtual edges exist only
+	 * in the graph analyzer and nowhere else
 	 */
 	insert_virtual_edges_for_potentially_infinite_execution(function_blocks, function_exit_block);
 
