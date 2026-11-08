@@ -1120,6 +1120,18 @@ static inline void calculate_dominance_frontiers(dynamic_array_t* function_block
 
 
 /**
+ * A strongly connected component(SCC) is a maximal set of vertices in a directed graph where every
+ * vertex could reach every other vertex by following the directed graph
+ *
+ * TODO
+ */
+static void strong_connect(basic_block_t* block, heap_stack_t* tarjan_stack, dynamic_array_t* strong_connected_components, int32_t* scc_index){
+
+}
+
+
+
+/**
  * 
  * TODO DOC
  *
@@ -1136,15 +1148,33 @@ static inline void insert_virtual_edges_for_potentially_inifinite_execution(dyna
 	heap_stack_t stack = heap_stack_alloc();
 	dynamic_array_t strongly_connected_components = dynamic_array_alloc_initial_size(function_blocks->current_index);
 
-
 	/**
 	 * Initialize Tarjan's SCC algorithm
 	 * For each function block, we need to initialize the following:
-	 * 	
+	 * 	1.) Set the index to be unnumbered. The index represents the order in which the
+	 * 	  	DFS visits this node
+	 * 	2.) Set the lowlink to be unnumbered. The lowlink represents the earliest indexed
+	 * 		node that can still be reached while maintaining the current SCC search
+	 * 	3.) Flag that we're not on the stack
 	 */
 	int32_t tarjan_index = 0;
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		block->scc_computation_info.index = LT_UNNUMBERED;
+		block->scc_computation_info.lowlink = LT_UNNUMBERED;
+		block->scc_computation_info.on_stack = FALSE;
+	}
+
+	/**
+	 * For each function block, we'll now compute the strongly connected component that contains
+	 * this given block. We'll only do this if the block's SCC index has a value of "Unnumbered", 
+	 * meaning that it is not yet part of a strongly connected component
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		if(block->scc_computation_info.index == LT_UNNUMBERED){
+			strong_connect(block, &stack, &strongly_connected_components, &tarjan_index);
+		}
 	}
 	
 
