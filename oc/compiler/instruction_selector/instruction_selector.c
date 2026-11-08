@@ -9998,7 +9998,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
  * the flags that said statement would generate, and from there remove the branch entirely by simulating the branch's
  * execution
  *
- * TODO FINISH
+ * TODO FINISH DOC
  */
 static inline u_int8_t branch_elimination_pass(basic_block_t* function_entry, basic_block_t* function_exit, dynamic_array_t* function_blocks){
 	/**
@@ -10855,6 +10855,8 @@ static void simplify(cfg_t* cfg){
 			//Run the mark and sweep
 			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
 
+			//TODO DO WE NEED CONTROL RELATION UPDATES
+
 			/**
 			 * If we ended up doing control flow simplification, we are going to need
 			 * to reorder all of the blocks
@@ -10877,6 +10879,8 @@ static void simplify(cfg_t* cfg){
 		} else {
 			//Run the mark and sweep
 			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
+
+			//TODO DO WE NEED CONTROL RELATION UPDATES
 
 			/**
 			 * If we ended up doing control flow simplification, we are going to need

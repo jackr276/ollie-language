@@ -1063,9 +1063,9 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 	/**
 	 * For each block in postorder
 	 */
-	for(int32_t _ = 0; _ < postorder->current_index; _++){
+	for(int32_t i = 0; i < postorder->current_index; i++){
 		//Grab the current block out
-		current = dynamic_array_get_at(postorder, _);
+		current = dynamic_array_get_at(postorder, i);
 
 		//If the exit statement is NULL then we can get out
 		if(current->exit_statement == NULL){
@@ -1155,7 +1155,6 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 			}
 		}
 	}
-
 
 	//Give back whether or not we changed
 	return changed;
@@ -1739,18 +1738,6 @@ cfg_t* optimize(cfg_t* cfg){
 
 		//The current function blocks are stored in the symtab
 		dynamic_array_t* current_function_blocks = &(current_function->function_blocks);
-
-		/**
-		 * PASS 0: Normalize the function CFG by removing all unreachable blocks from it's
-		 * block set
-		 */
-		delete_all_unreachable_blocks(function_entry_block, current_function_blocks);
-
-		/**
-		 * Once we get here, we have an array that is full of all of the blocks belonging
-		 * to the function that we wish to optimize. Now we will go through all of the 
-		 * optimization steps for this function
-		 */
 
 		/**
 		 * First thing we'll do is reset the visited status of the CFG. This just ensures
