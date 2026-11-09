@@ -43,6 +43,9 @@ static three_addr_var_t* instruction_pointer_variable;
 //A reference to our CFG
 static cfg_t* cfg_reference;
 
+//Generic reusable BFS traversal queue
+static heap_queue_t bfs_traversal_queue;
+
 //Maintain a reference to the use count tracker
 static use_count_tracker_t use_count_tracker;
 
@@ -852,6 +855,37 @@ static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type
 
 
 /**
+ * We want the function-level CFG to be stored in a way that optimizes jmp instructions
+ * being one after the other. This is done with a breadth-first traversal of the simplified
+ * function level CFG
+ *
+ * One special consideration we'll take is ordering nodes with a given jump next to eachother.
+ * For example, if block .L15 ends in a direct jump to .L16, we'll endeavor to have .L16 right
+ * after .L15 so that in a later stage, we can eliminate that jump.
+ */
+static void order_function_blocks(dynamic_array_t* function_blocks, basic_block_t* function_entry){
+	/**
+	 * Step 1: run through all function blocks and reset all of the direct successors
+	 * and visited statuses
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		block->visited = FALSE;
+		block->direct_successor = NULL;
+	}
+
+	/**
+	 * Wipe whatever is in here away so we're ready to use it again for our traversal
+	 */
+	heap_queue_clear(&bfs_traversal_queue);
+
+}
+
+
+
+
+
+/**
  * The first step in our instruction selector is to get the instructions stored in
  * a straight line in the exact way that we want them to be. This is done with a breadth-first
  * search traversal of the simplified CFG that has been optimized. 
@@ -863,7 +897,7 @@ static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type
  *
  * TODO THIS NEEDS TO BE MADE TO BE PER FUNCTION - PER CFG IS WASTEFUL
  */
-static void order_blocks(cfg_t* cfg){
+static void order_blocks__BAD(cfg_t* cfg){
 	//Run through every function and wipe the visited status and direct successor
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Get the entry block and the related function blocks
@@ -17887,6 +17921,12 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
 	/**
+	 * Allocate the BFS traversal queue for any block ordering. This is reusable
+	 * so we don't constantly reallocate memory
+	 */
+	bfs_traversal_queue = heap_queue_alloc();
+
+	/**
 	 * Allocate any of these reusable memory regions that we'll
 	 * be using. We do this because it's cheaper to just use
 	 * 1 over and over instead of allocating fresh every single
@@ -17946,6 +17986,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * Now we'll deallocate all of the shared memory
 	 * regions that we've been using
 	 */
+	heap_queue_dealloc(&bfs_traversal_queue);
 	dynamic_string_dealloc(&value_name_searcher_string);
 	use_count_tracker_dealloc(&use_count_tracker);
 }
