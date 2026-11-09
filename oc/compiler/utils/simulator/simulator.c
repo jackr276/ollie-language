@@ -50,8 +50,9 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
 	/**
 	 * Set the parity flag when the lowest 8 bits of the result contain an
 	 * even number of set bits. This is how the x86 parity flag is set. The
-	 * GCC __builtin_parity returns 1 if we contain an even number of set
-	 * bits, so we'll need to invert it
+	 * GCC __builtin_parity returns 0 if we contain an even number of set
+	 * bits, so for our parity flag we'll set it when __builtin_parity returns
+	 * 0 on the lowest 8 bits
 	 */
 	if(__builtin_parity(result & 0xFF) == 0){
 		set_parity_flag(&execution_result.flag_register);
@@ -99,6 +100,7 @@ static simulated_execution_result_t simulate_f32_constant_comparison(float const
 	 * is subtraction
 	 */
 	} else if(constant1 > constant2){
+
 	/**
 	 * Case 3: constant1 is less than constant2. The subtraction in this
 	 * case would have caused the carry flag to be set
@@ -156,6 +158,7 @@ static simulated_execution_result_t simulate_f64_constant_comparison(double cons
 	 * is subtraction
 	 */
 	} else if(constant1 > constant2){
+
 	/**
 	 * Case 3: constant1 is less than constant2. The subtraction in this
 	 * case would have caused the carry flag to be set
@@ -176,7 +179,9 @@ static simulated_execution_result_t simulate_f64_constant_comparison(double cons
 
 
 /**
- * Simulate a test if not zero statement
+ * Simulate a test if not zero statement. This simulator will decide first if it's even possible to simulate
+ * the statement, and then will call out to the appropriate simulation method based on whether or not we're
+ * dealing with a floating point or general purpose value
  */
 static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_block_t* block, instruction_t* instruction){
 	/**
@@ -185,8 +190,17 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 	 * potentially determine what this is
 	 */
 	if(instruction->operands.oir.operand1 != NULL){
+		/**
+		 * Extract the operand and operand type for the original instruction
+		 */
+		three_addr_var_t* operand = instruction->operands.oir.operand1;
+		generic_type_t* operand_type = operand->type;
+
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
+
+		//TODO IMPLEMENT CONSTANT SEARCHING LOGIC TO CRAWL UP THE BLOCK AND SEARCH FOR WHERE THE VARIABLE WAS SET
+
 
 	/**
 	 * Case 2: we have a constant operand in this case. This means that we can for sure simulate
