@@ -36,6 +36,14 @@ typedef enum {
 simplification_type_t perform_mark_and_sweep_pass(dynamic_array_t* function_blocks, basic_block_t* function_entry, basic_block_t* function_exit);
 
 /**
+ * A branch reduction pass first runs the clean() algorithm, which checks to see if blocks/branches have become useless or
+ * redundant and adjusts them accordingly. Following that, *if* we did end up deleting/reordering blocks, we'll recompute
+ * all control flow relations. An important note is that this function will only recompute control flow relations if it 
+ * is necessary. Control flow relations are not cheap to compute so we should not be finding them blindly
+ */
+simplification_type_t perform_branch_reduction_pass(dynamic_array_t* function_blocks, basic_block_t* function_entry, basic_block_t* function_exit);
+
+/**
  * Invoke the ollie optimizer
  */
 cfg_t* optimize(cfg_t* cfg);

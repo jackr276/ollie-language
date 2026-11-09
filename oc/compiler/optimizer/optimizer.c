@@ -1843,20 +1843,25 @@ simplification_type_t perform_mark_and_sweep_pass(dynamic_array_t* function_bloc
 }
 
 
+/**
+ * A branch reduction pass first runs the clean() algorithm, which checks to see if blocks/branches have become useless or
+ * redundant and adjusts them accordingly. Following that, *if* we did end up deleting/reordering blocks, we'll recompute
+ * all control flow relations. An important note is that this function will only recompute control flow relations if it 
+ * is necessary. Control flow relations are not cheap to compute so we should not be finding them blindly
+ */
 simplification_type_t perform_branch_reduction_pass(dynamic_array_t* function_blocks, basic_block_t* function_entry, basic_block_t* function_exit){
-	u_int8_t simplification_occurred = clean(current_function_blocks, function_entry_block);
-
-	//TODO CAN WE MAKE THE BELOW OPTIONAL AND ONLY IF NEEDED???
+	/**
+	 * First run clean and store whether or not we did anything
+	 */
+	u_int8_t simplification_occurred = clean(function_blocks, function_entry);
 
 	/**
-	 * PASS 4: Recalculate everything
-	 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
-	 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
-	 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
-	 *
-	 * TODO THIS SHOULD BE DONE OPTIONALLY - ITS NOT ALWAYS GOING TO BE NEEDED
+	 * If we did end up simplifying at least one branch or block, we will recompute all control flow
+	 * relations as the old ones are now likely invalid
 	 */
-	recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
+	if(simplification_occurred == TRUE){
+		recompute_all_control_flow_relations_for_function(function_blocks, function_entry, function_exit);
+	}
 
 	return simplification_occurred == TRUE ? SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW : NO_SIMPLIFICATION;
 }
