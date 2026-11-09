@@ -23,6 +23,8 @@ struct simulated_execution_result_t{
 	u_int8_t simulation_possible;
 };
 
+#define BLANK_SIMULATED_EXECUTION_RESULT (simulated_execution_result_t){{0}, FALSE}
+
 /**
  * Simulate the execution of the given instruction. The simulation will not return the actual value result, instead
  * we will return a struct that contains a boolean noting whether we even could simulate this, and a flag register
