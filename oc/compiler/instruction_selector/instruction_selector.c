@@ -879,6 +879,41 @@ static void order_function_blocks(dynamic_array_t* function_blocks, basic_block_
 	 */
 	heap_queue_clear(&bfs_traversal_queue);
 
+	/**
+	 * First enqueue the function entry block. Then, so long as the
+	 * queue is not empty we keep traversing it.
+	 */
+	basic_block_t* previous_block = NULL;
+	enqueue(&bfs_traversal_queue, function_entry);
+	while(queue_is_empty(&bfs_traversal_queue) == FALSE){
+		/**
+		 * Get the current block off of the queue. If it's already been
+		 * visited we can just continue along
+		 */
+		basic_block_t* current = dequeue(&bfs_traversal_queue);
+		if(current->visited == TRUE){
+			continue;
+		}
+
+		/**
+		 * If the previous block is not NULL, we'll need to create
+		 * a link using the direct successor field between the previous
+		 * and current blocks
+		 */
+		if(previous_block != NULL){
+			previous_block->direct_successor = current;
+		}
+
+		/**
+		 * The current block has been visited and it
+		 * is now the previous block
+		 */
+		current->visited = TRUE;
+		previous_block = current;
+
+	}
+
+
 }
 
 
