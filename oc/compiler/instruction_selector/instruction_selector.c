@@ -688,35 +688,6 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 
 
 /**
- * Does the block that we're passing in end in a direct(jmp) jump to
- * the very next block. If so, we'll return what block the jump goes to.
- * If not, we'll return null.
- *
- * TODO IDK IF THIS IS EVEN TRUE
- */
-static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
-	//If it's null then leave
-	if(block->exit_statement == NULL){
-		return NULL;
-	}
-
-	switch(block->exit_statement->statement_type){
-		//Direct jump, just use the if block
-		case THREE_ADDR_CODE_JUMP_STMT:
-			return block->exit_statement->if_block;
-
-		//In a branch statement, the else block is the direct jump
-		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->else_block;
-
-		//By default no
-		default:
-			return NULL;
-	}
-}
-
-
-/**
  * Is the given expression eligible for value numbering? Note that all
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
@@ -857,6 +828,30 @@ static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type
 
 
 /**
+ * Does the block that we're passing in end in a direct(jmp) jump to
+ * the very next block. If so, we'll return what block the jump goes to.
+ * If not, we'll return null.
+ */
+static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return NULL;
+	}
+
+	switch(block->exit_statement->statement_type){
+		case THREE_ADDR_CODE_JUMP_STMT:
+			return block->exit_statement->if_block;
+
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			return block->exit_statement->else_block;
+
+		default:
+			return NULL;
+	}
+}
+
+
+/**
  * We want the function-level CFG to be stored in a way that optimizes jmp instructions
  * being one after the other. This is done with a breadth-first traversal of the simplified
  * function level CFG
@@ -914,11 +909,35 @@ static void order_function_blocks(dynamic_array_t* function_blocks, basic_block_
 		previous_block = current;
 
 		/**
+		 * If we can determine the jump that this block ends in, we will
+		 * enqueue that first. This will let the blocks that we jump to directly
+		 * show up right after the jump, allowing us to remove the jump
+		 */
+		basic_block_t* ending_jump = does_block_end_in_jump(current);
+		if(ending_jump != NULL && ending_jump->visited == FALSE){
+			enqueue(&bfs_traversal_queue, ending_jump);
+
+		/**
+		 * If we couldn't add it be sure to NULL it out to avoid it being
+		 * skipped down the line
+		 */
+		} else {
+			ending_jump = NULL;
+		}
+
+		/**
 		 * Now go through and enqueue all the successors. Make sure that we're
 		 * only enqueueing ones that have not been visited
 		 */
 		for(int32_t i = 0; i < current->successors.current_index; i++){
 			basic_block_t* successor = get_edge_at_index(&(current->successors), i)->block;
+			
+			/**
+			 * We've already added the ending jump so don't readd it
+			 */
+			if(successor == ending_jump){
+				continue;
+			}
 
 			/**
 			 * Already visited so skip it
