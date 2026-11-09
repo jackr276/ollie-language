@@ -83,7 +83,38 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
  * 		cf = 0
  */
 static simulated_execution_result_t simulate_f32_constant_comparison(float constant1, float constant2){
+	simulated_execution_result_t result = {{0}, TRUE};
 
+	/**
+	 * Case 1: if either values is not a number, we set all 3 flags
+	 */
+	if(isnan(constant1) || isnan(constant2)){
+		set_zero_flag(&result.flag_register);
+		set_parity_flag(&result.flag_register);
+		set_carry_flag(&result.flag_register);
+
+	/**
+	 * Case 2: constant1 if more than constant2. In this case no zero flag
+	 * and no carry flag will be set. This is because the underlying logic
+	 * is subtraction
+	 */
+	} else if(constant1 > constant2){
+	/**
+	 * Case 3: constant1 is less than constant2. The subtraction in this
+	 * case would have caused the carry flag to be set
+	 */
+	} else if(constant1 < constant2){
+		set_carry_flag(&result.flag_register);
+		
+	/**
+	 * Case 4: constant1 is equal to constant2. The underlying subtraction in this case would
+	 * cause the zero flag to be set
+	 */
+	} else {
+		set_zero_flag(&result.flag_register);
+	}
+
+	return result;
 }
 
 
@@ -109,7 +140,38 @@ static simulated_execution_result_t simulate_f32_constant_comparison(float const
  * 		cf = 0
  */
 static simulated_execution_result_t simulate_f64_constant_comparison(double constant1, double constant2){
+	simulated_execution_result_t result = {{0}, TRUE};
 
+	/**
+	 * Case 1: if either values is not a number, we set all 3 flags
+	 */
+	if(isnan(constant1) || isnan(constant2)){
+		set_zero_flag(&result.flag_register);
+		set_parity_flag(&result.flag_register);
+		set_carry_flag(&result.flag_register);
+
+	/**
+	 * Case 2: constant1 if more than constant2. In this case no zero flag
+	 * and no carry flag will be set. This is because the underlying logic
+	 * is subtraction
+	 */
+	} else if(constant1 > constant2){
+	/**
+	 * Case 3: constant1 is less than constant2. The subtraction in this
+	 * case would have caused the carry flag to be set
+	 */
+	} else if(constant1 < constant2){
+		set_carry_flag(&result.flag_register);
+		
+	/**
+	 * Case 4: constant1 is equal to constant2. The underlying subtraction in this case would
+	 * cause the zero flag to be set
+	 */
+	} else {
+		set_zero_flag(&result.flag_register);
+	}
+
+	return result;
 }
 
 
