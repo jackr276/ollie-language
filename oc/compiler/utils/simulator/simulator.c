@@ -7,6 +7,61 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+
+/**
+ * Simulate a bitwise AND statement given 2 constants and their type. Bitwise AND 
+ * can only ever set the sign flag, zero flag and parity flags
+ *
+ * NOTE: bitwise AND can also be used to represent the TEST command in this context
+ */
+static inline simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+	/**
+	 * Initialize our results. If we get here then we know that this is going to work
+	 */
+	simulated_execution_result_t execution_result = {{0}, TRUE};
+
+	/**
+	 * Get the actual operand bit width and then create an appropriate mask
+	 */
+	u_int64_t operand_bit_width = operand_type->type_size * 8;
+	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
+
+	/**
+	 * Extract the 64 bit version of the constant value just so we have anything. The
+	 * size does not matter here for this. To get the result, we'll populate the constant
+	 * value with itself
+	 */
+	u_int64_t result = (raw_constant1 & raw_constant2) & mask;
+
+	/**
+	 * The carry flag, overflow flag and auxiliary carry flag remain complete unset
+	 * here. We need to worry about setting the sign flag, overflow flag and parity flag
+	 */
+	if(result == 0){
+		set_zero_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * Set sign flag if the sign bit is 1
+	 */
+	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
+		set_sign_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * Set the parity flag when the lowest 8 bits of the result contain an
+	 * even number of set bits. This is how the x86 parity flag is set. The
+	 * GCC __builtin_parity returns 1 if we contain an even number of set
+	 * bits, so we'll need to invert it
+	 */
+	if(__builtin_parity(result & 0xFF) == 0){
+		set_parity_flag(&execution_result.flag_register);
+	}
+
+	return execution_result;
+}
+
+
 /**
  * Simulate a test if not zero statement
  */
@@ -42,37 +97,8 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 		 * for us
 		 */
 		if(IS_FLOATING_POINT(operand_type) == FALSE){
-			/**
-			 * Get the actual operand bit width and then create an appropriate mask
-			 */
-			u_int64_t operand_bit_width = operand_type->type_size * 8;
-			u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
-
-			/**
-			 * Extract the 64 bit version of the constant value just so we have anything. The
-			 * size does not matter here for this. To get the result, we'll populate the constant
-			 * value with itself
-			 */
-			u_int64_t constant_value = instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant;
-			u_int64_t result = (constant_value & constant_value) & mask;
-
-			/**
-			 * The carry flag, overflow flag and auxiliary carry flag remain complete unset
-			 * here. We need to worry about setting the sign flag, overflow flag and parity flag
-			 */
-			if(result == 0){
-				set_zero_flag(&results.flag_register);
-			}
-
-			/**
-			 * Set sign flag if the sign bit is 1
-			 */
-			if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
-				set_sign_flag(&results.flag_register);
-			}
-
-
-			return results;
+			u_int64_t raw_constant_value = instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant;
+			return simulate_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
 
 		} else {
 			printf("TODO NOT IMPLEMENTED\n");
