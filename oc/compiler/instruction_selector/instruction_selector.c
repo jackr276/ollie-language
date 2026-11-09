@@ -15,7 +15,7 @@
 #include "../graph_analyzer/graph_analyzer.h"
 #include "../optimizer/optimizer.h"
 #include "../utils/constants.h"
-#include "../utils/x86_cpu_flags.h"
+#include "../utils/simulator/simulator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -55,9 +55,6 @@ typedef struct instruction_window_t instruction_window_t;
 
 //The copy pair struct for our copy pair emittal
 typedef struct instruction_copy_pair_t instruction_copy_pair_t;
-
-//Instruction simulation result
-typedef struct simulated_execution_result_t simulated_execution_result_t;
 
 /**
  * What is the alignment type for a given variable. Most of the time
@@ -102,17 +99,6 @@ struct instruction_window_t{
 	instruction_t* instruction1;
 	instruction_t* instruction2;
 	instruction_t* instruction3;
-};
-
-
-/**
- * A simluated execution returns the flag register after execution
- * and a boolean denoting whether a simulation was even possible. If
- * the simulation was not possible, the flags register is junk
- */
-struct simulated_execution_result_t{
-	RFLAGS_t flag_register;
-	u_int8_t simulation_possible;
 };
 
 
@@ -9113,35 +9099,6 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 	//Give back whether or not we did anything
 	return simplification_occured;
 }
-
-
-
-static simulated_execution_result_t simulate_instruction_execution(basic_block_t* block, instruction_t* instruction){
-	switch(instruction->statement_type){
-		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-
-		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
-
-		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
-
-		case THREE_ADDR_CODE_INC_STMT:
-
-		case THREE_ADDR_CODE_DEC_STMT:
-
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-
-		/**
-		 * By default we weren't able to simulate anything, so kickback
-		 * a 0'd out flags register with a FALSE flag
-		 */
-		default: {
-			return (simulated_execution_result_t){0, FALSE};
-		}
-	}
-}
-
 
 
 /**
