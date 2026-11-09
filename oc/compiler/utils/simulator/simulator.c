@@ -5,6 +5,7 @@
 
 #include "simulator.h"
 #include <stdint.h>
+#include <math.h>
 #include <sys/types.h>
 
 
@@ -14,7 +15,7 @@
  *
  * NOTE: bitwise AND can also be used to represent the TEST command in this context
  */
-static inline simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
 	 * Initialize our results. If we get here then we know that this is going to work
 	 */
@@ -27,15 +28,13 @@ static inline simulated_execution_result_t simulate_bitwise_and_with_constants(u
 	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
 
 	/**
-	 * Extract the 64 bit version of the constant value just so we have anything. The
-	 * size does not matter here for this. To get the result, we'll populate the constant
-	 * value with itself
+	 * Perform the bitwise AND and then use the mask to retain only the
+	 * bits that we're after
 	 */
 	u_int64_t result = (raw_constant1 & raw_constant2) & mask;
 
 	/**
-	 * The carry flag, overflow flag and auxiliary carry flag remain complete unset
-	 * here. We need to worry about setting the sign flag, overflow flag and parity flag
+	 * Zero flag is set if we're 0
 	 */
 	if(result == 0){
 		set_zero_flag(&execution_result.flag_register);
@@ -63,14 +62,61 @@ static inline simulated_execution_result_t simulate_bitwise_and_with_constants(u
 
 
 /**
+ * F32 comparison via UCOMISS will set the zero flag, parity flag and carry flag as needed. The
+ * logic is as follows:
+ *
+ * 	If constant1 or constant2 is not a number:
+ * 		zf = 1
+ * 		pf = 1
+ * 		cf = 1
+ * 	else if constant1 > constant2:
+ * 		zf = 0
+ * 		pf = 0
+ * 		cf = 0
+ * 	else if constant1 < constant2:
+ * 		zf = 0
+ * 		pf = 0
+ * 		cf = 1
+ * 	else(constant1 == constant2):
+ * 		zf = 1
+ * 		pf = 0
+ * 		cf = 0
+ */
+static simulated_execution_result_t simulate_f32_constant_comparison(float constant1, float constant2){
+
+}
+
+
+/**
+ * F64 comparison via UCOMISD will set the zero flag, parity flag and carry flag as needed. The
+ * logic is as follows:
+ *
+ * 	If constant1 or constant2 is not a number:
+ * 		zf = 1
+ * 		pf = 1
+ * 		cf = 1
+ * 	else if constant1 > constant2:
+ * 		zf = 0
+ * 		pf = 0
+ * 		cf = 0
+ * 	else if constant1 < constant2:
+ * 		zf = 0
+ * 		pf = 0
+ * 		cf = 1
+ * 	else(constant1 == constant2):
+ * 		zf = 1
+ * 		pf = 0
+ * 		cf = 0
+ */
+static simulated_execution_result_t simulate_f64_constant_comparison(double constant1, double constant2){
+
+}
+
+
+/**
  * Simulate a test if not zero statement
  */
 static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_block_t* block, instruction_t* instruction){
-	/**
-	 * Initialize a blank result pack to start
-	 */
-	simulated_execution_result_t results = BLANK_SIMULATED_EXECUTION_RESULT;
-
 	/**
 	 * Case 1: we have a variable operand1. This means that we do not have a constant
 	 * operand as what we're testing so we'll need to do some block traversal to even
@@ -86,10 +132,10 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 	 */
 	} else {
 		/**
-		 * We know for a fact that this will work
+		 * Extract the three address constant and it's type
 		 */
-		results.simulation_possible = TRUE;
-		generic_type_t* operand_type = instruction->operands.oir.constant_operand->type;
+		three_addr_const_t* constant_operand = instruction->operands.oir.constant_operand;
+		generic_type_t* operand_type = constant_operand->type;
 
 		/**
 		 * Case 2.1: for non-floating point constants, the test command is simply the
@@ -97,14 +143,25 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 		 * for us
 		 */
 		if(IS_FLOATING_POINT(operand_type) == FALSE){
-			u_int64_t raw_constant_value = instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant;
+			u_int64_t raw_constant_value = constant_operand->constant_value.unsigned_long_constant;
 			return simulate_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
 
+		/**
+		 * Case 2.2: for floating point constants, the test if not 0 instruction will be turned into
+		 * a UCOMISS/UCOMISSD with 0 as the other operand. We will simulate this accordingly
+		 */
 		} else {
-			printf("TODO NOT IMPLEMENTED\n");
-			exit(1);
-
-			return results;
+			/**
+			 * This is either an F32 or F64, we will call out to the appropriate handlers
+			 * based on the type
+			 */
+			if(operand_type->basic_type_token == F32){
+				float float_value = constant_operand->constant_value.float_constant;
+				return simulate_f32_constant_comparison(float_value, 0.0f);
+			} else {
+				double double_value= constant_operand->constant_value.double_constant;
+				return simulate_f32_constant_comparison(double_value, 0.0);
+			}
 		}
 	}
 }
