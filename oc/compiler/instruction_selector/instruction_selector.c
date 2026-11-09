@@ -15,6 +15,7 @@
 #include "../graph_analyzer/graph_analyzer.h"
 #include "../optimizer/optimizer.h"
 #include "../utils/constants.h"
+#include "../utils/x86_cpu_flags.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -55,6 +56,8 @@ typedef struct instruction_window_t instruction_window_t;
 //The copy pair struct for our copy pair emittal
 typedef struct instruction_copy_pair_t instruction_copy_pair_t;
 
+//Instruction simulation result
+typedef struct simulated_execution_result_t simulated_execution_result_t;
 
 /**
  * What is the alignment type for a given variable. Most of the time
@@ -99,6 +102,17 @@ struct instruction_window_t{
 	instruction_t* instruction1;
 	instruction_t* instruction2;
 	instruction_t* instruction3;
+};
+
+
+/**
+ * A simluated execution returns the flag register after execution
+ * and a boolean denoting whether a simulation was even possible. If
+ * the simulation was not possible, the flags register is junk
+ */
+struct simulated_execution_result_t{
+	RFLAGS_t flag_register;
+	u_int8_t simulation_possible;
 };
 
 
@@ -9101,6 +9115,13 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 }
 
 
+
+static simulated_execution_result_t simulate_instruction_execution(basic_block_t* block, instruction_t* instruction){
+
+}
+
+
+
 /**
  * Eliminate the given branch if at all possible
  *
@@ -9176,6 +9197,9 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * now after a large amount of simplification has occurred, because we should be able to knock out
 	 * a lot of constant statements that we otherwise couldn't
 	 */
+	simulated_execution_result_t simulation_result = simulate_instruction_execution(block, cc_setting_stmt);
+
+
 	//TODO HERE
 
 
@@ -9189,9 +9213,10 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
  * Ollie's branch eliminator relies on our ability to trace back from a branch's so-called "relies_on" field
  * to determine if we have a statement that we can evaluate at compile time. If we can evaluate it, we will simulate
  * the flags that said statement would generate, and from there remove the branch entirely by simulating the branch's
- * execution
+ * execution.
  *
- * TODO FINISH DOC
+ * In the event that we do remove a branch, we will return TRUE from this function. It is the caller's responsibility
+ * to then do any other passes that they deem necessary such as mark and sweep, clean, control flow relation recalcuation, etc
  */
 static inline u_int8_t branch_elimination_pass(basic_block_t* function_entry, basic_block_t* function_exit, dynamic_array_t* function_blocks){
 	/**
