@@ -1121,18 +1121,19 @@ static inline three_addr_const_t* clone_constant(three_addr_const_t* constant){
  * 				merge i and j
  */
 static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t* postorder){
-	//Have we seen a change? By default we assume not
+	/**
+	 * Did we ourselves perform any simplification? By default we assume
+	 * that we have not. This will be used later in the pipeline to determine
+	 * if we need to rerun any control flow relation computation
+	 */
 	u_int8_t changed = FALSE;
-
-	//Our current block
-	basic_block_t* current;
 
 	/**
 	 * For each block in postorder
 	 */
 	for(int32_t i = 0; i < postorder->current_index; i++){
 		//Grab the current block out
-		current = dynamic_array_get_at(postorder, i);
+		basic_block_t* current = dynamic_array_get_at(postorder, i);
 
 		//If the exit statement is NULL then we can get out
 		if(current->exit_statement == NULL){
@@ -1723,19 +1724,28 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
  * 			merge i and j
  * 		if j is empty and ends in a conditional branch then
  * 			overwrite i's jump with a copy of j's branch
- *
- * TODO CAN WE MAKE THIS AN "AT LEAST ONE CHANGE" RETURN AS WELL???
  */
-static inline void clean(dynamic_array_t* current_function_blocks, basic_block_t* function_entry_block){
-	//Have we seen a change?
-	u_int8_t changed;
+static inline u_int8_t clean(dynamic_array_t* current_function_blocks, basic_block_t* function_entry_block){
+	/**
+	 * By default assume that we have simplified nothing
+	 */
+	u_int8_t simplification_occurred = FALSE;
 
-	//Allocate the postorder traversal array
+	/**
+	 * Allocate a reusable postorder traversal array that we'll just
+	 * clear out and reuse for each iteration
+	 */
 	dynamic_array_t postorder = dynamic_array_alloc();
 
-	//Now we'll do the actual clean algorithm
+	/**
+	 * We loop so long as we have seen one change this iteration. This is
+	 * separate from the overall simplification_occurred flag
+	 */
+	u_int8_t changed_in_interation = FALSE;
 	do {
-		//Clear out the old postorder array
+		/**
+		 * Clear out the old postorder array
+		 */
 		clear_dynamic_array(&postorder);
 
 		/**
@@ -1745,14 +1755,23 @@ static inline void clean(dynamic_array_t* current_function_blocks, basic_block_t
 		 */
 		get_post_order_traversal(current_function_blocks, function_entry_block, &postorder);
 
-		//Call onepass() for the reduction
-		changed = branch_reduce(current_function_blocks, &postorder);
+		/**
+		 * Perform the reduction. We'll update the simplification_occurred flag to be
+		 * true 
+		 */
+		changed_in_interation = branch_reduce(current_function_blocks, &postorder);
+		simplification_occurred |= changed_in_interation;
 
-	//We keep going so long as branch_reduce changes something 
-	} while(changed == TRUE);
+	/**
+	 * Keep going so long as we have seen one change in the prior pass
+	 */
+	} while(changed_in_interation == TRUE);
 
-	//Release the memory
+	/**
+	 * Release the temporary memory and give back whether we simplified or not
+	 */
 	dynamic_array_dealloc(&postorder);
+	return simplification_occurred;
 }
 
 
