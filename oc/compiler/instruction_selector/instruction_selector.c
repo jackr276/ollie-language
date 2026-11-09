@@ -55,15 +55,6 @@ typedef struct instruction_window_t instruction_window_t;
 //The copy pair struct for our copy pair emittal
 typedef struct instruction_copy_pair_t instruction_copy_pair_t;
 
-/**
- * Will we be printing these out as instructions or as three address code
- * statements?
- */
-typedef enum {
-	PRINT_THREE_ADDRESS_CODE,
-	PRINT_INSTRUCTION
-} instruction_printing_mode_t;
-
 
 /**
  * What is the alignment type for a given variable. Most of the time
@@ -982,72 +973,16 @@ static inline void order_all_functions(cfg_t* cfg){
 
 
 /**
- * Print a block our for reading
- *
- * TODO MOVE THIS OVER
-*/
-static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
-	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
-	}
-
-	//Switch here based on the type of block that we have
-	switch(block->block_type){
-		//Function entry blocks need extra printing
-		case BLOCK_TYPE_FUNC_ENTRY:
-			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
-			print_local_stack_data_area(&(block->function_defined_in->local_stack));
-			break;
-
-		//By default just print the name
-		default:
-			printf(".L%d:\n", block->block_id);
-			break;
-	}
-
-	//Now grab a cursor and print out every statement that we 
-	//have
-	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
-	while(cursor != NULL){
-		//Based on what mode we're given here, we call the appropriate
-		//print statement
-		if(mode == PRINT_THREE_ADDRESS_CODE){
-			//Hand off to printing method
-			print_three_addr_code_stmt(stdout, cursor);
-		} else {
-			print_instruction(stdout, cursor, PRINTING_VAR_IN_INSTRUCTION);
-		}
-
-
-		//Move along to the next one
-		cursor = cursor->next_statement;
-	}
-
-	//For spacing
-	printf("\n");
-}
-
-
-/**
  * Run through using the direct successor strategy and print all ordered blocks.
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
-	//Run through all of the functions
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the entry block. This is our starting point
+static inline void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
-		//So long as this one isn't NULL
 		while(current != NULL){
-			//Print it
-			print_ordered_block(current, mode);
-			//Advance to the direct successor
+			print_ordered_block(stdout, current, mode);
 			current = current->direct_successor;
 		}
 	}

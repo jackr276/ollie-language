@@ -62,6 +62,15 @@ typedef enum {
 } forced_signedness_type_t;
 
 /**
+ * Will we be printing these out as instructions or as three address code
+ * statements?
+ */
+typedef enum {
+	PRINT_THREE_ADDRESS_CODE,
+	PRINT_INSTRUCTION
+} instruction_printing_mode_t;
+
+/**
  * A generic struct that encapsulates most of our instructions
  */
 struct instruction_t{

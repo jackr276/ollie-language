@@ -553,7 +553,7 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 	 */
 	instruction_t* cursor = block->leader_statement;
 	while(cursor != NULL){
-		print_three_addr_code_stmt(stdout, cursor);
+		print_three_addr_code_stmt(fl, cursor);
 		cursor = cursor->next_statement;
 	}
 
@@ -561,6 +561,43 @@ void print_OIR_block(FILE* fl, basic_block_t* block, emit_dominance_frontier_sel
 	 * Newline for extra spacing
 	 */
 	printf("\n");
+}
+
+
+/**
+ * Print a block with OIR instructions inside of it
+ */
+void print_ordered_block(FILE* fl, basic_block_t* block, instruction_printing_mode_t mode){
+	/**
+	 * If this is some kind of switch block, we first print the jump table
+	 */
+	if(block->jump_table != NULL){
+		print_jump_table(stdout, block->jump_table);
+	}
+
+	if(block->block_type != BLOCK_TYPE_FUNC_ENTRY){
+		fprintf(fl,".L%d:\n", block->block_id);
+	} else {
+		fprintf(fl, "%s:\n", block->function_defined_in->func_name.string);
+		print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
+		print_local_stack_data_area(&(block->function_defined_in->local_stack));
+	}
+
+	/**
+	 * Run through all of these and print them out in instruction mode
+	 */
+	instruction_t* cursor = block->leader_statement;
+	while(cursor != NULL){
+		if(mode == PRINT_THREE_ADDRESS_CODE){
+			print_three_addr_code_stmt(fl, cursor);
+		} else {
+			print_instruction(fl, cursor, PRINTING_VAR_IN_INSTRUCTION);
+		}
+
+		cursor = cursor->next_statement;
+	}
+
+	fprintf(fl, "\n");
 }
 
 
