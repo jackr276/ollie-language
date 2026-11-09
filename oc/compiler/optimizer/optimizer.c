@@ -1843,6 +1843,25 @@ simplification_type_t perform_mark_and_sweep_pass(dynamic_array_t* function_bloc
 }
 
 
+simplification_type_t perform_branch_reduction_pass(dynamic_array_t* function_blocks, basic_block_t* function_entry, basic_block_t* function_exit){
+	u_int8_t simplification_occurred = clean(current_function_blocks, function_entry_block);
+
+	//TODO CAN WE MAKE THE BELOW OPTIONAL AND ONLY IF NEEDED???
+
+	/**
+	 * PASS 4: Recalculate everything
+	 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
+	 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
+	 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
+	 *
+	 * TODO THIS SHOULD BE DONE OPTIONALLY - ITS NOT ALWAYS GOING TO BE NEEDED
+	 */
+	recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
+
+	return simplification_occurred == TRUE ? SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW : NO_SIMPLIFICATION;
+}
+
+
 /**
  * The generic optimize function. We have the option to specific how many passes the optimizer
  * runs for in it's current iteration
@@ -1908,24 +1927,13 @@ cfg_t* optimize(cfg_t* cfg){
 		}
 
 		/**
-		 * PASS 3: Clean algorithm
+		 * PASS 3: Branch reduction
 		 * Clean follows after sweep because during the sweep process, we will likely delete the contents of
 		 * entire blocks. Clean uses 4 different steps in a specific order to eliminate control flow
-		 * that has been made useless by sweep()
+		 * that has been made useless by sweep(). In the event that clean has removed blocks, we will then
+		 * recompute all control flow relations for the given function as the old ones are invalid
 		 */
-		clean(current_function_blocks, function_entry_block);
-
-		//TODO CAN WE MAKE THE BELOW OPTIONAL AND ONLY IF NEEDED???
-
-		/**
-		 * PASS 4: Recalculate everything
-		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
-		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
-		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
-		 *
-		 * TODO THIS SHOULD BE DONE OPTIONALLY - ITS NOT ALWAYS GOING TO BE NEEDED
-		 */
-		recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
+		perform_branch_reduction_pass(current_function_blocks, function_entry_block, function_exit_block);
 	}
 
 	//Give back the CFG

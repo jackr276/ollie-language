@@ -17906,6 +17906,8 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * Our very first step in the instruction selector is to order all of the blocks in one 
 	 * straight line. This step is also able to recognize and exploit some early optimizations,
 	 * such as when a block ends in a jump to the block right below it 
+	 *
+	 * TODO NEEDS TO BE PER FUNCTION
 	 */
 	order_blocks(cfg);
 
