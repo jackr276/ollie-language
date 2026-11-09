@@ -685,6 +685,20 @@ static void mark(dynamic_array_t* function_blocks){
 			}
 
 			/**
+			 * BIN OP statements can potentially have a load inside of them. To account for this
+			 * we'll need to mark the address operands should the statement have them
+			 */
+			case THREE_ADDR_CODE_BIN_OP_STMT: {
+				if(stmt->memory_access_type == READ_FROM_MEMORY){
+					mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
+				}
+
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
+				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
+				break;
+			}
+
+			/**
 			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
 			 * will ignore
 			 */
