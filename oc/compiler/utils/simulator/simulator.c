@@ -4,24 +4,82 @@
  */
 
 #include "simulator.h"
+#include <stdint.h>
+#include <sys/types.h>
 
 /**
  * Simulate a test if not zero statement
  */
 static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_block_t* block, instruction_t* instruction){
 	/**
+	 * Initialize a blank result pack to start
+	 */
+	simulated_execution_result_t results = BLANK_SIMULATED_EXECUTION_RESULT;
+
+	/**
 	 * Case 1: we have a variable operand1. This means that we do not have a constant
 	 * operand as what we're testing so we'll need to do some block traversal to even
 	 * potentially determine what this is
 	 */
 	if(instruction->operands.oir.operand1 != NULL){
+		printf("TODO NOT IMPLEMENTED\n");
+		exit(1);
 
 	/**
 	 * Case 2: we have a constant operand in this case. This means that we can for sure simulate
 	 * the execution result without any searching at all
 	 */
 	} else {
+		/**
+		 * We know for a fact that this will work
+		 */
+		results.simulation_possible = TRUE;
+		generic_type_t* operand_type = instruction->operands.oir.constant_operand->type;
 
+		/**
+		 * Case 2.1: for non-floating point constants, the test command is simply the
+		 * "andX" instruction without setting results. This is easy enough to simulate
+		 * for us
+		 */
+		if(IS_FLOATING_POINT(operand_type) == FALSE){
+			/**
+			 * Get the actual operand bit width and then create an appropriate mask
+			 */
+			u_int64_t operand_bit_width = operand_type->type_size * 8;
+			u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
+
+			/**
+			 * Extract the 64 bit version of the constant value just so we have anything. The
+			 * size does not matter here for this. To get the result, we'll populate the constant
+			 * value with itself
+			 */
+			u_int64_t constant_value = instruction->operands.oir.constant_operand->constant_value.unsigned_long_constant;
+			u_int64_t result = (constant_value & constant_value) & mask;
+
+			/**
+			 * The carry flag, overflow flag and auxiliary carry flag remain complete unset
+			 * here. We need to worry about setting the sign flag, overflow flag and parity flag
+			 */
+			if(result == 0){
+				set_zero_flag(&results.flag_register);
+			}
+
+			/**
+			 * Set sign flag if the sign bit is 1
+			 */
+			if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
+				set_sign_flag(&results.flag_register);
+			}
+
+
+			return results;
+
+		} else {
+			printf("TODO NOT IMPLEMENTED\n");
+			exit(1);
+
+			return results;
+		}
 	}
 }
 

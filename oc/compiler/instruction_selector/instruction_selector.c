@@ -17623,8 +17623,8 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 
 			//This really should be impossible
 			default:
-				printf("Fatal internal compiler error: unreachable path hit in FP test if not zero selector\n");
-				exit(1);
+				trigger_ice_panic("unreachable path hit in FP test if not zero selector");
+				break;
 		}
 
 		//Transfer over the old op1
