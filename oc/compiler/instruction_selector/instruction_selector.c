@@ -859,6 +859,9 @@ static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type
  * One special consideration we'll take is ordering nodes with a given jump next to eachother.
  * For example, if block .L15 ends in a direct jump to .L16, we'll endeavor to have .L16 right
  * after .L15 so that in a later stage, we can eliminate that jump.
+ *
+ *
+ * TODO THIS NEEDS TO BE MADE TO BE PER FUNCTION - PER CFG IS WASTEFUL
  */
 static void order_blocks(cfg_t* cfg){
 	//Run through every function and wipe the visited status and direct successor

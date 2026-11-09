@@ -1903,6 +1903,8 @@ cfg_t* optimize(cfg_t* cfg){
 		 * Now that we've marked, sweeped and cleaned, odds are that all of our control relations will be off due to deletions of blocks, statements,
 		 * etc. So, to remedy this, we will recalculate everything in the CFG. There is no advantage in splitting this section up by function, as 
 		 * all blocks are going to be traversed regardless. Due to this, we will be doing it over the entire CFG at the end
+		 *
+		 * TODO THIS SHOULD BE DONE OPTIONALLY - ITS NOT ALWAYS GOING TO BE NEEDED
 		 */
 		recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 	}
