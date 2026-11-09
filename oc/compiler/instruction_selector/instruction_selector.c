@@ -691,6 +691,8 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
  * Does the block that we're passing in end in a direct(jmp) jump to
  * the very next block. If so, we'll return what block the jump goes to.
  * If not, we'll return null.
+ *
+ * TODO IDK IF THIS IS EVEN TRUE
  */
 static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 	//If it's null then leave
@@ -911,9 +913,17 @@ static void order_function_blocks(dynamic_array_t* function_blocks, basic_block_
 		current->visited = TRUE;
 		previous_block = current;
 
+		/**
+		 * Now go through and enqueue all the successors. Make sure that we're
+		 * only enqueueing ones that have not been visited
+		 */
+		for(int32_t i = 0; i < current->successors.current_index; i++){
+			basic_block_t* successor = get_edge_at_index(&(current->successors), i)->block;
+			if(successor->visited == FALSE){
+				enqueue(&bfs_traversal_queue, successor);
+			}
+		}
 	}
-
-
 }
 
 
