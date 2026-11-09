@@ -10069,6 +10069,7 @@ static void simplify(cfg_t* cfg){
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 		symtab_function_record_t* function = function_entry->function_defined_in;
+		dynamic_array_t* function_blocks = &(function->function_blocks);
 
 		/**
 		 * Before we do any simplifying, we need to remediate all of the function
@@ -10078,13 +10079,13 @@ static void simplify(cfg_t* cfg){
 		 * true complexity of a function call. We will now do all of in depth
 		 * work to do this
 		 */
-		perform_call_lowering_in_function(&(function->function_blocks));
+		perform_call_lowering_in_function(function_blocks);
 
 		/**
 		 * Run the simplifier for the first time after we do our call lowering. We will
 		 * see the most simplification action in this step
 		 */
-		run_simplifier(&(function->function_blocks), function_entry);
+		run_simplifier(function_blocks, function_entry);
 
 		/**
 		 * Once we're confident that we've done all of the simplifying that we can, we 
@@ -10092,23 +10093,24 @@ static void simplify(cfg_t* cfg){
 		 * this pass optimizes anything, we will then retrigger the simplifier
 		 * to see if there are any more opportuntities
 		 */
-		u_int8_t simplification_occured = global_value_numbering_pass(function_entry, &(function->function_blocks));
+		u_int8_t simplification_occured = global_value_numbering_pass(function_entry, function_blocks);
 
 		/**
 		 * If we did do any global value numbering, then we'll need to come back
 		 * and resimplify to make sure we haven't missed anything post-simplify
 		 */
 		if(simplification_occured == TRUE){
-			//Run the mark and sweep
-			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
-
-			//TODO DO WE NEED CONTROL RELATION UPDATES
+			/**
+			 * Run mark and sweep. This will handle all control flow relation recomputation if the need arises
+			 */
+			simplification_type_t result = perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
 
 			/**
 			 * If we ended up doing control flow simplification, we are going to need
 			 * to reorder all of the blocks
 			 */
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
+				//TODO CAN WE MAKE THIS PER_FUNCTION????
 				order_blocks(cfg);
 			}
 
@@ -10116,7 +10118,7 @@ static void simplify(cfg_t* cfg){
 			 * Run the simplifier after we've done mark and sweep. Be sure
 			 * that we fix the use counts every time that we do this
 			 */
-			run_simplifier(&(function->function_blocks), function_entry);
+			run_simplifier(function_blocks, function_entry);
 
 		/**
 		 * Otherwise we were not able to value number anything, but we still may have redundant instructions
@@ -10124,10 +10126,10 @@ static void simplify(cfg_t* cfg){
 		 * pass
 		 */
 		} else {
-			//Run the mark and sweep
-			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
-
-			//TODO DO WE NEED CONTROL RELATION UPDATES
+			/**
+			 * Run the mark and sweep pass. This will handle any control flow relation updates that are needed
+			 */
+			simplification_type_t result = perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
 
 			/**
 			 * If we ended up doing control flow simplification, we are going to need
@@ -10144,7 +10146,7 @@ static void simplify(cfg_t* cfg){
 		 * one that can, we will remove the conditional branch entirely and just make it take the
 		 * path that we can prove it always would take
 		 */
-		u_int8_t branch_reduction_occurred = branch_elimination_pass(function_entry, function_exit, &(function->function_blocks));
+		u_int8_t branch_reduction_occurred = branch_elimination_pass(function_entry, function_exit, function_blocks);
 		if(branch_reduction_occurred == TRUE){
 			//TODO DETERMINE WHAT WE NEED TO DO IN HERE
 
@@ -10158,12 +10160,12 @@ static void simplify(cfg_t* cfg){
 		 * if we have at least one initializer that was simplified, which will tell us
 		 * that we need to trigger the simplifier
 		 */
-		if(lower_all_initializer_statements(&(function->function_blocks)) == TRUE){
+		if(lower_all_initializer_statements(function_blocks) == TRUE){
 			/**
 			 * After we do all of this, one run final simplifier pass to ensure everything
 			 * is in the simplest form that we can get it in
 			 */
-			run_simplifier(&(function->function_blocks), function_entry);
+			run_simplifier(function_blocks, function_entry);
 		}
 
 		/*
@@ -10173,12 +10175,12 @@ static void simplify(cfg_t* cfg){
 		 * point we find that we've converted at least one instruciton, we will
 		 * retrigger the simplifier
 		 */
-		if(convert_memory_copy_statements_into_loads_and_stores(&(function->function_blocks)) == TRUE){
+		if(convert_memory_copy_statements_into_loads_and_stores(function_blocks) == TRUE){
 			/**
 			 * Run the simplifier after we've done the conversion to make sure we are in
 			 * as simple a form as we can get
 			 */
-			run_simplifier(&(function->function_blocks), function_entry);
+			run_simplifier(function_blocks, function_entry);
 		}
 	}
 }

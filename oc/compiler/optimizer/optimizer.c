@@ -1861,18 +1861,17 @@ cfg_t* optimize(cfg_t* cfg){
 		 * are still around
 		 */
 		if(branching_assignments_optimized == TRUE){
-			//Reset all of the marks in the function
-			//TODO DONT NEED
-			reset_all_marks(current_function_blocks);
-
-			//Recalculate all dominance relations
+			/**
+			 * We need to recompute all control flow relations ones before running mark and sweep and then
+			 * again after in the event that we have a further control flow simplification
+			 */
 			recompute_all_control_flow_relations_for_function(current_function_blocks, function_entry_block, function_exit_block);
 
-			//Invoke the marker
-			mark(current_function_blocks);
-
-			//Invoke the sweeper
-			sweep(current_function_blocks, function_entry_block);
+			/**
+			 * Run the mark and sweep pass. This will also take care of all control flow relations
+			 * that need to be recalculated
+			 */
+			perform_mark_and_sweep_pass(current_function_blocks, function_entry_block, function_exit_block);
 		}
 
 		/**
