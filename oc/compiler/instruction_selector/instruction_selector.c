@@ -919,15 +919,47 @@ static void order_function_blocks(dynamic_array_t* function_blocks, basic_block_
 		 */
 		for(int32_t i = 0; i < current->successors.current_index; i++){
 			basic_block_t* successor = get_edge_at_index(&(current->successors), i)->block;
-			if(successor->visited == FALSE){
-				enqueue(&bfs_traversal_queue, successor);
+
+			/**
+			 * Already visited so skip it
+			 */
+			if(successor->visited == TRUE){
+				continue;
 			}
+
+			/**
+			 * Skip every empty block. This is mostly just to avoid
+			 * the virtual exit block
+			 */
+			if(successor->leader_statement == NULL){
+				successor->visited = TRUE;
+				continue;
+			}
+
+			/**
+			 * Otherwise we can enqueue this
+			 */
+			enqueue(&bfs_traversal_queue, successor);
 		}
 	}
 }
 
 
-
+/**
+ * Run through all functions and invoke the orderer on them all. This should
+ * only be used if you explicitly want to order every single function
+ */
+static inline void order_all_functions(cfg_t* cfg){
+	/**
+	 * Run through all functions and just invoke the helper for each one
+	 */
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		dynamic_array_t* function_blocks = &(function_entry->function_defined_in->function_blocks);
+		
+		order_function_blocks(function_blocks, function_entry);
+	}
+}
 
 
 /**
@@ -10192,8 +10224,7 @@ static void simplify(cfg_t* cfg){
 			 * to reorder all of the blocks
 			 */
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
-				//TODO CAN WE MAKE THIS PER_FUNCTION????
-				order_blocks(cfg);
+				order_function_blocks(function_blocks, function_entry);
 			}
 
 			/**
@@ -10218,7 +10249,7 @@ static void simplify(cfg_t* cfg){
 			 * to reorder all of the blocks
 			 */
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
-				order_blocks(cfg);
+				order_function_blocks(function_blocks, function_entry);
 			}
 		}
 
@@ -17991,10 +18022,8 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * Our very first step in the instruction selector is to order all of the blocks in one 
 	 * straight line. This step is also able to recognize and exploit some early optimizations,
 	 * such as when a block ends in a jump to the block right below it 
-	 *
-	 * TODO NEEDS TO BE PER FUNCTION
 	 */
-	order_blocks(cfg);
+	order_all_functions(cfg);
 
 	//Do we need to print intermediate representations?
 	u_int8_t print_irs = options->print_irs;
