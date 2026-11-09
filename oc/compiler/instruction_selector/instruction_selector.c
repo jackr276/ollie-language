@@ -9117,7 +9117,29 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 
 
 static simulated_execution_result_t simulate_instruction_execution(basic_block_t* block, instruction_t* instruction){
+	switch(instruction->statement_type){
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
 
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
+
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+
+		case THREE_ADDR_CODE_INC_STMT:
+
+		case THREE_ADDR_CODE_DEC_STMT:
+
+		case THREE_ADDR_CODE_BIN_OP_STMT:
+
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+
+		/**
+		 * By default we weren't able to simulate anything, so kickback
+		 * a 0'd out flags register with a FALSE flag
+		 */
+		default: {
+			return (simulated_execution_result_t){0, FALSE};
+		}
+	}
 }
 
 
@@ -9199,8 +9221,14 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 */
 	simulated_execution_result_t simulation_result = simulate_instruction_execution(block, cc_setting_stmt);
 
+	/**
+	 * If we find that it's impossible to simulate this bail out now
+	 */
+	if(simulation_result.simulation_possible == FALSE){
+		return FALSE;
+	}
 
-	//TODO HERE
+	//TODO NOW EXECUTE THE BRANCH BASED ON THE SIMULATION
 
 
 
