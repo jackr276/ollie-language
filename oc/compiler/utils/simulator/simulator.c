@@ -74,12 +74,31 @@ static search_result_t get_variable_value_in_block(basic_block_t* block, instruc
 		 * it's a more complex instruction then we're out of luck here
 		 */
 		if(variables_equal(variable, cursor->operands.oir.assignee) == TRUE){
+			/**
+			 * If we have an ASSN statement then we've got some other variable. We
+			 * won't try to keep chaining with assignments as that is unlikely to 
+			 * work
+			 */
 			if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+				search_result.result_type = SEARCH_RESULT_TYPE_VAR;
+				search_result.result.variable = cursor->operands.oir.operand1;
 
+			/**
+			 * This is what we're really after. An ASSN_CONST statement allows
+			 * us to simulate a lot
+			 */
 			} else if(cursor->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+				search_result.result_type = SEARCH_RESULT_TYPE_CONST;
+				search_result.result.constant = cursor->operands.oir.constant_operand;
 
+			/**
+			 * This is not an ASSN or an ASSN_CONST statement, so we can't do anything
+			 * with it. We are not trying to simulate super complex things like loads,
+			 * binary operations, etc.. Since we've found it, we can break out the loop
+			 * here
+			 */
 			} else {
-
+				break;
 			}
 		}
 
@@ -88,7 +107,6 @@ static search_result_t get_variable_value_in_block(basic_block_t* block, instruc
 		 */
 		cursor = cursor->previous_statement;
 	}
-
 
 	return search_result;
 }
