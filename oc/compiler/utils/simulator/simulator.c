@@ -61,7 +61,36 @@ struct search_result_t {
  * for where this variable was assigned to see if there's a simple value that we can report back
  */
 static search_result_t get_variable_value_in_block(basic_block_t* block, instruction_t* start_instruction, three_addr_var_t* variable){
+	search_result_t search_result = BLANK_SEARCH_RESULT;
 
+	/**
+	 * Crawl up the block starting at the provided start instruction
+	 */
+	instruction_t* cursor = start_instruction;
+	while(cursor != NULL){
+		/**
+		 * If the given variable and the assignee are equal, we *may* be able to
+		 * report something if the given instruction is an assignment instruction. If
+		 * it's a more complex instruction then we're out of luck here
+		 */
+		if(variables_equal(variable, cursor->operands.oir.assignee) == TRUE){
+			if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
+
+			} else if(cursor->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
+
+			} else {
+
+			}
+		}
+
+		/**
+		 * We go up the block *BACKWARDS*
+		 */
+		cursor = cursor->previous_statement;
+	}
+
+
+	return search_result;
 }
 
 
