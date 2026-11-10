@@ -10697,6 +10697,27 @@ static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_
 }
 
 
+/**
+ * TODO THIS
+ */
+static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement){
+
+	switch(statement->statement_type){
+
+		/**
+		 * If somehow we find a statement that is not known to set condition codes, then that is an error and
+		 * we will need to panic out here. This means that we're trying to branch using something that does not
+		 * set condition codes
+		 */
+		default: {
+			trigger_ice_panic("Statement that does not set condition codes was found as a dependency of conditional execution");
+		}
+	}
+
+	//Dummy to keep the compiler happy
+	return FALSE;
+}
+
 
 /**
  * Trace our way up the block to determine if the given variable relies on a floating point comparsion
@@ -10705,6 +10726,11 @@ static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_
  *
  * NOTE: if we cannot find where this variable comes from in the block we will trigger a panic. That should
  * absolutely never happen, and if it does something in the pipeline is messed up
+ *
+ * NOTE: Just because an operation has floating point operands does *NOT* necessarily mean that
+ * we need to take that into account in the end. For example, float logical or's final condition
+ * code setting statement is a regular bitwise and, which does not need to have parity flag setting
+ * taken into account.
  */
 static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* block, instruction_t* starting_statement, three_addr_var_t* variable){
 	/**
@@ -10715,9 +10741,18 @@ static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* bloc
 	}
 
 	/**
+	 * Starting at the given start statement, crawl our way up the
+	 * block until we can find an assignee that matches our given variable
 	 */
 	instruction_t* cursor = starting_statement;
 	while(cursor != NULL){
+		/**
+		 * If they are equal, then we use the special helper to determine whether
+		 * the given instruction will eventually use an FP comparison or not
+		 */
+		if(variables_equal(variable, cursor->operands.oir.assignee) == TRUE){
+
+		}
 
 		cursor = cursor->previous_statement;
 	}
