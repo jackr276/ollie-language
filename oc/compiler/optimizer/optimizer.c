@@ -1184,13 +1184,12 @@ static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* de
 	//Emit the instruction - we can just use a line number of 0 as it doesn't matter here
 	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(destination_variable, tested_variable, 0);
 
-	//If this is a floating point variable, update the pass-by-reference
-	//operator
+	/**
+	 * If this is a floating point variable, update the pass-by-reference
+	 * operator
+	 */
 	if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
 		*operator = NOT_EQUALS;
-
-		//Flag that this comes from FP comparison
-		destination_variable->comes_from_fp_comparison = TRUE;
 	}
 
 	//Give back the final assignee

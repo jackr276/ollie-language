@@ -1756,11 +1756,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 		 * operator
 		 */
 		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
-			//This is needed for branching later on
 			*operator = NOT_EQUALS;
-
-			//Flag that this comes out of an FP comparsion
-			test_if_not_zero->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 		}
 
 		//Give back the final assignee
@@ -4507,13 +4503,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
 			add_statement(current_block, logical_not_statement);
 
-			/**
-			 * If we came from a floating point operation, then we will just flag as such here
-			 */
-			if(IS_FLOATING_POINT(assignee->type) == TRUE){
-				logical_not_statement->operands.oir.assignee->comes_from_fp_comparison = TRUE;
-			}
-
 			//Package up and return the result
 			generic_results.operator = EXCLAMATION;
 			generic_results.starting_block = basic_block;
@@ -5293,15 +5282,6 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
 	}
 
-	/**
-	 * If this operand type is a floating point number,
-	 * we need to flag that this comparison is itself a floating point comparison
-	 * for the instruction selector
-	 */
-	if(IS_FLOATING_POINT(operand_type) == TRUE){
-		comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
-	}
-
 	//And then the conditional move statement itself
 	conditional_move = emit_conditional_movement_with_const_statement(current_result_var,
 																		false_variable, //If not equal then false
@@ -5348,15 +5328,6 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 
 			//Get the operand type base don the two types provided
 			operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
-		}
-
-		/**
-		 * If this operand type is a floating point number,
-		 * we need to flag that this comparison is itself a floating point comparison
-		 * for the instruction selector
-		 */
-		if(IS_FLOATING_POINT(operand_type) == TRUE){
-			comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 		}
 
 		//And then the conditional move statement itself
@@ -5844,14 +5815,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 					trigger_ice_panic("Invalid result type detected in binary expression emitter");
 				}
 
-			}
-
-			/**
-			 * If the final result type is an FP comparison, we need to flag this for later on down
-			 * the line when we need to perform instruction selection
-			 */
-			if(IS_FLOATING_POINT(final_result_type) == TRUE){
-				assignee->comes_from_fp_comparison = TRUE;
 			}
 
 			break;
