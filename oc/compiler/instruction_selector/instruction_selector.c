@@ -16311,6 +16311,9 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
  * jump-to-if and the unconditional else jump
  *
  * NOTE: we know that the branch instruction here is always instruction 1
+ *
+ *
+ * TODO WE NEED TO UPDATE HOW THIS WORKS FOR FLOATING POINT
  */
 static void handle_branch_instruction(instruction_window_t* window){
 	instruction_t* branch_stmt = window->instruction1;
@@ -16328,50 +16331,77 @@ static void handle_branch_instruction(instruction_window_t* window){
 	//The false jump condition
 	instruction_t* jump_to_else;
 
+
+	//TODO REWRITE ALL OF THIS
+
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
 	if(branch_stmt->relies_on->comes_from_fp_comparison == FALSE){
 		switch(branch_stmt->branch_type){
-			case BRANCH_A:
+			case BRANCH_A: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JA);
 				break;
-			case BRANCH_AE:
+			}
+
+			case BRANCH_AE: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
 				break;
-			case BRANCH_B:
+			}
+
+			case BRANCH_B: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JB);
 				break;
-			case BRANCH_BE:
+			}
+
+			case BRANCH_BE: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
 				break;
-			case BRANCH_E:
+			}
+
+			case BRANCH_E: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JE);
 				break;
-			case BRANCH_NE:
+			}
+
+			case BRANCH_NE: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
 				break;
-			case BRANCH_Z:
+			}
+
+			case BRANCH_Z: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JZ);
 				break;
-			case BRANCH_NZ:
+			}
+
+			case BRANCH_NZ: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
 				break;
-			case BRANCH_G:
+			}
+
+			case BRANCH_G: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JG);
 				break;
-			case BRANCH_GE:
+			}
+
+			case BRANCH_GE: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JGE);
 				break;
-			case BRANCH_L:
+			}
+
+			case BRANCH_L: {
 				jump_to_if = emit_jump_instruction_directly(if_block, JL);
 				break;
-			case BRANCH_LE:
+			}
+
+			case BRANCH_LE:{
 				jump_to_if = emit_jump_instruction_directly(if_block, JLE);
 				break;
+			}
+
 			//We in reality should never reach here
 			default:
-				printf("Fatal internal compiler error: Unreachable branch type hit\n");
-				exit(1);
+				trigger_ice_panic("Unreachable branch type hit in branch lowerer");
+				break;
 		}
 
 		//Copy over the special relies_on field
