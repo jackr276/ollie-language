@@ -9106,6 +9106,9 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
  *
  * TODO DOC
  *
+ *
+ * TODO SHOULD WE ALSO DO THIS FOR CONDITIONAL MOVES?????
+ *
  */
 static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	/**

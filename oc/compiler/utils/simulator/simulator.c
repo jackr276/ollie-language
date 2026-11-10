@@ -43,6 +43,29 @@ struct search_result_t {
 
 
 /**
+ * Search this entire block only, starting at the start instruction and working our way *BACKWARDS*,
+ * until we find what was assigned to equal "variable" or until we hit the start of the block. Based
+ * on what the variable was assigned to, we'll return a search result that contains nothing, a constant or
+ * a variable. This will be used by the caller in their simulation efforts
+ *
+ * Example:
+ * 	.L5:
+ * 		x_1 <- 5 	  <--- we'll eventually find this
+ * 		....
+ * 		....
+ * 		....
+ * 		t3 <- x_1 > 3  <--- start searching here
+ * 		branch_le .L6 else .L4
+ *
+ * An important note: we are not seeking to simplify or remove instructions in any way. We just wish to look
+ * for where this variable was assigned to see if there's a simple value that we can report back
+ */
+static search_result_t get_variable_value_in_block(basic_block_t* block, instruction_t* start_instruction, three_addr_var_t* variable){
+
+}
+
+
+/**
  * Simulate a bitwise AND statement given 2 constants and their type. Bitwise AND 
  * can only ever set the sign flag, zero flag and parity flags
  *
