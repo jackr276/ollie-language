@@ -10701,8 +10701,32 @@ static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_
  * TODO THIS
  */
 static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement){
-
+	/**
+	 * On a case by case basis determine if we use floating point 
+	 * comparison(UCOMISS/UCOMISD/COMISS/COMISD) or not
+	 */
 	switch(statement->statement_type){
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
+
+		}
+
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
+
+		}
+
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
+
+		}
+
+		case THREE_ADDR_CODE_SETNE_STMT:
+		case THREE_ADDR_CODE_INC_STMT:
+		case THREE_ADDR_CODE_DEC_STMT:
+		case THREE_ADDR_CODE_NEG_STATEMENT:
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+		case THREE_ADDR_CODE_CLEAR_STMT:
+			//TODO
+			return FALSE;
 
 		/**
 		 * If somehow we find a statement that is not known to set condition codes, then that is an error and
@@ -10748,10 +10772,11 @@ static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* bloc
 	while(cursor != NULL){
 		/**
 		 * If they are equal, then we use the special helper to determine whether
-		 * the given instruction will eventually use an FP comparison or not
+		 * the given instruction will eventually use an FP comparison or not. Once
+		 * we've found this we are done so we return the result
 		 */
 		if(variables_equal(variable, cursor->operands.oir.assignee) == TRUE){
-
+			return does_statement_use_fp_comparison(cursor);
 		}
 
 		cursor = cursor->previous_statement;
@@ -12215,7 +12240,7 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * for the if value now. We will hijack the old converting move OIR statement to do this
 	 */
 
-	if(conditional_move->relies_on->comes_from_fp_comparison == FALSE){
+	if(conditional_move->branch_derives_from_float_comparison == FALSE){
 		conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
 		conditional_move->operands.x86.destination_register = assignee;
 		conditional_move->operands.x86.source_register1 = if_assignee;
@@ -17085,6 +17110,8 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
  * A branch statement always selects 2 instructions, the conditional
  * jump-to-if and the unconditional else jump
  *
+ * TODO REWRITE
+ *
  * NOTE: we know that the branch instruction here is always instruction 1
  */
 static void handle_branch_instruction(instruction_window_t* window){
@@ -17105,7 +17132,7 @@ static void handle_branch_instruction(instruction_window_t* window){
 
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
-	if(branch_stmt->relies_on->comes_from_fp_comparison == FALSE){
+	if(branch_stmt->branch_derives_from_float_comparison == FALSE){
 		switch(branch_stmt->branch_type){
 			case BRANCH_A:
 				jump_to_if = emit_jump_instruction_directly(if_block, JA);
