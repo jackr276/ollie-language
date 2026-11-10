@@ -60,7 +60,7 @@ struct search_result_t {
  * An important note: we are not seeking to simplify or remove instructions in any way. We just wish to look
  * for where this variable was assigned to see if there's a simple value that we can report back
  */
-static search_result_t get_variable_value_in_block(basic_block_t* block, instruction_t* start_instruction, three_addr_var_t* variable){
+static search_result_t search_for_variable_assignment_in_block(basic_block_t* block, instruction_t* start_instruction, three_addr_var_t* variable){
 	search_result_t search_result = BLANK_SEARCH_RESULT;
 
 	/**
@@ -298,6 +298,24 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 		 */
 		three_addr_var_t* operand = instruction->operands.oir.operand1;
 		generic_type_t* operand_type = operand->type;
+
+		/**
+		 * Let's see if we can find out what this variable was assigned to. There is a chance that
+		 * this was assigned to be a constant. If that's the case, we will be able to simulate this
+		 * further
+		 */
+		search_result_t search_result = search_for_variable_assignment_in_block(block, instruction->previous_statement, operand);
+
+		/**
+		 * This is usually what happens - we found nothing or we found a variable assignment. In this case it's not possible
+		 * to simulate any further, so we'll return the blank simulation result which tells the caller that we could do
+		 * nothing with this
+		 */
+		if(search_result.result_type == SEARCH_RESULT_TYPE_NONE || search_result.result_type == SEARCH_RESULT_TYPE_VAR){
+			return BLANK_SIMULATED_EXECUTION_RESULT;
+		}
+
+
 
 		printf("TODO NOT IMPLEMENTED\n");
 		exit(1);
