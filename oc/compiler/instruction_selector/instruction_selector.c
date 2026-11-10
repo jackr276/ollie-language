@@ -10697,15 +10697,74 @@ static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_
 }
 
 
+
 /**
+ * Trace our way up the block to determine if the given variable relies on a floating point comparsion
+ * or not. We are specifically looking to see if we come from a UCOMISS/UCOMISD statement or not. We will
+ * crawl our way up the block starting at the given starting statement
+ *
+ * NOTE: if we cannot find where this variable comes from in the block we will trigger a panic. That should
+ * absolutely never happen, and if it does something in the pipeline is messed up
  */
-static void flag_branches_that_rely_on_float_comparison(dynamic_array_t* function_blocks){
+static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* block, instruction_t* starting_statement, three_addr_var_t* variable){
+	/**
+	 * This should *NEVER* happen. We must always have something thta our comparison came from
+	 */
+	if(variable == NULL){
+		trigger_ice_panic("NULL relies_on variable detected in fp comparison pipeline");
+	}
+
+	/**
+	 */
+	instruction_t* cursor = starting_statement;
+	while(cursor != NULL){
+
+		cursor = cursor->previous_statement;
+	}
+
+	/**
+	 * If we're ever unable to find the source of the "relies_on" variable within the block then
+	 * this is a hard error. We will trigger a panic
+	 */
+	trigger_ice_panic("Unable to find a relies on variable for a branch statement within the given block");
+	return FALSE;
+}
+
+
+/**
+ * TODO DOC
+ *
+ * NOTE: Just because an operation has floating point operands does *NOT* necessarily mean that
+ * we need to take that into account in the end. For example, float logical or's final condition
+ * code setting statement is a regular bitwise and, which does not need to have parity flag setting
+ * taken into account.
+ */
+static void flag_conditional_execution_that_relies_on_float_comparison(dynamic_array_t* function_blocks){
 	for(int32_t i = 0; i < function_blocks->current_index; i++){
 		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
 
+		/**
+		 * Crawl through the entire block. We'll only need to perform the
+		 * flagging operation for conditional moves and branch statements
+		 */
+		instruction_t* cursor = block->leader_statement;
+		while(cursor != NULL){
+			switch(cursor->statement_type){
+				case THREE_ADDR_CODE_BRANCH_STMT:
+				case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
+					cursor->branch_derives_from_float_comparison = does_variable_come_from_fp_comparison(block, cursor, cursor->relies_on);
+					break;
+				}
+
+				default: {
+					break;
+				}
+			}
+
+			cursor = cursor->next_statement;
+		}
 	}
 }
-
 
 
 /**
@@ -10825,7 +10884,7 @@ static void simplify(cfg_t* cfg){
 		 * through and flag any/all branches and conditional moves that rely on floating point
 		 * comparison as doing so. This will impact our branch selection down the line
 		 */
-		flag_branches_that_rely_float_comparison(&(function->function_blocks));
+		flag_conditional_execution_that_relies_on_float_comparison(&(function->function_blocks));
 	}
 }
 
@@ -16984,25 +17043,6 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
 
 	//The value that we're raising always comes from op1
 	instruction->operands.x86.source_register2 = instruction->operands.oir.operand1;
-}
-
-
-/**
- * Trace our way up the block to determine if the given variable relies on a floating point comparsion
- * or not. We are specifically looking to see if we come from a UCOMISS/UCOMISD statement or not. We will
- * crawl our way up the block starting at the given starting statement
- *
- * NOTE: if we cannot find where this variable comes from in the block we will trigger a panic. That should
- * absolutely never happen, and if it does something in the pipeline is messed up
- */
-static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* block, instruction_t* starting_statement, three_addr_var_t* variable){
-	instruction_t* cursor = starting_statement;
-	while(cursor != NULL){
-
-		cursor = cursor->previous_statement;
-	}
-
-	trigger_ice_panic("Unable to find a relies on variable for a branch statement within the given block");
 }
 
 
