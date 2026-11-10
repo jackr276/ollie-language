@@ -10716,6 +10716,16 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
 		}
 
+		/**
+		 * Test if not zero statements also will eventually be lowered to
+		 * use unordered comparison statements in the event that they have
+		 * a float operand. As such, we'll just have to return whether or
+		 * not the operand is a float
+		 */
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
+			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+		}
+
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 
 		}
@@ -10724,9 +10734,7 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 
 		}
 
-		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
 
-		}
 
 		case THREE_ADDR_CODE_SETNE_STMT:
 		case THREE_ADDR_CODE_INC_STMT:
