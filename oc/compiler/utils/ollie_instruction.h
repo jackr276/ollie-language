@@ -261,6 +261,8 @@ struct instruction_t{
 	u_int8_t mark;
 	//Is this a regular or inverse branch
 	u_int8_t inverse_branch;
+	//Does this branch derive from floating point comparison
+	u_int8_t branch_derives_from_float_comparison;
 	//Do we need to stop this value from being coalesced. This is only used
 	//very specifically in the logical not handler currently
 	u_int8_t cannot_be_combined;

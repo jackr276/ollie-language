@@ -10698,6 +10698,17 @@ static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_
 
 
 /**
+ */
+static void flag_branches_that_rely_on_float_comparison(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+	}
+}
+
+
+
+/**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
  */
@@ -10808,6 +10819,13 @@ static void simplify(cfg_t* cfg){
 			 */
 			run_simplifier(&(function->function_blocks), function_entry);
 		}
+
+		/**
+		 * Before we are able to completely lower all of our instructions, we will need to go
+		 * through and flag any/all branches and conditional moves that rely on floating point
+		 * comparison as doing so. This will impact our branch selection down the line
+		 */
+		flag_branches_that_rely_float_comparison(&(function->function_blocks));
 	}
 }
 
@@ -16966,6 +16984,25 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
 
 	//The value that we're raising always comes from op1
 	instruction->operands.x86.source_register2 = instruction->operands.oir.operand1;
+}
+
+
+/**
+ * Trace our way up the block to determine if the given variable relies on a floating point comparsion
+ * or not. We are specifically looking to see if we come from a UCOMISS/UCOMISD statement or not. We will
+ * crawl our way up the block starting at the given starting statement
+ *
+ * NOTE: if we cannot find where this variable comes from in the block we will trigger a panic. That should
+ * absolutely never happen, and if it does something in the pipeline is messed up
+ */
+static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* block, instruction_t* starting_statement, three_addr_var_t* variable){
+	instruction_t* cursor = starting_statement;
+	while(cursor != NULL){
+
+		cursor = cursor->previous_statement;
+	}
+
+	trigger_ice_panic("Unable to find a relies on variable for a branch statement within the given block");
 }
 
 
