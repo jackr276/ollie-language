@@ -445,6 +445,7 @@ basic_block_t* simulate_branch_execution(instruction_t* branch_statement, RFLAGS
 	branch_type_t branch_type = branch_statement->branch_type;
 	basic_block_t* branch_execution_result = NULL;
 
+	//TODO YOU NEED TO PAY ATTENTION TO THE PARITY FLAG WHEN DOING THESE
 	switch(branch_type){
 		case BRANCH_NE: {
 			//TODO
