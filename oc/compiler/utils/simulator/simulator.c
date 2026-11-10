@@ -446,6 +446,77 @@ basic_block_t* simulate_branch_execution(instruction_t* branch_statement, RFLAGS
 	basic_block_t* branch_execution_result = NULL;
 
 	switch(branch_type){
+		case BRANCH_NE: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_E: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_NZ: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_Z: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_L: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_LE: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_G: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_GE: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_A: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_AE: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_B: {
+			//TODO
+
+			break;
+		}
+
+		case BRANCH_BE: {
+			//TODO
+
+			break;
+		}
 
 
 		case NO_BRANCH: {
