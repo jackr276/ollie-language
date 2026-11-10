@@ -9188,6 +9188,11 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		return FALSE;
 	}
 
+	printf("SIMULATION WAS SUCCESSFUL FOR\n");
+	print_three_addr_code_stmt(stdout, cc_setting_stmt);
+	exit(1);
+
+
 	//TODO NOW EXECUTE THE BRANCH BASED ON THE SIMULATION
 
 

@@ -377,36 +377,36 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
 		}
 
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT: {
-			printf("TODO NOT IMPLEMENTED\n");
+			//printf("TODO NOT IMPLEMENTED\n");
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 		}
 
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
-			printf("TODO NOT IMPLEMENTED\n");
+			//printf("TODO NOT IMPLEMENTED\n");
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 
 		}
 
 		case THREE_ADDR_CODE_INC_STMT: {
-			printf("TODO NOT IMPLEMENTED\n");
+			//printf("TODO NOT IMPLEMENTED\n");
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 
 		}
 
 		case THREE_ADDR_CODE_DEC_STMT: {
-			printf("TODO NOT IMPLEMENTED\n");
+			//printf("TODO NOT IMPLEMENTED\n");
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
-			printf("TODO NOT IMPLEMENTED\n");
+			//printf("TODO NOT IMPLEMENTED\n");
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-			printf("TODO NOT IMPLEMENTED\n");
+			//printf("TODO NOT IMPLEMENTED\n");
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 
 		}
