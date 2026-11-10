@@ -10734,16 +10734,19 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 
 		}
 
-
-
-		case THREE_ADDR_CODE_SETNE_STMT:
 		case THREE_ADDR_CODE_INC_STMT:
 		case THREE_ADDR_CODE_DEC_STMT:
-		case THREE_ADDR_CODE_NEG_STATEMENT:
-		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
-		case THREE_ADDR_CODE_CLEAR_STMT:
 			//TODO
 			return FALSE;
+
+		/**
+		 * Bitwise NOT/NEG will never be used without an accompanying test if not
+		 * zero statement so we do not need to worry about them
+		 */
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT: {
+		case THREE_ADDR_CODE_NEG_STATEMENT:
+			return FALSE;
+		}
 
 		/**
 		 * If somehow we find a statement that is not known to set condition codes, then that is an error and
