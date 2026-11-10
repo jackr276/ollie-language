@@ -10706,6 +10706,16 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 	 * comparison(UCOMISS/UCOMISD/COMISS/COMISD) or not
 	 */
 	switch(statement->statement_type){
+		/**
+		 * Logical not statements *WILL* eventually be lowered
+		 * to use unordered comparison statements in the event
+		 * that they have a float operand. As such, we'll need
+		 * to return TRUE if the operand is a floating point value
+		 */
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
+			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+		}
+
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
 
 		}
@@ -10723,7 +10733,6 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		case THREE_ADDR_CODE_DEC_STMT:
 		case THREE_ADDR_CODE_NEG_STATEMENT:
 		case THREE_ADDR_CODE_BITWISE_NOT_STMT:
-		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 		case THREE_ADDR_CODE_CLEAR_STMT:
 			//TODO
 			return FALSE;
