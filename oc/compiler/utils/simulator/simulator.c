@@ -8,6 +8,39 @@
 #include <math.h>
 #include <sys/types.h>
 
+//Special search result type for block searching
+typedef struct search_result_t search_result_t;
+
+/**
+ * When we do a search in a block we can return nothing, a variable
+ * or a constant in the end
+ */
+typedef enum {
+	SEARCH_RESULT_TYPE_NONE,
+	SEARCH_RESULT_TYPE_VAR,
+	SEARCH_RESULT_TYPE_CONST,
+} search_result_type_t;
+
+
+/**
+ * The search result is a tagged union that may contain
+ * nothing(default), a variable or a constant. It is up
+ * to the user to unpack accordingly
+ */
+struct search_result_t {
+	union {
+		three_addr_var_t* variable;
+		three_addr_const_t* constant;
+	} result;
+	search_result_type_t result_type;
+};
+
+
+/**
+ * Utility for making a blank search result
+ */
+#define BLANK_SEARCH_RESULT (search_result_t){{NULL}, SEARCH_RESULT_TYPE_NONE}
+
 
 /**
  * Simulate a bitwise AND statement given 2 constants and their type. Bitwise AND 
