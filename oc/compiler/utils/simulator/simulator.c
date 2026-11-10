@@ -43,6 +43,17 @@ struct search_result_t {
 
 
 /**
+ * Trigger a fatal internal compiler error panic with the given message
+ * 
+ * NOTE: THIS WILL CRASH THE PROGRAM DELIBERATELY
+ */
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
+	exit(1);
+}
+
+
+/**
  * Search this entire block only, starting at the start instruction and working our way *BACKWARDS*,
  * until we find what was assigned to equal "variable" or until we hit the start of the block. Based
  * on what the variable was assigned to, we'll return a search result that contains nothing, a constant or
@@ -422,4 +433,26 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
 }
 
 
+/**
+ * Given the flags at the time of branch execution, determine which branch in the given branch
+ * statement we'd jump to. This will always return a valid block, because a branch must always execute
+ * in a way that gives one block back
+ */
+basic_block_t* simulate_branch_execution(instruction_t* branch_statement, RFLAGS_t flags){
+	/**
+	 * Extract the branch type and create a placeholder for our result
+	 */
+	branch_type_t branch_type = branch_statement->branch_type;
+	basic_block_t* branch_execution_result = NULL;
 
+	switch(branch_type){
+
+
+		case NO_BRANCH: {
+			trigger_ice_panic("Invalid branch type of NO_BRANCH encountered in simulator");
+			break;
+		}
+	}
+
+	return branch_execution_result;
+}
