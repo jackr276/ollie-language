@@ -10698,7 +10698,12 @@ static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_
 
 
 /**
- * TODO THIS
+ * Will the given statement, when lowered, result in an FP comparison instruction being
+ * used to set the condition codes. Note that not all statements that have FP operands
+ * are guaranteed to do this, so we need to analyze these on a case-by-case basis
+ *
+ * In the event that this function is given a statement that we believe should never be
+ * used to set condition codes we will panic and crash teh compiler
  */
 static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement){
 	/**
@@ -10727,16 +10732,18 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
+			//TODO
 
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
+			//TODO
 
 		}
 
 		case THREE_ADDR_CODE_INC_STMT:
 		case THREE_ADDR_CODE_DEC_STMT:
-			//TODO
+			//TODO NEEDS TESTING
 			return FALSE;
 
 		/**
@@ -10812,7 +10819,14 @@ static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* bloc
 
 
 /**
- * TODO DOC
+ * Conditional movement statements/branches that rely on floating point comparison need special handling
+ * during instruction lowering because of the possibility of NaN. These NaN values have the chance to
+ * set bits like the CF in situations where they normally would not be set for non-float values. We consider
+ * NaN values as nonzero, so we need to add special parity jumps/handling in the event that we encounter
+ * them. To ensure that we generate these parity checks only where appropriate, we will flag branches/conditional
+ * movement statements that rely on floating point comparisons now if their "relies_on" field comes from
+ * a floating point comparison. This flag will then be used during instruction selection to generate parity
+ * bit checks when needed
  *
  * NOTE: Just because an operation has floating point operands does *NOT* necessarily mean that
  * we need to take that into account in the end. For example, float logical or's final condition
