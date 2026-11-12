@@ -17199,7 +17199,7 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			add_statement(block_contained_in, jump_to_if);
 			add_statement(block_contained_in, jump_to_else);
 			delete_statement(branch_statement);
-			return jump_to_if;
+			return jump_to_else;
 		}
 
 		/**
@@ -17222,7 +17222,7 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			add_statement(block_contained_in, jump_to_if);
 			add_statement(block_contained_in, jump_to_else);
 			delete_statement(branch_statement);
-			return jump_to_if;
+			return jump_to_else;
 		}
 
 		/**
