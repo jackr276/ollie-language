@@ -1453,7 +1453,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 			 */
 			case CONDITIONAL_ALWAYS_FALSE:
 				//Is it an inverse branch or not? This will impact how we handle things
-				if(branch_instruction->inverse_branch == FALSE){
+				if(branch_instruction->branch_info.branch_category == BRANCH_CATEGORY_NORMAL){
 					//We will emit an unconditional jump to the else block
 					unconditional_jump = emit_jmp_instruction(else_block);
 
@@ -1494,7 +1494,7 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 			 */
 			case CONDITIONAL_ALWAYS_TRUE:
 				//Is it an inverse branch or not? This will impact how we handle things
-				if(branch_instruction->inverse_branch == FALSE){
+				if(branch_instruction->branch_info.branch_category == BRANCH_CATEGORY_NORMAL){
 					//We will emit an unconditional jump to the if block
 					unconditional_jump = emit_jmp_instruction(if_block);
 
@@ -1930,7 +1930,7 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * Since OIR supports having a const in the else assignee, we can do that here
 		 * if we have one to save on emitted OIR instructions
 		 */
-		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_type);
+		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_info.branch_type);
 		if(else_assignee != NULL){
 			instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type, branch_statement->line_number);
 			add_statement(top_level_if_block, conditional_assignment);

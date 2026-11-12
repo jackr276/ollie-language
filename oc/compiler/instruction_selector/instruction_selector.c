@@ -709,11 +709,11 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 	switch(block->exit_statement->statement_type){
 		//Direct jump, just use the if block
 		case THREE_ADDR_CODE_JUMP_STMT:
-			return block->exit_statement->if_block;
+			return block->exit_statement->branch_info.if_block;
 
 		//In a branch statement, the else block is the direct jump
 		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->else_block;
+			return block->exit_statement->branch_info.else_block;
 
 		//By default no
 		default:
@@ -9339,8 +9339,8 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
 					//We now need to unlink the successors that were in this branch
-					delete_successor(block, stmt->if_block);
-					delete_successor(block, stmt->else_block);
+					delete_successor(block, stmt->branch_info.if_block);
+					delete_successor(block, stmt->branch_info.else_block);
 
 					//This is now useless
 					delete_statement(stmt);
@@ -10860,7 +10860,7 @@ static void flag_conditional_execution_that_relies_on_float_comparison(dynamic_a
 			switch(cursor->statement_type){
 				case THREE_ADDR_CODE_BRANCH_STMT:
 				case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
-					cursor->branch_derives_from_float_comparison = does_variable_come_from_fp_comparison(cursor, cursor->relies_on);
+					cursor->branch_info.branch_derives_from_float_comparison = does_variable_come_from_fp_comparison(cursor, cursor->relies_on);
 					break;
 				}
 
@@ -12288,7 +12288,7 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * for the if value now. We will hijack the old converting move OIR statement to do this
 	 */
 
-	if(conditional_move->branch_derives_from_float_comparison == FALSE){
+	if(conditional_move->branch_info.branch_derives_from_float_comparison == FALSE){
 		conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
 		conditional_move->operands.x86.destination_register = assignee;
 		conditional_move->operands.x86.source_register1 = if_assignee;
@@ -17166,20 +17166,23 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
  *
  * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
  * that it inserted for window reconstruction purposes
+ *
+ * TODO MAKE BRANCH NOTE
  */
 static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* branch_statement){
 	/**
 	 * Extract the if block, else block, and the block that we're contained in
 	 */
 	basic_block_t* block_contained_in = branch_statement->block_contained_in;
-	basic_block_t* if_block = branch_statement->if_block;
-	basic_block_t* else_block = branch_statement->else_block;
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
+	branch_category_t branch_category = branch_statement->branch_info.branch_category;
 
 	/**
 	 * Based on the type of branch we'll go ahead. Float comparison will combine
 	 * unsigned branches and signed branches together. For floats there is no difference
 	 */
-	switch(branch_statement->branch_type){
+	switch(branch_statement->branch_info.branch_type){
 		/**
 		 * For branching above(g_than lumped in), we do *NOT* need to add parity checking because a NaN
 		 * will set the CF=1, and the branch will not execute
@@ -17343,14 +17346,18 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
  *
  * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
  * that it inserted for window reconstruction purposes
+ *
+ * NOTE: since these branches do not have a parity consideration, branch inversion
+ * (BRANCH_CATEGORY_NORMAL vs. BRANCH_CATEGORY_INVERSE) has no bearing here. We are able
+ * to flip the branch conditionals with out any additional checks
  */
 static instruction_t* handle_branch_without_float_parity_consideration(instruction_t* branch_statement){
 	/**
 	 * Extract the if and else blocks first before going on
 	 */
 	basic_block_t* block_contained_in = branch_statement->block_contained_in;
-	basic_block_t* if_block = branch_statement->if_block;
-	basic_block_t* else_block = branch_statement->else_block;
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
 
 	/**
 	 * We'll be emitting two jumps - the if and else jump - directly
@@ -17359,7 +17366,7 @@ static instruction_t* handle_branch_without_float_parity_consideration(instructi
 	 */
 	instruction_t* jump_to_if = NULL;
 	instruction_t* jump_to_else = NULL;
-	switch(branch_statement->branch_type){
+	switch(branch_statement->branch_info.branch_type){
 		case BRANCH_A: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JA);
 			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
@@ -17470,7 +17477,7 @@ static inline void handle_branch_instruction(instruction_window_t* window){
 	 * be relying on FP comparison. In this case we call out to
 	 * the helper that does not consider the parity flag
 	 */
-	if(branch_stmt->branch_derives_from_float_comparison == FALSE){
+	if(branch_stmt->branch_info.branch_derives_from_float_comparison == FALSE){
 		instruction_t* final_instruction = handle_branch_without_float_parity_consideration(branch_stmt);
 		reconstruct_window(window, final_instruction);
 	
