@@ -17225,19 +17225,30 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			return jump_to_if;
 		}
 
-		//Same with any kind of "<" case
+		/**
+		 * For branching below(L_THAN lumped in), we *DO* need to add parity
+		 * checking because if we have a NaN operand, UCOMISS/UCOMISD will set
+		 * the carry flag to 1. This would cause this branch to execute incorrectly
+		 * on NaN because JB checks if CF == 1. To fix this, we'll add a parity 
+		 * jump to false first to take care of the parity case
+		 *
+		 * Condition: PF == 0 && CF == 1
+		 */
 		case BRANCH_L:
-		case BRANCH_B:
-			jump_to_if = emit_jump_instruction_directly(if_block, JL);
-			jump_to_if->relies_on = branch_stmt->relies_on;
+		case BRANCH_B: {
+			instruction_t* jump_to_else_parity = emit_jump_instruction_directly(else_block, JP);
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JB);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
 
-			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-			//Add them all in
-			add_statement(block, jump_to_if);
-			add_statement(block, jump_to_else);
-			break;
-
+			/**
+			 * Add them all in, delete the branch and return the last statement
+			 */
+			add_statement(block_contained_in, jump_to_else_parity);
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			return jump_to_else;
+		}
 
 		//These are lumped together
 		case BRANCH_LE:
