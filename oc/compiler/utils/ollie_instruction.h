@@ -249,6 +249,10 @@ struct instruction_t{
 	 */
 	struct {
 		/**
+		 * Store the branch type
+		 */
+		branch_type_t branch_type;
+		/**
 		 * Store the if and else blocks. These are *raw* if and else blocks, they do not 
 		 * represent the actual result in the end
 		 */
@@ -265,7 +269,7 @@ struct instruction_t{
 		 * is only ever set by the instruction selector
 		 */
 		u_int8_t branch_derives_from_float_comparison;
-	} branch_storage;
+	} branch_info;
 
 	//What block holds this?
 	void* block_contained_in;
@@ -283,8 +287,6 @@ struct instruction_t{
 	u_int8_t cannot_be_combined;
 	//Does this instruction handle callee saving?
 	u_int8_t is_callee_saving_instruction;
-	//If it's a branch statment, then we'll use this
-	branch_type_t branch_type;
 	//The conditional movement type that we have
 	conditional_movement_type_t movement_type;
 	//Do we have a read, write, or no attempt to access memory(default)

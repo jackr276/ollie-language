@@ -790,8 +790,8 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 			//One type of block exit
 			case THREE_ADDR_CODE_JUMP_STMT:
 				//If this is the right target, then replace it
-				if(exit_statement->if_block == empty_block){
-					exit_statement->if_block = replacement;
+				if(exit_statement->branch_info.if_block == empty_block){
+					exit_statement->branch_info.if_block = replacement;
 					//Counts as a successor
 					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
@@ -801,15 +801,15 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 			//Other type of block exit
 			case THREE_ADDR_CODE_BRANCH_STMT:
 				//If this is the right target, then replace it
-				if(exit_statement->if_block == empty_block){
-					exit_statement->if_block = replacement;
+				if(exit_statement->branch_info.if_block == empty_block){
+					exit_statement->branch_info.if_block = replacement;
 					//Counts as a successor
 					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
 
 				//Same for the else block
-				if(exit_statement->else_block == empty_block){
-					exit_statement->else_block = replacement;
+				if(exit_statement->branch_info.else_block == empty_block){
+					exit_statement->branch_info.else_block = replacement;
 					//Counts as a successor
 					add_successor(predecessor, replacement, EDGE_TYPE_REAL);
 				}
@@ -989,8 +989,8 @@ static inline u_int8_t are_blocks_eligible_for_branch_hoisting(basic_block_t* de
 	instruction_t* branch = hoisting_block->exit_statement;
 
 	//Get the if and else blocks out
-	basic_block_t* if_block = branch->if_block;
-	basic_block_t* else_block = branch->else_block;
+	basic_block_t* if_block = branch->branch_info.if_block;
+	basic_block_t* else_block = branch->branch_info.else_block;
 
 	//We have a match - we can't do this
 	if(if_block->block_id == destination->block_id){
@@ -1094,12 +1094,12 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 			 * If both targets are identical(j) then:
 			 * 	replace branch with a jump to j
 			 */
-			if(branch->if_block == branch->else_block){
+			if(branch->branch_info.if_block == branch->branch_info.else_block){
 				//Delete the branch statement afterwards 
 				delete_statement(branch);
 
 				//Emit a jump here instead
-				emit_jump(current, branch->if_block);
+				emit_jump(current, branch->branch_info.if_block);
 
 				//This counts as a change
 				changed = TRUE;
@@ -1111,7 +1111,7 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 		 */
 		if(current->exit_statement->statement_type == THREE_ADDR_CODE_JUMP_STMT){
 			//Extract the block(j) that we're going to
-			basic_block_t* jumping_to_block = current->exit_statement->if_block;
+			basic_block_t* jumping_to_block = current->exit_statement->branch_info.if_block;
 
 			/**
 			 * If the blocks are the exact same block we can't do anything else.
@@ -1417,8 +1417,8 @@ static u_int8_t optimize_always_true_false_paths(dynamic_array_t* function_block
 		instruction_t* statement_cursor = current_block->exit_statement;
 
 		//Store these blocks for later processing
-		if_block = branch_instruction->if_block;
-		else_block = branch_instruction->else_block;
+		if_block = branch_instruction->branch_info.if_block;
+		else_block = branch_instruction->branch_info.else_block;
 
 		//Get what the branch relies on.
 		branch_relies_on = branch_instruction->relies_on;
@@ -1587,7 +1587,7 @@ static inline u_int8_t is_predecessor_block_valid_for_branch_assignment_folding(
 	 * Check 1: exit statement must be an unconditional jump to 
 	 * our candidate block
 	 */
-	if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->if_block != join_block){
+	if(cursor->statement_type != THREE_ADDR_CODE_JUMP_STMT || cursor->branch_info.if_block != join_block){
 		return FALSE;
 	}
 
@@ -1842,8 +1842,8 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 * will be the result_2 variable as well as the conditional. The other two blocks that are not needed
 		 * will be eliminated as well
 		 */
-		basic_block_t* if_destination = branch_statement->if_block;
-		basic_block_t* else_destination = branch_statement->else_block;
+		basic_block_t* if_destination = branch_statement->branch_info.if_block;
+		basic_block_t* else_destination = branch_statement->branch_info.else_block;
 		//These are initially NULL - we will scrape for them
 		three_addr_var_t* if_assignee = NULL;
 		three_addr_var_t* else_assignee = NULL;

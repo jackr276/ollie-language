@@ -2784,12 +2784,12 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 
 		case THREE_ADDR_CODE_JUMP_STMT:
 			//Then print out the block label
-			fprintf(fl, "jmp .L%d\n", ((basic_block_t*)(stmt->if_block))->block_id);
+			fprintf(fl, "jmp .L%d\n", ((basic_block_t*)(stmt->branch_info.if_block))->block_id);
 			break;
 
 		//Branch statements represent the ends of blocks
 		case THREE_ADDR_CODE_BRANCH_STMT:
-			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_type), ((basic_block_t*)(stmt->if_block))->block_id, ((basic_block_t*)(stmt->else_block))->block_id);
+			fprintf(fl, "%s .L%d else .L%d\n", branch_type_to_string(stmt->branch_info.branch_type), ((basic_block_t*)(stmt->branch_info.if_block))->block_id, ((basic_block_t*)(stmt->branch_info.else_block))->block_id);
 			break;
 
 		case THREE_ADDR_CODE_FUNC_CALL:
@@ -3105,7 +3105,7 @@ void print_three_addr_code_stmt(FILE* fl, instruction_t* stmt){
 		 */
 		case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
 			//Print out the jump offset
-			fprintf(fl, "jmp *.JT%d(, ", ((jump_table_t*)(stmt->if_block))->jump_table_id);
+			fprintf(fl, "jmp *.JT%d(, ", ((jump_table_t*)(stmt->branch_info.if_block))->jump_table_id);
 
 			/**
 			 * A bit unique here - unlike regular addressing mode expressions we print
@@ -5020,7 +5020,7 @@ static inline void print_xor_instruction(FILE* fl, instruction_t* instruction, v
  */
 void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_mode_t mode){
 	//This will be null often, but if we need it it'll be here
-	basic_block_t* jumping_to_block = instruction->if_block;
+	basic_block_t* jumping_to_block = instruction->branch_info.if_block;
 
 	switch (instruction->instruction_type) {
 		case RET: {
@@ -5489,7 +5489,7 @@ void print_instruction(FILE* fl, instruction_t* instruction, variable_printing_m
 			fprintf(fl, "jmp *");
 
 			//Grab this out for convenience
-			jump_table_t* jumping_to_block = instruction->if_block;
+			jump_table_t* jumping_to_block = instruction->branch_info.if_block;
 
 			//We first print out the jumping to block
 			fprintf(fl, ".JT%d(,", jumping_to_block->jump_table_id);
@@ -6444,7 +6444,7 @@ instruction_t* emit_jmp_instruction(void* jumping_to_block){
 
 	//Let's now populate it with values
 	stmt->statement_type = THREE_ADDR_CODE_JUMP_STMT;
-	stmt->if_block = jumping_to_block;
+	stmt->branch_info.if_block = jumping_to_block;
 	//Give the statement back
 	return stmt;
 }
@@ -6461,7 +6461,7 @@ instruction_t* emit_jump_instruction_directly(void* jumping_to_block, instructio
 	instruction->instruction_type = jump_instruction_type;
 
 	//Point to the jumping to block
-	instruction->if_block = jumping_to_block;
+	instruction->branch_info.if_block = jumping_to_block;
 
 	return instruction;
 }
@@ -6506,7 +6506,7 @@ instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to
 /**
  * Emit a branch statement
  */
-instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type, u_int32_t line_number){
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type, branch_category_t branch_category, u_int32_t line_number){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -6514,14 +6514,17 @@ instruction_t* emit_branch_statement(void* if_block, void* else_block, three_add
 	stmt->statement_type = THREE_ADDR_CODE_BRANCH_STMT;
 	
 	//If and else block storage
-	stmt->if_block = if_block;
-	stmt->else_block = else_block;
+	stmt->branch_info.if_block = if_block;
+	stmt->branch_info.else_block = else_block;
 
 	//Branch type
-	stmt->branch_type = branch_type;
+	stmt->branch_info.branch_type = branch_type;
 
 	//And we'll store the variable that we're making a decision based on here
 	stmt->relies_on = relies_on;
+
+	//Store the branch category as well
+	stmt->branch_info.branch_category = branch_category;
 
 	//Give the statement back
 	stmt->line_number = line_number;
@@ -6543,7 +6546,7 @@ instruction_t* emit_indirect_jump_statement(void* jump_table, three_addr_var_t* 
 	stmt->operands.oir.destination_address_expression = (addressing_operands_t){NULL, index, NULL, multiplier, NULL, ADDRESSING_MODE_INDEX_AND_SCALE};
 
 	//Store the block that we are jumping to here
-	stmt->if_block = jump_table;
+	stmt->branch_info.if_block = jump_table;
 
 	//And give it back
 	return stmt;
