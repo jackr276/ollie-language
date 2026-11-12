@@ -10731,14 +10731,27 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
 		}
 
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-			//TODO
-
-		}
-
+		/**
+		 * For a BIN_OP_WITH_CONST statement, we have a special helper
+		 * that will determine whether or not we end up using floating
+		 * point comparison. This is all determine by the operator and
+		 * the operand types
+		 */
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
-			//TODO
 
+
+			/**
+			 * Only comparison operations(>, >=, <, <=, ==, !=) can ever
+			 * lead to a float comparison being used as our branch conditional. 
+			 * Things like float logical and/float logical or, when lowered, actually
+			 * have a GP operation as their last operation, so they don't count here
+			 */
+			switch(statement->op){
+
+				default:
+					return FALSE;
+			}
 		}
 
 		/**
