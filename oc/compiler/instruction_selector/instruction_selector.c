@@ -17155,14 +17155,40 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
 
 
 /**
- * A branch statement always selects 2 instructions, the conditional
- * jump-to-if and the unconditional else jump
+ * If we get to this function, then we know that we're dealing with a branch where
+ * we have to account for the possibility of flags like the CF being set by NaN values
+ * with float comparison(UCOMISS/UCOMISD/COMISS/COMISD). This will lead to extra jumps
+ * being inserted around the partify flag(PF)
  *
- * TODO REWRITE
+ * TODO DETAIL HOW IT WORKS INTERNALLY
  *
- * NOTE: we know that the branch instruction here is always instruction 1
+ * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
+ * that it inserted for window reconstruction purposes
  */
-static void handle_branch_instruction(instruction_window_t* window){
+static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* instruction){
+
+}
+
+
+/**
+ * If we get to this function, then we know that we're dealing with a branch that does not come
+ * from a floating point comparison. As such, for this branch, we do not need to do any extra
+ * special checking around the parity flag
+ *
+ * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
+ * that it inserted for window reconstruction purposes
+ */
+static instruction_t* handle_branch_without_float_parity_consideration(instruction_t* instruction){
+
+}
+
+
+/**
+ * A branch statement is lowered differently based on whether or not it relies on a floating
+ * point comparison or not. This has already been determined for us by the time we get here, and
+ * as such we just need to act on it appropriately
+ */
+static inline void handle_branch_instruction(instruction_window_t* window){
 	instruction_t* branch_stmt = window->instruction1;
 	//Grab the block out
 	basic_block_t* block = branch_stmt->block_contained_in;
@@ -17177,6 +17203,9 @@ static void handle_branch_instruction(instruction_window_t* window){
 	instruction_t* jump_when_nan;
 	//The false jump condition
 	instruction_t* jump_to_else;
+
+
+	//TODO
 
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
