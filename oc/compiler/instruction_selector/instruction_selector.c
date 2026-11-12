@@ -10797,7 +10797,7 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
  * code setting statement is a regular bitwise and, which does not need to have parity flag setting
  * taken into account.
  */
-static inline u_int8_t does_variable_come_from_fp_comparison(basic_block_t* block, instruction_t* starting_statement, three_addr_var_t* variable){
+static inline u_int8_t does_variable_come_from_fp_comparison(instruction_t* starting_statement, three_addr_var_t* variable){
 	/**
 	 * This should *NEVER* happen. We must always have something thta our comparison came from
 	 */
@@ -10860,7 +10860,7 @@ static void flag_conditional_execution_that_relies_on_float_comparison(dynamic_a
 			switch(cursor->statement_type){
 				case THREE_ADDR_CODE_BRANCH_STMT:
 				case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
-					cursor->branch_derives_from_float_comparison = does_variable_come_from_fp_comparison(block, cursor, cursor->relies_on);
+					cursor->branch_derives_from_float_comparison = does_variable_come_from_fp_comparison(cursor, cursor->relies_on);
 					break;
 				}
 

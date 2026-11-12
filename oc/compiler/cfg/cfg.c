@@ -5210,7 +5210,6 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	instruction_t* conditional_move;
 	three_addr_var_t* current_result_var;
 	three_addr_var_t* previous_result_var;
-	generic_type_t* operand_type;
 
 	//When we unpack we may have either a constant or a variable
 	three_addr_var_t* in_constant_variable;
@@ -5268,18 +5267,12 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant_variable, in_expression->line_number);
 		add_statement(current_block, comparison_instruction);
 
-		//Get the operand type base don the two types provided
-		operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
-
 	} else {
 		//Unpack it first
 		in_constant = constant_results.result_value.result_const;
 
 		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant, in_expression->line_number);
 		add_statement(current_block, comparison_instruction);
-
-		//Get the operand type base don the two types provided
-		operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
 	}
 
 	//And then the conditional move statement itself
@@ -5316,18 +5309,12 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant_variable, in_expression->line_number);
 			add_statement(current_block, comparison_instruction);
 
-			//Get the operand type base don the two types provided
-			operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
-
 		} else {
 			//Unpack it first
 			in_constant = constant_results.result_value.result_const;
 
 			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant, in_expression->line_number);
 			add_statement(current_block, comparison_instruction);
-
-			//Get the operand type base don the two types provided
-			operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
 		}
 
 		//And then the conditional move statement itself
