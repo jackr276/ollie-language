@@ -17275,30 +17275,27 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		}
 
 		/**
-		 * 
+		 * For not equals or not zero branches, we do need to do parity checking because we consider
+		 * a NaN to never be equal with anything else. In Ollie, NaN != <anything>, so if the parity
+		 * flag is set we'll need to jump to false. We'll also jump to false if we're not equal
+		 *
+		 * Condition: PF == 1 || ZF == 0
 		 */
 		case BRANCH_NE:
-		case BRANCH_NZ:
-			//We need two conditional jumps here
-			jump_when_nan = emit_jump_instruction_directly(if_block, JP);
-			jump_when_nan->relies_on = branch_stmt->relies_on;
-
-			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
-			jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
-
-			//And the standard jump to else here
-			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+		case BRANCH_NZ: {
+			instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
 
 			/**
-			 * Add all of these statements in. NaN comes first, then the
-			 * if, and finally the ending catch-all
+			 * Add them all in, delete the branch and return the last statement
 			 */
-			add_statement(block, jump_when_nan);
-			add_statement(block, jump_to_if);
-			add_statement(block, jump_to_else);
-
-			break;
-
+			add_statement(block_contained_in, jump_to_if_parity);
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			return jump_to_else;
+		}
 
 		/**
 		 * For equals, say we had something like:
