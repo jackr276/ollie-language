@@ -10739,8 +10739,6 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 */
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
-
-
 			/**
 			 * Only comparison operations(>, >=, <, <=, ==, !=) can ever
 			 * lead to a float comparison being used as our branch conditional. 
@@ -10748,9 +10746,19 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 			 * have a GP operation as their last operation, so they don't count here
 			 */
 			switch(statement->op){
+				case L_THAN:
+				case L_THAN_OR_EQ:
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS: {
+					generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(statement);
+					return IS_FLOATING_POINT(operand_type);
+			 	}
 
-				default:
+				default: {
 					return FALSE;
+				}
 			}
 		}
 
