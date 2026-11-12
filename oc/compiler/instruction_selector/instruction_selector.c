@@ -17181,7 +17181,7 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 	 */
 	switch(branch_statement->branch_type){
 		/**
-		 * For branching above, we do *NOT* need to add parity checking because a NaN
+		 * For branching above(g_than lumped in), we do *NOT* need to add parity checking because a NaN
 		 * will set the CF=1, and the branch will not execute
 		 * 	
 		 * Condition: CF == 0 && ZF == 0
@@ -17189,6 +17189,29 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		case BRANCH_A:
 		case BRANCH_G: {
 			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
+
+			/**
+			 * Add them in, delete the branch, and give back the very
+			 * last instruction that we've added
+			 */
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
+			return jump_to_if;
+		}
+
+		/**
+		 * For branching above or equal(g_than_or_eq lumped in), we do *NOT*
+		 * need to add parity checking because a NaN will set the CF=1,
+		 * and the branch will not execute
+		 * 	
+		 * Condition: CF == 0 
+		 */
+		case BRANCH_AE:
+		case BRANCH_GE: {
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JAE);
 			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			jump_to_if->relies_on = branch_statement->relies_on;
 
@@ -17215,19 +17238,6 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			add_statement(block, jump_to_else);
 			break;
 
-		//These are lumped together
-		case BRANCH_AE:
-		case BRANCH_GE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-			jump_to_if->relies_on = branch_stmt->relies_on;
-
-			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-			//Add them all in
-			add_statement(block, jump_to_if);
-			add_statement(block, jump_to_else);
-			
-			break;
 
 		//These are lumped together
 		case BRANCH_LE:
