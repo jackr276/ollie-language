@@ -17194,9 +17194,11 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		case BRANCH_G: {
 			/**
 			 * For branching above without an inverted branch, we do *NOT* need to add
-			 * parity checking because a NaN will set the CF=1, and the branch will not execute
+			 * parity checking because a NaN will set the CF=1, and the branch will go
+			 * to the physical else block, which in this normal case is also the logical
+			 * else block
 			 * 	
-			 * Condition: CF == 0 && ZF == 0
+			 * Condition(to jump to phyiscal if block): CF == 0 && ZF == 0
 			 */
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
 				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
@@ -17216,9 +17218,10 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			 * For branching above *WITH* an inverted branch, we *DO* need to add parity
 			 * checking becasue a we want to consider the NaN as a false path. NaN is not
 			 * ever greater than anything else. However, our "false" path here is actually
-			 * the physical if block because it is an inverse branch
+			 * the physical if block because it is an inverse branch, so we'll want the parity
+			 * to take us to the physical if, which is the logical else
 			 *
-			 * Condition: PF == 1 || (CF == 0 && ZF == 0)
+			 * Condition(to jump to phyiscal if block): PF == 1 || (CF == 0 && ZF == 0)
 			 */
 			} else {
 				instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
@@ -17243,7 +17246,9 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		 * need to add parity checking because a NaN will set the CF=1,
 		 * and the branch will not execute
 		 * 	
-		 * Condition: CF == 0 
+		 * Condition(to jump to phyiscal if block): CF == 0 
+		 *
+		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
 		 */
 		case BRANCH_AE:
 		case BRANCH_GE: {
@@ -17268,7 +17273,9 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		 * on NaN because JB checks if CF == 1. To fix this, we'll add a parity 
 		 * jump to false first to take care of the parity case
 		 *
-		 * Condition: PF == 0 && CF == 1
+		 * Condition(to jump to phyiscal if block): PF == 0 && CF == 1
+		 *
+		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
 		 */
 		case BRANCH_L:
 		case BRANCH_B: {
@@ -17293,7 +17300,9 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		 * could cause an inaccurate branch. To fix this, we'll add a parity jump to false
 		 * first
 		 *
-		 * Condition: PF == 0 && (CF == 1 || ZF == 1)
+		 * Condition(to jump to phyiscal if block): PF == 0 && (CF == 1 || ZF == 1)
+		 *
+		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
 		 */
 		case BRANCH_LE:
 		case BRANCH_BE: {
@@ -17317,7 +17326,9 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		 * a NaN to never be equal with anything else. In Ollie, NaN != <anything>, so if the parity
 		 * flag is set we'll need to jump to false. We'll also jump to false if we're not equal
 		 *
-		 * Condition: PF == 1 || ZF == 0
+		 * Condition(to jump to phyiscal if block): PF == 1 || ZF == 0
+		 *
+		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
 		 */
 		case BRANCH_NE:
 		case BRANCH_NZ: {
@@ -17342,7 +17353,9 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		 * checked we'll need to jump to the else condition. Otherwise, we'll jump using
 		 * the regular JE/JMP combo
 		 *
-		 * Condition: PF == 0 && ZF == 1
+		 * Condition(to jump to phyiscal if block): PF == 0 && ZF == 1
+		 *
+		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
 		 */
 		case BRANCH_E:
 		case BRANCH_Z: {
