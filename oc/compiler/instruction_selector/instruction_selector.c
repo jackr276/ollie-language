@@ -17250,26 +17250,32 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			return jump_to_else;
 		}
 
-		//These are lumped together
+		/**
+		 * For branching below or equal, we *DO* need to add parity checking because
+		 * if we have a NaN operand, UCOMISS/UCOMISD will set the carry flag to 1 and this
+		 * could cause an inaccurate branch. To fix this, we'll add a parity jump to false
+		 * first
+		 *
+		 * Condition: PF == 0 && (CF == 1 || ZF == 1)
+		 */
 		case BRANCH_LE:
-		case BRANCH_BE:
-			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
-			jump_to_if->relies_on = branch_stmt->relies_on;
+		case BRANCH_BE: {
+			instruction_t* jump_to_else_parity = emit_jump_instruction_directly(else_block, JP);
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
 
-			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-			//Add them all in
-			add_statement(block, jump_to_if);
-			add_statement(block, jump_to_else);
-
-			break;
+			/**
+			 * Add them all in, delete the branch and return the last statement
+			 */
+			add_statement(block_contained_in, jump_to_else_parity);
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			return jump_to_else;
+		}
 
 		/**
-		 * For not equals, say we had something like:
-		 *    NaN != x
-		 * This will always be true. As such, we need to jump
-		 * to the true area on the condition that the parity
-		 * flag is set to 1(means we had NaN)
+		 * 
 		 */
 		case BRANCH_NE:
 		case BRANCH_NZ:
@@ -17326,9 +17332,10 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		/**
 		 * If we ever get here we panice
 		 */
-		default:
+		default: {
 			trigger_ice_panic("Unknown branch type hit in float branch lowerer");
 			return NULL;
+		}
 	}
 }
 
