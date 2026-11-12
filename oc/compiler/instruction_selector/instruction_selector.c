@@ -17179,60 +17179,115 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
  * that it inserted for window reconstruction purposes
  */
 static instruction_t* handle_branch_without_float_parity_consideration(instruction_t* branch_statement){
-	switch(branch_stmt->branch_type){
-		case BRANCH_A:
+	/**
+	 * Extract the if and else blocks first before going on
+	 */
+	basic_block_t* block_contained_in = branch_statement->block_contained_in;
+	basic_block_t* if_block = branch_statement->if_block;
+	basic_block_t* else_block = branch_statement->else_block;
+
+	/**
+	 * We'll be emitting two jumps - the if and else jump - directly
+	 * here. The jump to if is always our conditional jump for these
+	 * kinds of branches
+	 */
+	instruction_t* jump_to_if = NULL;
+	instruction_t* jump_to_else = NULL;
+	switch(branch_statement->branch_type){
+		case BRANCH_A: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JA);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_AE:
+		}
+
+		case BRANCH_AE: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_B:
+		}
+
+		case BRANCH_B: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JB);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_BE:
+		}
+
+		case BRANCH_BE: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_E:
+		}
+
+		case BRANCH_E: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_NE:
+		}
+
+		case BRANCH_NE: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_Z:
+		}
+
+		case BRANCH_Z: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JZ);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_NZ:
+		}
+
+		case BRANCH_NZ: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_G:
+		}
+
+		case BRANCH_G: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JG);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_GE:
+		}
+
+		case BRANCH_GE: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JGE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_L:
+		}
+
+		case BRANCH_L: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JL);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		case BRANCH_LE:
+		}
+
+		case BRANCH_LE: {
 			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
 			break;
-		//We in reality should never reach here
-		default:
-			printf("Fatal internal compiler error: Unreachable branch type hit\n");
-			exit(1);
+		}
+
+		/**
+		 * If we ever hit an unkown branch panic and get out
+		 */
+		default: {
+			trigger_ice_panic("Unknown branch type hit in branch lowerer");
+		}
 	}
 
-	//Copy over the special relies_on field
-	jump_to_if->relies_on = branch_stmt->relies_on;
+	/**
+	 * Copy over the "relies on" field over to the jump-to-if for later use
+	 */
+	jump_to_if->relies_on = branch_statement->relies_on;
 
-	//The else jump is always a direct jump no matter what
-	jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+	/**
+	 * Add the jump to else and jump to if in in that order, then
+	 * delete the old branch statement
+	 */
+	add_statement(block_contained_in, jump_to_if);
+	add_statement(block_contained_in, jump_to_else);
+	delete_statement(branch_statement);
 
-	//The if must go after the branch statement before the else
-	add_statement(block, jump_to_if);
-	//And the jump to else always goes after the if jump
-	add_statement(block, jump_to_else);
-
+	return jump_to_else;
 }
 
 
