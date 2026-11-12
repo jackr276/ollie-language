@@ -17247,6 +17247,7 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			add_statement(block_contained_in, jump_to_else_parity);
 			add_statement(block_contained_in, jump_to_if);
 			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
 			return jump_to_else;
 		}
 
@@ -17271,6 +17272,7 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			add_statement(block_contained_in, jump_to_else_parity);
 			add_statement(block_contained_in, jump_to_if);
 			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
 			return jump_to_else;
 		}
 
@@ -17294,37 +17296,34 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			add_statement(block_contained_in, jump_to_if_parity);
 			add_statement(block_contained_in, jump_to_if);
 			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
 			return jump_to_else;
 		}
 
 		/**
-		 * For equals, say we had something like:
-		 *    NaN == x
-		 * This will always be false. As such, we need to jump
-		 * to the false area on the condition that the parity
-		 * flag is set to 1(means we had NaN)
+		 * For regular equals branches, we need to do parity checking because like with the
+		 * not equals case, NaN != <anything>. In the event that we do see the parity flag
+		 * checked we'll need to jump to the else condition. Otherwise, we'll jump using
+		 * the regular JE/JMP combo
+		 *
+		 * Condition: PF == 0 && ZF == 1
 		 */
 		case BRANCH_E:
-		case BRANCH_Z:
-			//We need two conditional jumps here
-			jump_when_nan = emit_jump_instruction_directly(else_block, JP);
-			jump_when_nan->relies_on = branch_stmt->relies_on;
-
-			jump_to_if = emit_jump_instruction_directly(if_block, JE);
-			jump_to_if->relies_on = branch_stmt->relies_on;
-
-			//And the standard jump to else here
-			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+		case BRANCH_Z: {
+			instruction_t* jump_to_else_parity = emit_jump_instruction_directly(else_block, JP);
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JE);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
 
 			/**
-			 * Add all of these statements in. NaN comes first, then the
-			 * if, and finally the ending catch-all
+			 * Add them all in, delete the branch and return the last statement
 			 */
-			add_statement(block, jump_when_nan);
-			add_statement(block, jump_to_if);
-			add_statement(block, jump_to_else);
-			
-			break;
+			add_statement(block_contained_in, jump_to_else_parity);
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
+			return jump_to_else;
+		}
 
 		/**
 		 * If we ever get here we panice
