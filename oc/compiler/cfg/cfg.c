@@ -1974,7 +1974,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 																else_block,
 																conditional_decider,
 																branch_type,
-																BRANCH_CATEGORY_INVERSE,
+																branch_category,
 																conditional_node->line_number);
 
 		//Add it into the block

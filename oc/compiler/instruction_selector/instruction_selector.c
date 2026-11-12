@@ -17167,7 +17167,10 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
  * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
  * that it inserted for window reconstruction purposes
  *
- * TODO MAKE BRANCH NOTE
+ * NOTE: due to the way that branch inversion alone does not account for parity conditionals, we will need 
+ * to update the output based on whether or not the original branch was categorized as an inverse branch(jumps
+ * to the logical else when the conditional is true) or a regular branch(jumps to the logical if when the
+ * conditional is true)
  */
 static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* branch_statement){
 	/**
@@ -17184,25 +17187,55 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 	 */
 	switch(branch_statement->branch_info.branch_type){
 		/**
-		 * For branching above(g_than lumped in), we do *NOT* need to add parity checking because a NaN
-		 * will set the CF=1, and the branch will not execute
-		 * 	
-		 * Condition: CF == 0 && ZF == 0
+		 * BRANCH_A/BRANCH_G behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
 		 */
 		case BRANCH_A:
 		case BRANCH_G: {
-			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
-			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-			jump_to_if->relies_on = branch_statement->relies_on;
-
 			/**
-			 * Add them in, delete the branch, and give back the very
-			 * last instruction that we've added
+			 * For branching above without an inverted branch, we do *NOT* need to add
+			 * parity checking because a NaN will set the CF=1, and the branch will not execute
+			 * 	
+			 * Condition: CF == 0 && ZF == 0
 			 */
-			add_statement(block_contained_in, jump_to_if);
-			add_statement(block_contained_in, jump_to_else);
-			delete_statement(branch_statement);
-			return jump_to_else;
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			
+			/**
+			 * For branching above *WITH* an inverted branch, we *DO* need to add parity
+			 * checking becasue a we want to consider the NaN as a false path. NaN is not
+			 * ever greater than anything else. However, our "false" path here is actually
+			 * the physical if block because it is an inverse branch
+			 *
+			 * Condition: PF == 1 || (CF == 0 && ZF == 0)
+			 */
+			} else {
+				instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			}
 		}
 
 		/**
