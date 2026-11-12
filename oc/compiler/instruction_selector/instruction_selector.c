@@ -10741,11 +10741,6 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 
 		}
 
-		case THREE_ADDR_CODE_INC_STMT:
-		case THREE_ADDR_CODE_DEC_STMT:
-			//TODO NEEDS TESTING
-			return FALSE;
-
 		/**
 		 * Bitwise NOT/NEG will never be used without an accompanying test if not
 		 * zero statement so we do not need to worry about them
@@ -10762,11 +10757,9 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 */
 		default: {
 			trigger_ice_panic("Statement that does not set condition codes was found as a dependency of conditional execution");
+			return FALSE;
 		}
 	}
-
-	//Dummy to keep the compiler happy
-	return FALSE;
 }
 
 
