@@ -17160,27 +17160,47 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
  * with float comparison(UCOMISS/UCOMISD/COMISS/COMISD). This will lead to extra jumps
  * being inserted around the partify flag(PF)
  *
- * TODO DETAIL HOW IT WORKS INTERNALLY
+ * The key issue here is that UCOMISS/UCOMISD will set the CF=1 when either operand is NaN. Since
+ * this flag is relied on for several of our branches, a float operand can lead to a branch being
+ * inadvertently taken if an operand is NaN
  *
  * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
  * that it inserted for window reconstruction purposes
  */
 static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* branch_statement){
-	//Go by the branch type
-	switch(branch_stmt->branch_type){
-		//Any kind of ">" case is the same
+	/**
+	 * Extract the if block, else block, and the block that we're contained in
+	 */
+	basic_block_t* block_contained_in = branch_statement->block_contained_in;
+	basic_block_t* if_block = branch_statement->if_block;
+	basic_block_t* else_block = branch_statement->else_block;
+
+	/**
+	 * Based on the type of branch we'll go ahead. Float comparison will combine
+	 * unsigned branches and signed branches together. For floats there is no difference
+	 */
+	switch(branch_statement->branch_type){
+		/**
+		 * For branching above, we do *NOT* need to add parity checking because a NaN
+		 * will set the CF=1, and the branch will not execute
+		 * 	
+		 * Condition: CF == 0 && ZF == 0
+		 */
 		case BRANCH_A:
-		case BRANCH_G:
-			jump_to_if = emit_jump_instruction_directly(if_block, JA);
-			jump_to_if->relies_on = branch_stmt->relies_on;
+		case BRANCH_G: {
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
 
-			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-			//Add them all in
-			add_statement(block, jump_to_if);
-			add_statement(block, jump_to_else);
-
-			break;
+			/**
+			 * Add them in, delete the branch, and give back the very
+			 * last instruction that we've added
+			 */
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
+			return jump_to_if;
+		}
 
 		//Same with any kind of "<" case
 		case BRANCH_L:
@@ -17282,18 +17302,13 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 			
 			break;
 
-		//Should be unreachable
+		/**
+		 * If we ever get here we panice
+		 */
 		default:
-			printf("Fatal internal compiler error: Unreachable branch type hit\n");
-			exit(1);
+			trigger_ice_panic("Unknown branch type hit in float branch lowerer");
+			return NULL;
 	}
-
-	//Branch stmt is now useless so scrap it
-	delete_statement(branch_stmt);
-
-	//In the end, we always rebuild the window around the jump to else
-	reconstruct_window(window, jump_to_else);
-
 }
 
 
