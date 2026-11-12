@@ -17165,7 +17165,7 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
  * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
  * that it inserted for window reconstruction purposes
  */
-static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* instruction){
+static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* branch_statement){
 
 }
 
@@ -17178,7 +17178,60 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
  * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
  * that it inserted for window reconstruction purposes
  */
-static instruction_t* handle_branch_without_float_parity_consideration(instruction_t* instruction){
+static instruction_t* handle_branch_without_float_parity_consideration(instruction_t* branch_statement){
+	switch(branch_stmt->branch_type){
+		case BRANCH_A:
+			jump_to_if = emit_jump_instruction_directly(if_block, JA);
+			break;
+		case BRANCH_AE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+			break;
+		case BRANCH_B:
+			jump_to_if = emit_jump_instruction_directly(if_block, JB);
+			break;
+		case BRANCH_BE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+			break;
+		case BRANCH_E:
+			jump_to_if = emit_jump_instruction_directly(if_block, JE);
+			break;
+		case BRANCH_NE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+			break;
+		case BRANCH_Z:
+			jump_to_if = emit_jump_instruction_directly(if_block, JZ);
+			break;
+		case BRANCH_NZ:
+			jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
+			break;
+		case BRANCH_G:
+			jump_to_if = emit_jump_instruction_directly(if_block, JG);
+			break;
+		case BRANCH_GE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JGE);
+			break;
+		case BRANCH_L:
+			jump_to_if = emit_jump_instruction_directly(if_block, JL);
+			break;
+		case BRANCH_LE:
+			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
+			break;
+		//We in reality should never reach here
+		default:
+			printf("Fatal internal compiler error: Unreachable branch type hit\n");
+			exit(1);
+	}
+
+	//Copy over the special relies_on field
+	jump_to_if->relies_on = branch_stmt->relies_on;
+
+	//The else jump is always a direct jump no matter what
+	jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+
+	//The if must go after the branch statement before the else
+	add_statement(block, jump_to_if);
+	//And the jump to else always goes after the if jump
+	add_statement(block, jump_to_else);
 
 }
 
@@ -17210,59 +17263,6 @@ static inline void handle_branch_instruction(instruction_window_t* window){
 	//Most common case, we do not expect that most things will
 	//be relying on FP comparison
 	if(branch_stmt->branch_derives_from_float_comparison == FALSE){
-		switch(branch_stmt->branch_type){
-			case BRANCH_A:
-				jump_to_if = emit_jump_instruction_directly(if_block, JA);
-				break;
-			case BRANCH_AE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-				break;
-			case BRANCH_B:
-				jump_to_if = emit_jump_instruction_directly(if_block, JB);
-				break;
-			case BRANCH_BE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
-				break;
-			case BRANCH_E:
-				jump_to_if = emit_jump_instruction_directly(if_block, JE);
-				break;
-			case BRANCH_NE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
-				break;
-			case BRANCH_Z:
-				jump_to_if = emit_jump_instruction_directly(if_block, JZ);
-				break;
-			case BRANCH_NZ:
-				jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
-				break;
-			case BRANCH_G:
-				jump_to_if = emit_jump_instruction_directly(if_block, JG);
-				break;
-			case BRANCH_GE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JGE);
-				break;
-			case BRANCH_L:
-				jump_to_if = emit_jump_instruction_directly(if_block, JL);
-				break;
-			case BRANCH_LE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JLE);
-				break;
-			//We in reality should never reach here
-			default:
-				printf("Fatal internal compiler error: Unreachable branch type hit\n");
-				exit(1);
-		}
-
-		//Copy over the special relies_on field
-		jump_to_if->relies_on = branch_stmt->relies_on;
-
-		//The else jump is always a direct jump no matter what
-		jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-		//The if must go after the branch statement before the else
-		add_statement(block, jump_to_if);
-		//And the jump to else always goes after the if jump
-		add_statement(block, jump_to_else);
 
 		//Once this is all done, we can delete the branch
 		delete_statement(branch_stmt);
