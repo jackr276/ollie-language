@@ -17406,11 +17406,11 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		/**
 		 * For not equals or not zero branches, we do need to do parity checking because we consider
 		 * a NaN to never be equal with anything else. In Ollie, NaN != <anything>, so if the parity
-		 * flag is set we'll need to jump to false. We'll also jump to false if we're not equal
+		 * flag is set we'll need to jump to the if block. We'll also jump to true if we're not equal.
+		 * Since the parity conditions match up for both inverse branching(jump to physical if, logical else)
+		 * and normal branching(jump to physical if, logical if), we don't need any special logic for this
 		 *
 		 * Condition(to jump to phyiscal if block): PF == 1 || ZF == 0
-		 *
-		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
 		 */
 		case BRANCH_NE:
 		case BRANCH_NZ: {
