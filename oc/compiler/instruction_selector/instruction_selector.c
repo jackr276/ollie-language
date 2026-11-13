@@ -12210,15 +12210,52 @@ static inline instruction_type_t select_conditional_move_instruction(variable_si
 }
 
 
-
 /**
+ * Handle a regular conditional move that does *NOT* need to account for any floating point parity
+ * flag possibilites. For these conditional moves we do not need to add any extra consideration
+ * for inverse branches when compared to normal branches
  *
- * TODO HERE
+ * The standard pattern goes something like this:
+ * x_4 <- MOVE_E t1 else t4
+ * 
+ * Becomes:
+ * x_4 <- t4
+ * cmove x_4, t1
+ *
+ * We always unconditionally assign the else, and then overwrite it with our actual value if
+ * the conditional move works
+ *
+ * NOTE: This function returns a pointer to the very last instruction that it has produced
+ *
  */
 static instruction_t* handle_conditional_move_without_float_parity_consideration(instruction_t* instruction){
+	/**
+	 * Cache the destination type & assignee for needed comparisons
+	 */
+	three_addr_var_t* assignee = instruction->operands.oir.assignee;
+	generic_type_t* destination_type = assignee->type;
 
+	/**
+	 * We know that the if assignee will always be a variable so we can extract it now
+	 */
+	three_addr_var_t* if_assignee = instruction->operands.oir.operand1;
+	variable_size_t destination_size = get_type_size(destination_type);
+
+	/**
+	 * If the if-assignee requires a converting move, now is the time for us to insert
+	 * it. These do not set condition codes so we should be good here
+	 */
+	if(is_converting_move_required(destination_type, if_assignee->type) == TRUE){
+		if_assignee = create_and_insert_converting_move_instruction(instruction, if_assignee, destination_type);
+	}
+
+
+	conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
+	conditional_move->operands.x86.destination_register = assignee;
+	conditional_move->operands.x86.source_register1 = if_assignee;
+
+	return conditional_move;
 }
-
 
 
 
