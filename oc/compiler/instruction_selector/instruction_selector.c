@@ -17242,28 +17242,57 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		}
 
 		/**
-		 * For branching above or equal(g_than_or_eq lumped in), we do *NOT*
-		 * need to add parity checking because a NaN will set the CF=1,
-		 * and the branch will not execute
-		 * 	
-		 * Condition(to jump to phyiscal if block): CF == 0 
-		 *
-		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
+		 * BRANCH_AE/BRANCH_GE behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
 		 */
 		case BRANCH_AE:
 		case BRANCH_GE: {
-			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-			jump_to_if->relies_on = branch_statement->relies_on;
+			/**
+			 * For branching *WITHOUT* an inverted branch, we *DO NOT* need to add
+			 * a parity check. We want a NaN to go to the logical else, which is also
+			 * the physical else in this case, and since a NaN sets CF=1, this branch
+			 * goes to the else block already
+			 * 	
+			 * Condition(to jump to phyiscal if block): CF == 0 
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
 
 			/**
-			 * Add them in, delete the branch, and give back the very
-			 * last instruction that we've added
+			 * For branching with an inverted branch, we *DO* need to add a parity
+			 * check that will have us jump to the physical if(logical else in this case).
+			 * Since NaN sets CF=1, if we do not have this parity check, a NaN will send
+			 * us to the physical else(logical if) in this case
+			 *
+			 * Condition(jump to physical if block): PF == 1 || CF == 0
 			 */
-			add_statement(block_contained_in, jump_to_if);
-			add_statement(block_contained_in, jump_to_else);
-			delete_statement(branch_statement);
-			return jump_to_else;
+			} else {
+				instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			}
 		}
 
 		/**
