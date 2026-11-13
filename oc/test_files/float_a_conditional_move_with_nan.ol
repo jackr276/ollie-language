@@ -4,6 +4,15 @@
  * properly with NaN handling
  */
 
+
+/**
+ * This doesn't invert the branch so the test still works for the other way
+ */
+pub fn float_if_assignment_non_inverted(f1:f32, f2:f32, y:i32, z:i32) -> i32 {
+	ret (f1 > f2) ? y else z;
+}
+
+
 pub fn float_if_assignment(f1:f32, f2:f32, y:i32, z:i32) -> i32 {
 	declare result:i32;
 
@@ -27,6 +36,8 @@ pub fn main() -> i32 {
 	let NaN:f32 = *(<f32*>(&x));
 	let not_nan:f32 = 5.55;
 
-	OUNIT: [exit_status = 9]
-	ret @float_if_assignment(NaN, not_nan, 8, 9);
+	//Should return 9 + 11 = 20
+	OUNIT: [exit_status = 20]
+	ret @float_if_assignment(NaN, not_nan, 8, 9)
+		+ @float_if_assignment_non_inverted(NaN, not_nan, 10, 11);
 }

@@ -11910,107 +11910,6 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 
 
 /**
- * Select the appropriate conditional move based on the destination size
- * and conditional
- *
- * NOTE: this assumes that the comparison result does come from an FP comparison
- *
- * TODO UP HERE
- */
-static inline instruction_type_t select_conditional_move_instruction_for_float_comparison(variable_size_t size, conditional_movement_type_t movement_type){
-	switch(movement_type){
-		case MOVE_NE:
-		case MOVE_NZ:
-			switch(size){
-				case WORD:
-					return CMOVNEW;
-				case DOUBLE_WORD:
-					return CMOVNEL;
-				case QUAD_WORD:
-					return CMOVNEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_E:
-		case MOVE_Z:
-			switch(size){
-				case WORD:
-					return CMOVEW;
-				case DOUBLE_WORD:
-					return CMOVEL;
-				case QUAD_WORD:
-					return CMOVEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-		
-		case MOVE_L:
-		case MOVE_B:
-				switch(size){
-				case WORD:
-					return CMOVBW;
-				case DOUBLE_WORD:
-					return CMOVBL;
-				case QUAD_WORD:
-					return CMOVBQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}	
-
-		case MOVE_LE:
-		case MOVE_BE:
-			switch(size){
-				case WORD:
-					return CMOVBEW;
-				case DOUBLE_WORD:
-					return CMOVBEL;
-				case QUAD_WORD:
-					return CMOVBEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_G:
-		case MOVE_A:
-			switch(size){
-				case WORD:
-					return CMOVAW;
-				case DOUBLE_WORD:
-					return CMOVAL;
-				case QUAD_WORD:
-					return CMOVAQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_GE:
-		case MOVE_AE:
-			switch(size){
-				case WORD:
-					return CMOVAEW;
-				case DOUBLE_WORD:
-					return CMOVAEL;
-				case QUAD_WORD:
-					return CMOVAEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		default:
-			fprintf(stderr, "Fatal internal compiler error: Invalid conditional movement type detected\n");
-			exit(1);
-	}
-}
-
-
-/**
  * Directly emit a conditional move instruction based on the instruction type directly given. This conditional
  * move will already be in x86 form so no additional instruction selection will be needed
  */
@@ -12411,8 +12310,32 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 	 * with an inverse branch, we'll emit parity checks as appropriate.
 	 * The inner workings of this are detailed inside of each option
 	 */
-	switch(conditional_move->movement_type){
+	conditional_movement_type_t movement_type = conditional_move->movement_type;
+	branch_category_t branch_category = conditional_move->branch_info.branch_category;
+	switch(movement_type){
+		/**
+		 * For a MOVE_G/MOVE_A(they're the same for floats), we *WILL* have different
+		 * processing based on whether or not the branch is normal or inverted
+		 */
+		case MOVE_A:
+		case MOVE_G: {
+			/**
+			 * The instruction type selection is going to be the same regardless
+			 */
+			conditional_move->instruction_type = select_conditional_move_instruction_for_float_comparison(destination_size, conditional_move->movement_type);
 
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+			conditional_move->operands.x86.destination_register = assignee;
+			conditional_move->operands.x86.source_register1 = if_assignee;
+
+			} else {
+			conditional_move->operands.x86.destination_register = assignee;
+			conditional_move->operands.x86.source_register1 = if_assignee;
+
+			}
+		}
+
+		//TODO ADD REST
 		default: {
 			trigger_ice_panic("Unrecognized conditional movement type detected in float conditional movement lowerer");
 			return NULL;
