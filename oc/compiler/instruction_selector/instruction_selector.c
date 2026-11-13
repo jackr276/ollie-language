@@ -12014,7 +12014,7 @@ static inline instruction_type_t select_conditional_move_instruction_for_float_c
  * Directly emit a conditional move instruction based on the instruction type directly given. This conditional
  * move will already be in x86 form so no additional instruction selection will be needed
  */
-static instruction_t* emit_conditional_move_instruction(three_addr_var_t* destination_register, three_addr_var_t* source_register, three_addr_var_t* relies_on, instruction_type_t instruction_type){
+static inline instruction_t* emit_conditional_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register, three_addr_var_t* relies_on, instruction_type_t instruction_type){
 	instruction_t* conditional_movement = calloc(1, sizeof(instruction_t));
 
 	conditional_movement->instruction_type = instruction_type;
@@ -12454,13 +12454,13 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 
 				switch(destination_size){
 					case WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPW);
+						additional_conditional_move = emit_conditional_move_instruction_directly(assignee, if_assignee, conditional_move->relies_on, CMOVPW);
 						break;
 					case DOUBLE_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPL);
+						additional_conditional_move = emit_conditional_move_instruction_directly(assignee, if_assignee, conditional_move->relies_on, CMOVPL);
 						break;
 					case QUAD_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPQ);
+						additional_conditional_move = emit_conditional_move_instruction_directly(assignee, if_assignee, conditional_move->relies_on, CMOVPQ);
 						break;
 					default:
 						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
@@ -12522,13 +12522,13 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 
 				switch(destination_size){
 					case WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPW);
+						additional_conditional_move = emit_conditional_move_instruction_directly(assignee, cached_else_result, conditional_move->relies_on, CMOVPW);
 						break;
 					case DOUBLE_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPL);
+						additional_conditional_move = emit_conditional_move_instruction_directly(assignee, cached_else_result, conditional_move->relies_on, CMOVPL);
 						break;
 					case QUAD_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPQ);
+						additional_conditional_move = emit_conditional_move_instruction_directly(assignee, cached_else_result, conditional_move->relies_on, CMOVPQ);
 						break;
 					default:
 						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");

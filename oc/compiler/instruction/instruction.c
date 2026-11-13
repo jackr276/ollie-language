@@ -6161,7 +6161,8 @@ instruction_t* emit_assignment_with_const_instruction(three_addr_var_t* assignee
 /**
  * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and branch type for this
  */
-instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type, u_int32_t line_number){
+instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional,
+													conditional_movement_type_t movement_type, branch_category_t branch_category, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
@@ -6175,6 +6176,12 @@ instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, t
 	//This relies on the conditional to set codes
 	stmt->relies_on = conditional;
 
+	/**
+	 * Due to the lowering requirements for floating point operations, we need to store
+	 * whehter or not this is an inverse branch or a regular branch
+	 */
+	stmt->branch_info.branch_category = branch_category;
+
 	//Flag that this value sets condition codes, and will not need a setX after it
 	stmt->relies_on->sets_cc = TRUE;
 
@@ -6187,7 +6194,8 @@ instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, t
 /**
  * Emit a conditional movement statement with the else being a constant. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
  */
-instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type, u_int32_t line_number){
+instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional,
+																conditional_movement_type_t movement_type, branch_category_t branch_category, u_int32_t line_number){
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	stmt->statement_type = THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT;
@@ -6200,6 +6208,12 @@ instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* 
 
 	//This relies on the conditional to set codes
 	stmt->relies_on = conditional;
+
+	/**
+	 * Due to the lowering requirements for floating point operations, we need to store
+	 * whehter or not this is an inverse branch or a regular branch
+	 */
+	stmt->branch_info.branch_category = branch_category;
 
 	//Flag that this value sets condition codes, and will not need a setX after it
 	stmt->relies_on->sets_cc = TRUE;
