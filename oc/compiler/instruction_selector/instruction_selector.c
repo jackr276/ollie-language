@@ -12226,7 +12226,6 @@ static inline instruction_type_t select_conditional_move_instruction(variable_si
  * the conditional move works
  *
  * NOTE: This function returns a pointer to the very last instruction that it has produced
- *
  */
 static instruction_t* handle_conditional_move_without_float_parity_consideration(instruction_t* instruction){
 	/**
@@ -12249,14 +12248,73 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 		if_assignee = create_and_insert_converting_move_instruction(instruction, if_assignee, destination_type);
 	}
 
+	/**
+	 * The second operand has the option of being either a constant or a regular
+	 * value. If it is a regular value, then we will emit an unconditional move
+	 * into the destitination. If it is a constant then we just do a constant move
+	 */
+	three_addr_var_t* else_destination = emit_var_copy(assignee);
+	if(instruction->operands.oir.operand2 != NULL){
+		three_addr_var_t* else_assignee = instruction->operands.oir.operand2;
 
-	conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
-	conditional_move->operands.x86.destination_register = assignee;
-	conditional_move->operands.x86.source_register1 = if_assignee;
+		/**
+		 * Any required converting moves happen here
+		 */
+		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
+			else_assignee = create_and_insert_converting_move_instruction(instruction, else_assignee, destination_type);
+		}
 
-	return conditional_move;
+		/**
+		 * Now we can emit and insert the assignment
+		 */
+		instruction_t* else_assignment = emit_move_instruction(else_destination, else_assignee);
+		insert_instruction_before_given(else_assignment, instruction);
+
+	} else {
+		/**
+		 * For this we just need a plain constant assignment. No converting moves are required
+		 */
+		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, instruction->operands.oir.constant_operand);
+		insert_instruction_before_given(constant_assignment, instruction);
+	}
+
+	/**
+	 * If we have a destination that is a byte, that will actually not work for converting
+	 * moves because x86 does not support it. We will force these movements to be word
+	 * sized by forcing all of the operands to be word sized for now
+	 *
+	 * NOTE: if this is needed for the else assignee we will do that at the point where
+	 * the else assignee is needed. In most cases it won't be so we won't do that here
+	 */
+	if(destination_size == BYTE){
+		assignee = emit_var_copy(assignee);
+		if_assignee = emit_var_copy(if_assignee);
+
+		/**
+		 * Force both new versions to be word-sized
+		 */
+		assignee->type = i16;
+		assignee->variable_size = WORD;
+		if_assignee->type = i16;
+		if_assignee->variable_size = WORD;
+
+		/**
+		 * Set this so that the conditional move selector works
+		 */
+		destination_size = WORD;
+	}
+
+	/**
+	 * Select the instruction type and update the destination register and source register. Note
+	 * that once we do this we've destroyed the relationship between this and the else assignee.
+	 * This means that beyond this point traditional mark and sweep will not work if we tried to
+	 * do it
+	 */
+	instruction->instruction_type = select_conditional_move_instruction(destination_size, instruction->movement_type);
+	instruction->operands.x86.destination_register = assignee;
+	instruction->operands.x86.source_register1 = if_assignee;
+	return instruction;
 }
-
 
 
 /**
