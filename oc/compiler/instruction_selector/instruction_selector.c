@@ -12318,6 +12318,33 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 
 
 /**
+ * Convert a conditional movement statement into the equivalent x86 assembly. This inlined
+ * helper splits out into two separate functions that handle processing appropriately based
+ * on whether or not the conditional movement statement comes from a floating point comparison
+ * or not. Conditional movement statements that come from a floating point comparison
+ * need to be handled differetly due to the possibility of NaN operands
+ *
+ * NOTE: It is assumed that the first instruction in the window is the target statement
+ */
+static inline void handle_conditional_movement_statement(instruction_window_t* window){
+	instruction_t* conditional_move = window->instruction1;
+
+	/**
+	 * Split based on whether or not our conditional move operation comes from a floating
+	 * point comparison or not. We assume that most of the time it will not
+	 */
+	if(conditional_move->branch_info.branch_derives_from_float_comparison == FALSE){
+		instruction_t* last_statement = handle_conditional_move_without_float_parity_consideration(conditional_move);
+		reconstruct_window(window, last_statement);
+	} else {
+		printf("TODO NOT IMPLEMENTED\n");
+	}
+}
+
+
+
+
+/**
  * Convert a conditional movement OIR statement into x86 assembly
  *
  * x_4 <- MOVE_E t1 else t4
@@ -12333,7 +12360,7 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
  *
  * TODO HERE
  */
-static void handle_conditional_movement_statement(instruction_window_t* window){
+static void handle_conditional_movement_statement__OLD(instruction_window_t* window){
 	instruction_t* conditional_move = window->instruction1;
 	instruction_t* additional_conditional_move;
 	//Keep track of the final instruction for the eventual window rebuild
