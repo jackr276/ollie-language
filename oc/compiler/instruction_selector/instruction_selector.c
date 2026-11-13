@@ -12227,17 +12227,17 @@ static inline instruction_type_t select_conditional_move_instruction(variable_si
  *
  * NOTE: This function returns a pointer to the very last instruction that it has produced
  */
-static instruction_t* handle_conditional_move_without_float_parity_consideration(instruction_t* instruction){
+static instruction_t* handle_conditional_move_without_float_parity_consideration(instruction_t* conditional_move){
 	/**
 	 * Cache the destination type & assignee for needed comparisons
 	 */
-	three_addr_var_t* assignee = instruction->operands.oir.assignee;
+	three_addr_var_t* assignee = conditional_move->operands.oir.assignee;
 	generic_type_t* destination_type = assignee->type;
 
 	/**
 	 * We know that the if assignee will always be a variable so we can extract it now
 	 */
-	three_addr_var_t* if_assignee = instruction->operands.oir.operand1;
+	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
 	variable_size_t destination_size = get_type_size(destination_type);
 
 	/**
@@ -12245,7 +12245,7 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 	 * it. These do not set condition codes so we should be good here
 	 */
 	if(is_converting_move_required(destination_type, if_assignee->type) == TRUE){
-		if_assignee = create_and_insert_converting_move_instruction(instruction, if_assignee, destination_type);
+		if_assignee = create_and_insert_converting_move_instruction(conditional_move, if_assignee, destination_type);
 	}
 
 	/**
@@ -12254,28 +12254,28 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 	 * into the destitination. If it is a constant then we just do a constant move
 	 */
 	three_addr_var_t* else_destination = emit_var_copy(assignee);
-	if(instruction->operands.oir.operand2 != NULL){
-		three_addr_var_t* else_assignee = instruction->operands.oir.operand2;
+	if(conditional_move->operands.oir.operand2 != NULL){
+		three_addr_var_t* else_assignee = conditional_move->operands.oir.operand2;
 
 		/**
 		 * Any required converting moves happen here
 		 */
 		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
-			else_assignee = create_and_insert_converting_move_instruction(instruction, else_assignee, destination_type);
+			else_assignee = create_and_insert_converting_move_instruction(conditional_move, else_assignee, destination_type);
 		}
 
 		/**
 		 * Now we can emit and insert the assignment
 		 */
 		instruction_t* else_assignment = emit_move_instruction(else_destination, else_assignee);
-		insert_instruction_before_given(else_assignment, instruction);
+		insert_instruction_before_given(else_assignment, conditional_move);
 
 	} else {
 		/**
 		 * For this we just need a plain constant assignment. No converting moves are required
 		 */
-		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, instruction->operands.oir.constant_operand);
-		insert_instruction_before_given(constant_assignment, instruction);
+		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
+		insert_instruction_before_given(constant_assignment, conditional_move);
 	}
 
 	/**
@@ -12310,10 +12310,74 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 	 * This means that beyond this point traditional mark and sweep will not work if we tried to
 	 * do it
 	 */
-	instruction->instruction_type = select_conditional_move_instruction(destination_size, instruction->movement_type);
-	instruction->operands.x86.destination_register = assignee;
-	instruction->operands.x86.source_register1 = if_assignee;
-	return instruction;
+	conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
+	conditional_move->operands.x86.destination_register = assignee;
+	conditional_move->operands.x86.source_register1 = if_assignee;
+	return conditional_move;
+}
+
+
+/**
+ * TODO DOC
+ *
+ * NOTE: This function returns a pointer to the very last instruction that it has produced
+ */
+static instruction_t* handle_conditional_move_with_float_parity_consideration(instruction_t* conditional_move){
+	/**
+	 * Cache the destination type & assignee for needed comparisons
+	 */
+	three_addr_var_t* assignee = conditional_move->operands.oir.assignee;
+	generic_type_t* destination_type = assignee->type;
+
+	/**
+	 * We know that the if assignee will always be a variable so we can extract it now
+	 */
+	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
+	variable_size_t destination_size = get_type_size(destination_type);
+
+	/**
+	 * If the if-assignee requires a converting move, now is the time for us to insert
+	 * it. These do not set condition codes so we should be good here
+	 */
+	if(is_converting_move_required(destination_type, if_assignee->type) == TRUE){
+		if_assignee = create_and_insert_converting_move_instruction(conditional_move, if_assignee, destination_type);
+	}
+
+	/**
+	 * The second operand has the option of being either a constant or a regular
+	 * value. If it is a regular value, then we will emit an unconditional move
+	 * into the destitination. If it is a constant then we just do a constant move.
+	 * Note that we will need the else assignee afterwards for a lot of our parity
+	 * moves
+	 */
+	three_addr_var_t* else_destination = emit_var_copy(assignee);
+	three_addr_var_t* else_assignee = NULL;
+	if(conditional_move->operands.oir.operand2 != NULL){
+		/**
+		 * Extract it and emit any conditional moves if they are required
+		 */
+		else_assignee = conditional_move->operands.oir.operand2;
+		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
+			else_assignee = create_and_insert_converting_move_instruction(conditional_move, else_assignee, destination_type);
+		}
+
+		/**
+		 * Now we can emit and insert the assignment
+		 */
+		instruction_t* else_assignment = emit_move_instruction(else_destination, else_assignee);
+		insert_instruction_before_given(else_assignment, conditional_move);
+
+	} else {
+		/**
+		 * For the constant version we'll need to emit an assignment and then hold onto the variable 
+		 * that we assigned it into for later use
+		 */
+		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
+		insert_instruction_before_given(constant_assignment, conditional_move);
+		else_assignee = constant_assignment->operands.x86.destination_register;
+	}
+
+
 }
 
 
@@ -12337,7 +12401,8 @@ static inline void handle_conditional_movement_statement(instruction_window_t* w
 		instruction_t* last_statement = handle_conditional_move_without_float_parity_consideration(conditional_move);
 		reconstruct_window(window, last_statement);
 	} else {
-		printf("TODO NOT IMPLEMENTED\n");
+		instruction_t* last_statement = handle_conditional_move_with_float_parity_consideration(conditional_move);
+		reconstruct_window(window, last_statement);
 	}
 }
 
