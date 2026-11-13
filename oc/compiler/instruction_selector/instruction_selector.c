@@ -12217,6 +12217,25 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 
 
 /**
+ * Select the given cmovaX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovaX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVAW;
+		case DOUBLE_WORD:
+			return CMOVAL;
+		case QUAD_WORD:
+			return CMOVAQ;
+		default: {
+			trigger_ice_panic("Invalid cmovaX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
+
+/**
  * TODO DOC
  *
  * NOTE: This function returns a pointer to the very last instruction that it has produced
@@ -12320,14 +12339,42 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 		case MOVE_A:
 		case MOVE_G: {
 			/**
-			 * The instruction type selection is going to be the same regardless
+			 * If we have a non-inverted structure, a NaN(which is always false) should lead to us
+			 * loading in the else-assignee. Since the cmovaX instruction checks to see if CF == 0, and
+			 * the NaN will set CF = 1, this naturally excludes NaNs from the true condition
+			 * 
+			 * a > b:
+			 * movl else value, final_assignee
+			 * cmoval if_value, final_assignee
+			 *
+			 * Condition(to add phyiscal if assignee): CF == 0 && ZF == 0
 			 */
-			conditional_move->instruction_type = select_conditional_move_instruction_for_float_comparison(destination_size, conditional_move->movement_type);
-
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				
+
+			conditional_move->instruction_type = select_conditional_move_instruction_for_float_comparison(destination_size, conditional_move->movement_type);
 			conditional_move->operands.x86.destination_register = assignee;
 			conditional_move->operands.x86.source_register1 = if_assignee;
 
+				/**
+				 * Remove the old conditional move and give back the very
+				 * last instruction in the chain
+				 */
+				delete_statement(conditional_move);
+			
+			/**
+			 * Otherwise, we have an inverted structure. This means that the logical false
+			 * value is in reality the if value. This means that in the event of a parity, we'll
+			 * want to assign the if assignee over. We'll achieve this by adding a parity move
+			 * before the cmoval
+			 *
+			 * a <= b(been inverted):
+			 * movl else value, final_assignee
+			 * cmovpl if_value, final_assignee <-- accounts for NaN's going to logical else
+			 * cmoval if_value, final_assignee <-- all other cases
+			 *
+			 * Condition(to add physical if assignee): PF == 1 || (CF == 0 && ZF == 0)
+			 */
 			} else {
 			conditional_move->operands.x86.destination_register = assignee;
 			conditional_move->operands.x86.source_register1 = if_assignee;
