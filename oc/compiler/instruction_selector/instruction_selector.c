@@ -12259,6 +12259,25 @@ static inline instruction_type_t select_cmovaX_given_size(variable_size_t size){
 
 
 /**
+ * Select the given cmovpX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovpX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVPW;
+		case DOUBLE_WORD:
+			return CMOVPL;
+		case QUAD_WORD:
+			return CMOVPQ;
+		default: {
+			trigger_ice_panic("Invalid cmovaX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
+
+/**
  * TODO DOC
  *
  * NOTE: This function returns a pointer to the very last instruction that it has produced
@@ -12397,7 +12416,7 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 * want to assign the if assignee over. We'll achieve this by adding a parity move
 			 * before the cmoval
 			 *
-			 * a <= b(been inverted):
+			 * a <= b(that has been inverted):
 			 * movl else value, final_assignee
 			 * cmovpl if_value, final_assignee <-- accounts for NaN's going to logical else
 			 * cmoval if_value, final_assignee <-- all other cases
@@ -12405,9 +12424,43 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 * Condition(to add physical if assignee): PF == 1 || (CF == 0 && ZF == 0)
 			 */
 			} else {
-			conditional_move->operands.x86.destination_register = assignee;
-			conditional_move->operands.x86.source_register1 = if_assignee;
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
 
+				/**
+				 * Then the first parity move to if
+				 */
+				instruction_t* cmovp_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovpX_given_size(destination_size));
+
+				/**
+				 * Then the actual above move to if
+				 */
+				instruction_t* cmova_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						if_operand,
+																						conditional_move->relies_on,
+																						select_cmovaX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovp_to_if, conditional_move);
+				insert_instruction_before_given(cmova_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmova_to_if;
 			}
 		}
 
@@ -12525,10 +12578,12 @@ static void handle_conditional_movement_statement__OLD(instruction_window_t* win
 		conditional_move->operands.x86.destination_register = assignee;
 		conditional_move->operands.x86.source_register1 = if_assignee;
 	} else {
+		//TODO DEPREACTED
+
 		/**
 		 * Step 1: select the regular converting move instruction and add our values in
 		 */
-		conditional_move->instruction_type = select_conditional_move_instruction_for_float_comparison(destination_size, conditional_move->movement_type);
+		//conditional_move->instruction_type = select_conditional_move_instruction_for_float_comparison(destination_size, conditional_move->movement_type);
 		conditional_move->operands.x86.destination_register = assignee;
 		conditional_move->operands.x86.source_register1 = if_assignee;
 
