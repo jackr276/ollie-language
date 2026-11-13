@@ -17432,12 +17432,12 @@ static instruction_t* handle_branch_with_float_parity_consideration(instruction_
 		/**
 		 * For regular equals branches, we need to do parity checking because like with the
 		 * not equals case, NaN != <anything>. In the event that we do see the parity flag
-		 * checked we'll need to jump to the else condition. Otherwise, we'll jump using
-		 * the regular JE/JMP combo
+		 * checked we'll need to jump to the physical else condition. We'll jump to true if they are
+		 * equal. Since the parity conditions match up for both inverse branching(jump to physical else,
+		 * logical if) and normal branching(jump to physical else, logical else), we don't need
+		 * to add any special logic here
 		 *
 		 * Condition(to jump to phyiscal if block): PF == 0 && ZF == 1
-		 *
-		 * TODO CHECK WITH INVERSE BRANCHING AND FIX
 		 */
 		case BRANCH_E:
 		case BRANCH_Z: {
