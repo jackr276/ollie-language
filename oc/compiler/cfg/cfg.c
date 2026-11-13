@@ -5135,6 +5135,7 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 																						 	true_constant,
 																						 	first_comparison->operands.oir.assignee,
 																						 	first_move_type,
+																							BRANCH_CATEGORY_NORMAL,
 																						 	in_node->line_number);
 	add_statement(current_block, first_conditional_move);
 
@@ -5158,6 +5159,7 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 																				  result_var_1,
 																				  second_comparison->operands.oir.assignee,
 																				  second_move_type,
+																				  BRANCH_CATEGORY_NORMAL,
 																			   	  in_node->line_number);
 	add_statement(current_block, second_conditional_move);
 
@@ -5288,6 +5290,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 																		true_constant,  //If not not equal then true
 																		comparison_instruction->operands.oir.assignee,
 																		MOVE_NE,
+																		BRANCH_CATEGORY_NORMAL,
 																   		in_expression->line_number);
 	add_statement(current_block, conditional_move);
 
@@ -5330,6 +5333,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 																			true_constant, //If it's not not equal, then it worked so put true	
 																			comparison_instruction->operands.oir.assignee,
 																			MOVE_NE,
+																			BRANCH_CATEGORY_NORMAL,
 																			in_expression->line_number);
 		add_statement(current_block, conditional_move);
 

@@ -1932,10 +1932,22 @@ static u_int8_t optimize_branching_assignments_where_possible(dynamic_array_t* c
 		 */
 		conditional_movement_type_t movement_type = convert_branch_type_to_conditional_movement_type(branch_statement->branch_info.branch_type);
 		if(else_assignee != NULL){
-			instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, if_assignee, else_assignee, branch_statement->relies_on, movement_type, branch_statement->line_number);
+			instruction_t* conditional_assignment = emit_conditional_movement_statement(branching_assignment_variable, 
+																						if_assignee,
+																						else_assignee,
+																						branch_statement->relies_on,
+																						movement_type,
+																						branch_statement->branch_info.branch_category,
+																						branch_statement->line_number);
 			add_statement(top_level_if_block, conditional_assignment);
 		} else {
-			instruction_t* conditional_assignment = emit_conditional_movement_with_const_statement(branching_assignment_variable, if_assignee, else_assignee_const, branch_statement->relies_on, movement_type, branch_statement->line_number);
+			instruction_t* conditional_assignment = emit_conditional_movement_with_const_statement(branching_assignment_variable,
+																									if_assignee,
+																									else_assignee_const,
+																									branch_statement->relies_on,
+																									movement_type,
+																									branch_statement->branch_info.branch_category,
+																									branch_statement->line_number);
 			add_statement(top_level_if_block, conditional_assignment);
 		}
 
