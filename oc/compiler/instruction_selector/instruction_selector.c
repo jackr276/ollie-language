@@ -12532,18 +12532,54 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			/**
 			 * If we have an inverted structure, a NaN(which is always false) should lead us to loading
 			 * the if assignee(logical else). Since the cmoveaX only checks for CF=0, we would incorrectly
-			 * go the else-assignee on a NaN. To resolve this, we'll add a final move if parity to
+			 * go the else-assignee on a NaN. To resolve this, we'll add a move if parity to
 			 * overwrite with the if assignee that will account for this
 			 *
 			 * a < b(inverted):
 			 * movl else value, final_assignee
-			 * cmovael if_value, final_assignee
-			 * cmovpl if_value, final_assignee
+			 * cmovpl if_value, final_assignee <-- accounts for NaN's going to physical if
+			 * cmovael if_value, final_assignee <-- accounts for all above/equal case
 			 *
 			 * Condition(to add phyiscal if assignee): CF == 0 || PF == 1
 			 */
 			} else {
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
 
+				/**
+				 * First we'll have the conditional move if parity to if
+				 */
+				instruction_t* cmovp_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovpX_given_size(destination_size));
+
+				/**
+				 * Then the conditional move if above or equal to if
+				 */
+				instruction_t* cmovae_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						if_operand,
+																						conditional_move->relies_on,
+																						select_cmovaeX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovp_to_if, conditional_move);
+				insert_instruction_before_given(cmovae_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmovae_to_if;
 			}
 		}
 
