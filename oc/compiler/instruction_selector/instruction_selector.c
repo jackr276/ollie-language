@@ -12238,6 +12238,24 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 	return conditional_move;
 }
 
+/**
+ * Select the given cmovaeX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovaeX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVAEW;
+		case DOUBLE_WORD:
+			return CMOVAEL;
+		case QUAD_WORD:
+			return CMOVAEQ;
+		default: {
+			trigger_ice_panic("Invalid cmovaX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
 
 /**
  * Select the given cmovaX given the size. Panics on invalid input
@@ -12461,6 +12479,43 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 				insert_instruction_before_given(cmova_to_if, conditional_move);
 				delete_statement(conditional_move);
 				return cmova_to_if;
+			}
+		}
+
+		/**
+		 * For a MOVE_GE/MOVE_AE(they're the same for floats), we *WILL* have different
+		 * processing based on whether or not the branch is normal or inverted
+		 */
+		case MOVE_AE:
+		case MOVE_GE: {
+			/**
+			 * If we have a non-inverted structure, a NaN(which is always false) should lead to us
+			 * loading in the else-assignee. Since the cmovaeX instruction checks to see if CF == 0, and
+			 * the NaN will set CF = 1, this naturally excludes NaNs from the true condition
+			 * 
+			 * a >= b:
+			 * movl else value, final_assignee
+			 * cmovael if_value, final_assignee
+			 *
+			 * Condition(to add phyiscal if assignee): CF == 0
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+
+			/**
+			 * If we have an inverted structure, a NaN(which is always false) should lead us to loading
+			 * the if assignee(logical else). Since the cmoveaX only checks for CF=0, we would incorrectly
+			 * go the else-assignee on a NaN. To resolve this, we'll add a final move if parity to
+			 * overwrite with the if assignee that will account for this
+			 *
+			 * a < b(inverted):
+			 * movl else value, final_assignee
+			 * cmovael if_value, final_assignee
+			 * cmovpl if_value, final_assignee
+			 *
+			 * Condition(to add phyiscal if assignee): CF == 0 || PF == 1
+			 */
+			} else {
+
 			}
 		}
 
