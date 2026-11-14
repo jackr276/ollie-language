@@ -12500,6 +12500,34 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 * Condition(to add phyiscal if assignee): CF == 0
 			 */
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
+
+				/**
+				 * Then the conditional needed move to if
+				 */
+				instruction_t* cmovae_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovaeX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovae_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmovae_to_if;
 
 			/**
 			 * If we have an inverted structure, a NaN(which is always false) should lead us to loading
