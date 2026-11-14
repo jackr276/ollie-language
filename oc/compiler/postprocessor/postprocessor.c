@@ -294,8 +294,8 @@ static void replace_all_branch_targets(basic_block_t* empty_block, basic_block_t
 				case JAE:
 				case JBE:
 					//If this is the empty block, then replace it
-					if(current_statement->if_block == empty_block){
-						current_statement->if_block = replacement;
+					if(current_statement->branch_info.if_block == empty_block){
+						current_statement->branch_info.if_block = replacement;
 						//This is now a successor
 						add_real_successor(predecessor, replacement);
 					}
@@ -384,7 +384,7 @@ static inline basic_block_t* get_jumping_to_block_if_exists(basic_block_t* block
 	switch(block->exit_statement->instruction_type){
 		//Direct jump, just use the if block
 		case JMP:
-			return block->exit_statement->if_block;
+			return block->exit_statement->branch_info.if_block;
 
 		//By default no
 		default:
@@ -431,7 +431,7 @@ static inline u_int8_t does_block_contain_more_than_one_jump_to_target(basic_blo
 			case JP:
 				//Bump the number of jumps to target it we
 				//hit this
-				if(instruction_cursor->if_block == target){
+				if(instruction_cursor->branch_info.if_block == target){
 					number_of_jumps++;
 				}
 
@@ -699,7 +699,7 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* function_blocks, dyna
 			 */
 			if(second_to_last_statement != NULL
 				&& is_jump_instruction(second_to_last_statement) == TRUE
-				&& second_to_last_statement->if_block == exit_statement->if_block){
+				&& second_to_last_statement->branch_info.if_block == exit_statement->branch_info.if_block){
 
 				//We can completely delete the conditional jump
 				delete_statement(second_to_last_statement);
@@ -712,7 +712,7 @@ static u_int8_t branch_reduce_postprocess(dynamic_array_t* function_blocks, dyna
 			}
 
 			//Extract the block(j) that we're going to
-			basic_block_t* jumping_to_block = exit_statement->if_block;
+			basic_block_t* jumping_to_block = exit_statement->branch_info.if_block;
 
 			/**
 			 * If these are the exact same block, then we need to 

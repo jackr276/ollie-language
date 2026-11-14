@@ -51,6 +51,9 @@ typedef struct instruction_window_t instruction_window_t;
 //The copy pair struct for our copy pair emittal
 typedef struct instruction_copy_pair_t instruction_copy_pair_t;
 
+//For storing optional const/var operands
+typedef struct operand_value_t operand_value_t;
+
 /**
  * Will we be printing these out as instructions or as three address code
  * statements?
@@ -101,9 +104,29 @@ typedef enum {
 } addressing_operands_side_t;
 
 
+/**
+ * We can have either a constant or variable operand
+ */
+typedef enum {
+	OPERAND_TYPE_CONST,
+	OPERAND_TYPE_VAR
+} operand_type_t;
+
+
 //Define the instructions per window
 #define INSTRUCTIONS_PER_WINDOW 3
 
+/**
+ * Tagged union used in conditional move lowering
+ * that stores constants or variables
+ */
+struct operand_value_t {
+	union {
+		three_addr_const_t* constant_value;
+		three_addr_var_t* variable_value;
+	} value;
+	operand_type_t type;
+};
 
 /**
  * The widow that we have here will store three instructions at once. This allows
@@ -709,11 +732,11 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 	switch(block->exit_statement->statement_type){
 		//Direct jump, just use the if block
 		case THREE_ADDR_CODE_JUMP_STMT:
-			return block->exit_statement->if_block;
+			return block->exit_statement->branch_info.if_block;
 
 		//In a branch statement, the else block is the direct jump
 		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->else_block;
+			return block->exit_statement->branch_info.else_block;
 
 		//By default no
 		default:
@@ -9339,8 +9362,8 @@ static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block
 					nearest_marked_postdom = get_nearest_marked_postdominator(block);
 
 					//We now need to unlink the successors that were in this branch
-					delete_successor(block, stmt->if_block);
-					delete_successor(block, stmt->else_block);
+					delete_successor(block, stmt->branch_info.if_block);
+					delete_successor(block, stmt->branch_info.else_block);
 
 					//This is now useless
 					delete_statement(stmt);
@@ -10698,6 +10721,184 @@ static inline void run_simplifier(dynamic_array_t* function_blocks, basic_block_
 
 
 /**
+ * Will the given statement, when lowered, result in an FP comparison instruction being
+ * used to set the condition codes. Note that not all statements that have FP operands
+ * are guaranteed to do this, so we need to analyze these on a case-by-case basis
+ *
+ * In the event that this function is given a statement that we believe should never be
+ * used to set condition codes we will panic and crash teh compiler
+ */
+static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement){
+	/**
+	 * On a case by case basis determine if we use floating point 
+	 * comparison(UCOMISS/UCOMISD/COMISS/COMISD) or not
+	 */
+	switch(statement->statement_type){
+		/**
+		 * Logical not statements *WILL* eventually be lowered
+		 * to use unordered comparison statements in the event
+		 * that they have a float operand. As such, we'll need
+		 * to return TRUE if the operand is a floating point value
+		 */
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
+			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+		}
+
+		/**
+		 * Test if not zero statements also will eventually be lowered to
+		 * use unordered comparison statements in the event that they have
+		 * a float operand. As such, we'll just have to return whether or
+		 * not the operand is a float
+		 */
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
+			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+		}
+
+		/**
+		 * For a BIN_OP_WITH_CONST statement, we have a special helper
+		 * that will determine whether or not we end up using floating
+		 * point comparison. This is all determine by the operator and
+		 * the operand types
+		 */
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
+			/**
+			 * Only comparison operations(>, >=, <, <=, ==, !=) can ever
+			 * lead to a float comparison being used as our branch conditional. 
+			 * Things like float logical and/float logical or, when lowered, actually
+			 * have a GP operation as their last operation, so they don't count here
+			 */
+			switch(statement->op){
+				case L_THAN:
+				case L_THAN_OR_EQ:
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS: {
+					generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(statement);
+					return IS_FLOATING_POINT(operand_type);
+			 	}
+
+				default: {
+					return FALSE;
+				}
+			}
+		}
+
+		/**
+		 * Bitwise NOT/NEG will never be used without an accompanying test if not
+		 * zero statement so we do not need to worry about them
+		 */
+		case THREE_ADDR_CODE_BITWISE_NOT_STMT: {
+		case THREE_ADDR_CODE_NEG_STATEMENT:
+			return FALSE;
+		}
+
+		/**
+		 * If somehow we find a statement that is not known to set condition codes, then that is an error and
+		 * we will need to panic out here. This means that we're trying to branch using something that does not
+		 * set condition codes
+		 */
+		default: {
+			trigger_ice_panic("Statement that does not set condition codes was found as a dependency of conditional execution");
+			return FALSE;
+		}
+	}
+}
+
+
+/**
+ * Trace our way up the block to determine if the given variable relies on a floating point comparsion
+ * or not. We are specifically looking to see if we come from a UCOMISS/UCOMISD statement or not. We will
+ * crawl our way up the block starting at the given starting statement
+ *
+ * NOTE: if we cannot find where this variable comes from in the block we will trigger a panic. That should
+ * absolutely never happen, and if it does something in the pipeline is messed up
+ *
+ * NOTE: Just because an operation has floating point operands does *NOT* necessarily mean that
+ * we need to take that into account in the end. For example, float logical or's final condition
+ * code setting statement is a regular bitwise and, which does not need to have parity flag setting
+ * taken into account.
+ */
+static inline u_int8_t does_variable_come_from_fp_comparison(instruction_t* starting_statement, three_addr_var_t* variable){
+	/**
+	 * This should *NEVER* happen. We must always have something thta our comparison came from
+	 */
+	if(variable == NULL){
+		trigger_ice_panic("NULL relies_on variable detected in fp comparison pipeline");
+	}
+
+	/**
+	 * Starting at the given start statement, crawl our way up the
+	 * block until we can find an assignee that matches our given variable
+	 */
+	instruction_t* cursor = starting_statement;
+	while(cursor != NULL){
+		/**
+		 * If they are equal, then we use the special helper to determine whether
+		 * the given instruction will eventually use an FP comparison or not. Once
+		 * we've found this we are done so we return the result
+		 */
+		if(variables_equal(variable, cursor->operands.oir.assignee) == TRUE){
+			return does_statement_use_fp_comparison(cursor);
+		}
+
+		cursor = cursor->previous_statement;
+	}
+
+	/**
+	 * If we're ever unable to find the source of the "relies_on" variable within the block then
+	 * this is a hard error. We will trigger a panic
+	 */
+	trigger_ice_panic("Unable to find a relies on variable for a branch statement within the given block");
+	return FALSE;
+}
+
+
+/**
+ * Conditional movement statements/branches that rely on floating point comparison need special handling
+ * during instruction lowering because of the possibility of NaN. These NaN values have the chance to
+ * set bits like the CF in situations where they normally would not be set for non-float values. We consider
+ * NaN values as nonzero, so we need to add special parity jumps/handling in the event that we encounter
+ * them. To ensure that we generate these parity checks only where appropriate, we will flag branches/conditional
+ * movement statements that rely on floating point comparisons now if their "relies_on" field comes from
+ * a floating point comparison. This flag will then be used during instruction selection to generate parity
+ * bit checks when needed
+ *
+ * NOTE: Just because an operation has floating point operands does *NOT* necessarily mean that
+ * we need to take that into account in the end. For example, float logical or's final condition
+ * code setting statement is a regular bitwise and, which does not need to have parity flag setting
+ * taken into account.
+ */
+static void flag_conditional_execution_that_relies_on_float_comparison(dynamic_array_t* function_blocks){
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+
+		/**
+		 * Crawl through the entire block. We'll only need to perform the
+		 * flagging operation for conditional moves and branch statements
+		 */
+		instruction_t* cursor = block->leader_statement;
+		while(cursor != NULL){
+			switch(cursor->statement_type){
+				case THREE_ADDR_CODE_BRANCH_STMT:
+				case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
+					cursor->branch_info.branch_derives_from_float_comparison = does_variable_come_from_fp_comparison(cursor, cursor->relies_on);
+					break;
+				}
+
+				default: {
+					break;
+				}
+			}
+
+			cursor = cursor->next_statement;
+		}
+	}
+}
+
+
+/**
  * We'll make use of a while change algorithm here. We make passes
  * until we see the first pass where we experience no change at all.
  */
@@ -10808,6 +11009,13 @@ static void simplify(cfg_t* cfg){
 			 */
 			run_simplifier(&(function->function_blocks), function_entry);
 		}
+
+		/**
+		 * Before we are able to completely lower all of our instructions, we will need to go
+		 * through and flag any/all branches and conditional moves that rely on floating point
+		 * comparison as doing so. This will impact our branch selection down the line
+		 */
+		flag_conditional_execution_that_relies_on_float_comparison(&(function->function_blocks));
 	}
 }
 
@@ -11725,280 +11933,10 @@ instruction_t* emit_constant_move_instruction(three_addr_var_t* destination, thr
 
 
 /**
- * Select the appropriate conditional move based on the destination size
- * and conditional
- *
- * NOTE: this assumes that the comparison result does not come from an FP comparison
- */
-static inline instruction_type_t select_conditional_move_instruction(variable_size_t size, conditional_movement_type_t movement_type){
-	switch(movement_type){
-		case MOVE_NE:
-			switch(size){
-				case WORD:
-					return CMOVNEW;
-				case DOUBLE_WORD:
-					return CMOVNEL;
-				case QUAD_WORD:
-					return CMOVNEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_E:
-			switch(size){
-				case WORD:
-					return CMOVEW;
-				case DOUBLE_WORD:
-					return CMOVEL;
-				case QUAD_WORD:
-					return CMOVEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-		
-		case MOVE_Z:
-			switch(size){
-				case WORD:
-					return CMOVZW;
-				case DOUBLE_WORD:
-					return CMOVZL;
-				case QUAD_WORD:
-					return CMOVZQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_NZ:
-			switch(size){
-				case WORD:
-					return CMOVNZW;
-				case DOUBLE_WORD:
-					return CMOVNZL;
-				case QUAD_WORD:
-					return CMOVNZQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_L:
-				switch(size){
-				case WORD:
-					return CMOVLW;
-				case DOUBLE_WORD:
-					return CMOVLL;
-				case QUAD_WORD:
-					return CMOVLQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}	
-
-		case MOVE_LE:
-			switch(size){
-				case WORD:
-					return CMOVLEW;
-				case DOUBLE_WORD:
-					return CMOVLEL;
-				case QUAD_WORD:
-					return CMOVLEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_G:
-			switch(size){
-				case WORD:
-					return CMOVGW;
-				case DOUBLE_WORD:
-					return CMOVGL;
-				case QUAD_WORD:
-					return CMOVGQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_GE:
-			switch(size){
-				case WORD:
-					return CMOVGEW;
-				case DOUBLE_WORD:
-					return CMOVGEL;
-				case QUAD_WORD:
-					return CMOVGEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_A:
-			switch(size){
-				case WORD:
-					return CMOVAW;
-				case DOUBLE_WORD:
-					return CMOVAL;
-				case QUAD_WORD:
-					return CMOVAQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_AE:
-			switch(size){
-				case WORD:
-					return CMOVAEW;
-				case DOUBLE_WORD:
-					return CMOVAEL;
-				case QUAD_WORD:
-					return CMOVAEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_B:
-			switch(size){
-				case WORD:
-					return CMOVBW;
-				case DOUBLE_WORD:
-					return CMOVBL;
-				case QUAD_WORD:
-					return CMOVBQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_BE:
-			switch(size){
-				case WORD:
-					return CMOVBEW;
-				case DOUBLE_WORD:
-					return CMOVBEL;
-				case QUAD_WORD:
-					return CMOVBEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		default:
-			fprintf(stderr, "Fatal internal compiler error: Invalid conditional movement type detected\n");
-			exit(1);
-	}
-}
-
-
-/**
- * Select the appropriate conditional move based on the destination size
- * and conditional
- *
- * NOTE: this assumes that the comparison result does come from an FP comparison
- */
-static inline instruction_type_t select_conditional_move_instruction_for_float_comparison(variable_size_t size, conditional_movement_type_t movement_type){
-	switch(movement_type){
-		case MOVE_NE:
-		case MOVE_NZ:
-			switch(size){
-				case WORD:
-					return CMOVNEW;
-				case DOUBLE_WORD:
-					return CMOVNEL;
-				case QUAD_WORD:
-					return CMOVNEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_E:
-		case MOVE_Z:
-			switch(size){
-				case WORD:
-					return CMOVEW;
-				case DOUBLE_WORD:
-					return CMOVEL;
-				case QUAD_WORD:
-					return CMOVEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-		
-		case MOVE_L:
-		case MOVE_B:
-				switch(size){
-				case WORD:
-					return CMOVBW;
-				case DOUBLE_WORD:
-					return CMOVBL;
-				case QUAD_WORD:
-					return CMOVBQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}	
-
-		case MOVE_LE:
-		case MOVE_BE:
-			switch(size){
-				case WORD:
-					return CMOVBEW;
-				case DOUBLE_WORD:
-					return CMOVBEL;
-				case QUAD_WORD:
-					return CMOVBEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_G:
-		case MOVE_A:
-			switch(size){
-				case WORD:
-					return CMOVAW;
-				case DOUBLE_WORD:
-					return CMOVAL;
-				case QUAD_WORD:
-					return CMOVAQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		case MOVE_GE:
-		case MOVE_AE:
-			switch(size){
-				case WORD:
-					return CMOVAEW;
-				case DOUBLE_WORD:
-					return CMOVAEL;
-				case QUAD_WORD:
-					return CMOVAEQ;
-				default:
-					fprintf(stderr, "Invalid/unsupported variable size detected in conditional move instruction\n");
-					exit(1);
-			}
-
-		default:
-			fprintf(stderr, "Fatal internal compiler error: Invalid conditional movement type detected\n");
-			exit(1);
-	}
-}
-
-
-/**
  * Directly emit a conditional move instruction based on the instruction type directly given. This conditional
  * move will already be in x86 form so no additional instruction selection will be needed
  */
-static instruction_t* emit_conditional_move_instruction(three_addr_var_t* destination_register, three_addr_var_t* source_register, three_addr_var_t* relies_on, instruction_type_t instruction_type){
+static inline instruction_t* emit_conditional_move_instruction_directly(three_addr_var_t* destination_register, three_addr_var_t* source_register, three_addr_var_t* relies_on, instruction_type_t instruction_type){
 	instruction_t* conditional_movement = calloc(1, sizeof(instruction_t));
 
 	conditional_movement->instruction_type = instruction_type;
@@ -12011,8 +11949,195 @@ static instruction_t* emit_conditional_move_instruction(three_addr_var_t* destin
 
 
 /**
- * Convert a conditional movement OIR statement into x86 assembly
+ * Select the appropriate conditional move based on the destination size
+ * and conditional
  *
+ * NOTE: this assumes that the comparison result does not come from an FP comparison
+ */
+static inline instruction_type_t select_conditional_move_instruction(variable_size_t size, conditional_movement_type_t movement_type){
+	switch(movement_type){
+		case MOVE_NE: {
+			switch(size){
+				case WORD:
+					return CMOVNEW;
+				case DOUBLE_WORD:
+					return CMOVNEL;
+				case QUAD_WORD:
+					return CMOVNEQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_E: {
+			switch(size){
+				case WORD:
+					return CMOVEW;
+				case DOUBLE_WORD:
+					return CMOVEL;
+				case QUAD_WORD:
+					return CMOVEQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+		
+		case MOVE_Z: {
+			switch(size){
+				case WORD:
+					return CMOVZW;
+				case DOUBLE_WORD:
+					return CMOVZL;
+				case QUAD_WORD:
+					return CMOVZQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_NZ: {
+			switch(size){
+				case WORD:
+					return CMOVNZW;
+				case DOUBLE_WORD:
+					return CMOVNZL;
+				case QUAD_WORD:
+					return CMOVNZQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_L: {
+				switch(size){
+				case WORD:
+					return CMOVLW;
+				case DOUBLE_WORD:
+					return CMOVLL;
+				case QUAD_WORD:
+					return CMOVLQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_LE: {
+			switch(size){
+				case WORD:
+					return CMOVLEW;
+				case DOUBLE_WORD:
+					return CMOVLEL;
+				case QUAD_WORD:
+					return CMOVLEQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_G: {
+			switch(size){
+				case WORD:
+					return CMOVGW;
+				case DOUBLE_WORD:
+					return CMOVGL;
+				case QUAD_WORD:
+					return CMOVGQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_GE: {
+			switch(size){
+				case WORD:
+					return CMOVGEW;
+				case DOUBLE_WORD:
+					return CMOVGEL;
+				case QUAD_WORD:
+					return CMOVGEQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_A: {
+			switch(size){
+				case WORD:
+					return CMOVAW;
+				case DOUBLE_WORD:
+					return CMOVAL;
+				case QUAD_WORD:
+					return CMOVAQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_AE: {
+			switch(size){
+				case WORD:
+					return CMOVAEW;
+				case DOUBLE_WORD:
+					return CMOVAEL;
+				case QUAD_WORD:
+					return CMOVAEQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_B: {
+			switch(size){
+				case WORD:
+					return CMOVBW;
+				case DOUBLE_WORD:
+					return CMOVBL;
+				case QUAD_WORD:
+					return CMOVBQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		case MOVE_BE: {
+			switch(size){
+				case WORD:
+					return CMOVBEW;
+				case DOUBLE_WORD:
+					return CMOVBEL;
+				case QUAD_WORD:
+					return CMOVBEQ;
+				default:
+					trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+					return NO_INSTRUCTION_SELECTED;
+			}
+		}
+
+		default: {
+			trigger_ice_panic("Invalid/unsupported variable size detected in conditional move instruction");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
+
+/**
+ * Handle a regular conditional move that does *NOT* need to account for any floating point parity
+ * flag possibilites. For these conditional moves we do not need to add any extra consideration
+ * for inverse branches when compared to normal branches
+ *
+ * The standard pattern goes something like this:
  * x_4 <- MOVE_E t1 else t4
  * 
  * Becomes:
@@ -12022,19 +12147,18 @@ static instruction_t* emit_conditional_move_instruction(three_addr_var_t* destin
  * We always unconditionally assign the else, and then overwrite it with our actual value if
  * the conditional move works
  *
- * NOTE: It is assumed that the first instruction in the window is the target statement
+ * NOTE: This function returns a pointer to the very last instruction that it has produced
  */
-static void handle_conditional_movement_statement(instruction_window_t* window){
-	instruction_t* conditional_move = window->instruction1;
-	instruction_t* additional_conditional_move;
-	//Keep track of the final instruction for the eventual window rebuild
-	instruction_t* final_instruction = conditional_move;
-
-	//Cache the destination type & assignee for needed comparisons
+static instruction_t* handle_conditional_move_without_float_parity_consideration(instruction_t* conditional_move){
+	/**
+	 * Cache the destination type & assignee for needed comparisons
+	 */
 	three_addr_var_t* assignee = conditional_move->operands.oir.assignee;
 	generic_type_t* destination_type = assignee->type;
 
-	//We know that the if assignee will always be a variable so we can extract it now
+	/**
+	 * We know that the if assignee will always be a variable so we can extract it now
+	 */
 	three_addr_var_t* if_assignee = conditional_move->operands.oir.operand1;
 	variable_size_t destination_size = get_type_size(destination_type);
 
@@ -12052,26 +12176,28 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * into the destitination. If it is a constant then we just do a constant move
 	 */
 	three_addr_var_t* else_destination = emit_var_copy(assignee);
-	//We'll need this externally
-	three_addr_var_t* else_assignee;
 	if(conditional_move->operands.oir.operand2 != NULL){
-		else_assignee = conditional_move->operands.oir.operand2;
+		three_addr_var_t* else_assignee = conditional_move->operands.oir.operand2;
 
-		//Any required converting moves happen here
+		/**
+		 * Any required converting moves happen here
+		 */
 		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
 			else_assignee = create_and_insert_converting_move_instruction(conditional_move, else_assignee, destination_type);
 		}
 
-		//Now we can emit and insert the assignment
+		/**
+		 * Now we can emit and insert the assignment
+		 */
 		instruction_t* else_assignment = emit_move_instruction(else_destination, else_assignee);
 		insert_instruction_before_given(else_assignment, conditional_move);
 
 	} else {
+		/**
+		 * For this we just need a plain constant assignment. No converting moves are required
+		 */
 		instruction_t* constant_assignment = emit_constant_move_instruction(else_destination, conditional_move->operands.oir.constant_operand);
 		insert_instruction_before_given(constant_assignment, conditional_move);
-		
-		//Stash this in case we need it for floats
-		else_assignee = constant_assignment->operands.x86.destination_register;
 	}
 
 	/**
@@ -12083,165 +12209,419 @@ static void handle_conditional_movement_statement(instruction_window_t* window){
 	 * the else assignee is needed. In most cases it won't be so we won't do that here
 	 */
 	if(destination_size == BYTE){
-		//Copy both variables
 		assignee = emit_var_copy(assignee);
 		if_assignee = emit_var_copy(if_assignee);
 
-		//Bump both of the copied versions up to be word sized
+		/**
+		 * Force both new versions to be word-sized
+		 */
 		assignee->type = i16;
 		assignee->variable_size = WORD;
-
 		if_assignee->type = i16;
 		if_assignee->variable_size = WORD;
 
-		//Revise this so that the selector is happy
+		/**
+		 * Set this so that the conditional move selector works
+		 */
 		destination_size = WORD;
 	}
 
 	/**
-	 * Now that we have the destination pre-loaded with the else value, we can emit the conditional move 
-	 * for the if value now. We will hijack the old converting move OIR statement to do this
+	 * Select the instruction type and update the destination register and source register. Note
+	 * that once we do this we've destroyed the relationship between this and the else assignee.
+	 * This means that beyond this point traditional mark and sweep will not work if we tried to
+	 * do it
 	 */
+	conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
+	conditional_move->operands.x86.destination_register = assignee;
+	conditional_move->operands.x86.source_register1 = if_assignee;
+	return conditional_move;
+}
 
-	if(conditional_move->relies_on->comes_from_fp_comparison == FALSE){
-		conditional_move->instruction_type = select_conditional_move_instruction(destination_size, conditional_move->movement_type);
-		conditional_move->operands.x86.destination_register = assignee;
-		conditional_move->operands.x86.source_register1 = if_assignee;
-	} else {
-		/**
-		 * Step 1: select the regular converting move instruction and add our values in
-		 */
-		conditional_move->instruction_type = select_conditional_move_instruction_for_float_comparison(destination_size, conditional_move->movement_type);
-		conditional_move->operands.x86.destination_register = assignee;
-		conditional_move->operands.x86.source_register1 = if_assignee;
-
-		/**
-		 * Step 2: for certain floating point comparison types, we need check and see if the parity
-		 * flag has been set/unset. These are the NZ, Z, NE and E conditional move types because
-		 * the parity flag being set would be a part of these
-		 */
-		switch(conditional_move->movement_type){
-			/**
-			 * For NE and NZ, Ollie considers NaN to never be equal to anything. As such,
-			 * if we have a NaN flag set here, we will need to take the *true* path. This
-			 * will involve moving the else destination into our register after the if has
-			 * been moved in if we see the parity flag has been set(pf = 1)
-			 *
-			 * 	if(x != 3.33){
-			 * 		result = 5;
-			 * 	} else {
-			 * 		result = 4;
-			 * 	}
-			 *
-			 * 	ucomiss .LC1, x
-			 * 	movl $4, result
-			 * 	cmovnel $5, result <- if they're plain not equal
-			 * 	cmovpl $5, result <- if we have a NaN we consider it not equal and do this
-			 */
-			case MOVE_NE:
-			case MOVE_NZ:
-				//Emit a clone for our uses
-				assignee = emit_var_copy(assignee);
-
-				switch(destination_size){
-					case WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPW);
-						break;
-					case DOUBLE_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPL);
-						break;
-					case QUAD_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, if_assignee, conditional_move->relies_on, CMOVPQ);
-						break;
-					default:
-						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
-						exit(1);
-				}
-
-				//This goes in after the original converting move
-				insert_instruction_after_given(additional_conditional_move, conditional_move);
-
-				//For when we rebuild
-				final_instruction = additional_conditional_move;
-				break;
-
-			/**
-			 * For E and Z, Ollie considers NaN to never be equal to anything. As such,
-			 * if we have a NaN flag set here, we will need to take the *false* path. This
-			 * will involve moving the else destination into our register after the if has
-			 * been moved in if we see the parity flag has been set(pf = 1)
-			 *
-			 * 	if(x == 3.33){
-			 * 		result = 5;
-			 * 	} else {
-			 * 		result = 4;
-			 * 	}
-			 *
-			 * 	ucomiss .LC1, x
-			 * 	movl $4, result
-			 * 	cmovel $5, result <- if they're equal move the if value in
-			 * 	cmovpl $4, result <- if we have a NaN we consider it not equal and put the else back in
-			 *
-			 * 	Due to how this works, we will need a third variable to store the else assignee in the even of
-			 * 	a constant move. We will always emit an assignment instruction with the else assignee over to a 
-			 * 	temp var just to be safe
-			 */
-			case MOVE_E:
-			case MOVE_Z:
-				//Emit a clone for our uses
-				assignee = emit_var_copy(assignee);
-
-				//Emit a copy instruction for the else and add this in before the very first assignment
-				instruction_t* copy_else = emit_register_movement_instruction_directly(emit_temp_var(else_assignee->type), else_assignee);
-				insert_instruction_before_given(copy_else, conditional_move);
-
-				//We will use this cached version in our second parity move
-				three_addr_var_t* cached_else_result = copy_else->operands.x86.destination_register;
-
-				/**
-				 * If this is a byte sized value, then we need to emit a copy
-				 * that is an i16 similar to what we do for the assignee and
-				 * the if result. This is because cmovX in x86 does not support
-				 * byte operands
-				 */
-				if(cached_else_result->variable_size == BYTE){
-					cached_else_result = emit_var_copy(cached_else_result);
-
-					cached_else_result->type = i16;
-					cached_else_result->variable_size = WORD;
-				}
-
-				switch(destination_size){
-					case WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPW);
-						break;
-					case DOUBLE_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPL);
-						break;
-					case QUAD_WORD:
-						additional_conditional_move = emit_conditional_move_instruction(assignee, cached_else_result, conditional_move->relies_on, CMOVPQ);
-						break;
-					default:
-						fprintf(stderr, "Fatal internal compiler error: invalid destination size in floating point conditional move selector\n");
-						exit(1);
-				}
-
-				//This goes in after the original converting move
-				insert_instruction_after_given(additional_conditional_move, conditional_move);
-
-				//For when we rebuild
-				final_instruction = additional_conditional_move;
-
-				break;
-				
-			//By default do nothing
-			default:
-				break;
+/**
+ * Select the given cmovaeX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovaeX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVAEW;
+		case DOUBLE_WORD:
+			return CMOVAEL;
+		case QUAD_WORD:
+			return CMOVAEQ;
+		default: {
+			trigger_ice_panic("Invalid cmovaX size requested");
+			return NO_INSTRUCTION_SELECTED;
 		}
 	}
+}
 
-	//Rebuild the window around the final instruction
-	reconstruct_window(window, final_instruction);
+
+/**
+ * Select the given cmovaX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovaX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVAW;
+		case DOUBLE_WORD:
+			return CMOVAL;
+		case QUAD_WORD:
+			return CMOVAQ;
+		default: {
+			trigger_ice_panic("Invalid cmovaX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
+
+/**
+ * Select the given cmovpX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovpX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVPW;
+		case DOUBLE_WORD:
+			return CMOVPL;
+		case QUAD_WORD:
+			return CMOVPQ;
+		default: {
+			trigger_ice_panic("Invalid cmovaX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
+
+/**
+ * Conditional moves that derive from floating point comparisons will need special attention
+ * compared to the ones that do not. For one, we need to account for cases where we have NaN
+ * as one of the operands. This should always lead us to the *logical* false assignee being
+ * returned by the conditional move. However, due to the way that some of our conditional
+ * moves come from inverse branches, sometimes the physical if assignee is actually the logical
+ * else assignee. We will as such need to generate different instruction patterns for different
+ * conditional move types based on whether or not they are inverse branches. More detail can
+ * be found in the examples given in each of the move type handlers
+ *
+ * NOTE: This function returns a pointer to the very last instruction that it has produced
+ */
+static instruction_t* handle_conditional_move_with_float_parity_consideration(instruction_t* conditional_move){
+	/**
+	 * Cache the destination type & assignee for needed comparisons
+	 */
+	three_addr_var_t* destination_variable = conditional_move->operands.oir.assignee;
+	generic_type_t* destination_type = destination_variable->type;
+
+	/**
+	 * We know that the if assignee will always be a variable so we can extract it now
+	 */
+	three_addr_var_t* if_operand = conditional_move->operands.oir.operand1;
+	variable_size_t destination_size = get_type_size(destination_type);
+
+	/**
+	 * If the if-assignee requires a converting move, now is the time for us to insert
+	 * it. These do not set condition codes so we should be good here
+	 */
+	if(is_converting_move_required(destination_type, if_operand->type) == TRUE){
+		if_operand = create_and_insert_converting_move_instruction(conditional_move, if_operand, destination_type);
+	}
+
+	/**
+	 * If we have a destination that is a byte, that will actually not work for converting
+	 * moves because x86 does not support it. We will force these movements to be word
+	 * sized by forcing all of the operands to be word sized for now
+	 */
+	if(destination_size == BYTE){
+		/**
+		 * First copy all variables whole
+		 */
+		destination_variable = emit_var_copy(destination_variable);
+		if_operand = emit_var_copy(if_operand);
+
+		/**
+		 * Then bump all of the copied operands to be word size
+		 */
+		destination_variable->type = i16;
+		destination_variable->variable_size = WORD;
+		if_operand->type = i16;
+		if_operand->variable_size = WORD;
+
+		/**
+		 * Revise this so that the selector is accurate
+		 */
+		destination_size = WORD;
+	}
+
+	/**
+	 * If we have a second operand, then we'll check for conditional moves if required. We'll
+	 * also check to see if we need to adjust the variable size as byte sized variables aren't
+	 * used in conditional moves. If it's a constant then we'll just extract the constant value
+	 */
+	operand_value_t else_operand;
+	if(conditional_move->operands.oir.operand2 != NULL){
+		/**
+		 * Extract it and emit any conditional moves if they are required
+		 */
+		three_addr_var_t* else_assignee = conditional_move->operands.oir.operand2;
+		if(is_converting_move_required(destination_type, else_assignee->type) == TRUE){
+			else_assignee = create_and_insert_converting_move_instruction(conditional_move, else_assignee, destination_type);
+		}
+
+		else_operand.type = OPERAND_TYPE_VAR;
+		else_operand.value.variable_value = else_assignee;
+
+	/**
+	 * Extract and store the constant operand
+	 */
+	} else {
+		else_operand.type = OPERAND_TYPE_CONST;
+		else_operand.value.constant_value = conditional_move->operands.oir.constant_operand;
+	}
+
+	/**
+	 * Based on the movement type *AND* whether or not we're dealing
+	 * with an inverse branch, we'll emit parity checks as appropriate.
+	 * The inner workings of this are detailed inside of each option
+	 */
+	conditional_movement_type_t movement_type = conditional_move->movement_type;
+	branch_category_t branch_category = conditional_move->branch_info.branch_category;
+	switch(movement_type){
+		/**
+		 * For a MOVE_G/MOVE_A(they're the same for floats), we *WILL* have different
+		 * processing based on whether or not the branch is normal or inverted
+		 */
+		case MOVE_A:
+		case MOVE_G: {
+			/**
+			 * If we have a non-inverted structure, a NaN(which is always false) should lead to us
+			 * loading in the else-assignee. Since the cmovaX instruction checks to see if CF == 0, and
+			 * the NaN will set CF = 1, this naturally excludes NaNs from the true condition
+			 * 
+			 * a > b:
+			 * movl else value, final_assignee
+			 * cmoval if_value, final_assignee
+			 *
+			 * Condition(to add phyiscal if assignee): CF == 0 && ZF == 0
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
+
+				/**
+				 * Then the needed move to if
+				 */
+				instruction_t* cmov_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						if_operand,
+																						conditional_move->relies_on,
+																						select_cmovaX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmov_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmov_to_if;
+			
+			/**
+			 * Otherwise, we have an inverted structure. This means that the logical false
+			 * value is in reality the if value. This means that in the event of a parity, we'll
+			 * want to assign the if assignee over. We'll achieve this by adding a parity move
+			 * before the cmoval
+			 *
+			 * a <= b(that has been inverted):
+			 * movl else value, final_assignee
+			 * cmovpl if_value, final_assignee <-- accounts for NaN's going to logical else
+			 * cmoval if_value, final_assignee <-- all other cases
+			 *
+			 * Condition(to add physical if assignee): PF == 1 || (CF == 0 && ZF == 0)
+			 */
+			} else {
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
+
+				/**
+				 * Then the first parity move to if
+				 */
+				instruction_t* cmovp_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovpX_given_size(destination_size));
+
+				/**
+				 * Then the actual above move to if
+				 */
+				instruction_t* cmova_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						if_operand,
+																						conditional_move->relies_on,
+																						select_cmovaX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovp_to_if, conditional_move);
+				insert_instruction_before_given(cmova_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmova_to_if;
+			}
+		}
+
+		/**
+		 * For a MOVE_GE/MOVE_AE(they're the same for floats), we *WILL* have different
+		 * processing based on whether or not the branch is normal or inverted
+		 */
+		case MOVE_AE:
+		case MOVE_GE: {
+			/**
+			 * If we have a non-inverted structure, a NaN(which is always false) should lead to us
+			 * loading in the else-assignee. Since the cmovaeX instruction checks to see if CF == 0, and
+			 * the NaN will set CF = 1, this naturally excludes NaNs from the true condition
+			 * 
+			 * a >= b:
+			 * movl else value, final_assignee
+			 * cmovael if_value, final_assignee
+			 *
+			 * Condition(to add phyiscal if assignee): CF == 0
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
+
+				/**
+				 * Then the conditional needed move to if
+				 */
+				instruction_t* cmovae_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovaeX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovae_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmovae_to_if;
+
+			/**
+			 * If we have an inverted structure, a NaN(which is always false) should lead us to loading
+			 * the if assignee(logical else). Since the cmoveaX only checks for CF=0, we would incorrectly
+			 * go the else-assignee on a NaN. To resolve this, we'll add a move if parity to
+			 * overwrite with the if assignee that will account for this
+			 *
+			 * a < b(inverted):
+			 * movl else value, final_assignee
+			 * cmovpl if_value, final_assignee <-- accounts for NaN's going to physical if
+			 * cmovael if_value, final_assignee <-- accounts for all above/equal case
+			 *
+			 * Condition(to add phyiscal if assignee): CF == 0 || PF == 1
+			 */
+			} else {
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
+
+				/**
+				 * First we'll have the conditional move if parity to if
+				 */
+				instruction_t* cmovp_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovpX_given_size(destination_size));
+
+				/**
+				 * Then the conditional move if above or equal to if
+				 */
+				instruction_t* cmovae_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						if_operand,
+																						conditional_move->relies_on,
+																						select_cmovaeX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovp_to_if, conditional_move);
+				insert_instruction_before_given(cmovae_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmovae_to_if;
+			}
+		}
+
+		//TODO ADD REST
+		default: {
+			trigger_ice_panic("Unrecognized conditional movement type detected in float conditional movement lowerer");
+			return NULL;
+		}
+	}
+}
+
+
+/**
+ * Convert a conditional movement statement into the equivalent x86 assembly. This inlined
+ * helper splits out into two separate functions that handle processing appropriately based
+ * on whether or not the conditional movement statement comes from a floating point comparison
+ * or not. Conditional movement statements that come from a floating point comparison
+ * need to be handled differetly due to the possibility of NaN operands
+ *
+ * NOTE: It is assumed that the first instruction in the window is the target statement
+ */
+static inline void handle_conditional_movement_statement(instruction_window_t* window){
+	instruction_t* conditional_move = window->instruction1;
+
+	/**
+	 * Split based on whether or not our conditional move operation comes from a floating
+	 * point comparison or not. We assume that most of the time it will not
+	 */
+	if(conditional_move->branch_info.branch_derives_from_float_comparison == FALSE){
+		instruction_t* last_statement = handle_conditional_move_without_float_parity_consideration(conditional_move);
+		reconstruct_window(window, last_statement);
+	} else {
+		instruction_t* last_statement = handle_conditional_move_with_float_parity_consideration(conditional_move);
+		reconstruct_window(window, last_statement);
+	}
 }
 
 
@@ -16970,228 +17350,468 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
 
 
 /**
- * A branch statement always selects 2 instructions, the conditional
- * jump-to-if and the unconditional else jump
+ * If we get to this function, then we know that we're dealing with a branch where
+ * we have to account for the possibility of flags like the CF being set by NaN values
+ * with float comparison(UCOMISS/UCOMISD/COMISS/COMISD). This will lead to extra jumps
+ * being inserted around the partify flag(PF)
  *
- * NOTE: we know that the branch instruction here is always instruction 1
+ * The key issue here is that UCOMISS/UCOMISD will set the CF=1 when either operand is NaN. Since
+ * this flag is relied on for several of our branches, a float operand can lead to a branch being
+ * inadvertently taken if an operand is NaN
+ *
+ * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
+ * that it inserted for window reconstruction purposes
+ *
+ * NOTE: due to the way that branch inversion alone does not account for parity conditionals, we will need 
+ * to update the output based on whether or not the original branch was categorized as an inverse branch(jumps
+ * to the logical else when the conditional is true) or a regular branch(jumps to the logical if when the
+ * conditional is true)
  */
-static void handle_branch_instruction(instruction_window_t* window){
-	instruction_t* branch_stmt = window->instruction1;
-	//Grab the block out
-	basic_block_t* block = branch_stmt->block_contained_in;
+static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* branch_statement){
+	/**
+	 * Extract the if block, else block, and the block that we're contained in
+	 */
+	basic_block_t* block_contained_in = branch_statement->block_contained_in;
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
+	branch_category_t branch_category = branch_statement->branch_info.branch_category;
 
-	//Grab out the if and else blocks
-	basic_block_t* if_block = branch_stmt->if_block;
-	basic_block_t* else_block = branch_stmt->else_block;
+	/**
+	 * Based on the type of branch we'll go ahead. Float comparison will combine
+	 * unsigned branches and signed branches together. For floats there is no difference
+	 */
+	switch(branch_statement->branch_info.branch_type){
+		/**
+		 * BRANCH_A/BRANCH_G behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
+		 */
+		case BRANCH_A:
+		case BRANCH_G: {
+			/**
+			 * For branching above without an inverted branch, we do *NOT* need to add
+			 * parity checking because a NaN will set the CF=1, and the branch will go
+			 * to the physical else block, which in this normal case is also the logical
+			 * else block
+			 * 	
+			 * Condition(to jump to phyiscal if block): CF == 0 && ZF == 0
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
 
-	//Placeholder for the jump to if instruction
-	instruction_t* jump_to_if;
-	//For floats only, this is used to jump when we have a NaN
-	instruction_t* jump_when_nan;
-	//The false jump condition
-	instruction_t* jump_to_else;
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			
+			/**
+			 * For branching above *WITH* an inverted branch, we *DO* need to add parity
+			 * checking becasue a we want to consider the NaN as a false path. NaN is not
+			 * ever greater than anything else. However, our "false" path here is actually
+			 * the physical if block because it is an inverse branch, so we'll want the parity
+			 * to take us to the physical if, which is the logical else
+			 *
+			 * Condition(to jump to phyiscal if block): PF == 1 || (CF == 0 && ZF == 0)
+			 */
+			} else {
+				instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JA);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
 
-	//Most common case, we do not expect that most things will
-	//be relying on FP comparison
-	if(branch_stmt->relies_on->comes_from_fp_comparison == FALSE){
-		switch(branch_stmt->branch_type){
-			case BRANCH_A:
-				jump_to_if = emit_jump_instruction_directly(if_block, JA);
-				break;
-			case BRANCH_AE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-				break;
-			case BRANCH_B:
-				jump_to_if = emit_jump_instruction_directly(if_block, JB);
-				break;
-			case BRANCH_BE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
-				break;
-			case BRANCH_E:
-				jump_to_if = emit_jump_instruction_directly(if_block, JE);
-				break;
-			case BRANCH_NE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
-				break;
-			case BRANCH_Z:
-				jump_to_if = emit_jump_instruction_directly(if_block, JZ);
-				break;
-			case BRANCH_NZ:
-				jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
-				break;
-			case BRANCH_G:
-				jump_to_if = emit_jump_instruction_directly(if_block, JG);
-				break;
-			case BRANCH_GE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JGE);
-				break;
-			case BRANCH_L:
-				jump_to_if = emit_jump_instruction_directly(if_block, JL);
-				break;
-			case BRANCH_LE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JLE);
-				break;
-			//We in reality should never reach here
-			default:
-				printf("Fatal internal compiler error: Unreachable branch type hit\n");
-				exit(1);
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			}
 		}
 
-		//Copy over the special relies_on field
-		jump_to_if->relies_on = branch_stmt->relies_on;
+		/**
+		 * BRANCH_AE/BRANCH_GE behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
+		 */
+		case BRANCH_AE:
+		case BRANCH_GE: {
+			/**
+			 * For branching *WITHOUT* an inverted branch, we *DO NOT* need to add
+			 * a parity check. We want a NaN to go to the logical else, which is also
+			 * the physical else in this case, and since a NaN sets CF=1, this branch
+			 * goes to the else block already
+			 * 	
+			 * Condition(to jump to phyiscal if block): CF == 0 
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
 
-		//The else jump is always a direct jump no matter what
-		jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
 
-		//The if must go after the branch statement before the else
-		add_statement(block, jump_to_if);
-		//And the jump to else always goes after the if jump
-		add_statement(block, jump_to_else);
+			/**
+			 * For branching with an inverted branch, we *DO* need to add a parity
+			 * check that will have us jump to the physical if(logical else in this case).
+			 * Since NaN sets CF=1, if we do not have this parity check, a NaN will send
+			 * us to the physical else(logical if) in this case
+			 *
+			 * Condition(jump to physical if block): PF == 1 || CF == 0
+			 */
+			} else {
+				instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
 
-		//Once this is all done, we can delete the branch
-		delete_statement(branch_stmt);
+				/**
+				 * Add them in, delete the branch, and give back the very
+				 * last instruction that we've added
+				 */
+				add_statement(block_contained_in, jump_to_if_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			}
+		}
 
-		//And reset the window based on the last one
-		reconstruct_window(window, jump_to_else);
+		/**
+		 * BRANCH_L/BRANCH_B behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
+		 */
+		case BRANCH_L:
+		case BRANCH_B: {
+			/**
+			 * For branching below without an inverse branch, our logical else matches our
+			 * physical else. However, we *DO* still need to add a parity check because
+			 * if we have a NaN operand, it will set CF=1, and this would cause us to jump
+			 * to the physical if(logical if as well) on a NaN incorrectly. Since the physical
+			 * else is our logical else, our parity check will jump to else 
+			 *
+			 * Condition(to jump to phyiscal if block): PF == 0 && CF == 1
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				instruction_t* jump_to_else_parity = emit_jump_instruction_directly(else_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JB);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them all in, delete the branch and return the last statement
+				 */
+				add_statement(block_contained_in, jump_to_else_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+
+			/**
+			 * For branching below with an inverse branch, our logical else is
+			 * our physical if. Since NaN should always take the logical false
+			 * path, we need to add a parity jump to the physical if block
+			 * to account for the different logic
+			 *
+			 * Condition(to jump to physical if block): PF == 1 || CF == 1
+			 */
+			} else {
+				instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JB);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them all in, delete the branch and return the last statement
+				 */
+				add_statement(block_contained_in, jump_to_if_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			}
+		}
+
+		/**
+		 * BRANCH_L/BRANCH_B behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
+		 */
+		case BRANCH_LE:
+		case BRANCH_BE: {
+			/**
+			 * For a regular branch, our physical if is also our logical if. For this reason
+			 * we'll want any NaN's to jump to the physical else. Since a NaN would set
+			 * the CF=1, we will need to add a parity check beforehand that takes us
+			 * to the else in the event that the PF is set
+			 *
+			 * Condition(to jump to phyiscal if block): PF == 0 && (CF == 1 || ZF == 1)
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				instruction_t* jump_to_else_parity = emit_jump_instruction_directly(else_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them all in, delete the branch and return the last statement
+				 */
+				add_statement(block_contained_in, jump_to_else_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+
+			/**
+			 * For an inverse branch, our physical if is our logical else. For this reason
+			 * we'll want any NaN's to jump to the physical if. For this reason, we'll
+			 * add a parity check right beforehand to account for the NaN case
+			 *
+			 * Condition(to jump to phyiscal if block): PF == 1 || (CF == 1 || ZF == 1)
+			 */
+			} else {
+				instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+				instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+				instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+				jump_to_if->relies_on = branch_statement->relies_on;
+
+				/**
+				 * Add them all in, delete the branch and return the last statement
+				 */
+				add_statement(block_contained_in, jump_to_if_parity);
+				add_statement(block_contained_in, jump_to_if);
+				add_statement(block_contained_in, jump_to_else);
+				delete_statement(branch_statement);
+				return jump_to_else;
+			}
+		}
+
+		/**
+		 * For not equals or not zero branches, we do need to do parity checking because we consider
+		 * a NaN to never be equal with anything else. In Ollie, NaN != <anything>, so if the parity
+		 * flag is set we'll need to jump to the if block. We'll also jump to true if we're not equal.
+		 * Since the parity conditions match up for both inverse branching(jump to physical if, logical else)
+		 * and normal branching(jump to physical if, logical if), we don't need any special logic for this
+		 *
+		 * Condition(to jump to phyiscal if block): PF == 1 || ZF == 0
+		 */
+		case BRANCH_NE:
+		case BRANCH_NZ: {
+			instruction_t* jump_to_if_parity = emit_jump_instruction_directly(if_block, JP);
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
+
+			/**
+			 * Add them all in, delete the branch and return the last statement
+			 */
+			add_statement(block_contained_in, jump_to_if_parity);
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
+			return jump_to_else;
+		}
+
+		/**
+		 * For regular equals branches, we need to do parity checking because like with the
+		 * not equals case, NaN != <anything>. In the event that we do see the parity flag
+		 * checked we'll need to jump to the physical else condition. We'll jump to true if they are
+		 * equal. Since the parity conditions match up for both inverse branching(jump to physical else,
+		 * logical if) and normal branching(jump to physical else, logical else), we don't need
+		 * to add any special logic here
+		 *
+		 * Condition(to jump to phyiscal if block): PF == 0 && ZF == 1
+		 */
+		case BRANCH_E:
+		case BRANCH_Z: {
+			instruction_t* jump_to_else_parity = emit_jump_instruction_directly(else_block, JP);
+			instruction_t* jump_to_if = emit_jump_instruction_directly(if_block, JE);
+			instruction_t* jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			jump_to_if->relies_on = branch_statement->relies_on;
+
+			/**
+			 * Add them all in, delete the branch and return the last statement
+			 */
+			add_statement(block_contained_in, jump_to_else_parity);
+			add_statement(block_contained_in, jump_to_if);
+			add_statement(block_contained_in, jump_to_else);
+			delete_statement(branch_statement);
+			return jump_to_else;
+		}
+
+		/**
+		 * If we ever get here we panice
+		 */
+		default: {
+			trigger_ice_panic("Unknown branch type hit in float branch lowerer");
+			return NULL;
+		}
+	}
+}
+
+
+/**
+ * If we get to this function, then we know that we're dealing with a branch that does not come
+ * from a floating point comparison. As such, for this branch, we do not need to do any extra
+ * special checking around the parity flag
+ *
+ * NOTE: this function will return a pointer to the very last instruction(jump to else usually)
+ * that it inserted for window reconstruction purposes
+ *
+ * NOTE: since these branches do not have a parity consideration, branch inversion
+ * (BRANCH_CATEGORY_NORMAL vs. BRANCH_CATEGORY_INVERSE) has no bearing here. We are able
+ * to flip the branch conditionals with out any additional checks
+ */
+static instruction_t* handle_branch_without_float_parity_consideration(instruction_t* branch_statement){
+	/**
+	 * Extract the if and else blocks first before going on
+	 */
+	basic_block_t* block_contained_in = branch_statement->block_contained_in;
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
+
+	/**
+	 * We'll be emitting two jumps - the if and else jump - directly
+	 * here. The jump to if is always our conditional jump for these
+	 * kinds of branches
+	 */
+	instruction_t* jump_to_if = NULL;
+	instruction_t* jump_to_else = NULL;
+	switch(branch_statement->branch_info.branch_type){
+		case BRANCH_A: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JA);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_AE: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JAE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_B: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JB);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_BE: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JBE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_E: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_NE: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JNE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_Z: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JZ);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_NZ: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JNZ);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_G: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JG);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_GE: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JGE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_L: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JL);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		case BRANCH_LE: {
+			jump_to_if = emit_jump_instruction_directly(if_block, JLE);
+			jump_to_else = emit_jump_instruction_directly(else_block, JMP);
+			break;
+		}
+
+		/**
+		 * If we ever hit an unkown branch panic and get out
+		 */
+		default: {
+			trigger_ice_panic("Unknown branch type hit in branch lowerer");
+		}
+	}
+
+	/**
+	 * Copy over the "relies on" field over to the jump-to-if for later use
+	 */
+	jump_to_if->relies_on = branch_statement->relies_on;
+
+	/**
+	 * Add the jump to else and jump to if in in that order, then
+	 * delete the old branch statement
+	 */
+	add_statement(block_contained_in, jump_to_if);
+	add_statement(block_contained_in, jump_to_else);
+	delete_statement(branch_statement);
+
+	return jump_to_else;
+}
+
+
+/**
+ * A branch statement is lowered differently based on whether or not it relies on a floating
+ * point comparison or not. This has already been determined for us by the time we get here, and
+ * as such we just need to act on it appropriately
+ */
+static inline void handle_branch_instruction(instruction_window_t* window){
+	instruction_t* branch_stmt = window->instruction1;
+
+	/**
+	 * Most common case, we do not expect that most things will
+	 * be relying on FP comparison. In this case we call out to
+	 * the helper that does not consider the parity flag
+	 */
+	if(branch_stmt->branch_info.branch_derives_from_float_comparison == FALSE){
+		instruction_t* final_instruction = handle_branch_without_float_parity_consideration(branch_stmt);
+		reconstruct_window(window, final_instruction);
 	
 	/**
-	 * Handle all floating point cases. For these cases, we need to account
-	 * for the fact that we could have an inverse branch. We do this because
-	 * we consider NaNs to be "falseful" values and as such they cause us to jump
-	 * to our else cases
-	 *
-	 * These leads us to have JP's for our equals and not equals. However for any other
-	 * kind of branch, these values are automatically false and as such we don't need any
-	 * kind of JP
+	 * For all other cases, we need to take into consideration the special floating
+	 * point comparison possibilities. These lead to different branching strategies
+	 * for things like <, <=, == or !=
 	 */
 	} else {
-		//Go by the branch type
-		switch(branch_stmt->branch_type){
-			//Any kind of ">" case is the same
-			case BRANCH_A:
-			case BRANCH_G:
-				jump_to_if = emit_jump_instruction_directly(if_block, JA);
-				jump_to_if->relies_on = branch_stmt->relies_on;
-
-				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-				//Add them all in
-				add_statement(block, jump_to_if);
-				add_statement(block, jump_to_else);
-
-				break;
-
-			//Same with any kind of "<" case
-			case BRANCH_L:
-			case BRANCH_B:
-				jump_to_if = emit_jump_instruction_directly(if_block, JL);
-				jump_to_if->relies_on = branch_stmt->relies_on;
-
-				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-				//Add them all in
-				add_statement(block, jump_to_if);
-				add_statement(block, jump_to_else);
-				break;
-
-			//These are lumped together
-			case BRANCH_AE:
-			case BRANCH_GE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JAE);
-				jump_to_if->relies_on = branch_stmt->relies_on;
-
-				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-				//Add them all in
-				add_statement(block, jump_to_if);
-				add_statement(block, jump_to_else);
-				
-				break;
-
-			//These are lumped together
-			case BRANCH_LE:
-			case BRANCH_BE:
-				jump_to_if = emit_jump_instruction_directly(if_block, JBE);
-				jump_to_if->relies_on = branch_stmt->relies_on;
-
-				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-				//Add them all in
-				add_statement(block, jump_to_if);
-				add_statement(block, jump_to_else);
-
-				break;
-
-			/**
-			 * For not equals, say we had something like:
-			 *    NaN != x
-			 * This will always be true. As such, we need to jump
-			 * to the true area on the condition that the parity
-			 * flag is set to 1(means we had NaN)
-			 */
-			case BRANCH_NE:
-			case BRANCH_NZ:
-				//We need two conditional jumps here
-				jump_when_nan = emit_jump_instruction_directly(if_block, JP);
-				jump_when_nan->relies_on = branch_stmt->relies_on;
-
-				jump_to_if = emit_jump_instruction_directly(if_block, JNE);
-				jump_to_if->operands.oir.operand1 = branch_stmt->operands.oir.operand1;
-
-				//And the standard jump to else here
-				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-				/**
-				 * Add all of these statements in. NaN comes first, then the
-				 * if, and finally the ending catch-all
-				 */
-				add_statement(block, jump_when_nan);
-				add_statement(block, jump_to_if);
-				add_statement(block, jump_to_else);
-
-				break;
-
-
-			/**
-			 * For equals, say we had something like:
-			 *    NaN == x
-			 * This will always be false. As such, we need to jump
-			 * to the false area on the condition that the parity
-			 * flag is set to 1(means we had NaN)
-			 */
-			case BRANCH_E:
-			case BRANCH_Z:
-				//We need two conditional jumps here
-				jump_when_nan = emit_jump_instruction_directly(else_block, JP);
-				jump_when_nan->relies_on = branch_stmt->relies_on;
-
-				jump_to_if = emit_jump_instruction_directly(if_block, JE);
-				jump_to_if->relies_on = branch_stmt->relies_on;
-
-				//And the standard jump to else here
-				jump_to_else = emit_jump_instruction_directly(else_block, JMP);
-
-				/**
-				 * Add all of these statements in. NaN comes first, then the
-				 * if, and finally the ending catch-all
-				 */
-				add_statement(block, jump_when_nan);
-				add_statement(block, jump_to_if);
-				add_statement(block, jump_to_else);
-				
-				break;
-
-			//Should be unreachable
-			default:
-				printf("Fatal internal compiler error: Unreachable branch type hit\n");
-				exit(1);
-		}
-
-		//Branch stmt is now useless so scrap it
-		delete_statement(branch_stmt);
-
-		//In the end, we always rebuild the window around the jump to else
-		reconstruct_window(window, jump_to_else);
+		instruction_t* final_instruction = handle_branch_with_float_parity_consideration(branch_stmt);
+		reconstruct_window(window, final_instruction);
 	}
 }
 

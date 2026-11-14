@@ -353,12 +353,14 @@ instruction_t* emit_truncating_assignment_instruction(three_addr_var_t* assignee
 /**
  * Emit a conditional movement statement. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
  */
-instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type, u_int32_t line_number);
+instruction_t* emit_conditional_movement_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_var_t* else_assignee, three_addr_var_t* conditional,
+													conditional_movement_type_t movement_type, branch_category_t branch_category, u_int32_t line_number);
 
 /**
  * Emit a conditional movement statement with the else being a constant. Unlike regular moves, we will also need to provide the conditional and conditional movement type for this
  */
-instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional, conditional_movement_type_t movement_type, u_int32_t line_number);
+instruction_t* emit_conditional_movement_with_const_statement(three_addr_var_t* assignee, three_addr_var_t* if_assignee, three_addr_const_t* else_assignee, three_addr_var_t* conditional,
+																conditional_movement_type_t movement_type, branch_category_t branch_category, u_int32_t line_number);
 
 /**
  * Emit a memory copy statement from one memory region to another. This exists
@@ -516,7 +518,7 @@ instruction_t* emit_stack_deallocation_ir_statement(three_addr_const_t* bytes_to
 /**
  * Emit a branch statement
  */
-instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type, u_int32_t line_number);
+instruction_t* emit_branch_statement(void* if_block, void* else_block, three_addr_var_t* relies_on, branch_type_t branch_type, branch_category_t branch_category, u_int32_t line_number);
 
 /**
  * Emit an indirect jump statement. The jump statement can take on several different types of jump

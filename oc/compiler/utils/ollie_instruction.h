@@ -160,10 +160,6 @@ struct instruction_t{
 	 */
 	dynamic_array_t parameters;
 
-	//We have 2 ways to jump. The if jump is our affirmative jump, else is our alternative
-	void* if_block;
-	void* else_block;
-
 	//Optional variable storage to determine what a value relies on
 	three_addr_var_t* relies_on;
 
@@ -248,6 +244,33 @@ struct instruction_t{
 		generic_type_t* result_type;
 	} type_storage;
 
+	/**
+	 * Store all branch info inside of one unified area
+	 */
+	struct {
+		/**
+		 * Store the branch type
+		 */
+		branch_type_t branch_type;
+		/**
+		 * Store the if and else blocks. These are *raw* if and else blocks, they do not 
+		 * represent the actual result in the end
+		 */
+		void* if_block;
+		void* else_block;
+		/**
+		 * BRANCH_CATEGORY_NORMAL - If block is the affirmative condition
+		 * BRANCH_CATEGORY_INVERSE - Else block is the affirmative condition
+		 */
+		branch_category_t branch_category;
+		//
+		/**
+		 * Does this branch derive from floating point comparison. This
+		 * is only ever set by the instruction selector
+		 */
+		u_int8_t branch_derives_from_float_comparison;
+	} branch_info;
+
 	//What block holds this?
 	void* block_contained_in;
 	//Instruction's line number
@@ -259,15 +282,11 @@ struct instruction_t{
 	u_int8_t exclude_when_inlining;
 	//Is this operation critical?
 	u_int8_t mark;
-	//Is this a regular or inverse branch
-	u_int8_t inverse_branch;
 	//Do we need to stop this value from being coalesced. This is only used
 	//very specifically in the logical not handler currently
 	u_int8_t cannot_be_combined;
 	//Does this instruction handle callee saving?
 	u_int8_t is_callee_saving_instruction;
-	//If it's a branch statment, then we'll use this
-	branch_type_t branch_type;
 	//The conditional movement type that we have
 	conditional_movement_type_t movement_type;
 	//Do we have a read, write, or no attempt to access memory(default)
