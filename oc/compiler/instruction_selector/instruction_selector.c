@@ -12296,7 +12296,14 @@ static inline instruction_type_t select_cmovpX_given_size(variable_size_t size){
 
 
 /**
- * TODO DOC
+ * Conditional moves that derive from floating point comparisons will need special attention
+ * compared to the ones that do not. For one, we need to account for cases where we have NaN
+ * as one of the operands. This should always lead us to the *logical* false assignee being
+ * returned by the conditional move. However, due to the way that some of our conditional
+ * moves come from inverse branches, sometimes the physical if assignee is actually the logical
+ * else assignee. We will as such need to generate different instruction patterns for different
+ * conditional move types based on whether or not they are inverse branches. More detail can
+ * be found in the examples given in each of the move type handlers
  *
  * NOTE: This function returns a pointer to the very last instruction that it has produced
  */
