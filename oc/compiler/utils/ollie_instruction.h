@@ -339,17 +339,6 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		case PLUSPLUS:
 		case MINUSMINUS:
 		/**
-		 * Addition and subtraction will set them as well
-		 */
-		case PLUS:
-		case MINUS:
-		/**
-		 * Mulitplication, division and modulo also do
-		 */
-		case STAR:
-		case F_SLASH:
-		case MOD:
-		/**
 		 * Logical not will set it
 		 */
 		case EXCLAMATION:
@@ -370,6 +359,21 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		case DOUBLE_AND:
 		case DOUBLE_OR:
 			return TRUE;
+
+		/**
+		 * Addition, subtraction, multiplication and division
+		 * set RFLAGS *ONLY* if the operands are not floating
+		 * point operands. Floating point operations in x86
+		 * assembly as a rule do not set condition codes unless
+		 * they are UCOMISS/UCOMISD/COMISS/COMISD
+		 */
+		case PLUS:
+		case MINUS:
+		case STAR:
+		case F_SLASH:
+		case MOD: {
+			return !(IS_FLOATING_POINT(operand_type));
+		}
 
 		/**
 		 * Operators like bitwise not(~) do not set flags
