@@ -442,7 +442,7 @@ basic_block_t* simulate_branch_execution(instruction_t* branch_statement, RFLAGS
 	/**
 	 * Extract the branch type and create a placeholder for our result
 	 */
-	branch_type_t branch_type = branch_statement->branch_type;
+	branch_type_t branch_type = branch_statement->branch_info.branch_type;
 	basic_block_t* branch_execution_result = NULL;
 
 	//TODO YOU NEED TO PAY ATTENTION TO THE PARITY FLAG WHEN DOING THESE
