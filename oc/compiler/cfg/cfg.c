@@ -4843,6 +4843,11 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block);
 
+	/**
+	 * A ternary expression should never be considered to set condition codes
+	 */
+	return_package.sets_rflags = FALSE;
+
 	//Add the final things in here
 	return_package.starting_block = starting_block;
 	return_package.final_block = end_block;
