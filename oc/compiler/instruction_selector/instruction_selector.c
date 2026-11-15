@@ -130,6 +130,7 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
 static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement);
 static instruction_t* generate_OIR_lea_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee);
 
 
@@ -9150,7 +9151,7 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
  * TODO DOC
  *
  *
- * TODO SHOULD WE ALSO DO THIS FOR CONDITIONAL MOVES?????
+ * TODO WE SHOULD BE DOING THIS FOR CONDITIONAL MOVES AS WELL!!!
  *
  */
 static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
@@ -9207,6 +9208,12 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	}
 
 	/**
+	 * VERY IMPORTANT - we need to determine whether this CC setting statement uses FP comparison
+	 * or not. This is exteremely important when it comes to the branch simulation down the road
+	 */
+	u_int8_t comes_from_fp_comparison = does_statement_use_fp_comparison(cc_setting_stmt);
+
+	/**
 	 * If we make it to here, we now have a branch statement and the statement that sets the condition
 	 * codes for this given branch statement. There is now a good chance that we can cheaply determine
 	 * whether or not we know if this branch will always execute. It is important that we're doing this
@@ -9216,7 +9223,8 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	simulated_execution_result_t simulation_result = simulate_instruction_execution(block, cc_setting_stmt);
 
 	/**
-	 * If we find that it's impossible to simulate this bail out now
+	 * If we find that it's impossible to simulate this bail out now, returning FALSE so that
+	 * the caller knows that we didn't change anything
 	 */
 	if(simulation_result.simulation_possible == FALSE){
 		return FALSE;
@@ -9225,6 +9233,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	printf("SIMULATION WAS SUCCESSFUL FOR\n");
 	print_three_addr_code_stmt(stdout, cc_setting_stmt);
 	exit(1);
+
 
 
 	//TODO NOW EXECUTE THE BRANCH BASED ON THE SIMULATION
@@ -18657,11 +18666,6 @@ static inline instruction_type_t select_appropriate_test_statement(variable_size
 static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 	//Grab out what we're really after
 	instruction_t* instruction = window->instruction1;
-
-	if(instruction->operands.oir.operand1 == NULL){
-		printf("TODO NOT IMPLEMENTED\n");
-		exit(1);
-	}
 
 	//We expect the most common case to be non-floating point
 	if(IS_FLOATING_POINT(instruction->operands.oir.operand1->type) == FALSE){

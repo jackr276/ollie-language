@@ -39,6 +39,6 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
  * statement we'd jump to. This will always return a valid block, because a branch must always execute
  * in a way that gives one block back
  */
-basic_block_t* simulate_branch_execution(instruction_t* branch_statement, RFLAGS_t flags);
+basic_block_t* simulate_branch_execution(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags);
 
 #endif /* OIR_SIMULATOR_H */

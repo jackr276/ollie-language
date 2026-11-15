@@ -544,12 +544,14 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
  * statement we'd jump to. This will always return a valid block, because a branch must always execute
  * in a way that gives one block back
  */
-basic_block_t* simulate_branch_execution(instruction_t* branch_statement, RFLAGS_t flags){
+basic_block_t* simulate_branch_execution(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags){
 	/**
 	 * Extract the branch type and create a placeholder for our result
 	 */
 	branch_type_t branch_type = branch_statement->branch_info.branch_type;
 	basic_block_t* branch_execution_result = NULL;
+
+	//TODO REWRITE THIS
 
 	//TODO YOU NEED TO PAY ATTENTION TO THE PARITY FLAG WHEN DOING THESE
 	switch(branch_type){
