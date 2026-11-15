@@ -12675,7 +12675,6 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 				 */
 				insert_instruction_before_given(move_else, conditional_move);
 				insert_instruction_before_given(cmovb_to_if, conditional_move);
-				insert_instruction_before_given(cmovb_to_if, conditional_move);
 				insert_instruction_before_given(cmovp_to_else, conditional_move);
 				delete_statement(conditional_move);
 				return cmovp_to_else;
@@ -12694,7 +12693,42 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 * Condition(to add physical if assignee): PF == 1 || CF == 1
 			 */
 			} else {
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
 
+				/**
+				 * First we'll have the conditional move if below to if
+				 */
+				instruction_t* cmovb_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovbX_given_size(destination_size));
+				/**
+				 * Then the conditional move if parity to if
+				 */
+				instruction_t* cmovp_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						if_operand,
+																						conditional_move->relies_on,
+																						select_cmovpX_given_size(destination_size));
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovb_to_if, conditional_move);
+				insert_instruction_before_given(cmovp_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmovp_to_if;
 			}
 		}
 
