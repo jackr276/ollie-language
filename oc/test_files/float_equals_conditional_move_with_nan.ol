@@ -37,8 +37,8 @@ pub fn main() -> i32 {
 	let NaN:f32 = *(<f32*>(&x));
 	let not_nan:f32 = 5.55;
 
-	//Should return 9 + 10 = 19
-	OUNIT: [exit_status = 19]
+	//Should return 8 + 37 = 45
+	OUNIT: [exit_status = 45]
 	ret @float_if_assignment(NaN, not_nan, 8, 9)
 		+ @float_if_assignment_non_inverted(NaN, not_nan, 10, 37);
 }
