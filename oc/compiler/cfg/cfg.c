@@ -1905,7 +1905,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * we'll need to make that happen here. We pass the operator
 		 * in by reference so that we may change it later on
 		 */
-		if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
+		if(does_operator_set_RFLAGS(binary_results.operator) == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator), conditional_node->line_number);
 		}
 
@@ -2201,7 +2201,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * If the given operator does not set condition codes appropriately, then
 		 * we'll need to make that happen here
 		 */
-		if(does_operator_set_condition_codes(conditional_results.operator) == FALSE){
+		if(does_operator_set_RFLAGS(conditional_results.operator) == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(conditional_results.operator), conditional_node->line_number);
 		}
 
