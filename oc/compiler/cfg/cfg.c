@@ -1756,11 +1756,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 		 * operator
 		 */
 		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
-			//This is needed for branching later on
 			*operator = NOT_EQUALS;
-
-			//Flag that this comes out of an FP comparsion
-			test_if_not_zero->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 		}
 
 		//Give back the final assignee
@@ -1974,7 +1970,12 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
 
 		//Now we can finall spit this one out
-		instruction_t* branch_statement = emit_branch_statement(if_block, else_block, conditional_decider, branch_type, conditional_node->line_number);
+		instruction_t* branch_statement = emit_branch_statement(if_block,
+																else_block,
+																conditional_decider,
+																branch_type,
+																branch_category,
+																conditional_node->line_number);
 
 		//Add it into the block
 		add_statement(current_block, branch_statement);
@@ -1987,12 +1988,9 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		if(branch_category == BRANCH_CATEGORY_NORMAL){
 			add_real_successor(current_block, if_block);
 			add_real_successor(current_block, else_block);
-			branch_statement->inverse_branch = FALSE;
-
 		} else {
 			add_real_successor(current_block, else_block);
 			add_real_successor(current_block, if_block);
-			branch_statement->inverse_branch = TRUE;
 		}
 
 	/**
@@ -2266,7 +2264,12 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		branch_type_t branch_type = select_appropriate_branch_statement(conditional_results.operator, BRANCH_CATEGORY_NORMAL, type_signed);
 
 		//Now we can finally spit this one out
-		instruction_t* branch_statement = emit_branch_statement(NULL, else_block, conditional_decider, branch_type, conditional_node->line_number);
+		instruction_t* branch_statement = emit_branch_statement(NULL,
+																else_block,
+																conditional_decider,
+																branch_type,
+																BRANCH_CATEGORY_NORMAL,
+																conditional_node->line_number);
 		
 		//Store the if destination for later
 		branch_statement->optional_storage.jumping_to_label = if_destination_label;
@@ -4507,13 +4510,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
 			add_statement(current_block, logical_not_statement);
 
-			/**
-			 * If we came from a floating point operation, then we will just flag as such here
-			 */
-			if(IS_FLOATING_POINT(assignee->type) == TRUE){
-				logical_not_statement->operands.oir.assignee->comes_from_fp_comparison = TRUE;
-			}
-
 			//Package up and return the result
 			generic_results.operator = EXCLAMATION;
 			generic_results.starting_block = basic_block;
@@ -5139,6 +5135,7 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 																						 	true_constant,
 																						 	first_comparison->operands.oir.assignee,
 																						 	first_move_type,
+																							BRANCH_CATEGORY_NORMAL,
 																						 	in_node->line_number);
 	add_statement(current_block, first_conditional_move);
 
@@ -5162,6 +5159,7 @@ static inline cfg_result_package_t lower_contiguous_in_expression_to_oir_conditi
 																				  result_var_1,
 																				  second_comparison->operands.oir.assignee,
 																				  second_move_type,
+																				  BRANCH_CATEGORY_NORMAL,
 																			   	  in_node->line_number);
 	add_statement(current_block, second_conditional_move);
 
@@ -5221,7 +5219,6 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 	instruction_t* conditional_move;
 	three_addr_var_t* current_result_var;
 	three_addr_var_t* previous_result_var;
-	generic_type_t* operand_type;
 
 	//When we unpack we may have either a constant or a variable
 	three_addr_var_t* in_constant_variable;
@@ -5279,27 +5276,12 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 		comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant_variable, in_expression->line_number);
 		add_statement(current_block, comparison_instruction);
 
-		//Get the operand type base don the two types provided
-		operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
-
 	} else {
 		//Unpack it first
 		in_constant = constant_results.result_value.result_const;
 
 		comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant, in_expression->line_number);
 		add_statement(current_block, comparison_instruction);
-
-		//Get the operand type base don the two types provided
-		operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
-	}
-
-	/**
-	 * If this operand type is a floating point number,
-	 * we need to flag that this comparison is itself a floating point comparison
-	 * for the instruction selector
-	 */
-	if(IS_FLOATING_POINT(operand_type) == TRUE){
-		comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 	}
 
 	//And then the conditional move statement itself
@@ -5308,6 +5290,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 																		true_constant,  //If not not equal then true
 																		comparison_instruction->operands.oir.assignee,
 																		MOVE_NE,
+																		BRANCH_CATEGORY_NORMAL,
 																   		in_expression->line_number);
 	add_statement(current_block, conditional_move);
 
@@ -5336,27 +5319,12 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 			comparison_instruction = emit_binary_operation_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant_variable, in_expression->line_number);
 			add_statement(current_block, comparison_instruction);
 
-			//Get the operand type base don the two types provided
-			operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant_variable->type);
-
 		} else {
 			//Unpack it first
 			in_constant = constant_results.result_value.result_const;
 
 			comparison_instruction = emit_binary_operation_with_const_instruction(emit_temp_var(i8), conditional_expression_variable, NOT_EQUALS, in_constant, in_expression->line_number);
 			add_statement(current_block, comparison_instruction);
-
-			//Get the operand type base don the two types provided
-			operand_type = get_operand_type_for_relational_operation(type_symtab, conditional_expression_variable->type, in_constant->type);
-		}
-
-		/**
-		 * If this operand type is a floating point number,
-		 * we need to flag that this comparison is itself a floating point comparison
-		 * for the instruction selector
-		 */
-		if(IS_FLOATING_POINT(operand_type) == TRUE){
-			comparison_instruction->operands.oir.assignee->comes_from_fp_comparison = TRUE;
 		}
 
 		//And then the conditional move statement itself
@@ -5365,6 +5333,7 @@ static inline cfg_result_package_t lower_in_expression_to_conditional_move_chain
 																			true_constant, //If it's not not equal, then it worked so put true	
 																			comparison_instruction->operands.oir.assignee,
 																			MOVE_NE,
+																			BRANCH_CATEGORY_NORMAL,
 																			in_expression->line_number);
 		add_statement(current_block, conditional_move);
 
@@ -5844,14 +5813,6 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 					trigger_ice_panic("Invalid result type detected in binary expression emitter");
 				}
 
-			}
-
-			/**
-			 * If the final result type is an FP comparison, we need to flag this for later on down
-			 * the line when we need to perform instruction selection
-			 */
-			if(IS_FLOATING_POINT(final_result_type) == TRUE){
-				assignee->comes_from_fp_comparison = TRUE;
 			}
 
 			break;
@@ -6482,8 +6443,8 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
  * These are always normal branches - there is not an option for an inverse branch here
  */
 static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, basic_block_t* if_destination, basic_block_t* else_destination, branch_type_t branch_type, three_addr_var_t* conditional_result, u_int32_t line_number){
-	//Emit the actual instruction here
-	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type, line_number);
+	//Emit the actual instruction here - switch branches are always normal
+	instruction_t* branch_instruction = emit_branch_statement(if_destination, else_destination, conditional_result, branch_type, BRANCH_CATEGORY_NORMAL, line_number);
 
 	/**
 	 * We need to flag for later on that this conditional result is being used to set condition
@@ -6497,9 +6458,6 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 
 	add_real_successor(basic_block, if_destination);
 	add_real_successor(basic_block, else_destination);
-
-	//These are always normal branches
-	branch_instruction->inverse_branch = FALSE;
 }
 
 /**
@@ -7763,9 +7721,9 @@ static inline u_int8_t is_if_path_likely_to_execute(cfg_result_package_t* result
 		 * option
 		 */
 		case THREE_ADDR_CODE_JUMP_STMT:
-			if(exit_statement->if_block == peek(&break_stack)){
+			if(exit_statement->branch_info.if_block == peek(&break_stack)){
 				return FALSE;
-			} else if(exit_statement->if_block == peek(&continue_stack)){
+			} else if(exit_statement->branch_info.if_block == peek(&continue_stack)){
 				return FALSE;
 			} else {
 				return TRUE;
@@ -8757,7 +8715,13 @@ static cfg_result_package_t convert_c_style_switch_to_if_statement(generic_ast_n
 				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
 				 */
 				branch_type_t branch_type = select_appropriate_branch_statement(DOUBLE_EQUALS, BRANCH_CATEGORY_INVERSE, is_type_signed(input_variable->type));
-				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparison_expression->operands.oir.assignee, branch_type, root_node->line_number);
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block,
+																			case_default_results.starting_block,
+																			comparison_expression->operands.oir.assignee,
+																			branch_type,
+																			BRANCH_CATEGORY_INVERSE,
+																			root_node->line_number);
+
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
@@ -8976,7 +8940,13 @@ static cfg_result_package_t convert_ollie_switch_to_if_statement(generic_ast_nod
 				 * we assume that this will be the case and instead conditionally jump to the "else" in our case
 				 */
 				branch_type_t branch_type = select_appropriate_branch_statement(DOUBLE_EQUALS, BRANCH_CATEGORY_INVERSE, is_type_signed(switching_on_variable->type));
-				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block, case_default_results.starting_block, comparsion_expression->operands.oir.assignee, branch_type, root_node->line_number);
+				instruction_t* branch_instruction = emit_branch_statement(new_conditional_block,
+																			case_default_results.starting_block,
+																			comparsion_expression->operands.oir.assignee,
+																			branch_type,
+																			BRANCH_CATEGORY_INVERSE,
+																			root_node->line_number);
+
 				add_statement(current_conditional_block, branch_instruction);
 
 				//Do the successor bookkeeping as needed for this
@@ -10572,14 +10542,14 @@ static inline void finalize_all_user_defined_jump_statements(dynamic_array_t* us
 		}
 
 		//Make this our if block
-		instruction->if_block = jumping_to_label->block;
+		instruction->branch_info.if_block = jumping_to_label->block;
 
 		//Add this in as a successor
-		add_real_successor(instruction->block_contained_in, instruction->if_block);
+		add_real_successor(instruction->block_contained_in, instruction->branch_info.if_block);
 
 		//If it was a branch, add the else block as a successor too
 		if(instruction->statement_type == THREE_ADDR_CODE_BRANCH_STMT){
-			add_real_successor(instruction->block_contained_in, instruction->else_block);
+			add_real_successor(instruction->block_contained_in, instruction->branch_info.else_block);
 		}
 	}
 }
@@ -12329,9 +12299,9 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			//Copy over everything that we'll need
 			branch_stmt->statement_type = source_instruction->statement_type;
 			branch_stmt->op = source_instruction->op;
-			branch_stmt->branch_type = source_instruction->branch_type;
+			branch_stmt->branch_info.branch_type = source_instruction->branch_info.branch_type;
 			branch_stmt->line_number = source_instruction->line_number;
-			branch_stmt->inverse_branch = source_instruction->inverse_branch;
+			branch_stmt->branch_info.branch_category = source_instruction->branch_info.branch_category;
 
 			//Branch statements *need* to have the "relies_on" field populated properly
 			branch_stmt->relies_on = clone_variable(source_instruction->relies_on, variable_map);
@@ -12339,10 +12309,10 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			/**
 			 * Populate the if and else block with what they directly map to
 			 */
-			basic_block_t* old_if_block = source_instruction->if_block;
-			basic_block_t* old_else_block = source_instruction->else_block;
-			branch_stmt->if_block = old_if_block->mapping_info.maps_to;
-			branch_stmt->else_block = old_else_block->mapping_info.maps_to;
+			basic_block_t* old_if_block = source_instruction->branch_info.if_block;
+			basic_block_t* old_else_block = source_instruction->branch_info.else_block;
+			branch_stmt->branch_info.if_block = old_if_block->mapping_info.maps_to;
+			branch_stmt->branch_info.else_block = old_else_block->mapping_info.maps_to;
 
 			//Add it into the block and we should be good
 			add_statement(cloning_into_block, branch_stmt);
@@ -12354,7 +12324,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 		 * to create an equivalent substitution in the inlined function
 		 */
 		case THREE_ADDR_CODE_JUMP_STMT: {
-			basic_block_t* source_jumping_to_block = source_instruction->if_block;
+			basic_block_t* source_jumping_to_block = source_instruction->branch_info.if_block;
 			emit_jump(cloning_into_block, source_jumping_to_block->mapping_info.maps_to);
 			return;
 		}
@@ -12380,7 +12350,7 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			new_jump->line_number = source_instruction->line_number;
 
 			//Jump table reference
-			new_jump->if_block = cloning_into_block->jump_table; 
+			new_jump->branch_info.if_block = cloning_into_block->jump_table; 
 
 			//Indirect jump statements have address operands and a multiplier
 			new_jump->relies_on = clone_variable(source_instruction->relies_on, variable_map);
@@ -12704,10 +12674,10 @@ static inline void clone_instruction_into_block(symtab_function_record_t* functi
 			 */
 			new_instruction->statement_type = source_instruction->statement_type;
 			new_instruction->op = source_instruction->op;
-			new_instruction->branch_type = source_instruction->branch_type;
+			new_instruction->branch_info.branch_type = source_instruction->branch_info.branch_type;
 			new_instruction->memory_access_type = source_instruction->memory_access_type;
 			new_instruction->line_number = source_instruction->line_number;
-			new_instruction->inverse_branch = source_instruction->inverse_branch;
+			new_instruction->branch_info.branch_category = source_instruction->branch_info.branch_category;
 
 			//We choose to use the result type for this copy over. The memory type will be used by other cloning
 			new_instruction->type_storage.result_type = source_instruction->type_storage.result_type;
