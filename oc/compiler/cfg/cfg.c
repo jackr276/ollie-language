@@ -123,9 +123,21 @@ typedef struct {
 		three_addr_initializer_t* result_initializer;
 	} result_value;
 
+	/**
+	 * Is this an initializer, variable or constant
+	 */
 	cfg_result_type_t type;
 
-	//The operator may or may not always be filled
+	/**
+	 * Does this operation set RFLAGS? This is usually set to false, it's
+	 * only ever used for binary operations
+	 */
+	u_int8_t sets_rflags;
+
+	/**
+	 * The operator may or may not always be filled. Again usually
+	 * this is only used for unary/binary operations
+	 */
 	ollie_token_t operator;
 } cfg_result_package_t;
 
@@ -180,7 +192,7 @@ typedef enum{
  * result type. We usually stack allocate these
  * so we can't wipe them out any other way
  */
-#define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, BLANK}
+#define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
 
 /**
  * A simple macro initializer for a blank address offset type
@@ -1905,7 +1917,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * we'll need to make that happen here. We pass the operator
 		 * in by reference so that we may change it later on
 		 */
-		if(does_operator_set_RFLAGS(binary_results.operator) == FALSE){
+		if(does_operator_set_RFLAGS(binary_results.operator, ) == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator), conditional_node->line_number);
 		}
 
