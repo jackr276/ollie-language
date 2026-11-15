@@ -12732,7 +12732,37 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			}
 		}
 
-		//TODO ADD REST
+		/**
+		 * MOVE_LE/MOVE_BE(they're the same for floats) will be generated differently based on whether or not
+		 * we have an inverse branch to guarantee that NaN always goes to the logical else
+		 */
+		case MOVE_BE:
+		case MOVE_LE: {
+			/**
+			 * If we have a non-inverted structure, a NaN(which is always false) should lead to us
+			 * loading in the else-assignee. Since the cmovbeX instruction checks to see if CF == 1, and
+			 * the NaN will set CF = 1, this means that we need to account for NaNs inside of the conditional
+			 * move with a final NaN move using the else value
+			 * 
+			 * a <= b:
+			 * movl else value, final_assignee
+			 * cmovbel if_value, final_assignee <-- first put the if value in
+			 * cmovpl else_value, final_assignee <-- if there is parity overwrite with the else
+			 *
+			 * Condition(to add physical if assignee): PF == 0 && (CF == 1 || ZF == 1)
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+
+			} else {
+
+			}
+		}
+
+		//TODO
+
+		/**
+		 * Anything else is an invalid conditional move and will cause a panic
+		 */
 		default: {
 			trigger_ice_panic("Unrecognized conditional movement type detected in float conditional movement lowerer");
 			return NULL;
