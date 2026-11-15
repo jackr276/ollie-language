@@ -1718,15 +1718,46 @@ static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
  */
 static inline u_int8_t does_operator_set_condition_codes(ollie_token_t op){
 	switch(op){
+		/**
+		 * All of the comparison operators will set condition codes
+		 */
 		case L_THAN:
 		case L_THAN_OR_EQ:
 		case G_THAN:
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-		//Logical not sets it
+		/**
+		 * Increment and decrement do as well
+		 */
+		case PLUSPLUS:
+		case MINUSMINUS:
+		/**
+		 * Addition and subtraction will set them as well
+		 */
+		case PLUS:
+		case MINUS:
+		/**
+		 * Mulitplication, division and modulo also do
+		 */
+		case STAR:
+		case F_SLASH:
+		case MOD:
+		/**
+		 * Logical not will set it
+		 */
 		case EXCLAMATION:
+		/**
+		 * Bit shifting sets flags
+		 */
+		case R_SHIFT:
+		case L_SHIFT:
 			return TRUE;
+
+		/**
+		 * Operators like bitwise not(~) do not set flags
+		 * at all so we exclude them
+		 */
 		default:
 			return FALSE;
 	}
@@ -1897,21 +1928,23 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				break;
 		}
 
-		//First let the helper emit it
+		/**
+		 * Let the helper emit the conditional, extract and update the final block
+		 */
 		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
-
-		//Update the final block
 		current_block = binary_results.final_block;
 
-		//The conditional decider comes from the result type itself
-		three_addr_var_t* conditional_decider;
-
+		/**
+		 * The conditional decider is the variable that represents the flags set by the equation that we're using
+		 * to decide this branch
+		 */
+		three_addr_var_t* conditional_decider = NULL;
 		switch(binary_results.type){
-			//For a constant type, we are going to need to emit an assignment
+			/**
+			 * For a constant type, we are going to need to emit an assignment
+			 */
 			case CFG_RESULT_TYPE_CONST: {
 				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
-
-				//Get it in the block
 				add_statement(current_block, constant_assignment);
 
 				//This now is our decider
@@ -1919,13 +1952,17 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				break;
 			}
 
-			//For this we can extract the result var
+			/**
+			 * If this is a varible we can just extract the result var
+			 */
 			case CFG_RESULT_TYPE_VAR: {
 				conditional_decider = binary_results.result_value.result_var;
 				break;
 			}
 
-			//We should never see an initializer here
+			/**
+			 * We should never see an initializer here
+			 */
 			default: {
 				trigger_ice_panic("Invalid result type detected in branch emitter");
 			}
@@ -1945,7 +1982,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
 		 * the assignee type
 		 */
-		u_int8_t type_signed;
+		u_int8_t type_signed = FALSE;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
 			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
