@@ -192,7 +192,13 @@ typedef enum{
  * result type. We usually stack allocate these
  * so we can't wipe them out any other way
  */
-#define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
+#define INITIALIZE_BLANK_CFG_RESULT (cfg_result_package_t){NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
+
+/**
+ * Initialize a blank CFG result with the start and final 
+ * blocks set to what they should be
+ */
+#define INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(block) (cfg_result_package_t){block, block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
 
 /**
  * A simple macro initializer for a blank address offset type
@@ -3039,9 +3045,8 @@ static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_b
 			//Let the helper do it
 		 	result_variable = emit_identifier(basic_block, primary_parent);
 
-			//Initialize and give back the result
-			cfg_result_package_t result_package = {basic_block, basic_block, {result_variable}, CFG_RESULT_TYPE_VAR, BLANK};
-			return result_package;
+			//Just give back a blank result with the start block
+			return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
 
 		case AST_NODE_TYPE_CONSTANT:
 			return emit_constant_from_node(basic_block, primary_parent);
@@ -5651,8 +5656,7 @@ static inline three_addr_var_t* insert_temporary_assignment_for_unsequenced_oper
  * just be emitting the straight values and letting everything else deal with that
  */
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
-	//The return package here
-	cfg_result_package_t package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t package = INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
 	basic_block_t* current_block = basic_block;
@@ -5877,6 +5881,13 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	//Throw this into the current block
 	add_statement(current_block, binary_operation);
+
+	/**
+	 * Inside of the result package we will store the determination as to whether or
+	 * not this binary operation sets RFLAGS or not. This is important when it comes 
+	 * time for branch emittal
+	 */
+	package.sets_rflags = does_operator_set_RFLAGS(logical_or_expr->binary_operator, final_result_type);
 
 	//Package up and return
 	package.final_block = current_block;
@@ -6156,7 +6167,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * param stack region. This is because those first 4 bytes are where we store the parameter count
  */
 static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
-	cfg_result_package_t results = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Extract the variable
 	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
@@ -6196,7 +6207,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				visit_static_declare_statement(expr_node);
 			}
 
-			return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+			return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
  
 		case AST_NODE_TYPE_LET_STMT:
 			//Split based on the kind of variable that we have
@@ -6204,14 +6215,14 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				return visit_let_statement(basic_block, expr_node);
 			} else {
 				visit_static_let_statement(expr_node);
-				return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+				return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
 			}
 
 		/**
 		 * This is a dummy node type - just swallow it and move along
 		 */
 		case AST_NODE_TYPE_FUNC_PREDCLARATION:
-			return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+			return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
 			return visit_paramcount_statement(basic_block, expr_node);
