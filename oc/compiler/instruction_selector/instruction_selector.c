@@ -12617,13 +12617,6 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 		case MOVE_L:
 		case MOVE_B: {
 			/**
-			 * Both patterns for MOVE_L/MOVE_B will require us to have a variable as the else assignee. As 
-			 * such if we have a constant else value we'll need to make it a variable one now
-			 */
-			//TODO
-
-
-			/**
 			 * If we have a non-inverted structure, a NaN(which is always false) should lead to us
 			 * loading in the else-assignee. Since the cmovbX instruction checks to see if CF == 1, and
 			 * the NaN will set CF = 1, this means that we need to account for NaNs inside of the conditional
@@ -12638,17 +12631,28 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 */
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
 				/**
-				 * First emit the appropriate move to else
+				 * This is a special case - since we're useing the else value twice, if it is a constant
+				 * we are going to emit a constant assignment here to begin with
 				 */
-				instruction_t* move_else;
+				three_addr_var_t* else_value = NULL;
 				switch(else_operand.type){
-					case OPERAND_TYPE_VAR:
-						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+					case OPERAND_TYPE_VAR: {
+						else_value = else_operand.value.variable_value;
 						break;
-					case OPERAND_TYPE_CONST:
-						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+					}
+
+					case OPERAND_TYPE_CONST: {
+						else_value = emit_temp_var(destination_type);
+						instruction_t* else_move = emit_constant_move_instruction(else_value, else_operand.value.constant_value);
+						insert_instruction_before_given(else_move, conditional_move);
 						break;
+					}
 				}
+
+				/**
+				 * Now we can emit the starting move from else
+				 */
+				instruction_t* move_else = emit_move_instruction(emit_var_copy(destination_variable), else_value);
 
 				/**
 				 * Then the conditional move to if when below
@@ -12658,19 +12662,37 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 																						 conditional_move->relies_on,
 																						 select_cmovbX_given_size(destination_size));
 				/**
+				 * Now emit the conditional move to else when the parity is set
 				 */
-
+				instruction_t* cmovp_to_else = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																							else_value,
+																							conditional_move->relies_on,
+																							select_cmovpX_given_size(destination_size));
 
 				/**
 				 * Insert everything before the old conditional move, then scrap the conditional move
 				 * and return the last instruction we added
 				 */
 				insert_instruction_before_given(move_else, conditional_move);
-				insert_instruction_before_given(cmovae_to_if, conditional_move);
+				insert_instruction_before_given(cmovb_to_if, conditional_move);
+				insert_instruction_before_given(cmovb_to_if, conditional_move);
+				insert_instruction_before_given(cmovp_to_else, conditional_move);
 				delete_statement(conditional_move);
-				return cmovae_to_if;
+				return cmovp_to_else;
 
-
+			/**
+			 * If we have an inverted structure, a NaN(which is always false) should lead to us
+			 * loading in the if-assignee(logical else). To accommodate this, we'll add a conditional
+			 * move to the if assignee in the event that the parity flag is set to overwrite using the
+			 * if value
+			 * 
+			 * a >= b(inverted):
+			 * movl else value, final_assignee
+			 * cmovbl if_value, final_assignee <-- first put the if value in
+			 * cmovpl if_value, final_assignee <-- parity would also cause the if value to load
+			 *
+			 * Condition(to add physical if assignee): PF == 1 || CF == 1
+			 */
 			} else {
 
 			}
