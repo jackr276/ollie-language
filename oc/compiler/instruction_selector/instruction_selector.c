@@ -722,34 +722,6 @@ static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instr
 
 
 /**
- * Does the block that we're passing in end in a direct(jmp) jump to
- * the very next block. If so, we'll return what block the jump goes to.
- * If not, we'll return null.
- */
-static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
-	//If it's null then leave
-	if(block->exit_statement == NULL){
-		return NULL;
-	}
-
-	switch(block->exit_statement->statement_type){
-		//Direct jump, just use the if block
-		case THREE_ADDR_CODE_JUMP_STMT:
-			return block->exit_statement->branch_info.if_block;
-
-		//In a branch statement, the else block is the direct jump
-		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->branch_info.else_block;
-
-		//By default no
-		default:
-			return NULL;
-	}
-}
-
-
-/**
->>>>>>> main
  * Is the given expression eligible for value numbering? Note that all
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
@@ -902,10 +874,10 @@ static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
 
 	switch(block->exit_statement->statement_type){
 		case THREE_ADDR_CODE_JUMP_STMT:
-			return block->exit_statement->if_block;
+			return block->exit_statement->branch_info.if_block;
 
 		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->else_block;
+			return block->exit_statement->branch_info.else_block;
 
 		default:
 			return NULL;
@@ -9189,107 +9161,6 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	three_addr_var_t* relies_on_var = branch_statement->relies_on;
 	//TODO LOOK AT
 
-	//For each and every operation in every basic block
-	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
-
-		//Holder for the postdom
-		basic_block_t* nearest_marked_postdom;
-
-		//Grab the statement out
-		instruction_t* stmt = block->leader_statement;
-
-		//For each statement in the block
-		while(stmt != NULL){
-			//If it's useful, ignore it
-			if(stmt->mark == TRUE){
-				stmt = stmt->next_statement;
-				continue;
-			}
-
-			//A holder for when we perform deletions
-			instruction_t* temp;
-
-			/**
-			 * Some statements like jumps and branches
-			 * require special attention
-			 */
-			switch(stmt->statement_type){
-				/**
-				 * We *never* delete jump statements because
-				 * they are critical to the control flow. They
-				 * may be cleaned up by other optimizations, but for
-				 * here we leave them
-				 */
-				case THREE_ADDR_CODE_JUMP_STMT:
-					stmt = stmt->next_statement;
-
-					break;
-
-				/**
-				 * If we have a branch that is now useless,
-				 * we'll need to replace it with a jump to
-				 * it's nearest marked postdominator
-				 */
-				case THREE_ADDR_CODE_BRANCH_STMT:
-					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = get_nearest_marked_postdominator(block);
-
-					//We now need to unlink the successors that were in this branch
-					delete_successor(block, stmt->branch_info.if_block);
-					delete_successor(block, stmt->branch_info.else_block);
-
-					//This is now useless
-					delete_statement(stmt);
-
-					/**
-					 * Emit the jump statement to the nearest marked postdominator
-					 * NOTE: the emit jump adds the successor in for us, so we don't need to
-					 * do so here
-					 */
-					stmt = emit_jump(block, nearest_marked_postdom);
-
-					//We have done instructions and control flow here
-					result = SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW;
-
-					break;
-
-				/**
-				 * By default no special treatment, we're just deleting
-				 */
-				default:
-					//Perform the deletion and advancement
-					temp = stmt;
-
-					/**
-					 * If we are deleting an indirect jump address calculation statement,
-					 * then this statements jump table is useless
-					 */
-					if(temp->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
-						//We'll need to deallocate this jump table
-						jump_table_dealloc(block->jump_table);
-
-						//Flag it as null
-						block->jump_table = NULL;
-					}
-					
-					//Advance the statement
-					stmt = stmt->next_statement;
-					//Delete the statement, now that we know it is not a jump
-					delete_statement(temp);
-
-					//If we havent' flagged already, not that we did instructions
-					if(result == NO_SIMPLIFICATION){
-						result = SIMPLIFICATION_INSTRUCTIONS_ONLY;
-					}
-
-					break;
-			}
-		}
->>>>>>> main
-	}
-
 	/**
 	 * We will now need to crawl our way up the block looking for where this
 	 * "relies on" variable was set. It should be the assignee of some other
@@ -17289,7 +17160,6 @@ static inline void handle_raise_instruction(instruction_t* instruction, symtab_f
  * to update the output based on whether or not the original branch was categorized as an inverse branch(jumps
  * to the logical else when the conditional is true) or a regular branch(jumps to the logical if when the
  * conditional is true)
->>>>>>> main
  */
 static instruction_t* handle_branch_with_float_parity_consideration(instruction_t* branch_statement){
 	/**
