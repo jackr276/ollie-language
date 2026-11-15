@@ -177,7 +177,7 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
 
 
 /**
- * Simulate a bitwise OR statement given 2 constants and their type. Bitwise  OR
+ * Simulate a bitwise OR statement given 2 constants and their type. Bitwise OR
  * can only ever set the sign flag, zero flag and parity flags
  *
  * NOTE: bitwise AND can also be used to represent the TEST command in this context
@@ -195,10 +195,63 @@ static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t
 	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
 
 	/**
-	 * Perform the bitwise AND and then use the mask to retain only the
+	 * Perform the bitwise OR and then use the mask to retain only the
 	 * bits that we're after
 	 */
 	u_int64_t result = (raw_constant1 | raw_constant2) & mask;
+
+	/**
+	 * Zero flag is set if we're 0
+	 */
+	if(result == 0){
+		set_zero_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * Set sign flag if the sign bit is 1
+	 */
+	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
+		set_sign_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * Set the parity flag when the lowest 8 bits of the result contain an
+	 * even number of set bits. This is how the x86 parity flag is set. The
+	 * GCC __builtin_parity returns 0 if we contain an even number of set
+	 * bits, so for our parity flag we'll set it when __builtin_parity returns
+	 * 0 on the lowest 8 bits
+	 */
+	if(__builtin_parity(result & 0xFF) == 0){
+		set_parity_flag(&execution_result.flag_register);
+	}
+
+	return execution_result;
+}
+
+
+/**
+ * Simulate a bitwise XOR statement given 2 constants and their type. Bitwise XOR
+ * can only ever set the sign flag, zero flag and parity flags
+ *
+ * NOTE: bitwise AND can also be used to represent the TEST command in this context
+ */
+static simulated_execution_result_t simulate_bitwise_xor_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+	/**
+	 * Initialize our results. If we get here then we know that this is going to work
+	 */
+	simulated_execution_result_t execution_result = {{0}, TRUE};
+
+	/**
+	 * Get the actual operand bit width and then create an appropriate mask
+	 */
+	u_int64_t operand_bit_width = operand_type->type_size * 8;
+	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
+
+	/**
+	 * Perform the bitwise XOR and then use the mask to retain only the
+	 * bits that we're after
+	 */
+	u_int64_t result = (raw_constant1 ^ raw_constant2) & mask;
 
 	/**
 	 * Zero flag is set if we're 0
