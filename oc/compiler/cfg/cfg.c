@@ -1738,6 +1738,7 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 		 * operator
 		 */
 		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
+			//So what's the point of this??? TODO
 			*operator = NOT_EQUALS;
 		}
 
@@ -1893,6 +1894,9 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		switch(binary_results.type){
 			/**
 			 * For a constant type, we are going to need to emit an assignment
+			 *
+			 *
+			 * TODO CAN WE SIMPLIFY THIS??
 			 */
 			case CFG_RESULT_TYPE_CONST: {
 				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
@@ -2193,6 +2197,8 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		three_addr_var_t* conditional_decider;
 
 		switch(conditional_results.type){
+			//TODO CAN WE SIMPLIFY THIS AND JUST HAVE THE TEST NOT ZERO DO IT FOR US
+
 			//For a constant type, we are going to need to emit an assignment
 			case CFG_RESULT_TYPE_CONST: {
 				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type), conditional_results.result_value.result_const, conditional_node->line_number);
@@ -2231,6 +2237,8 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * Let's try to grab the final result type. Remember that the comparison type may be different than
 		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
 		 * the assignee type
+		 *
+		 * TODO MAYBE WE CAN SIMPLIFY THIS AS WELL USING THE RESULTS PACKAGE
 		 */
 		u_int8_t type_signed;
 		if(current_block->exit_statement != NULL
