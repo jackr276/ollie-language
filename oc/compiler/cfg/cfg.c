@@ -198,7 +198,8 @@ typedef enum{
  * Initialize a blank CFG result with the start and final 
  * blocks set to what they should be
  */
-#define INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(block) (cfg_result_package_t){block, block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
+#define INITIALIZE_CFG_RESULT_WITH_BLOCK(block) (cfg_result_package_t){block, block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
+#define INITIALIZE_CFG_RESULT_WITH_BLOCK_AND_VARIABLE(block, variable) (cfg_result_package_t){block, block, {variable}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
 
 /**
  * A simple macro initializer for a blank address offset type
@@ -3037,36 +3038,43 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* block, generic
  * tree
  */
 static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
-	three_addr_var_t* result_variable;
-
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->ast_node_type){
-		case AST_NODE_TYPE_IDENTIFIER:
+		case AST_NODE_TYPE_IDENTIFIER: {
 			//Let the helper do it
-		 	result_variable = emit_identifier(basic_block, primary_parent);
+		 	three_addr_var_t* result_variable = emit_identifier(basic_block, primary_parent);
 
 			//Just give back a blank result with the start block
-			return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
+			return INITIALIZE_CFG_RESULT_WITH_BLOCK_AND_VARIABLE(basic_block, result_variable);
+		}
 
-		case AST_NODE_TYPE_CONSTANT:
+		case AST_NODE_TYPE_CONSTANT: {
 			return emit_constant_from_node(basic_block, primary_parent);
+		}
 
 		case AST_NODE_TYPE_FUNCTION_CALL:
-		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
 			return emit_function_call(basic_block, primary_parent);
+		}
 
-		case AST_NODE_TYPE_STRING_INITIALIZER:
+		case AST_NODE_TYPE_STRING_INITIALIZER: {
 			return emit_string_initializer(basic_block, primary_parent);
+		}
 
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST: {
 			return emit_struct_initializer(basic_block, primary_parent);
+		}
 
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST: {
 			return emit_array_initializer(basic_block, primary_parent);
+		}
 
-		//By default, we're emitting some kind of expression here
-		default:
+		/**
+		 * By default, we're emitting some kind of expression here
+		 */
+		default: {
 			return emit_expression(basic_block, primary_parent);
+		}
 	}
 }
 
@@ -4273,6 +4281,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
 			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
+			generic_type_t* operand_type = assignee->type;
 
 			/**
 			 * Split this down by what kind of types we have. We are only able to see basic types
@@ -4358,6 +4367,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, line_number);
 				add_statement(current_block, store_instruction);
 			}
+
+			/**
+			 * Whether or not this sets RFLAGS depends on the type
+			 */
+			generic_results.sets_rflags = does_operator_set_RFLAGS(unary_operator_node->unary_operator, operand_type);
 
 			//Package up and return our results
 			generic_results.starting_block = basic_block;
@@ -4471,6 +4485,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				}
 			}
 
+			//These never set RFLAGS
+			generic_results.sets_rflags = FALSE;
+
 			//Package up and return
 			generic_results.starting_block = basic_block;
 			generic_results.final_block = basic_block;
@@ -4495,6 +4512,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Emit and add the logical not expression
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
 			add_statement(current_block, logical_not_statement);
+
+			//These always set RFLAGS
+			generic_results.sets_rflags = TRUE;
 
 			//Package up and return the result
 			generic_results.operator = EXCLAMATION;
@@ -4536,6 +4556,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			instruction_t* bitwise_not = emit_not_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, bitwise_not);
 
+			//These never set RFLAGS
+			generic_results.sets_rflags = FALSE;
+
 			//Package up and return the results
 			generic_results.operator = B_NOT;
 			generic_results.starting_block = basic_block;
@@ -4576,6 +4599,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			instruction_t* negation_instruction = emit_neg_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, negation_instruction);
+
+			//TODO DOES THIS SET RFLAGS FOR FLOATS???
 
 			//Package up and return the results
 			generic_results.operator = MINUS;
@@ -4651,6 +4676,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					break;
 				}
 			}
+
+			//These never set RFLAGS
+			generic_results.sets_rflags = FALSE;
 
 			//Package up and return the geneirc results
 			generic_results.operator = SINGLE_AND;
@@ -5406,7 +5434,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	three_addr_var_t* operand2 = NULL;
 
 	//Prepackage up the results here
-	cfg_result_package_t results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t results = INITIALIZE_CFG_RESULT_WITH_BLOCK(starting_block);
 
 	//Holder for the current block as it changes
 	basic_block_t* current_block = starting_block;
@@ -5656,7 +5684,7 @@ static inline three_addr_var_t* insert_temporary_assignment_for_unsequenced_oper
  * just be emitting the straight values and letting everything else deal with that
  */
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
-	cfg_result_package_t package = INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
+	cfg_result_package_t package = INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
 	basic_block_t* current_block = basic_block;
@@ -5999,7 +6027,7 @@ static inline u_int8_t is_statement_eligible_for_assignee_replacement(instructio
  * initialization is required
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
-	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Maintain a pointer to the current block
 	basic_block_t* current_block = basic_block;
@@ -6167,7 +6195,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * param stack region. This is because those first 4 bytes are where we store the parameter count
  */
 static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
-	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
+	cfg_result_package_t results = INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Extract the variable
 	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
@@ -6207,7 +6235,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				visit_static_declare_statement(expr_node);
 			}
 
-			return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
+			return INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
  
 		case AST_NODE_TYPE_LET_STMT:
 			//Split based on the kind of variable that we have
@@ -6215,14 +6243,14 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				return visit_let_statement(basic_block, expr_node);
 			} else {
 				visit_static_let_statement(expr_node);
-				return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
+				return INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 			}
 
 		/**
 		 * This is a dummy node type - just swallow it and move along
 		 */
 		case AST_NODE_TYPE_FUNC_PREDCLARATION:
-			return INITIALIZE_BLANK_CFG_RESULT_WITH_BLOCK(basic_block);
+			return INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
 			return visit_paramcount_statement(basic_block, expr_node);
@@ -6395,7 +6423,7 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 	basic_block_t* handler_block = basic_block_alloc_and_estimate();
 
 	//Our overall result package
-	cfg_result_package_t results = {handler_block, handler_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t results = INITIALIZE_CFG_RESULT_WITH_BLOCK(handler_block);
 
 	/**
 	 * There are only 3 types that we could have - ret, raise or some expression. We will
@@ -9582,7 +9610,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -9636,7 +9664,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					/**
 					 * For a regular break statement, this is it, so we just get out
@@ -10100,7 +10128,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10155,7 +10183,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					//For a regular break statement, this is it, so we just get out
 					return results;
@@ -11306,7 +11334,7 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
  * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
-	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t let_results = INITIALIZE_CFG_RESULT_WITH_BLOCK(starting_block);
 
 	//Useful things to hold onto
 	symtab_variable_record_t* variable = node->variable;
