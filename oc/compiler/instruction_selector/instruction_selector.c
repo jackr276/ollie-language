@@ -12276,6 +12276,24 @@ static inline instruction_type_t select_cmovbX_given_size(variable_size_t size){
 	}
 }
 
+/**
+ * Select the given cmovneX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovneX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVNEW;
+		case DOUBLE_WORD:
+			return CMOVNEL;
+		case QUAD_WORD:
+			return CMOVNEQ;
+		default: {
+			trigger_ice_panic("Invalid cmovneX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
 
 /**
  * Select the given cmovaeX given the size. Panics on invalid input
@@ -12871,6 +12889,26 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 				delete_statement(conditional_move);
 				return cmovp_to_if;
 			}
+		}
+
+		/**
+		 * For not equals or not zero moves, we do need to do parity checking because we consider
+		 * a NaN to never be equal with anything else. In Ollie, NaN != <anything>, so if the parity
+		 * flag is set we'll need to use the if assignee. If the zero flag is not set, we'll also
+		 * need to add the if assignee. We do not need any special consideration for inverse moves
+		 * in this case because there is no "hidden" false path behavior as with the other move
+		 * types
+		 *
+		 * a != b:
+		 * movl else value, final_assignee
+		 * cmovnel if_value, final_assignee <-- first put the if value in if the zero flag is unset
+		 * cmovpl if_value, final_assignee <-- parity should also cause the if value to load
+		 *
+		 * Condition(to add physical if assignee): PF == 1 || ZF == 0
+		 */
+		case MOVE_NE:
+		case MOVE_NZ: {
+
 		}
 
 		//TODO
