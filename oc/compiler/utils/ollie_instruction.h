@@ -299,4 +299,82 @@ struct instruction_t{
 };
 
 
+/**
+ * Is an operator short circuit eligible? Return TRUE if yes, FALSE
+ * if no
+ */
+static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
+	switch(op){
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Will a given binary operator eventually result in lowered x86
+ * assembly that sets the RFLAGS register? This is important for us to know
+ * as we use this for deciding when to emit test if not zero instructions
+ * or not
+ */
+static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op){
+	switch(op){
+		/**
+		 * All of the comparison operators will set condition codes
+		 */
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		/**
+		 * Increment and decrement do as well
+		 */
+		case PLUSPLUS:
+		case MINUSMINUS:
+		/**
+		 * Addition and subtraction will set them as well
+		 */
+		case PLUS:
+		case MINUS:
+		/**
+		 * Mulitplication, division and modulo also do
+		 */
+		case STAR:
+		case F_SLASH:
+		case MOD:
+		/**
+		 * Logical not will set it
+		 */
+		case EXCLAMATION:
+		/**
+		 * Bit shifting sets flags
+		 */
+		case R_SHIFT:
+		case L_SHIFT:
+		/**
+		 * ^, & and | will all set flags as well
+		 */
+		case CARROT:
+		case SINGLE_AND:
+		case SINGLE_OR:
+		/**
+		 * Logical and and logical or will as well
+		 */
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			return TRUE;
+
+		/**
+		 * Operators like bitwise not(~) do not set flags
+		 * at all so we exclude them
+		 */
+		default:
+			return FALSE;
+	}
+}
 #endif /* OLLIE_INSTRUCTION_H */
