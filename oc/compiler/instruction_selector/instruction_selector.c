@@ -12946,7 +12946,25 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			return cmovp_to_if;
 		}
 
-		//TODO
+		/**
+		 * For equals or zero moves, we do need to do parity checking because we consider
+		 * a NaN to never be equal with anything else. In Ollie, NaN != <anything>, so if the parity
+		 * flag is set we'll need to use the else assignee. If the zero flag is set, we'll also
+		 * need to add the if assignee. We do not need any special consideration for inverse moves
+		 * in this case because there is no "hidden" false path behavior as with the other move
+		 * types
+		 *
+		 * a == b:
+		 * movl else value, final_assignee
+		 * cmovel if_value, final_assignee <-- first put the if value in if the zero flag is set
+		 * cmovpl else_value, final_assignee <-- parity flag should cause us to overwrite with the else value
+		 *
+		 * Condition(to add physical if assignee): PF == 0 && ZF == 1
+		 */
+		case MOVE_E:
+		case MOVE_Z: {
+
+		}
 
 		/**
 		 * Anything else is an invalid conditional move and will cause a panic
