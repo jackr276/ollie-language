@@ -12276,6 +12276,7 @@ static inline instruction_type_t select_cmovbX_given_size(variable_size_t size){
 	}
 }
 
+
 /**
  * Select the given cmovneX given the size. Panics on invalid input
  */
@@ -12289,6 +12290,25 @@ static inline instruction_type_t select_cmovneX_given_size(variable_size_t size)
 			return CMOVNEQ;
 		default: {
 			trigger_ice_panic("Invalid cmovneX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
+
+/**
+ * Select the given cmoveX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmoveX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVEW;
+		case DOUBLE_WORD:
+			return CMOVEL;
+		case QUAD_WORD:
+			return CMOVEQ;
+		default: {
+			trigger_ice_panic("Invalid cmoveX size requested");
 			return NO_INSTRUCTION_SELECTED;
 		}
 	}
@@ -12668,7 +12688,7 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 */
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
 				/**
-				 * This is a special case - since we're useing the else value twice, if it is a constant
+				 * This is a special case - since we're using the else value twice, if it is a constant
 				 * we are going to emit a constant assignment here to begin with
 				 */
 				three_addr_var_t* else_value = NULL;
@@ -12790,7 +12810,7 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 */
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
 				/**
-				 * This is a special case - since we're useing the else value twice, if it is a constant
+				 * This is a special case - since we're using the else value twice, if it is a constant
 				 * we are going to emit a constant assignment here to begin with
 				 */
 				three_addr_var_t* else_value = NULL;
@@ -12963,7 +12983,54 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 		 */
 		case MOVE_E:
 		case MOVE_Z: {
+			/**
+			 * This is a special case - since we're using the else value twice, if it is a constant
+			 * we are going to emit a constant assignment here to begin with
+			 */
+			three_addr_var_t* else_value = NULL;
+			switch(else_operand.type){
+				case OPERAND_TYPE_VAR: {
+					else_value = else_operand.value.variable_value;
+					break;
+				}
 
+				case OPERAND_TYPE_CONST: {
+					else_value = emit_temp_var(destination_type);
+					instruction_t* else_move = emit_constant_move_instruction(else_value, else_operand.value.constant_value);
+					insert_instruction_before_given(else_move, conditional_move);
+					break;
+				}
+			}
+
+			/**
+			 * Now we can emit the starting move from else
+			 */
+			instruction_t* move_else = emit_move_instruction(emit_var_copy(destination_variable), else_value);
+
+			/**
+			 * Then the conditional move to if when equal
+			 */
+			instruction_t* cmovee_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																					 if_operand,
+																					 conditional_move->relies_on,
+																					 select_cmoveX_given_size(destination_size));
+			/**
+			 * Now emit the conditional move to else when the parity is set
+			 */
+			instruction_t* cmovp_to_else = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						else_value,
+																						conditional_move->relies_on,
+																						select_cmovpX_given_size(destination_size));
+
+			/**
+			 * Insert everything before the old conditional move, then scrap the conditional move
+			 * and return the last instruction we added
+			 */
+			insert_instruction_before_given(move_else, conditional_move);
+			insert_instruction_before_given(cmovee_to_if, conditional_move);
+			insert_instruction_before_given(cmovp_to_else, conditional_move);
+			delete_statement(conditional_move);
+			return cmovp_to_else;
 		}
 
 		/**
