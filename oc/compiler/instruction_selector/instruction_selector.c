@@ -12238,6 +12238,26 @@ static instruction_t* handle_conditional_move_without_float_parity_consideration
 	return conditional_move;
 }
 
+
+/**
+ * Select the given cmovbX given the size. Panics on invalid input
+ */
+static inline instruction_type_t select_cmovbX_given_size(variable_size_t size){
+	switch(size){
+		case WORD:
+			return CMOVBW;
+		case DOUBLE_WORD:
+			return CMOVBL;
+		case QUAD_WORD:
+			return CMOVBQ;
+		default: {
+			trigger_ice_panic("Invalid cmovbX size requested");
+			return NO_INSTRUCTION_SELECTED;
+		}
+	}
+}
+
+
 /**
  * Select the given cmovaeX given the size. Panics on invalid input
  */
@@ -12250,7 +12270,7 @@ static inline instruction_type_t select_cmovaeX_given_size(variable_size_t size)
 		case QUAD_WORD:
 			return CMOVAEQ;
 		default: {
-			trigger_ice_panic("Invalid cmovaX size requested");
+			trigger_ice_panic("Invalid cmovaeX size requested");
 			return NO_INSTRUCTION_SELECTED;
 		}
 	}
@@ -12288,7 +12308,7 @@ static inline instruction_type_t select_cmovpX_given_size(variable_size_t size){
 		case QUAD_WORD:
 			return CMOVPQ;
 		default: {
-			trigger_ice_panic("Invalid cmovaX size requested");
+			trigger_ice_panic("Invalid cmovpX size requested");
 			return NO_INSTRUCTION_SELECTED;
 		}
 	}
@@ -12597,6 +12617,13 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 		case MOVE_L:
 		case MOVE_B: {
 			/**
+			 * Both patterns for MOVE_L/MOVE_B will require us to have a variable as the else assignee. As 
+			 * such if we have a constant else value we'll need to make it a variable one now
+			 */
+			//TODO
+
+
+			/**
 			 * If we have a non-inverted structure, a NaN(which is always false) should lead to us
 			 * loading in the else-assignee. Since the cmovbX instruction checks to see if CF == 1, and
 			 * the NaN will set CF = 1, this means that we need to account for NaNs inside of the conditional
@@ -12610,6 +12637,39 @@ static instruction_t* handle_conditional_move_with_float_parity_consideration(in
 			 * Condition(to add physical if assignee): PF == 0 && CF == 1
 			 */
 			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				/**
+				 * First emit the appropriate move to else
+				 */
+				instruction_t* move_else;
+				switch(else_operand.type){
+					case OPERAND_TYPE_VAR:
+						move_else = emit_move_instruction(emit_var_copy(destination_variable), else_operand.value.variable_value);
+						break;
+					case OPERAND_TYPE_CONST:
+						move_else = emit_constant_move_instruction(emit_var_copy(destination_variable), else_operand.value.constant_value);
+						break;
+				}
+
+				/**
+				 * Then the conditional move to if when below
+				 */
+				instruction_t* cmovb_to_if = emit_conditional_move_instruction_directly(emit_var_copy(destination_variable),
+																						 if_operand,
+																						 conditional_move->relies_on,
+																						 select_cmovbX_given_size(destination_size));
+				/**
+				 */
+
+
+				/**
+				 * Insert everything before the old conditional move, then scrap the conditional move
+				 * and return the last instruction we added
+				 */
+				insert_instruction_before_given(move_else, conditional_move);
+				insert_instruction_before_given(cmovae_to_if, conditional_move);
+				delete_statement(conditional_move);
+				return cmovae_to_if;
+
 
 			} else {
 
