@@ -1,6 +1,6 @@
 /**
  * Author: Jack Robbins
- * Test a float conditional where we're using <= to see if this works
+ * Test a float conditional where we're using != to see if this works
  * properly with NaN handling
  */
 
