@@ -319,8 +319,10 @@ static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
  * assembly that sets the RFLAGS register? This is important for us to know
  * as we use this for deciding when to emit test if not zero instructions
  * or not
+ *
+ * TODO NEED TO UPDATE THIS BASED ON OPERAND TYPES LOOK AT THE OUTPUT OF CHATGPT
  */
-static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op){
+static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t* operand_type){
 	switch(op){
 		/**
 		 * All of the comparison operators will set condition codes
