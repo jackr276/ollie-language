@@ -9159,7 +9159,6 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 */
 	basic_block_t* block = branch_statement->block_contained_in;
 	three_addr_var_t* relies_on_var = branch_statement->relies_on;
-	//TODO LOOK AT
 
 	/**
 	 * We will now need to crawl our way up the block looking for where this
