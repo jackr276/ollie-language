@@ -319,13 +319,14 @@ static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
  * assembly that sets the RFLAGS register? This is important for us to know
  * as we use this for deciding when to emit test if not zero instructions
  * or not
- *
- * TODO NEED TO UPDATE THIS BASED ON OPERAND TYPES LOOK AT THE OUTPUT OF CHATGPT
  */
 static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t* operand_type){
 	switch(op){
 		/**
-		 * All of the comparison operators will set condition codes
+		 * Comparison operators(<, <=, >, >=, !=, ==), logical not(!), 
+		 * right/left shift(<<, >>), bitwise operators(^, |, &), and 
+		 * logical and/or(&&, ||) will all set condition codes regardless
+		 * of the operand type once lowered to x86 assembly
 		 */
 		case L_THAN:
 		case L_THAN_OR_EQ:
@@ -333,32 +334,16 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-		/**
-		 * Increment and decrement do as well
-		 */
-		case PLUSPLUS:
-		case MINUSMINUS:
-		/**
-		 * Logical not will set it
-		 */
 		case EXCLAMATION:
-		/**
-		 * Bit shifting sets flags
-		 */
 		case R_SHIFT:
 		case L_SHIFT:
-		/**
-		 * ^, & and | will all set flags as well
-		 */
 		case CARROT:
 		case SINGLE_AND:
 		case SINGLE_OR:
-		/**
-		 * Logical and and logical or will as well
-		 */
 		case DOUBLE_AND:
-		case DOUBLE_OR:
+		case DOUBLE_OR: {
 			return TRUE;
+		}
 
 		/**
 		 * Addition, subtraction, multiplication and division
@@ -367,6 +352,8 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		 * assembly as a rule do not set condition codes unless
 		 * they are UCOMISS/UCOMISD/COMISS/COMISD
 		 */
+		case PLUSPLUS:
+		case MINUSMINUS:
 		case PLUS:
 		case MINUS:
 		case STAR:
@@ -379,8 +366,9 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		 * Operators like bitwise not(~) do not set flags
 		 * at all so we exclude them
 		 */
-		default:
+		default: {
 			return FALSE;
+		}
 	}
 }
 #endif /* OLLIE_INSTRUCTION_H */

@@ -1920,11 +1920,12 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		}
 
 		/**
-		 * If the given operator does not set condition codes appropriately, then
-		 * we'll need to make that happen here. We pass the operator
-		 * in by reference so that we may change it later on
+		 * If the binary results package reports that whatever operation that it performs does
+		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
+		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
-		if(does_operator_set_RFLAGS(binary_results.operator, ) == FALSE){
+		if(binary_results.sets_rflags == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator), conditional_node->line_number);
 		}
 
@@ -2217,10 +2218,12 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		}
 
 		/**
-		 * If the given operator does not set condition codes appropriately, then
-		 * we'll need to make that happen here
+		 * If the binary results package reports that whatever operation that it performs does
+		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
+		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
-		if(does_operator_set_RFLAGS(conditional_results.operator) == FALSE){
+		if(conditional_results.sets_rflags == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(conditional_results.operator), conditional_node->line_number);
 		}
 
@@ -4587,6 +4590,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The result will always be a variable that we can unpack
 			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
+			generic_type_t* operand_type = assignee->type;
 
 			/**
 			 * Now assign to a temporary variable so that the actual value isn't affected by the negation
@@ -4600,7 +4604,10 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			instruction_t* negation_instruction = emit_neg_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, negation_instruction);
 
-			//TODO DOES THIS SET RFLAGS FOR FLOATS???
+			/**
+			 * Whether or not this actually sets RFLAGS depends on the type of the operand
+			 */
+			generic_results.sets_rflags = does_operator_set_RFLAGS(MINUS, operand_type);
 
 			//Package up and return the results
 			generic_results.operator = MINUS;
