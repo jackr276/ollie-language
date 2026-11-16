@@ -291,40 +291,38 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
  * wants us to unpack the constant if we are able to.
  */
 static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* result_package, basic_block_t* block, u_int32_t line_number){
-	//The variable that we will always end up returning
-	three_addr_var_t* returned_variable;
-	three_addr_const_t* constant_value;
-
 	switch(result_package->type){
-		//Variable - just give it back
+		/**
+		 * Variable - just give it back
+		 */
 		case CFG_RESULT_TYPE_VAR: {
-			returned_variable = result_package->result_value.result_var;
-			break;
+			return result_package->result_value.result_var;
 		}
 
-		//Constant - unpack with an assignment and give the temp var back
+		/**
+		 * Constant - unpack with an assignment and give the temp var back
+		 */
 		case CFG_RESULT_TYPE_CONST: {
-			constant_value = result_package->result_value.result_const;
+			three_addr_const_t* constant_value = result_package->result_value.result_const;
 
-			//Emit the assignment
+			/**
+			 * Emit and add the assignment
+			 */
 			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value, line_number);
-
-			//Throw it into the block
 			add_statement(block, const_assignment);
 
 			//This is the variable that we end up returning
-			returned_variable = const_assignment->operands.oir.assignee;
-			break;
+			return const_assignment->operands.oir.assignee;
 		}
 
-		//We shouldn't be seeing initializers in this
+		/**
+		 * We shouldn't be seeing initializers in this
+		 */
 		default: {
 			trigger_ice_panic("Invalid result type detected in result package unpacker");
+			return NULL;
 		}
 	}
-
-	//Give back the returned variable in the end
-	return returned_variable;
 }
 
 
@@ -336,48 +334,47 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
  * used for binary expressions where we want to preserve execution ordre
  */
 static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_result_package_t* result_package, basic_block_t* block, u_int32_t line_number){
-	//The variable that we will always end up returning
-	three_addr_var_t* variable_value;
-	three_addr_const_t* constant_value;
-	three_addr_var_t* returned_variable;
-
 	switch(result_package->type){
-		//Unpack by performing a temporary assignment
+		/**
+		 * Unpack by performing a temporary assignment
+		 */
 		case CFG_RESULT_TYPE_VAR: {
-			variable_value = result_package->result_value.result_var;
+			three_addr_var_t* variable_value = result_package->result_value.result_var;
 
-			//Emit the assignment into the block
+			/**
+			 * Emit the assignment into the block
+			 */
 			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(variable_value->type), variable_value, line_number);
 			add_statement(block, temp_assignment);
 
 			//We will return the temp
-			returned_variable = temp_assignment->operands.oir.assignee;
-			break;
+			return temp_assignment->operands.oir.assignee;
 		}
 
-		//Constant - unpack with an assignment and give the temp var back
+		/**
+		 * Constant - unpack with an assignment and give the temp var back
+		 */
 		case CFG_RESULT_TYPE_CONST: {
-			constant_value = result_package->result_value.result_const;
+			three_addr_const_t* constant_value = result_package->result_value.result_const;
 
-			//Emit the assignment
+			/**
+			 * Emit and add the assignment
+			 */
 			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value, line_number);
-
-			//Throw it into the block
 			add_statement(block, const_assignment);
 
 			//This is the variable that we end up returning
-			returned_variable = const_assignment->operands.oir.assignee;
-			break;
+			return const_assignment->operands.oir.assignee;
 		}
 
-		//We shouldn't be seeing initializers in this
+		/**
+		 * We shouldn't be seeing initializers in this
+		 */
 		default: {
 			trigger_ice_panic("Invalid result type detected in result package unpacker");
+			return NULL;
 		}
 	}
-
-	//Give back the returned variable in the end
-	return returned_variable;
 }
 
 
@@ -2187,10 +2184,10 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	 * we will just go through the motions here of a regular branch
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
-		//First let the helper emit it
+		/**
+		 * Let the helper emit our package and update the current block
+		 */
 		cfg_result_package_t conditional_results = emit_branch_conditional_expression(current_block, conditional_node);
-
-		//Update the final block
 		current_block = conditional_results.final_block;
 
 		//Extract the actual result assignee
@@ -2222,6 +2219,9 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 				trigger_ice_panic("Invalid result type detected in branch emitter");
 			}
 		}
+
+		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, conditional_node->line_number);
+
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
