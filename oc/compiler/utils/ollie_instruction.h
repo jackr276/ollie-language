@@ -395,9 +395,9 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 
 
 /**
- * Does the given OIR statement set condition codes?
+ * Does the given OIR statement set the RFLAGS register?
  */
-static inline u_int8_t does_OIR_statement_set_condition_codes(instruction_t* statement){
+static inline u_int8_t does_OIR_statement_set_RFLAGS(instruction_t* statement){
 	switch(statement->statement_type){
 		/**
 		 * For the following statement types, whether or not we set condition

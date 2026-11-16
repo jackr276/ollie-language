@@ -703,26 +703,6 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 
 
 /**
- * Is this instruction going to be used to set condition codes? If so, we
- * don't want to accidentally value number the thing and remove it
- */
-static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instruction){
-	switch(instruction->instruction_type){
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			//Use the flag to determine this
-			return instruction->operands.oir.assignee->sets_cc;
-
-		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-			return TRUE;
-
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Is the given expression eligible for value numbering? Note that all
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
@@ -9183,7 +9163,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		 * way of what we rely on for condition codes *AND* this instruction
 		 * also sets condition codes, then we have a huge problem
 		 */
-		if(does_OIR_statement_set_condition_codes(cursor->statement_type) == TRUE){
+		if(does_OIR_statement_set_RFLAGS(cursor) == TRUE){
 			trigger_ice_panic("Condition code trampling detected in branch reduction");
 		}
 
@@ -9203,7 +9183,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * condition codes but is literally incapable of it, we need to fail out
 	 * hard and crash the compiler
 	 */
-	if(does_OIR_statement_set_condition_codes(cc_setting_stmt->statement_type) == FALSE){
+	if(does_OIR_statement_set_RFLAGS(cc_setting_stmt) == FALSE){
 		trigger_ice_panic("Branch was found to rely on statement that cannot set condition codes");
 	}
 
