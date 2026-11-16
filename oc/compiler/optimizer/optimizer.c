@@ -1174,30 +1174,6 @@ static u_int8_t branch_reduce(dynamic_array_t* function_blocks, dynamic_array_t*
 
 
 /**
- * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
- *
- * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
- * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
- * have that logic already in for when the branch statements are selected
- */
-static inline instruction_t* emit_test_not_zero_instruction(three_addr_var_t* destination_variable, three_addr_var_t* tested_variable, ollie_token_t* operator){
-	//Emit the instruction - we can just use a line number of 0 as it doesn't matter here
-	instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(destination_variable, tested_variable, 0);
-
-	/**
-	 * If this is a floating point variable, update the pass-by-reference
-	 * operator
-	 */
-	if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
-		*operator = NOT_EQUALS;
-	}
-
-	//Give back the final assignee
-	return test_if_not_zero;
-}
-
-
-/**
  * Remove all of the successors from a given block. This handles all of the decoupling
  * that we need, so we shouldn't need to do anythign else to the block after this function
  * runs
