@@ -1818,8 +1818,6 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
  * branch category is also given and will be used when we're accounting for how to place things
  */
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
-	instruction_t* constant_assignment;
-
 	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -1887,38 +1885,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * The conditional decider is the variable that represents the flags set by the equation that we're using
 		 * to decide this branch
 		 */
-		three_addr_var_t* conditional_decider = NULL;
-		switch(binary_results.type){
-			/**
-			 * For a constant type, we are going to need to emit an assignment
-			 *
-			 *
-			 * TODO CAN WE SIMPLIFY THIS??
-			 */
-			case CFG_RESULT_TYPE_CONST: {
-				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type), binary_results.result_value.result_const, conditional_node->line_number);
-				add_statement(current_block, constant_assignment);
-
-				//This now is our decider
-				conditional_decider = constant_assignment->operands.oir.assignee;
-				break;
-			}
-
-			/**
-			 * If this is a varible we can just extract the result var
-			 */
-			case CFG_RESULT_TYPE_VAR: {
-				conditional_decider = binary_results.result_value.result_var;
-				break;
-			}
-
-			/**
-			 * We should never see an initializer here
-			 */
-			default: {
-				trigger_ice_panic("Invalid result type detected in branch emitter");
-			}
-		}
+		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, conditional_node->line_number);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
