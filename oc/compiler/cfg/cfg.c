@@ -1788,50 +1788,6 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
 		/**
-		 * If we are able to off the bat determine whether or not this is true, then this
-		 * branch itself is going to be useless. Instead of emitting things, we will just
-		 * optimize as we go right here and jump either to if or else based on
-		 * the branch type and trutfulness
-		 */
-		branch_conditional_truthfullness_t truthfullness = get_branch_conditional_truthfullness(conditional_node);
-
-		switch(truthfullness){
-			/**
-			 * We have something that is provable to always be true. 
-			 *
-			 * If regular branch -> jump to if always
-			 * If inverse branch -> jump to else always
-			 */
-			case BRANCH_CONDITIONAL_ALWAYS_TRUE:
-				if(branch_category == BRANCH_CATEGORY_NORMAL){
-					emit_jump(current_block, if_block);
-				} else {
-					emit_jump(current_block, else_block);
-				}
-
-				return results;
-
-			/**
-			 * We have something that is provable to always be false. 
-			 *
-			 * If regular branch -> jump to else always
-			 * If inverse branch -> jump to if always
-			 */
-			case BRANCH_CONDITIONAL_ALWAYS_FALSE:
-				if(branch_category == BRANCH_CATEGORY_NORMAL){
-					emit_jump(current_block, else_block);
-				} else {
-					emit_jump(current_block, if_block);
-				}
-
-				return results;
-
-			//Anything else it's impossible to determine so we process normally
-			default:
-				break;
-		}
-
-		/**
 		 * Let the helper emit the conditional, extract and update the final block
 		 */
 		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
@@ -1841,7 +1797,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * The conditional decider is the variable that represents the flags set by the equation that we're using
 		 * to decide this branch
 		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, conditional_node->line_number);
+		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, line_number);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
@@ -1850,7 +1806,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
 		if(binary_results.sets_rflags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
 		}
 
 		/**
@@ -1890,7 +1846,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 																conditional_decider,
 																branch_type,
 																branch_category,
-																conditional_node->line_number);
+																line_number);
 
 		//Add it into the block
 		add_statement(current_block, branch_statement);
@@ -2117,7 +2073,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		/**
 		 * Unpack the conditional decider using result unpacking
 		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, conditional_node->line_number);
+		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, line_number);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
@@ -2126,7 +2082,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
 		if(conditional_results.sets_rflags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
 		}
 
 		/**
@@ -2162,7 +2118,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 																conditional_decider,
 																branch_type,
 																BRANCH_CATEGORY_NORMAL,
-																conditional_node->line_number);
+																line_number);
 		
 		//Store the if destination for later
 		branch_statement->optional_storage.jumping_to_label = if_destination_label;
