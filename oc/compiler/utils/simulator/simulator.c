@@ -428,7 +428,7 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 		 * to simulate any further, so we'll return the blank simulation result which tells the caller that we could do
 		 * nothing with this
 		 */
-		if(search_result.result_type == SEARCH_RESULT_TYPE_NONE || search_result.result_type == SEARCH_RESULT_TYPE_VAR){
+		if(search_result.result_type != SEARCH_RESULT_TYPE_CONST){
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 		}
 
@@ -477,10 +477,33 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 
 /**
  * Simulate a logical not statement if at all possible. This simulation is going
- * to be different for floats/non float operations
+ * to be different for floats/non float operations. In the event that no simulation
+ * is possible, this statement will return a blank simulated execution result that 
+ * tells the caller to move along without simulating
+ *
+ * NOTE: even though we call this logical not, in reality all branches with logical
+ * not are just checking to see if the value is zero or not. As such, we really
+ * only need to check if we have a zero here
  */
-simulated_execution_result_t simulate_logical_not_statement(instruction_t* instruction){
-	//TODO IS IT EVEN NEEDED?
+simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block, instruction_t* instruction){
+	/**
+	 * First extract the logical not operand and search for it's assignment
+	 * within the block
+	 */
+	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
+	search_result_t search_result = search_for_variable_assignment_in_block(block, instruction, logical_not_operand);
+
+	/**
+	 * This is usually what happens - we found nothing or we found a variable assignment. In this case it's not possible
+	 * to simulate any further, so we'll return the blank simulation result which tells the caller that we could do
+	 * nothing with this
+	 */
+	if(search_result.result_type != SEARCH_RESULT_TYPE_CONST){
+		return BLANK_SIMULATED_EXECUTION_RESULT;
+	}
+
+	//TODO TEST IF NOT ZERO
+
 
 }
 
@@ -505,8 +528,7 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
 		}
 
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
-			//printf("TODO NOT IMPLEMENTED\n");
-			return BLANK_SIMULATED_EXECUTION_RESULT;
+			return simulate_logical_not_statement(block, instruction);
 		}
 
 		case THREE_ADDR_CODE_INC_STMT: {
