@@ -123,9 +123,21 @@ typedef struct {
 		three_addr_initializer_t* result_initializer;
 	} result_value;
 
+	/**
+	 * Is this an initializer, variable or constant
+	 */
 	cfg_result_type_t type;
 
-	//The operator may or may not always be filled
+	/**
+	 * Does this operation set RFLAGS? This is usually set to false, it's
+	 * only ever used for binary operations
+	 */
+	u_int8_t sets_rflags;
+
+	/**
+	 * The operator may or may not always be filled. Again usually
+	 * this is only used for unary/binary operations
+	 */
 	ollie_token_t operator;
 } cfg_result_package_t;
 
@@ -172,7 +184,14 @@ typedef enum{
  * result type. We usually stack allocate these
  * so we can't wipe them out any other way
  */
-#define INITIALIZE_BLANK_CFG_RESULT {NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, BLANK}
+#define INITIALIZE_BLANK_CFG_RESULT (cfg_result_package_t){NULL, NULL, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
+
+/**
+ * Initialize a blank CFG result with the start and final 
+ * blocks set to what they should be
+ */
+#define INITIALIZE_CFG_RESULT_WITH_BLOCK(block) (cfg_result_package_t){block, block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
+#define INITIALIZE_CFG_RESULT_WITH_BLOCK_AND_VARIABLE(block, variable) (cfg_result_package_t){block, block, {variable}, CFG_RESULT_TYPE_VAR, FALSE, BLANK}
 
 /**
  * A simple macro initializer for a blank address offset type
@@ -264,40 +283,38 @@ static void print_cfg_message(error_message_type_t message_type, char* info, u_i
  * wants us to unpack the constant if we are able to.
  */
 static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* result_package, basic_block_t* block, u_int32_t line_number){
-	//The variable that we will always end up returning
-	three_addr_var_t* returned_variable;
-	three_addr_const_t* constant_value;
-
 	switch(result_package->type){
-		//Variable - just give it back
+		/**
+		 * Variable - just give it back
+		 */
 		case CFG_RESULT_TYPE_VAR: {
-			returned_variable = result_package->result_value.result_var;
-			break;
+			return result_package->result_value.result_var;
 		}
 
-		//Constant - unpack with an assignment and give the temp var back
+		/**
+		 * Constant - unpack with an assignment and give the temp var back
+		 */
 		case CFG_RESULT_TYPE_CONST: {
-			constant_value = result_package->result_value.result_const;
+			three_addr_const_t* constant_value = result_package->result_value.result_const;
 
-			//Emit the assignment
+			/**
+			 * Emit and add the assignment
+			 */
 			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value, line_number);
-
-			//Throw it into the block
 			add_statement(block, const_assignment);
 
 			//This is the variable that we end up returning
-			returned_variable = const_assignment->operands.oir.assignee;
-			break;
+			return const_assignment->operands.oir.assignee;
 		}
 
-		//We shouldn't be seeing initializers in this
+		/**
+		 * We shouldn't be seeing initializers in this
+		 */
 		default: {
 			trigger_ice_panic("Invalid result type detected in result package unpacker");
+			return NULL;
 		}
 	}
-
-	//Give back the returned variable in the end
-	return returned_variable;
 }
 
 
@@ -309,48 +326,47 @@ static inline three_addr_var_t* unpack_result_package(cfg_result_package_t* resu
  * used for binary expressions where we want to preserve execution ordre
  */
 static inline three_addr_var_t* unpack_result_package_with_temp_assignment(cfg_result_package_t* result_package, basic_block_t* block, u_int32_t line_number){
-	//The variable that we will always end up returning
-	three_addr_var_t* variable_value;
-	three_addr_const_t* constant_value;
-	three_addr_var_t* returned_variable;
-
 	switch(result_package->type){
-		//Unpack by performing a temporary assignment
+		/**
+		 * Unpack by performing a temporary assignment
+		 */
 		case CFG_RESULT_TYPE_VAR: {
-			variable_value = result_package->result_value.result_var;
+			three_addr_var_t* variable_value = result_package->result_value.result_var;
 
-			//Emit the assignment into the block
+			/**
+			 * Emit the assignment into the block
+			 */
 			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(variable_value->type), variable_value, line_number);
 			add_statement(block, temp_assignment);
 
 			//We will return the temp
-			returned_variable = temp_assignment->operands.oir.assignee;
-			break;
+			return temp_assignment->operands.oir.assignee;
 		}
 
-		//Constant - unpack with an assignment and give the temp var back
+		/**
+		 * Constant - unpack with an assignment and give the temp var back
+		 */
 		case CFG_RESULT_TYPE_CONST: {
-			constant_value = result_package->result_value.result_const;
+			three_addr_const_t* constant_value = result_package->result_value.result_const;
 
-			//Emit the assignment
+			/**
+			 * Emit and add the assignment
+			 */
 			instruction_t* const_assignment = emit_assignment_with_const_instruction(emit_temp_var(constant_value->type), constant_value, line_number);
-
-			//Throw it into the block
 			add_statement(block, const_assignment);
 
 			//This is the variable that we end up returning
-			returned_variable = const_assignment->operands.oir.assignee;
-			break;
+			return const_assignment->operands.oir.assignee;
 		}
 
-		//We shouldn't be seeing initializers in this
+		/**
+		 * We shouldn't be seeing initializers in this
+		 */
 		default: {
 			trigger_ice_panic("Invalid result type detected in result package unpacker");
+			return NULL;
 		}
 	}
-
-	//Give back the returned variable in the end
-	return returned_variable;
 }
 
 
@@ -1689,67 +1705,18 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 
 /**
- * Is an operator short circuit eligible? Return TRUE if yes, FALSE
- * if no
- */
-static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
-	switch(op){
-		case DOUBLE_AND:
-		case DOUBLE_OR:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Does a given operator set condition codes? Return true if yes, false
- * if no. Yes all ops can set condition codes, but we're referring to
- * specifically relational operators here
- */
-static inline u_int8_t does_operator_set_condition_codes(ollie_token_t op){
-	switch(op){
-		case L_THAN:
-		case L_THAN_OR_EQ:
-		case G_THAN:
-		case G_THAN_OR_EQ:
-		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
-		//Logical not sets it
-		case EXCLAMATION:
-			return TRUE;
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
  * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
- *
- * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
- * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
- * have that logic already in for when the branch statements are selected
  */
-static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, ollie_token_t* operator, u_int32_t line_number){
+static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, u_int32_t line_number){
 	//If we don't have a temp var, then we just go right to the emission
 	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
 		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
 
-		//Emit the instruction
-		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-
-		//Now we'll add it into the block
-		add_statement(basic_block, test_if_not_zero);
-
 		/**
-		 * If this is a floating point variable, update the pass-by-reference
-		 * operator
+		 * Emit the instruction
 		 */
-		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
-			*operator = NOT_EQUALS;
-		}
+		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
+		add_statement(basic_block, test_if_not_zero);
 
 		//Give back the final assignee
 		return test_if_not_zero->operands.oir.assignee;
@@ -1774,10 +1741,10 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 			return test_if_not_zero->operands.oir.assignee;
 
 		} else {
-			//Emit the instruction
+			/**
+			 * Emit and add the instruction
+			 */
 			instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-
-			//Now we'll add it into the block
 			add_statement(basic_block, test_if_not_zero);
 
 			//Give back the final assignee
@@ -1808,7 +1775,7 @@ static inline cfg_result_package_t emit_branch_conditional_expression(basic_bloc
  * branch category is also given and will be used when we're accounting for how to place things
  */
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
-	//Allcoate the results, hang onto the current block
+	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 	basic_block_t* current_block = starting_block;
 	u_int32_t line_number = conditional_node->line_number;
@@ -1820,46 +1787,70 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 	 * short circuit optimization here
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
-		//First let the helper emit it
-		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
+		/**
+		 * If we are able to off the bat determine whether or not this is true, then this
+		 * branch itself is going to be useless. Instead of emitting things, we will just
+		 * optimize as we go right here and jump either to if or else based on
+		 * the branch type and trutfulness
+		 */
+		branch_conditional_truthfullness_t truthfullness = get_branch_conditional_truthfullness(conditional_node);
 
-		//Update the final block
-		current_block = binary_results.final_block;
+		switch(truthfullness){
+			/**
+			 * We have something that is provable to always be true. 
+			 *
+			 * If regular branch -> jump to if always
+			 * If inverse branch -> jump to else always
+			 */
+			case BRANCH_CONDITIONAL_ALWAYS_TRUE:
+				if(branch_category == BRANCH_CATEGORY_NORMAL){
+					emit_jump(current_block, if_block);
+				} else {
+					emit_jump(current_block, else_block);
+				}
 
-		//The conditional decider comes from the result type itself
-		three_addr_var_t* conditional_decider;
+				return results;
 
-		switch(binary_results.type){
-			case CFG_RESULT_TYPE_CONST: {
-				//Emit and add the constant assignment as our decider
-				instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(binary_results.result_value.result_const->type),
-																							binary_results.result_value.result_const,
-																							line_number);
-				add_statement(current_block, constant_assignment);
+			/**
+			 * We have something that is provable to always be false. 
+			 *
+			 * If regular branch -> jump to else always
+			 * If inverse branch -> jump to if always
+			 */
+			case BRANCH_CONDITIONAL_ALWAYS_FALSE:
+				if(branch_category == BRANCH_CATEGORY_NORMAL){
+					emit_jump(current_block, else_block);
+				} else {
+					emit_jump(current_block, if_block);
+				}
 
-				//This now is our decider
-				conditional_decider = constant_assignment->operands.oir.assignee;
+				return results;
+
+			//Anything else it's impossible to determine so we process normally
+			default:
 				break;
-			}
-
-			case CFG_RESULT_TYPE_VAR: {
-				conditional_decider = binary_results.result_value.result_var;
-				break;
-			}
-
-			//We should never see an initializer here
-			default: {
-				trigger_ice_panic("Invalid result type detected in branch emitter");
-			}
 		}
 
 		/**
-		 * If the given operator does not set condition codes appropriately, then
-		 * we'll need to make that happen here. We pass the operator
-		 * in by reference so that we may change it later on
+		 * Let the helper emit the conditional, extract and update the final block
 		 */
-		if(does_operator_set_condition_codes(binary_results.operator) == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator), line_number);
+		cfg_result_package_t binary_results = emit_branch_conditional_expression(current_block, conditional_node);
+		current_block = binary_results.final_block;
+
+		/**
+		 * The conditional decider is the variable that represents the flags set by the equation that we're using
+		 * to decide this branch
+		 */
+		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, conditional_node->line_number);
+
+		/**
+		 * If the binary results package reports that whatever operation that it performs does
+		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
+		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+		 * bitwise inversing, etc., so this flag is very important to have set correctly
+		 */
+		if(binary_results.sets_rflags == FALSE){
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
 		}
 
 		/**
@@ -1867,7 +1858,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
 		 * the assignee type
 		 */
-		u_int8_t type_signed;
+		u_int8_t type_signed = FALSE;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
 			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
@@ -2117,48 +2108,25 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 	 * we will just go through the motions here of a regular branch
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
-		//First let the helper emit it
+		/**
+		 * Let the helper emit our package and update the current block
+		 */
 		cfg_result_package_t conditional_results = emit_branch_conditional_expression(current_block, conditional_node);
-
-		//Update the final block
 		current_block = conditional_results.final_block;
 
-		//Extract the actual result assignee
-		three_addr_var_t* conditional_decider;
-
-		switch(conditional_results.type){
-			//For a constant type, we are going to need to emit an assignment
-			case CFG_RESULT_TYPE_CONST: {
-				instruction_t* constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type),
-																							conditional_results.result_value.result_const,
-																							line_number);
-
-				//Get it in the block
-				add_statement(current_block, constant_assignment);
-
-				//This now is our decider
-				conditional_decider = constant_assignment->operands.oir.assignee;
-				break;
-			}
-
-			//For this we can extract the result var
-			case CFG_RESULT_TYPE_VAR: {
-				conditional_decider = conditional_results.result_value.result_var;
-				break;
-			}
-
-			//It is never valid to see an initializer here
-			default: {
-				trigger_ice_panic("Invalid result type detected in branch emitter");
-			}
-		}
+		/**
+		 * Unpack the conditional decider using result unpacking
+		 */
+		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, conditional_node->line_number);
 
 		/**
-		 * If the given operator does not set condition codes appropriately, then
-		 * we'll need to make that happen here
+		 * If the binary results package reports that whatever operation that it performs does
+		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
+		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
-		if(does_operator_set_condition_codes(conditional_results.operator) == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(conditional_results.operator), conditional_node->line_number);
+		if(conditional_results.sets_rflags == FALSE){
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
 		}
 
 		/**
@@ -2166,7 +2134,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
 		 * the assignee type
 		 */
-		u_int8_t type_signed;
+		u_int8_t type_signed = FALSE;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
 			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
@@ -2975,37 +2943,43 @@ static cfg_result_package_t emit_array_initializer(basic_block_t* block, generic
  * tree
  */
 static inline cfg_result_package_t emit_primary_expr_code(basic_block_t* basic_block, generic_ast_node_t* primary_parent){
-	three_addr_var_t* result_variable;
-
 	//Switch based on what kind of expression we have. This mainly just calls the appropriate rules
 	switch(primary_parent->ast_node_type){
-		case AST_NODE_TYPE_IDENTIFIER:
+		case AST_NODE_TYPE_IDENTIFIER: {
 			//Let the helper do it
-		 	result_variable = emit_identifier(basic_block, primary_parent);
+		 	three_addr_var_t* result_variable = emit_identifier(basic_block, primary_parent);
 
-			//Initialize and give back the result
-			cfg_result_package_t result_package = {basic_block, basic_block, {result_variable}, CFG_RESULT_TYPE_VAR, BLANK};
-			return result_package;
+			//Just give back a blank result with the start block
+			return INITIALIZE_CFG_RESULT_WITH_BLOCK_AND_VARIABLE(basic_block, result_variable);
+		}
 
-		case AST_NODE_TYPE_CONSTANT:
+		case AST_NODE_TYPE_CONSTANT: {
 			return emit_constant_from_node(basic_block, primary_parent);
+		}
 
 		case AST_NODE_TYPE_FUNCTION_CALL:
-		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL:
+		case AST_NODE_TYPE_INDIRECT_FUNCTION_CALL: {
 			return emit_function_call(basic_block, primary_parent);
+		}
 
-		case AST_NODE_TYPE_STRING_INITIALIZER:
+		case AST_NODE_TYPE_STRING_INITIALIZER: {
 			return emit_string_initializer(basic_block, primary_parent);
+		}
 
-		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST:
+		case AST_NODE_TYPE_STRUCT_INITIALIZER_LIST: {
 			return emit_struct_initializer(basic_block, primary_parent);
+		}
 
-		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST:
+		case AST_NODE_TYPE_ARRAY_INITIALIZER_LIST: {
 			return emit_array_initializer(basic_block, primary_parent);
+		}
 
-		//By default, we're emitting some kind of expression here
-		default:
+		/**
+		 * By default, we're emitting some kind of expression here
+		 */
+		default: {
 			return emit_expression(basic_block, primary_parent);
+		}
 	}
 }
 
@@ -4212,6 +4186,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The assignee comes from our package. This is what we are ultimately using in the final result
 			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
+			generic_type_t* operand_type = assignee->type;
 
 			/**
 			 * Split this down by what kind of types we have. We are only able to see basic types
@@ -4297,6 +4272,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				instruction_t* store_instruction = emit_store_base_address_only(memory_address_var, assignee, type, line_number);
 				add_statement(current_block, store_instruction);
 			}
+
+			/**
+			 * Whether or not this sets RFLAGS depends on the type
+			 */
+			generic_results.sets_rflags = does_operator_set_RFLAGS(unary_operator_node->unary_operator, operand_type);
 
 			//Package up and return our results
 			generic_results.starting_block = basic_block;
@@ -4410,6 +4390,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 				}
 			}
 
+			//These never set RFLAGS
+			generic_results.sets_rflags = FALSE;
+
 			//Package up and return
 			generic_results.starting_block = basic_block;
 			generic_results.final_block = basic_block;
@@ -4434,6 +4417,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Emit and add the logical not expression
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
 			add_statement(current_block, logical_not_statement);
+
+			//These always set RFLAGS
+			generic_results.sets_rflags = TRUE;
 
 			//Package up and return the result
 			generic_results.operator = EXCLAMATION;
@@ -4475,6 +4461,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			instruction_t* bitwise_not = emit_not_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, bitwise_not);
 
+			//These never set RFLAGS
+			generic_results.sets_rflags = FALSE;
+
 			//Package up and return the results
 			generic_results.operator = B_NOT;
 			generic_results.starting_block = basic_block;
@@ -4503,6 +4492,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The result will always be a variable that we can unpack
 			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
+			generic_type_t* operand_type = assignee->type;
 
 			/**
 			 * Now assign to a temporary variable so that the actual value isn't affected by the negation
@@ -4515,6 +4505,11 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			 */
 			instruction_t* negation_instruction = emit_neg_instruction(temp_assignment->operands.oir.assignee, line_number);
 			add_statement(current_block, negation_instruction);
+
+			/**
+			 * Whether or not this actually sets RFLAGS depends on the type of the operand
+			 */
+			generic_results.sets_rflags = does_operator_set_RFLAGS(MINUS, operand_type);
 
 			//Package up and return the results
 			generic_results.operator = MINUS;
@@ -4590,6 +4585,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 					break;
 				}
 			}
+
+			//These never set RFLAGS
+			generic_results.sets_rflags = FALSE;
 
 			//Package up and return the geneirc results
 			generic_results.operator = SINGLE_AND;
@@ -4746,6 +4744,11 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 
 	//Now add a direct jump to the end
 	emit_jump(else_block, end_block);
+
+	/**
+	 * A ternary expression should never be considered to set condition codes
+	 */
+	return_package.sets_rflags = FALSE;
 
 	//Add the final things in here
 	return_package.starting_block = starting_block;
@@ -5345,7 +5348,7 @@ static inline cfg_result_package_t generate_pointer_arithmetic_for_binary_operat
 	three_addr_var_t* operand2 = NULL;
 
 	//Prepackage up the results here
-	cfg_result_package_t results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t results = INITIALIZE_CFG_RESULT_WITH_BLOCK(starting_block);
 
 	//Holder for the current block as it changes
 	basic_block_t* current_block = starting_block;
@@ -5595,8 +5598,7 @@ static inline three_addr_var_t* insert_temporary_assignment_for_unsequenced_oper
  * just be emitting the straight values and letting everything else deal with that
  */
 static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, generic_ast_node_t* logical_or_expr){
-	//The return package here
-	cfg_result_package_t package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t package = INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Current block may change as time goes on, so we'll use the term current block up here to refer to it
 	basic_block_t* current_block = basic_block;
@@ -5822,6 +5824,13 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	//Throw this into the current block
 	add_statement(current_block, binary_operation);
 
+	/**
+	 * Inside of the result package we will store the determination as to whether or
+	 * not this binary operation sets RFLAGS or not. This is important when it comes 
+	 * time for branch emittal
+	 */
+	package.sets_rflags = does_operator_set_RFLAGS(logical_or_expr->binary_operator, final_result_type);
+
 	//Package up and return
 	package.final_block = current_block;
 	package.type = CFG_RESULT_TYPE_VAR;
@@ -5932,7 +5941,7 @@ static inline u_int8_t is_statement_eligible_for_assignee_replacement(instructio
  * initialization is required
  */
 static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_block, generic_ast_node_t* parent_node){
-	cfg_result_package_t result_package = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t result_package = INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Maintain a pointer to the current block
 	basic_block_t* current_block = basic_block;
@@ -6100,7 +6109,7 @@ static cfg_result_package_t emit_assignment_expression(basic_block_t* basic_bloc
  * param stack region. This is because those first 4 bytes are where we store the parameter count
  */
 static cfg_result_package_t visit_paramcount_statement(basic_block_t* basic_block, generic_ast_node_t* paramcount_node){
-	cfg_result_package_t results = {basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t results = INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 
 	//Extract the variable
 	symtab_variable_record_t* paramcount_var = paramcount_node->variable;
@@ -6140,7 +6149,7 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				visit_static_declare_statement(expr_node);
 			}
 
-			return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+			return INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
  
 		case AST_NODE_TYPE_LET_STMT:
 			//Split based on the kind of variable that we have
@@ -6148,14 +6157,14 @@ static cfg_result_package_t emit_expression(basic_block_t* basic_block, generic_
 				return visit_let_statement(basic_block, expr_node);
 			} else {
 				visit_static_let_statement(expr_node);
-				return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+				return INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 			}
 
 		/**
 		 * This is a dummy node type - just swallow it and move along
 		 */
 		case AST_NODE_TYPE_FUNC_PREDCLARATION:
-			return (cfg_result_package_t){basic_block, basic_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+			return INITIALIZE_CFG_RESULT_WITH_BLOCK(basic_block);
 		
 		case AST_NODE_TYPE_PARAMCOUNT_STMT:
 			return visit_paramcount_statement(basic_block, expr_node);
@@ -6328,7 +6337,7 @@ static cfg_result_package_t emit_error_handle_statement(generic_ast_node_t* erro
 	basic_block_t* handler_block = basic_block_alloc_and_estimate();
 
 	//Our overall result package
-	cfg_result_package_t results = {handler_block, handler_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t results = INITIALIZE_CFG_RESULT_WITH_BLOCK(handler_block);
 
 	/**
 	 * There are only 3 types that we could have - ret, raise or some expression. We will
@@ -9519,7 +9528,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -9573,7 +9582,7 @@ static cfg_result_package_t visit_statement_chain(generic_ast_node_t* first_node
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					generic_results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					/**
 					 * For a regular break statement, this is it, so we just get out
@@ -10037,7 +10046,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, continuing_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					/**
 					 * We're done here, so return the starting block. There is no 
@@ -10092,7 +10101,7 @@ static cfg_result_package_t visit_compound_statement(generic_ast_node_t* root_no
 					emit_jump(current_block, breaking_to);
 
 					//Package and return
-					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+					results = (cfg_result_package_t){starting_block, current_block, {NULL}, CFG_RESULT_TYPE_VAR, FALSE, BLANK};
 
 					//For a regular break statement, this is it, so we just get out
 					return results;
@@ -11243,7 +11252,7 @@ static void visit_declaration_statement(basic_block_t* current_block, generic_as
  * Visit a let statement
  */
 static cfg_result_package_t visit_let_statement(basic_block_t* starting_block, generic_ast_node_t* node){
-	cfg_result_package_t let_results = {starting_block, starting_block, {NULL}, CFG_RESULT_TYPE_VAR, BLANK};
+	cfg_result_package_t let_results = INITIALIZE_CFG_RESULT_WITH_BLOCK(starting_block);
 
 	//Useful things to hold onto
 	symtab_variable_record_t* variable = node->variable;

@@ -308,4 +308,88 @@ struct instruction_t{
 };
 
 
+/**
+ * Is an operator short circuit eligible? Return TRUE if yes, FALSE
+ * if no
+ */
+static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
+	switch(op){
+		case DOUBLE_AND:
+		case DOUBLE_OR:
+			return TRUE;
+		default:
+			return FALSE;
+	}
+}
+
+
+/**
+ * Will a given binary operator eventually result in lowered x86
+ * assembly that sets the RFLAGS register? This is important for us to know
+ * as we use this for deciding when to emit test if not zero instructions
+ * or not
+ */
+static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t* operand_type){
+	switch(op){
+		/**
+		 * Comparison operators(<, <=, >, >=, !=, ==), logical not(!), 
+		 * right/left shift(<<, >>), bitwise operators(^, |, &), and 
+		 * logical and/or(&&, ||) will all set condition codes regardless
+		 * of the operand type once lowered to x86 assembly
+		 */
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		case EXCLAMATION:
+		case R_SHIFT:
+		case L_SHIFT:
+		case CARROT:
+		case SINGLE_AND:
+		case SINGLE_OR:
+		case DOUBLE_AND:
+		case DOUBLE_OR: {
+			return TRUE;
+		}
+
+		/**
+		 * Addition, subtraction, multiplication and division
+		 * set RFLAGS *ONLY* if the operands are not floating
+		 * point operands. Floating point operations in x86
+		 * assembly as a rule do not set condition codes unless
+		 * they are UCOMISS/UCOMISD/COMISS/COMISD
+		 */
+		case PLUSPLUS:
+		case MINUSMINUS:
+		case PLUS:
+		case MINUS:
+		case STAR:
+		case F_SLASH: {
+			return !(IS_FLOATING_POINT(operand_type));
+		}
+
+		/**
+		 * Modulo is a special case because even though it
+		 * performs a division operation which does set
+		 * condition codes, those condition codes are
+		 * not based on the *REMAINDER* which is what this
+		 * operation is after. As such, we'll flag that
+		 * this does not truly set condition codes so that
+		 * a test if not zero is generated
+		 */
+		case MOD: {
+			return FALSE;
+		}
+
+		/**
+		 * Operators like bitwise not(~) do not set flags
+		 * at all so we exclude them
+		 */
+		default: {
+			return FALSE;
+		}
+	}
+}
 #endif /* OLLIE_INSTRUCTION_H */
