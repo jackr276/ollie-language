@@ -357,9 +357,21 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		case PLUS:
 		case MINUS:
 		case STAR:
-		case F_SLASH:
-		case MOD: {
+		case F_SLASH: {
 			return !(IS_FLOATING_POINT(operand_type));
+		}
+
+		/**
+		 * Modulo is a special case because even though it
+		 * performs a division operation which does set
+		 * condition codes, those condition codes are
+		 * not based on the *REMAINDER* which is what this
+		 * operation is after. As such, we'll flag that
+		 * this does not truly set condition codes so that
+		 * a test if not zero is generated
+		 */
+		case MOD: {
+			return FALSE;
 		}
 
 		/**
