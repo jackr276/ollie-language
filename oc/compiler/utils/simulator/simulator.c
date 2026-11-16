@@ -491,6 +491,7 @@ simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block
 	 * within the block
 	 */
 	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
+	generic_type_t* operand_type = logical_not_operand->type;
 	search_result_t search_result = search_for_variable_assignment_in_block(block, instruction, logical_not_operand);
 
 	/**
@@ -502,11 +503,38 @@ simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
-	//TODO TEST IF NOT ZERO
+	/**
+	 * Extract the constant operand and go from here
+	 */
+	three_addr_const_t* constant_operand = search_result.result.constant;
 
+	/**
+	 * Case 1: for non-floating point constants, the test command is simply the
+	 * "andX" instruction without setting results. This is easy enough to simulate
+	 * for us
+	 */
+	if(IS_FLOATING_POINT(operand_type) == FALSE){
+		u_int64_t raw_constant_value = constant_operand->constant_value.unsigned_long_constant;
+		return simulate_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
 
+	/**
+	 * Case 2: for floating point constants, the test if not 0 instruction will be turned into
+	 * a UCOMISS/UCOMISSD with 0 as the other operand. We will simulate this accordingly
+	 */
+	} else {
+		/**
+		 * This is either an F32 or F64, we will call out to the appropriate handlers
+		 * based on the type
+		 */
+		if(operand_type->basic_type_token == F32){
+			float float_value = constant_operand->constant_value.float_constant;
+			return simulate_f32_constant_comparison(float_value, 0.0f);
+		} else {
+			double double_value= constant_operand->constant_value.double_constant;
+			return simulate_f32_constant_comparison(double_value, 0.0);
+		}
+	}
 }
-
 
 
 /**
