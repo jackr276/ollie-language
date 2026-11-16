@@ -103,6 +103,10 @@ static search_result_t search_for_variable_assignment_in_block(basic_block_t* bl
 				search_result.result.constant = cursor->operands.oir.constant_operand;
 
 			/**
+			 * TODO IF WE HAVE A LOCAL CONSTANT LOAD FOR A FLOAT THAT SHOULD WORK
+			 */
+
+			/**
 			 * This is not an ASSN or an ASSN_CONST statement, so we can't do anything
 			 * with it. We are not trying to simulate super complex things like loads,
 			 * binary operations, etc.. Since we've found it, we can break out the loop
@@ -557,6 +561,11 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
 
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
 			return simulate_logical_not_statement(block, instruction);
+		}
+
+		case THREE_ADDR_CODE_NEG_STATEMENT: {
+			//TODO HANDLE NEGATION
+			return BLANK_SIMULATED_EXECUTION_RESULT;
 		}
 
 		case THREE_ADDR_CODE_INC_STMT: {

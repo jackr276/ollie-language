@@ -6698,6 +6698,9 @@ instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_nu
 	//No matter what this is the op1
 	stmt->operands.oir.operand1 = negatee;
 
+	//This is a MINUS operation
+	stmt->op = MINUS;
+
 	//Give it back
 	stmt->line_number = line_number;
 	return stmt;

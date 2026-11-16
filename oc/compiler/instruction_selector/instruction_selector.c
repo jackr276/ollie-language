@@ -9147,60 +9147,60 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * statement. We only search for this locally within the block
 	 */
 	instruction_t* cursor = branch_statement->previous_statement;
-	instruction_t* cc_setting_stmt = NULL;
+	instruction_t* flag_setting_statement = NULL;
 	while(cursor != NULL){
 		/**
 		 * If we find a statement where the assignee is equal to what we rely
 		 * on then we've found it
 		 */
 		if(variables_equal(relies_on_var, cursor->operands.oir.assignee) == TRUE){
-			cc_setting_stmt = cursor;
+			flag_setting_statement = cursor;
 			break;
 		}
 
 		/**
 		 * Sanity check - if we have an instruction that is in the
-		 * way of what we rely on for condition codes *AND* this instruction
-		 * also sets condition codes, then we have a huge problem
+		 * way of what we rely on for RFLAGS *AND* this instruction
+		 * also sets the RFLAGS, then we have a huge problem
 		 */
 		if(does_OIR_statement_set_RFLAGS(cursor) == TRUE){
-			trigger_ice_panic("Condition code trampling detected in branch reduction");
+			trigger_ice_panic("RFLAGS register trampling detected in branch reduction");
 		}
 
 		cursor = cursor->previous_statement;
 	}
 
 	/**
-	 * We made it here and we never found the statement that sets the condition
-	 * codes. At this point we just quit, it's not worth more searching
+	 * We made it here and we never found the statement that sets the flags. 
+	 * At this point we just quit, it's not worth more searching
 	 */
-	if(cc_setting_stmt == NULL){
+	if(flag_setting_statement == NULL){
 		return FALSE;	
 	}
 
 	/**
 	 * Sanity check here - if we somehow get a statement that allegedly sets
-	 * condition codes but is literally incapable of it, we need to fail out
+	 * the FLAGS but is literally incapable of it, we need to fail out
 	 * hard and crash the compiler
 	 */
-	if(does_OIR_statement_set_RFLAGS(cc_setting_stmt) == FALSE){
-		trigger_ice_panic("Branch was found to rely on statement that cannot set condition codes");
+	if(does_OIR_statement_set_RFLAGS(flag_setting_statement) == FALSE){
+		trigger_ice_panic("Branch was found to rely on statement that cannot set the RFLAGS register");
 	}
 
 	/**
-	 * VERY IMPORTANT - we need to determine whether this CC setting statement uses FP comparison
+	 * VERY IMPORTANT - we need to determine whether this flag setting statement uses FP comparison
 	 * or not. This is exteremely important when it comes to the branch simulation down the road
 	 */
-	u_int8_t comes_from_fp_comparison = does_statement_use_fp_comparison(cc_setting_stmt);
+	u_int8_t comes_from_fp_comparison = does_statement_use_fp_comparison(flag_setting_statement);
 
 	/**
-	 * If we make it to here, we now have a branch statement and the statement that sets the condition
-	 * codes for this given branch statement. There is now a good chance that we can cheaply determine
+	 * If we make it to here, we now have a branch statement and the statement that sets the flags 
+	 * for this given branch statement. There is now a good chance that we can cheaply determine
 	 * whether or not we know if this branch will always execute. It is important that we're doing this
 	 * now after a large amount of simplification has occurred, because we should be able to knock out
 	 * a lot of constant statements that we otherwise couldn't
 	 */
-	simulated_execution_result_t simulation_result = simulate_instruction_execution(block, cc_setting_stmt);
+	simulated_execution_result_t simulation_result = simulate_instruction_execution(block, flag_setting_statement);
 
 	/**
 	 * If we find that it's impossible to simulate this bail out now, returning FALSE so that
@@ -9221,7 +9221,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 
 
 	printf("SIMULATION WAS SUCCESSFUL FOR\n");
-	print_three_addr_code_stmt(stdout, cc_setting_stmt);
+	print_three_addr_code_stmt(stdout, flag_setting_statement);
 	exit(1);
 
 
