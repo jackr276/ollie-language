@@ -476,6 +476,17 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 
 
 /**
+ * Simulate a logical not statement if at all possible. This simulation is going
+ * to be different for floats/non float operations
+ */
+simulated_execution_result_t simulate_logical_not_statement(instruction_t* instruction){
+	//TODO IS IT EVEN NEEDED?
+
+}
+
+
+
+/**
  * Simulate the execution of the given instruction. The simulation will not return the actual value result, instead
  * we will return a struct that contains a boolean noting whether we even could simulate this, and a flag register
  * that represents the state of RFLAGS after this instruction executes
@@ -635,7 +646,6 @@ basic_block_t* simulate_branch_execution(instruction_t* branch_statement, u_int8
 
 			break;
 		}
-
 
 		case NO_BRANCH: {
 			trigger_ice_panic("Invalid branch type of NO_BRANCH encountered in simulator");
