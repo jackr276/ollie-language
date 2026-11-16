@@ -392,4 +392,51 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		}
 	}
 }
+
+
+/**
+ * Does the given OIR statement set condition codes?
+ */
+static inline u_int8_t does_OIR_statement_set_condition_codes(instruction_t* statement){
+	switch(statement->statement_type){
+		/**
+		 * For the following statement types, whether or not we set condition
+		 * codes depends entirely on the type that we're operating over.
+		 */
+		case THREE_ADDR_CODE_INC_STMT:
+		case THREE_ADDR_CODE_DEC_STMT:
+		case THREE_ADDR_CODE_NEG_STATEMENT: 
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
+			/**
+			 * Extract the type that we're operating on to determine
+			 * if we set flags or not
+			 */
+			generic_type_t* type_operating_on = NULL;
+			if(statement->type_storage.result_type != NULL){
+				type_operating_on = statement->type_storage.result_type;
+			} else {
+				type_operating_on = statement->operands.oir.operand1->type;
+			}
+
+			return does_operator_set_RFLAGS(statement->op, type_operating_on);
+		}
+
+		/**
+		 * THese are going to set condition codes regardless
+		 */
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+		case THREE_ADDR_CODE_CLEAR_STMT: {
+			return TRUE;
+		}
+
+		/**
+		 * By default assume no condition codes are set
+		 */
+		default: {
+			return FALSE;
+		}
+	}
+}
 #endif /* OLLIE_INSTRUCTION_H */
