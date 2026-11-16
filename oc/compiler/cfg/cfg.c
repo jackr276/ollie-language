@@ -2163,8 +2163,6 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
  * We'll leave out all of the successor logic here as well, until we reach the end
  */
 static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_block){
-	instruction_t* constant_assignment;
-
 	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
 
@@ -2190,38 +2188,10 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		cfg_result_package_t conditional_results = emit_branch_conditional_expression(current_block, conditional_node);
 		current_block = conditional_results.final_block;
 
-		//Extract the actual result assignee
-		three_addr_var_t* conditional_decider;
-
-		switch(conditional_results.type){
-			//TODO CAN WE SIMPLIFY THIS AND JUST HAVE THE TEST NOT ZERO DO IT FOR US
-
-			//For a constant type, we are going to need to emit an assignment
-			case CFG_RESULT_TYPE_CONST: {
-				constant_assignment = emit_assignment_with_const_instruction(emit_temp_var(conditional_results.result_value.result_const->type), conditional_results.result_value.result_const, conditional_node->line_number);
-
-				//Get it in the block
-				add_statement(current_block, constant_assignment);
-
-				//This now is our decider
-				conditional_decider = constant_assignment->operands.oir.assignee;
-				break;
-			}
-
-			//For this we can extract the result var
-			case CFG_RESULT_TYPE_VAR: {
-				conditional_decider = conditional_results.result_value.result_var;
-				break;
-			}
-
-			//It is never valid to see an initializer here
-			default: {
-				trigger_ice_panic("Invalid result type detected in branch emitter");
-			}
-		}
-
+		/**
+		 * Unpack the conditional decider using result unpacking
+		 */
 		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, conditional_node->line_number);
-
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
@@ -2237,10 +2207,8 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * Let's try to grab the final result type. Remember that the comparison type may be different than
 		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
 		 * the assignee type
-		 *
-		 * TODO MAYBE WE CAN SIMPLIFY THIS AS WELL USING THE RESULTS PACKAGE
 		 */
-		u_int8_t type_signed;
+		u_int8_t type_signed = FALSE;
 		if(current_block->exit_statement != NULL
 			&& is_binary_operation(current_block->exit_statement)
 			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
