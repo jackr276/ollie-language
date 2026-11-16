@@ -490,6 +490,7 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
 	 */
 	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
+														printf("HERE\n\n\n");
 			return simulate_test_if_not_zero_statement(block, instruction);
 		}
 
