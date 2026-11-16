@@ -9210,6 +9210,16 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		return FALSE;
 	}
 
+	/**
+	 * If we get here, then we know that it is in fact possible to simulate
+	 * the execution of this branch. We will use the flags that we got from 
+	 * the given simulation to make this branch determination
+	 */
+	basic_block_t* result_block = simulate_branch_execution(branch_statement, comes_from_fp_comparison, simulation_result.flag_register);
+
+	//TODO NONE OF THIS WORKS YET
+
+
 	printf("SIMULATION WAS SUCCESSFUL FOR\n");
 	print_three_addr_code_stmt(stdout, cc_setting_stmt);
 	exit(1);
