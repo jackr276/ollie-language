@@ -9154,7 +9154,6 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		 * on then we've found it
 		 */
 		if(variables_equal(relies_on_var, cursor->operands.oir.assignee) == TRUE){
-			printf("FOUND IT\n");
 			cc_setting_stmt = cursor;
 			break;
 		}
@@ -9193,8 +9192,6 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * or not. This is exteremely important when it comes to the branch simulation down the road
 	 */
 	u_int8_t comes_from_fp_comparison = does_statement_use_fp_comparison(cc_setting_stmt);
-
-	printf("MADE IT HERE\n");
 
 	/**
 	 * If we make it to here, we now have a branch statement and the statement that sets the condition
@@ -10071,12 +10068,16 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 * use unordered comparison statements in the event that they have
 		 * a float operand. As such, we'll just have to return whether or
 		 * not the operand is a float
+		 *
+		 * NOTE: remember that at this point it's still valid OIR to have a
+		 * test if not zero statement with a constant
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
-														//TODO BAD!!!!!
-														printf("GOT HERE\n");
-
-			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+			if(statement->operands.oir.operand1 != NULL){
+				return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+			} else {
+				return IS_FLOATING_POINT(statement->operands.oir.constant_operand->type);
+			}
 		}
 
 		/**
