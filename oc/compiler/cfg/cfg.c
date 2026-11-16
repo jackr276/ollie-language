@@ -1714,30 +1714,17 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 /**
  * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
- *
- * Note that for the operator input, we will use this to modify the given operator *if* we have a floating point operation.
- * This is because the eventual selected code for floating point will turn if(x) into if(x != 0) essentially, so we need to
- * have that logic already in for when the branch statements are selected
  */
-static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, ollie_token_t* operator, u_int32_t line_number){
+static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, u_int32_t line_number){
 	//If we don't have a temp var, then we just go right to the emission
 	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
 		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
 
-		//Emit the instruction
-		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-
-		//Now we'll add it into the block
-		add_statement(basic_block, test_if_not_zero);
-
 		/**
-		 * If this is a floating point variable, update the pass-by-reference
-		 * operator
+		 * Emit the instruction
 		 */
-		if(IS_FLOATING_POINT(tested_variable->type) == TRUE){
-			//So what's the point of this??? TODO
-			*operator = NOT_EQUALS;
-		}
+		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
+		add_statement(basic_block, test_if_not_zero);
 
 		//Give back the final assignee
 		return test_if_not_zero->operands.oir.assignee;
@@ -1762,10 +1749,10 @@ static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, t
 			return test_if_not_zero->operands.oir.assignee;
 
 		} else {
-			//Emit the instruction
+			/**
+			 * Emit and add the instruction
+			 */
 			instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-
-			//Now we'll add it into the block
 			add_statement(basic_block, test_if_not_zero);
 
 			//Give back the final assignee
@@ -1894,7 +1881,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
 		if(binary_results.sets_rflags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(binary_results.operator), conditional_node->line_number);
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
 		}
 
 		/**
@@ -2167,7 +2154,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
 		if(conditional_results.sets_rflags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, &(conditional_results.operator), conditional_node->line_number);
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
 		}
 
 		/**
