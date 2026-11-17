@@ -315,12 +315,12 @@ static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
 
 
 /**
- * Will a given binary operator eventually result in lowered x86
- * assembly that sets the RFLAGS register? This is important for us to know
- * as we use this for deciding when to emit test if not zero instructions
- * or not
+ * Will a given operator and operand type, when lowered to x86 assembly, set flags that
+ * are actionable for a branch? This is very specific: we aren't just asking if it sets flags
+ * or not, we explicitly require that this sets things like the zero flag that a branch can
+ * act on
  */
-static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t* operand_type){
+static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t op, generic_type_t* operand_type){
 	switch(op){
 		/**
 		 * Comparison operators(<, <=, >, >=, !=, ==), logical not(!), 
@@ -346,16 +346,11 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		}
 
 		/**
-		 * Addition, subtraction, multiplication and division
-		 * set RFLAGS *ONLY* if the operands are not floating
-		 * point operands. Floating point operations in x86
-		 * assembly as a rule do not set condition codes unless
-		 * they are UCOMISS/UCOMISD/COMISS/COMISD
+		 * TODO
 		 */
 		case PLUS:
 		case MINUS:
-		case STAR:
-		case F_SLASH: {
+		case STAR: {
 			return !(IS_FLOATING_POINT(operand_type));
 		}
 
@@ -372,14 +367,12 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		}
 
 		/**
-		 * Modulo is a special case because even though it
-		 * performs a division operation which does set
-		 * condition codes, those condition codes are
-		 * not based on the *REMAINDER* which is what this
-		 * operation is after. As such, we'll flag that
-		 * this does not truly set condition codes so that
-		 * a test if not zero is generated
+		 * Modulo and division(integer or floating point) do not provide meaningful
+		 * flag information. Specifically the divX/idivX/divss/divsd operations do
+		 * not ever set the zero flag. As such they are useless for branching and
+		 * we will mark them FALSE here
 		 */
+		case F_SLASH:
 		case MOD: {
 			return FALSE;
 		}
