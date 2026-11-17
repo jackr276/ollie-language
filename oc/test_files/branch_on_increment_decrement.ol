@@ -26,6 +26,6 @@ pub fn branch_on_dec(x:mut i32) -> i32 {
 
 pub fn main() -> i32 {
 	//Should return 1 + 5 = 6
-	OUNIT:[exit_status = 8]
+	OUNIT:[exit_status = 6]
 	ret @branch_on_inc(0) + @branch_on_dec(1);
 }

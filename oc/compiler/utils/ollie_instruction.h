@@ -352,13 +352,23 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		 * assembly as a rule do not set condition codes unless
 		 * they are UCOMISS/UCOMISD/COMISS/COMISD
 		 */
-		case PLUSPLUS:
-		case MINUSMINUS:
 		case PLUS:
 		case MINUS:
 		case STAR:
 		case F_SLASH: {
 			return !(IS_FLOATING_POINT(operand_type));
+		}
+
+		/**
+		 * For ++/--, the INC and DEC commands do set flags but they are weird
+		 * in that they don't ever set the CF. The determination has been made that,
+		 * since they do not set the carry flag, we will not count them as setting
+		 * flags at all. Instead we'll just insert a TEST_IF_NOT_ZERO command after
+		 * any INC/DEC if needed
+		 */
+		case PLUSPLUS:
+		case MINUSMINUS: {
+			return FALSE;
 		}
 
 		/**
