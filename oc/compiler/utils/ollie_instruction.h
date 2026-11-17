@@ -315,12 +315,12 @@ static inline u_int8_t is_op_short_circuit_eligible(ollie_token_t op){
 
 
 /**
- * Will a given binary operator eventually result in lowered x86
- * assembly that sets the RFLAGS register? This is important for us to know
- * as we use this for deciding when to emit test if not zero instructions
- * or not
+ * Will a given operator and operand type, when lowered to x86 assembly, set flags that
+ * are actionable for a branch? This is very specific: we aren't just asking if it sets flags
+ * or not, we explicitly require that this sets things like the zero flag that a branch can
+ * act on
  */
-static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t* operand_type){
+static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t op, generic_type_t* operand_type){
 	switch(op){
 		/**
 		 * Comparison operators(<, <=, >, >=, !=, ==), logical not(!), 
@@ -335,8 +335,6 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
 		case EXCLAMATION:
-		case R_SHIFT:
-		case L_SHIFT:
 		case CARROT:
 		case SINGLE_AND:
 		case SINGLE_OR:
@@ -346,31 +344,58 @@ static inline u_int8_t does_operator_set_RFLAGS(ollie_token_t op, generic_type_t
 		}
 
 		/**
-		 * Addition, subtraction, multiplication and division
-		 * set RFLAGS *ONLY* if the operands are not floating
-		 * point operands. Floating point operations in x86
-		 * assembly as a rule do not set condition codes unless
-		 * they are UCOMISS/UCOMISD/COMISS/COMISD
+		 * For addition(addX, addss, addsd) and subtraction(subX, subss, subsd), the
+		 * integer versions of the operation *DO* set flags as needed. However, the floating
+		 * point versions do not. As such, if there are integer operands then this does
+		 * work for branching, and if they are floating point it does not
 		 */
-		case PLUSPLUS:
-		case MINUSMINUS:
 		case PLUS:
-		case MINUS:
-		case STAR:
-		case F_SLASH: {
+		case MINUS: {
 			return !(IS_FLOATING_POINT(operand_type));
 		}
 
 		/**
-		 * Modulo is a special case because even though it
-		 * performs a division operation which does set
-		 * condition codes, those condition codes are
-		 * not based on the *REMAINDER* which is what this
-		 * operation is after. As such, we'll flag that
-		 * this does not truly set condition codes so that
-		 * a test if not zero is generated
+		 * For ++/--, the INC and DEC commands do set flags but they are weird
+		 * in that they don't ever set the CF. The determination has been made that,
+		 * since they do not set the carry flag, we will not count them as setting
+		 * flags at all. Instead we'll just insert a TEST_IF_NOT_ZERO command after
+		 * any INC/DEC if needed
 		 */
+		case PLUSPLUS:
+		case MINUSMINUS: {
+			return FALSE;
+		}
+
+		/**
+		 * Modulo and division(integer or floating point) do not provide meaningful
+		 * flag information. Specifically the divX/idivX/divss/divsd operations do
+		 * not ever set the zero flag. As such they are useless for branching and
+		 * we will mark them FALSE here
+		 */
+		case F_SLASH:
 		case MOD: {
+			return FALSE;
+		}
+
+		/**
+		 * Multiplication(integer and floating point) does not provide meaningful flag
+		 * information on x86. Specifcally, we will never see the zero flag set by a mulitplication
+		 * instruction. As such they alone are useless for branching and we will mark
+		 * them FALSE here
+		 */
+		case STAR: {
+			return FALSE;
+		}
+
+		/**
+		 * Shifting(salX, shlX, sarX, shrX) is unique in that it does set the zero flag
+		 * in all but *ONE* scenario. That scenario being that, if the count is 0, we do
+		 * not set the 0 flag even if the result is 0. Since we have no way of divining this
+		 * in most areas of our compiler pipeline, we will need to consider all left/right
+		 * shift operations as not eligible to be branched off of
+		 */
+		case L_SHIFT:
+		case R_SHIFT: {
 			return FALSE;
 		}
 
