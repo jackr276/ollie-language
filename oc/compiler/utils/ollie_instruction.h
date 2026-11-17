@@ -462,11 +462,38 @@ static inline u_int8_t does_OIR_statement_alter_flags(instruction_t* statement){
 				case SINGLE_AND:
 				case SINGLE_OR:
 				case DOUBLE_AND:
-				case DOUBLE_OR: {
+				case DOUBLE_OR:
+				case PLUSPLUS:
+				case MINUSMINUS:
+				case L_SHIFT:
+				case R_SHIFT: {
 					return TRUE;
 				}
 
+				/**
+				 * +, -, *, / and % all mangle the flags when they are done over integers. If
+				 * done over floating point operands, then no flags are touched. To be specific,
+				 * the x86 standard lists these as "undefined" for integer operands, meaning that
+				 * no guarnatees are made at an architecture level as to what the values are
+				 */
+				case PLUS:
+				case MINUS:
+				case STAR:
+				case F_SLASH:
+				case MOD: {
+					if(IS_FLOATING_POINT(type_operating_on) == FALSE){
+						return TRUE;
+					} else {
+						return FALSE;
+					}
+				}
 
+				/**
+				 * Anything else is undefined and false
+				 */
+				default: {
+					return FALSE;
+				}
 			}
 		}
 
