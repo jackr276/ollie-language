@@ -1472,6 +1472,10 @@ static void rename_block(basic_block_t* entry){
 					rhs_new_name(cursor->operands.oir.operand2);
 				}
 
+				if(is_variable_ssa_eligible(cursor->relies_on) == TRUE){
+					rhs_new_name(cursor->relies_on);
+				}
+
 				/**
 				 * After we rename the RHS, we need to rename the left hand variable if
 				 * it itself is eligible
