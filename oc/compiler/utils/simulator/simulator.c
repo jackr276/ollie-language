@@ -145,10 +145,28 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
 
 	/**
+	 * Get a sign bit mask that has 1 where the sign bit would be
+	 */
+	u_int64_t sign_bit_mask = (u_int64_t)(1) << (operand_bit_width - 1);
+
+	/**
+	 * Cut down both operands to be mask sized
+	 */
+	raw_constant1 &= mask;
+	raw_constant2 &= mask;
+
+	/**
 	 * Perform the subtraction and then use the mask to retain only
 	 * what we're after
 	 */
-	u_int64_t result = (raw_constant1 - raw_constant2) & mask;
+	u_int64_t result = raw_constant1 - raw_constant2;
+
+	/**
+	 * Unsigned overflow occurs when the first operand is less than the second
+	 */
+	if(raw_constant1 < raw_constant2){
+		set_carry_flag(&execution_result.flag_register);
+	}
 
 	/**
 	 * Zero flag is set if we're 0
@@ -158,6 +176,8 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	}
 
 	/**
+	 * TODO REDO SIGN BIT
+	 *
 	 * Set sign flag if the sign bit is 1
 	 */
 	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
@@ -212,6 +232,9 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
 	}
 
 	/**
+	 * TODO REDO SIGN BIT
+	 *
+	 *
 	 * Set sign flag if the sign bit is 1
 	 */
 	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
@@ -264,6 +287,9 @@ static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t
 	}
 
 	/**
+	 * TODO REDO SIGN BIT
+	 *
+	 *
 	 * Set sign flag if the sign bit is 1
 	 */
 	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
@@ -316,6 +342,8 @@ static simulated_execution_result_t simulate_bitwise_xor_with_constants(u_int64_
 	}
 
 	/**
+	 * TODO REDO SIGN BIT
+	 *
 	 * Set sign flag if the sign bit is 1
 	 */
 	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
