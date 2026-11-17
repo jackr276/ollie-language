@@ -1874,6 +1874,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 */
 		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, conditional_node->line_number);
 
+		printf("BRANCH RELIES ON:\n");
+		print_variable(stdout, conditional_decider, PRINTING_VAR_INLINE);
+		printf("\n");
+
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
 		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
