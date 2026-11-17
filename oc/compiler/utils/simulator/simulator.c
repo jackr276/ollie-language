@@ -680,8 +680,19 @@ static simulated_execution_result_t simulate_negation_statement(basic_block_t* b
 	 * is in reality equivalent to doing "0 - x", so that is what we will simulate for our flags
 	 */
 	//TODO
+	return BLANK_SIMULATED_EXECUTION_RESULT;
+}
 
 
+static simulated_execution_result_t simulate_binary_operation_statement(basic_block_t* block, instruction_t* instruction){
+	//TODO
+	return BLANK_SIMULATED_EXECUTION_RESULT;
+}
+
+
+static simulated_execution_result_t simulate_binary_operation_with_constant_statement(basic_block_t* block, instruction_t* instruction){
+	//TODO
+	return BLANK_SIMULATED_EXECUTION_RESULT;
 }
 
 
@@ -708,18 +719,15 @@ simulated_execution_result_t simulate_instruction_flags_after_execution(basic_bl
 		}
 
 		case THREE_ADDR_CODE_NEG_STATEMENT: {
-			//TODO HANDLE NEGATION
-			return BLANK_SIMULATED_EXECUTION_RESULT;
+			return simulate_negation_statement(block, instruction);
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
-			//printf("TODO NOT IMPLEMENTED\n");
-			return BLANK_SIMULATED_EXECUTION_RESULT;
+			return simulate_binary_operation_statement(block, instruction);
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-			//printf("TODO NOT IMPLEMENTED\n");
-			return BLANK_SIMULATED_EXECUTION_RESULT;
+			return simulate_binary_operation_with_constant_statement(block, instruction);
 		}
 
 		/**
