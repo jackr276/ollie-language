@@ -419,9 +419,76 @@ static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t 
 }
 
 
-//TODO
+/**
+ * Does the given OIR statement alter flags in any way? This drops the strict
+ * requirement of the flags being branch eligible
+ */
 static inline u_int8_t does_OIR_statement_alter_flags(instruction_t* statement){
+	switch(statement->statement_type){
+		/**
+		 * For binary operations and negation, whether or not we alter flags depends on what
+		 * we're operating over and the operand itself
+		 */
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_NEG_STATEMENT: 
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
+			/**
+			 * Extract the type that we're operating on to determine
+			 * if we set flags or not
+			 */
+			generic_type_t* type_operating_on = NULL;
+			if(statement->type_storage.result_type != NULL){
+				type_operating_on = statement->type_storage.result_type;
+			} else {
+				type_operating_on = statement->operands.oir.operand1->type;
+			}
 
+			/**
+			 * Based on the operator we will determine if flags are set or
+			 * unchanged by this operation
+			 */
+			switch(statement->op){
+				/**
+				 * All of the below will always set flags no matter what
+				 */
+				case L_THAN:
+				case L_THAN_OR_EQ:
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS:
+				case EXCLAMATION:
+				case CARROT:
+				case SINGLE_AND:
+				case SINGLE_OR:
+				case DOUBLE_AND:
+				case DOUBLE_OR: {
+					return TRUE;
+				}
+
+
+			}
+		}
+
+		/**
+		 * All of the following are going to set flags no matter what, so we have to
+		 * include them below
+		 */
+		case THREE_ADDR_CODE_INC_STMT:
+		case THREE_ADDR_CODE_DEC_STMT:
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+		case THREE_ADDR_CODE_CLEAR_STMT: {
+			return TRUE;
+		}
+
+		/**
+		 * By default assume no condition codes are set
+		 */
+		default: {
+			return FALSE;
+		}
+	}
 }
 
 

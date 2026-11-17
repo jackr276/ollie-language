@@ -9159,13 +9159,11 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		}
 
 		/**
-		 * Sanity check - if we have an instruction that is in the
-		 * way of what we rely on for RFLAGS *AND* this instruction
-		 * also sets the RFLAGS, then we have a huge problem
-		 *
-		 * TODO FIX THIS SO THAT THIS ONE ONLY CHECKS IF WE SET FLAGS IN GENERAL
+		 * Sanity check: if this is not the statement that we're relying on to set
+		 * the flags for branching *BUT* it still tramples the flags in some way,
+		 * that means that we've got an issue
 		 */
-		if(does_OIR_statement_set_RFLAGS(cursor) == TRUE){
+		if(does_OIR_statement_alter_flags(cursor) == TRUE){
 			trigger_ice_panic("RFLAGS register trampling detected in branch reduction");
 		}
 
