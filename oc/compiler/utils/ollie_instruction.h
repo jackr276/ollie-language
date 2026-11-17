@@ -335,8 +335,6 @@ static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t 
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
 		case EXCLAMATION:
-		case R_SHIFT:
-		case L_SHIFT:
 		case CARROT:
 		case SINGLE_AND:
 		case SINGLE_OR:
@@ -386,6 +384,18 @@ static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t 
 		 * them FALSE here
 		 */
 		case STAR: {
+			return FALSE;
+		}
+
+		/**
+		 * Shifting(salX, shlX, sarX, shrX) is unique in that it does set the zero flag
+		 * in all but *ONE* scenario. That scenario being that, if the count is 0, we do
+		 * not set the 0 flag even if the result is 0. Since we have no way of divining this
+		 * in most areas of our compiler pipeline, we will need to consider all left/right
+		 * shift operations as not eligible to be branched off of
+		 */
+		case L_SHIFT:
+		case R_SHIFT: {
 			return FALSE;
 		}
 
