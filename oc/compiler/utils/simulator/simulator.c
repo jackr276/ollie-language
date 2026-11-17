@@ -686,13 +686,13 @@ static simulated_execution_result_t simulate_negation_statement(basic_block_t* b
 
 
 /**
- * Simulate the execution of the given instruction. The simulation will not return the actual value result, instead
- * we will return a struct that contains a boolean noting whether we even could simulate this, and a flag register
- * that represents the state of RFLAGS after this instruction executes
+ * Simulate the flags of the given instruction after execution. For this, we really don't care about the actual
+ * value of the result variable. Rather, since these instructions are being used for conditional execution, what
+ * we really care about is the state of the flags register after they run
  *
  * There is no guarantee that an instruction passed into this simulator can be simulated
  */
-simulated_execution_result_t simulate_instruction_execution(basic_block_t* block, instruction_t* instruction){
+simulated_execution_result_t simulate_instruction_flags_after_execution(basic_block_t* block, instruction_t* instruction){
 	/**
 	 * We will go based on the statement type and make call outs as appropriate. Note
 	 * that not all statements can be simulated. If it's not in our predetermined list
@@ -709,16 +709,6 @@ simulated_execution_result_t simulate_instruction_execution(basic_block_t* block
 
 		case THREE_ADDR_CODE_NEG_STATEMENT: {
 			//TODO HANDLE NEGATION
-			return BLANK_SIMULATED_EXECUTION_RESULT;
-		}
-
-		case THREE_ADDR_CODE_INC_STMT: {
-			//printf("TODO NOT IMPLEMENTED\n");
-			return BLANK_SIMULATED_EXECUTION_RESULT;
-		}
-
-		case THREE_ADDR_CODE_DEC_STMT: {
-			//printf("TODO NOT IMPLEMENTED\n");
 			return BLANK_SIMULATED_EXECUTION_RESULT;
 		}
 
@@ -761,13 +751,12 @@ static basic_block_t* simulate_branch_without_parity_consideration(instruction_t
 }
 
 
-
 /**
  * Given the flags at the time of branch execution, determine which branch in the given branch
  * statement we'd jump to. This will always return a valid block, because a branch must always execute
  * in a way that gives one block back
  */
-basic_block_t* simulate_branch_execution(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags){
+basic_block_t* simulate_branch_execution_given_flags(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags){
 	/**
 	 * Extract the branch type and create a placeholder for our result
 	 */

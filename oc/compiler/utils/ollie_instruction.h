@@ -549,11 +549,10 @@ static inline u_int8_t does_OIR_statement_set_branch_eligible_flags(instruction_
 		}
 
 		/**
-		 * Test if not zero and clear are always going to set condition codes in a way
-		 * that a branch would like
+		 * Test if not zero is purpose built to always set condition codes, so we will
+		 * always return TRUE in that case
 		 */
-		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-		case THREE_ADDR_CODE_CLEAR_STMT: {
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
 			return TRUE;
 		}
 

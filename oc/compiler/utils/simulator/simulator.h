@@ -32,13 +32,13 @@ struct simulated_execution_result_t{
  *
  * There is no guarantee that an instruction passed into this simulator can be simulated
  */
-simulated_execution_result_t simulate_instruction_execution(basic_block_t* block, instruction_t* instruction);
+simulated_execution_result_t simulate_instruction_flags_after_execution(basic_block_t* block, instruction_t* instruction);
 
 /**
  * Given the flags at the time of branch execution, determine which branch in the given branch
  * statement we'd jump to. This will always return a valid block, because a branch must always execute
  * in a way that gives one block back
  */
-basic_block_t* simulate_branch_execution(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags);
+basic_block_t* simulate_branch_execution_given_flags(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags);
 
 #endif /* OIR_SIMULATOR_H */

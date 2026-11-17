@@ -9199,7 +9199,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * now after a large amount of simplification has occurred, because we should be able to knock out
 	 * a lot of constant statements that we otherwise couldn't
 	 */
-	simulated_execution_result_t simulation_result = simulate_instruction_execution(block, flag_setting_statement);
+	simulated_execution_result_t simulation_result = simulate_instruction_flags_after_execution(block, flag_setting_statement);
 
 	/**
 	 * If we find that it's impossible to simulate this bail out now, returning FALSE so that
@@ -9214,7 +9214,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * the execution of this branch. We will use the flags that we got from 
 	 * the given simulation to make this branch determination
 	 */
-	basic_block_t* result_block = simulate_branch_execution(branch_statement, comes_from_fp_comparison, simulation_result.flag_register);
+	basic_block_t* result_block = simulate_branch_execution_given_flags(branch_statement, comes_from_fp_comparison, simulation_result.flag_register);
 
 	//TODO NONE OF THIS WORKS YET
 
