@@ -542,6 +542,44 @@ simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block
 
 
 /**
+ * Simulate a negation statement in OIR. Negation statements operate differently if they're 
+ * operating over floats or integers. Only negation statements over integers will be considered 
+ * for this simulation
+ *
+ * NOTE: floating point negation should never actually be used to set flags. In the event that 
+ * we encounter a floating point negation that is supposedly setting flags here, we will panic
+ */
+static simulated_execution_result_t simulate_negation_statement(basic_block_t* block, instruction_t* instruction){
+	/**
+	 * First extract the negation operand and its type. In the event that we have
+	 * a floating point operand we will panic
+	 */
+	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
+	generic_type_t* operand_type = logical_not_operand->type;
+	if(IS_FLOATING_POINT(operand_type) == TRUE){
+		trigger_ice_panic("Floating point negation has been marked for use as a flag setting statement");
+	}
+
+	/**
+	 * Attempt to find the variable's assignment inside of the block
+	 */
+	search_result_t search_result = search_for_variable_assignment_in_block(block, instruction, logical_not_operand);
+	if(search_result.result_type != SEARCH_RESULT_TYPE_CONST){
+		return BLANK_SIMULATED_EXECUTION_RESULT;
+	}
+
+	/**
+	 * If we get here we know that the execution result is a pure constant and it's not a floating point
+	 * value. In this case we are able to simulate the execution of the negation. Integer negation
+	 * is in reality equivalent to doing "0 - x", so that is what we will simulate for our flags
+	 */
+	//TODO
+
+
+}
+
+
+/**
  * Simulate the execution of the given instruction. The simulation will not return the actual value result, instead
  * we will return a struct that contains a boolean noting whether we even could simulate this, and a flag register
  * that represents the state of RFLAGS after this instruction executes
