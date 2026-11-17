@@ -9162,6 +9162,8 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		 * Sanity check - if we have an instruction that is in the
 		 * way of what we rely on for RFLAGS *AND* this instruction
 		 * also sets the RFLAGS, then we have a huge problem
+		 *
+		 * TODO FIX THIS SO THAT THIS ONE ONLY CHECKS IF WE SET FLAGS IN GENERAL
 		 */
 		if(does_OIR_statement_set_RFLAGS(cursor) == TRUE){
 			trigger_ice_panic("RFLAGS register trampling detected in branch reduction");
@@ -9179,11 +9181,10 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	}
 
 	/**
-	 * Sanity check here - if we somehow get a statement that allegedly sets
-	 * the FLAGS but is literally incapable of it, we need to fail out
-	 * hard and crash the compiler
+	 * Validate that the statement that is allegedly setting these flags not only
+	 * sets the flags, but sets them in a way that s eligible for branching
 	 */
-	if(does_OIR_statement_set_RFLAGS(flag_setting_statement) == FALSE){
+	if(does_OIR_statement_set_branch_eligible_flags(flag_setting_statement) == FALSE){
 		trigger_ice_panic("Branch was found to rely on statement that cannot set the RFLAGS register");
 	}
 

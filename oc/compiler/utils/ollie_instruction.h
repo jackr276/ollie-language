@@ -419,19 +419,26 @@ static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t 
 }
 
 
+//TODO
+static inline u_int8_t does_OIR_statement_alter_flags(instruction_t* statement){
+
+}
+
+
 /**
- * Does the given OIR statement set the RFLAGS register?
+ * Does the given OIR statement set the RFLAGS register in a way that is sufficient
+ * to be branched on? This means that incomplete or undefined flag setting will
+ * be ignored(example: division, shifting, inc/dec, etc)
  */
-static inline u_int8_t does_OIR_statement_set_RFLAGS(instruction_t* statement){
+static inline u_int8_t does_OIR_statement_set_branch_eligible_flags(instruction_t* statement){
 	switch(statement->statement_type){
 		/**
 		 * For the following statement types, whether or not we set condition
 		 * codes depends entirely on the type that we're operating over.
 		 */
-		case THREE_ADDR_CODE_INC_STMT:
-		case THREE_ADDR_CODE_DEC_STMT:
 		case THREE_ADDR_CODE_NEG_STATEMENT: 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
 			/**
 			 * Extract the type that we're operating on to determine
@@ -444,14 +451,14 @@ static inline u_int8_t does_OIR_statement_set_RFLAGS(instruction_t* statement){
 				type_operating_on = statement->operands.oir.operand1->type;
 			}
 
-			return does_operator_set_RFLAGS(statement->op, type_operating_on);
+			return does_operator_set_branch_actionable_RFLAGS(statement->op, type_operating_on);
 		}
 
 		/**
-		 * THese are going to set condition codes regardless
+		 * Test if not zero and clear are always going to set condition codes in a way
+		 * that a branch would like
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
 		case THREE_ADDR_CODE_CLEAR_STMT: {
 			return TRUE;
 		}
