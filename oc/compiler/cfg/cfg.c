@@ -4232,7 +4232,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			/**
 			 * Whether or not this sets RFLAGS depends on the type
 			 */
-			generic_results.sets_rflags = does_operator_set_RFLAGS(unary_operator_node->unary_operator, operand_type);
+			generic_results.sets_rflags = does_operator_set_branch_actionable_RFLAGS(unary_operator_node->unary_operator, operand_type);
 
 			//Package up and return our results
 			generic_results.starting_block = basic_block;
@@ -4465,7 +4465,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			/**
 			 * Whether or not this actually sets RFLAGS depends on the type of the operand
 			 */
-			generic_results.sets_rflags = does_operator_set_RFLAGS(MINUS, operand_type);
+			generic_results.sets_rflags = does_operator_set_branch_actionable_RFLAGS(MINUS, operand_type);
 
 			//Package up and return the results
 			generic_results.operator = MINUS;
@@ -5785,7 +5785,7 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 	 * not this binary operation sets RFLAGS or not. This is important when it comes 
 	 * time for branch emittal
 	 */
-	package.sets_rflags = does_operator_set_RFLAGS(logical_or_expr->binary_operator, final_result_type);
+	package.sets_rflags = does_operator_set_branch_actionable_RFLAGS(logical_or_expr->binary_operator, final_result_type);
 
 	//Package up and return
 	package.final_block = current_block;
