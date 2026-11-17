@@ -346,11 +346,13 @@ static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t 
 		}
 
 		/**
-		 * TODO
+		 * For addition(addX, addss, addsd) and subtraction(subX, subss, subsd), the
+		 * integer versions of the operation *DO* set flags as needed. However, the floating
+		 * point versions do not. As such, if there are integer operands then this does
+		 * work for branching, and if they are floating point it does not
 		 */
 		case PLUS:
-		case MINUS:
-		case STAR: {
+		case MINUS: {
 			return !(IS_FLOATING_POINT(operand_type));
 		}
 
@@ -374,6 +376,16 @@ static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t 
 		 */
 		case F_SLASH:
 		case MOD: {
+			return FALSE;
+		}
+
+		/**
+		 * Multiplication(integer and floating point) does not provide meaningful flag
+		 * information on x86. Specifcally, we will never see the zero flag set by a mulitplication
+		 * instruction. As such they alone are useless for branching and we will mark
+		 * them FALSE here
+		 */
+		case STAR: {
 			return FALSE;
 		}
 
