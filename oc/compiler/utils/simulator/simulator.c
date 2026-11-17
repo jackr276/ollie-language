@@ -159,13 +159,31 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	 * Perform the subtraction and then use the mask to retain only
 	 * what we're after
 	 */
-	u_int64_t result = raw_constant1 - raw_constant2;
+	u_int64_t result = (raw_constant1 - raw_constant2) & mask;
+
+	//TODO BREAK OUT WHAT WE CAN INTO DIFFERENT FUNCTIONS AS HELPERS
+
 
 	/**
 	 * Unsigned overflow occurs when the first operand is less than the second
 	 */
 	if(raw_constant1 < raw_constant2){
 		set_carry_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * Signed overflow occurs when the operands have different signs and the
+	 * result's sign differs from A
+	 *
+	 * raw_constant1 ^ raw_constant2 = sign bit is 1 if they have different signs
+	 * raw_constant1 ^ result = sign bit is 1 if they have different signs
+	 *
+	 * (raw_constant1 ^ raw_constant2) & (raw_constant1 ^ result) & sign_bit_mask 
+	 * This is nonzero when the two operands have different signs, and the result's sign
+	 * differs from the first constant, meaning that a signed overflow has occurred
+	 */
+	if(((raw_constant1 ^ raw_constant2) & (raw_constant1 ^ result) & sign_bit_mask) != 0){
+		set_overflow_flag(&execution_result.flag_register);
 	}
 
 	/**
@@ -176,13 +194,22 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	}
 
 	/**
-	 * TODO REDO SIGN BIT
-	 *
-	 * Set sign flag if the sign bit is 1
+	 * Set sign flag if the sign bit is 1. We can figure this
+	 * out be bitwise ANDing with the sign bit
 	 */
-	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
+	if((result & sign_bit_mask) != 0){
 		set_sign_flag(&execution_result.flag_register);
 	}
+
+	/**
+	 * Set auxiliary carry when we had to borrow from bit 4. This will only
+	 * happen when raw_constant1 ^ raw_constant2 ^ result is nonzero TODO
+	 * DOC WHY WITH EXAMPLE
+	 */
+	if(((raw_constant1 ^ raw_constant2 ^ result) & 0x10) != 0){
+		set_auxiliary_carry_flag(&execution_result.flag_register);
+	}
+
 
 	/**
 	 * Set the parity flag when the lowest 8 bits of the result contain an
