@@ -875,16 +875,39 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 			}
 		}
 
+		/**
+		 * Signed branch when greater will execute when the sign flag and the overflow
+		 * flag are equal *AND* the zero flag is unset. When the sign and overflow flags
+		 * are equal, it means that either the result is positive and there was no overflow
+		 * *OR* the result was negative and there was overflow, both meaning that the first
+		 * operand is more than but not equal to the second
+		 *
+		 * Condition to jump to physical if block: ZF == 0 && SF == OF
+		 */
 		case BRANCH_G: {
-			//TODO
-
-			break;
+			if((get_zero_flag(&flags) == 0) && (get_sign_flag(&flags) == get_overflow_flag(&flags))){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
+		/**
+		 * Signed branch when greater or equal will execute when the sign flag and the overflow
+		 * flag are equal. When the sign and overflow flags are equal, it means that either the
+		 * result is positive and there was no overflow *OR* the result was negative and there 
+		 * was overflow, both meaning that the first operand is more than but not equal to the second.
+		 * It could also indicate that the two operands are equal, whcih accounts for our equals
+		 * case
+		 *
+		 * Condition to jump to physical if block: SF == OF
+		 */
 		case BRANCH_GE: {
-			//TODO
-
-			break;
+			if(get_sign_flag(&flags) == get_overflow_flag(&flags)){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
 		case BRANCH_A: {
