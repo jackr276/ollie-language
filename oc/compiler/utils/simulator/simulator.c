@@ -845,16 +845,34 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 			}
 		}
 
+		/**
+		 * Unsigned branch if below - jump to if when the carry flag has been set, indicating
+		 * an unsigned overflow in the subtraction process which means that the first operand
+		 * is smaller than the second
+		 *
+		 * Condition to jump to physical if block: CF == 1
+		 */
 		case BRANCH_B: {
-			//TODO
-
-			break;
+			if(get_carry_flag(&flags) == 1){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
+		/**
+		 * Unsigned branch if below or equal - jump to if when the carry flag has been set, indicating
+		 * an unsigned overflow in the subtraction process which means that the first operand
+		 * is smaller than the second, *OR* when the zero flag has been set indicating equality
+		 *
+		 * Condition to jump to physical if block: CF == 1 || ZF == 1
+		 */
 		case BRANCH_BE: {
-			//TODO
-
-			break;
+			if((get_carry_flag(&flags) == 1) || (get_zero_flag(&flags) == 1)){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
 		case BRANCH_G: {
@@ -881,14 +899,14 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 			break;
 		}
 
+		/**
+		 * Any unrecognized branch requires a panic on our part
+		 */
 		case NO_BRANCH: {
 			trigger_ice_panic("Invalid branch type of NO_BRANCH encountered in simulator");
-			break;
+			return NULL;
 		}
 	}
-
-
-	return NULL;
 }
 
 
