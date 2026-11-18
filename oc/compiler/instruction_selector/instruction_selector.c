@@ -9240,22 +9240,19 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 		delete_successor(block, if_block);
 	}
 
-
-	//TODO NONE OF THIS WORKS YET
-
-
-	printf("SIMULATION WAS SUCCESSFUL FOR\n");
-	print_three_addr_code_stmt(stdout, flag_setting_statement);
-	exit(1);
-
-
-
-	//TODO NOW EXECUTE THE BRANCH BASED ON THE SIMULATION
+	/**
+	 * Emit the unconditional jump to our result block, insert it before the branch,
+	 * and then delete the branch entirely and give back TRUE to signify that we were
+	 * able to eliminate a branch
+	 */
+	instruction_t* jump_to_result = emit_jmp_instruction(result_block);
+	insert_instruction_before_given(jump_to_result, branch_statement);
+	delete_statement(branch_statement);
 
 
+	print_OIR_block(stdout, block, DO_NOT_EMIT_DOMINANCE_FRONTIER);
 
-	//TODO
-	return FALSE;
+	return TRUE;
 }
 
 
