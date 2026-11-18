@@ -910,16 +910,32 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 			}
 		}
 
+		/**
+		 * Unsigned branch if above occurs when we zero flag is unset and the carry flag
+		 * is also unset, indicating that there was no unsigned overflow
+		 *
+		 * Condition to jump to physical if block: ZF == 0 && CF == 0
+		 */
 		case BRANCH_A: {
-			//TODO
-
-			break;
+			if((get_zero_flag(&flags) == 0) && (get_carry_flag(&flags) == 0)){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
+		/**
+		 * Unsigned branch if above occurs when the carry flag is unset, indicating
+		 * that there is no unsigned overflow
+		 *
+		 * Condition to jump to physical if block: CF == 0
+		 */
 		case BRANCH_AE: {
-			//TODO
-
-			break;
+			if(get_carry_flag(&flags) == 0){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
 		/**
