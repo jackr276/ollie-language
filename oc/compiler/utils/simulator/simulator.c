@@ -748,6 +748,8 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 		trigger_ice_panic("Floating point negation has been marked for use as a flag setting statement");
 	}
 
+	printf("HERE\n\n\n");
+
 	/**
 	 * Attempt to find the variable's assignment inside of the block
 	 */
@@ -756,13 +758,14 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
+	printf("HERE\n\n\n");
+
 	/**
 	 * If we get here we know that the execution result is a pure constant and it's not a floating point
 	 * value. In this case we are able to simulate the execution of the negation. Integer negation
 	 * is in reality equivalent to doing "0 - x", so that is what we will simulate for our flags
 	 */
-	//TODO
-	return BLANK_SIMULATED_EXECUTION_RESULT;
+	return simulate_subtraction_with_constants(0UL, search_result.result.constant->constant_value.unsigned_long_constant, operand_type);
 }
 
 
