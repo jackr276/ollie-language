@@ -107,7 +107,45 @@ static search_result_t search_for_variable_assignment_in_block(basic_block_t* bl
 					return search_result;
 				}
 
+				/**
+				 * By the time we try to simulate instructions, all floating point constants
+				 * will have been removed from raw OIR and replaced with local constant load
+				 * statements. In the event that we encounter one of these, it's easy for
+				 * us to claw that value back out of the local constant load
+				 */
 				case THREE_ADDR_CODE_LOAD_STATEMENT: {
+					/**
+					 * If it's not rip-relative then this is something else and we can't use it at all
+					 */
+					if(cursor->operands.oir.source_address_expression.addressing_mode != ADDRESSING_MODE_RIP_RELATIVE){
+						return search_result;
+					}
+
+					/**
+					 * Extract the rip offset variable. If it's not stamped explicitly as a local constant then
+					 * we can't use this and we'll move along
+					 */
+					three_addr_var_t* local_constant_var = cursor->operands.oir.source_address_expression.rip_offset_var;
+					if(local_constant_var->variable_type != VARIABLE_TYPE_LOCAL_CONSTANT){
+						return search_result;
+					}
+
+					/**
+					 * Extract the local constant. If it's not a floating point type then this is useless
+					 * and we fail out
+					 */
+					local_constant_t* local_constant = local_constant_var->associated_memory_region.local_constant;
+					if(IS_FLOATING_POINT(local_constant->type) == FALSE){
+						return search_result;
+					}
+
+					/**
+					 * Get the value out of here. The float values have had their bits stored inside of u_int32_t/u_int64_t
+					 * bitmaps, but it's easy enough to get them out with some address manipulation
+					 */
+
+
+
 					printf("TODO\n");
 					exit(1);
 				}
