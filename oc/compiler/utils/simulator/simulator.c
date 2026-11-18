@@ -186,6 +186,7 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
  * Simulate the subtraction of 2 constants. We will always do raw_constant1 - raw_constant2
  *
  * Integer subtraction(subX) can set: CF, OF, SF, ZF, AF, PF
+ * TODO REWORK
  */
 static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -287,6 +288,7 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
  * Bitwise AND can set: SF, ZF, PF
  *
  * NOTE: bitwise AND can also be used to represent the TEST command in this context
+ * TODO REWORK
  */
 static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -342,6 +344,7 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
  * Simulate a bitwise OR statement given 2 constants and their type
  *
  * Bitwise OR can set: SF, ZF, PF
+ * TODO REWORK
  */
 static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -397,6 +400,8 @@ static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t
  * Simulate a bitwise XOR statement given 2 constants and their type
  *
  * Bitwise XOR can set: SF, ZF, PF
+ *
+ * TODO REWORK
  */
 static simulated_execution_result_t simulate_bitwise_xor_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -468,7 +473,7 @@ static simulated_execution_result_t simulate_bitwise_xor_with_constants(u_int64_
  * 		pf = 0
  * 		cf = 0
  */
-static simulated_execution_result_t simulate_f32_constant_comparison(float constant1, float constant2){
+static simulated_execution_result_t simulate_flags_from_f32_constant_comparison(float constant1, float constant2){
 	simulated_execution_result_t result = {{0}, TRUE};
 
 	/**
@@ -526,7 +531,7 @@ static simulated_execution_result_t simulate_f32_constant_comparison(float const
  * 		pf = 0
  * 		cf = 0
  */
-static simulated_execution_result_t simulate_f64_constant_comparison(double constant1, double constant2){
+static simulated_execution_result_t simulate_flags_from_f64_constant_comparison(double constant1, double constant2){
 	simulated_execution_result_t result = {{0}, TRUE};
 
 	/**
@@ -568,7 +573,7 @@ static simulated_execution_result_t simulate_f64_constant_comparison(double cons
  * the statement, and then will call out to the appropriate simulation method based on whether or not we're
  * dealing with a floating point or general purpose value
  */
-static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_block_t* block, instruction_t* instruction){
+static simulated_execution_result_t simulate_test_if_not_zero_flags_after_execution(instruction_t* instruction){
 	/**
 	 * We need to have a constant operand in order for any simulation to work. If we, as
 	 * of right now, have a non-constant operand, we'll need to first attempt to find
@@ -618,6 +623,7 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 	 */
 	if(IS_FLOATING_POINT(operand_type) == FALSE){
 		u_int64_t raw_constant_value = constant_operand->constant_value.unsigned_long_constant;
+		//TODO REWORK
 		return simulate_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
 
 	/**
@@ -631,10 +637,10 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 		 */
 		if(operand_type->basic_type_token == F32){
 			float float_value = constant_operand->constant_value.float_constant;
-			return simulate_f32_constant_comparison(float_value, 0.0f);
+			return simulate_flags_from_f32_constant_comparison(float_value, 0.0f);
 		} else {
 			double double_value= constant_operand->constant_value.double_constant;
-			return simulate_f32_constant_comparison(double_value, 0.0);
+			return simulate_flags_from_f64_constant_comparison(double_value, 0.0);
 		}
 	}
 }
@@ -650,7 +656,7 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
  * not are just checking to see if the value is zero or not. As such, we really
  * only need to check if we have a zero here
  */
-simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block, instruction_t* instruction){
+simulated_execution_result_t simulate_logical_not_flags_after_execution(basic_block_t* block, instruction_t* instruction){
 	/**
 	 * First extract the logical not operand and search for it's assignment
 	 * within the block
@@ -680,6 +686,7 @@ simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block
 	 */
 	if(IS_FLOATING_POINT(operand_type) == FALSE){
 		u_int64_t raw_constant_value = constant_operand->constant_value.unsigned_long_constant;
+		//TODO REWORK
 		return simulate_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
 
 	/**
@@ -693,10 +700,10 @@ simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block
 		 */
 		if(operand_type->basic_type_token == F32){
 			float float_value = constant_operand->constant_value.float_constant;
-			return simulate_f32_constant_comparison(float_value, 0.0f);
+			return simulate_flags_from_f32_constant_comparison(float_value, 0.0f);
 		} else {
 			double double_value= constant_operand->constant_value.double_constant;
-			return simulate_f32_constant_comparison(double_value, 0.0);
+			return simulate_flags_from_f64_constant_comparison(double_value, 0.0);
 		}
 	}
 }
@@ -710,7 +717,7 @@ simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block
  * NOTE: floating point negation should never actually be used to set flags. In the event that 
  * we encounter a floating point negation that is supposedly setting flags here, we will panic
  */
-static simulated_execution_result_t simulate_negation_statement(basic_block_t* block, instruction_t* instruction){
+static simulated_execution_result_t simulate_negation_flags_after_execution(basic_block_t* block, instruction_t* instruction){
 	/**
 	 * First extract the negation operand and its type. In the event that we have
 	 * a floating point operand we will panic
@@ -739,13 +746,13 @@ static simulated_execution_result_t simulate_negation_statement(basic_block_t* b
 }
 
 
-static simulated_execution_result_t simulate_binary_operation_statement(basic_block_t* block, instruction_t* instruction){
+static simulated_execution_result_t simulate_binary_operation_flags_after_execution(basic_block_t* block, instruction_t* instruction){
 	//TODO
 	return BLANK_SIMULATED_EXECUTION_RESULT;
 }
 
 
-static simulated_execution_result_t simulate_binary_operation_with_constant_statement(basic_block_t* block, instruction_t* instruction){
+static simulated_execution_result_t simulate_binary_operation_with_constant_flags_after_execution(basic_block_t* block, instruction_t* instruction){
 	//TODO
 	return BLANK_SIMULATED_EXECUTION_RESULT;
 }
@@ -766,23 +773,23 @@ simulated_execution_result_t simulate_instruction_flags_after_execution(basic_bl
 	 */
 	switch(instruction->statement_type){
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
-			return simulate_test_if_not_zero_statement(block, instruction);
+			return simulate_test_if_not_zero_flags_after_execution(instruction);
 		}
 
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
-			return simulate_logical_not_statement(block, instruction);
+			return simulate_logical_not_flags_after_execution(block, instruction);
 		}
 
 		case THREE_ADDR_CODE_NEG_STATEMENT: {
-			return simulate_negation_statement(block, instruction);
+			return simulate_negation_flags_after_execution(block, instruction);
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
-			return simulate_binary_operation_statement(block, instruction);
+			return simulate_binary_operation_flags_after_execution(block, instruction);
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-			return simulate_binary_operation_with_constant_statement(block, instruction);
+			return simulate_binary_operation_with_constant_flags_after_execution(block, instruction);
 		}
 
 		/**
