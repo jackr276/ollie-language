@@ -786,16 +786,30 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 			}
 		}
 
+		/**
+		 * Branch if not zero looks at the zero flag exclusively
+		 *
+		 * Condition to jump to physical if block: ZF == 0
+		 */
 		case BRANCH_NZ: {
-			//TODO
-
-			break;
+			if(get_zero_flag(&flags) == 0){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
+		/**
+		 * Branch if zero looks at the zero flag exclusively
+		 *
+		 * Condition to jump to physical if block: ZF == 1
+		 */
 		case BRANCH_Z: {
-			//TODO
-
-			break;
+			if(get_zero_flag(&flags) == 1){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
 		case BRANCH_L: {
@@ -861,6 +875,9 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
  * TODO DOC
  */
 static inline basic_block_t* simulate_branch_with_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
+	printf("TODO NOT DONE YET\n");
+	exit(1);
+
 	return NULL;
 }
 
