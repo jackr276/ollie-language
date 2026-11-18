@@ -742,9 +742,12 @@ simulated_execution_result_t simulate_instruction_flags_after_execution(basic_bl
 
 
 /**
- * TODO DOC
+ * For most branches, we will not need to consider the parity flag during our execution of it. This 
+ * helper function does simulation for branches of that kind. Since there is no parity flag consideration,
+ * the branch will execute the same way regardless of if its an inverse or regular branch. This function
+ * always returns the block that the branch would take given the flags
  */
-static basic_block_t* simulate_branch_with_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
+static inline basic_block_t* simulate_branch_without_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
 
 	return NULL;
 }
@@ -753,8 +756,7 @@ static basic_block_t* simulate_branch_with_parity_consideration(instruction_t* b
 /**
  * TODO DOC
  */
-static basic_block_t* simulate_branch_without_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
-
+static inline basic_block_t* simulate_branch_with_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
 	return NULL;
 }
 
@@ -766,12 +768,15 @@ static basic_block_t* simulate_branch_without_parity_consideration(instruction_t
  */
 basic_block_t* simulate_branch_execution_given_flags(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags){
 	/**
-	 * Extract the branch type and create a placeholder for our result
+	 * We will execute the branch differently based on whether or not we're
+	 * branching based on a fp comparison
 	 */
-	branch_type_t branch_type = branch_statement->branch_info.branch_type;
-	basic_block_t* branch_execution_result = NULL;
+	if(comes_from_fp_comparison == FALSE){
+		return simulate_branch_without_parity_consideration(branch_statement, flags);
+	} else {
+		return simulate_branch_with_parity_consideration(branch_statement, flags);
+	}
 
-	//TODO REWRITE THIS
 
 	//TODO YOU NEED TO PAY ATTENTION TO THE PARITY FLAG WHEN DOING THESE
 	switch(branch_type){
