@@ -85,35 +85,42 @@ static search_result_t search_for_variable_assignment_in_block(basic_block_t* bl
 		 * it's a more complex instruction then we're out of luck here
 		 */
 		if(variables_equal(variable, cursor->operands.oir.assignee) == TRUE){
-			/**
-			 * If we have an ASSN statement then we've got some other variable. We
-			 * won't try to keep chaining with assignments as that is unlikely to 
-			 * work
-			 */
-			if(cursor->statement_type == THREE_ADDR_CODE_ASSN_STMT){
-				search_result.result_type = SEARCH_RESULT_TYPE_VAR;
-				search_result.result.variable = cursor->operands.oir.operand1;
+			switch(cursor->statement_type){
+				/**
+				 * This is what we're really after. An ASSN_CONST statement allows
+				 * us to simulate a lot
+				 */
+				case THREE_ADDR_CODE_ASSN_CONST_STMT: {
+					search_result.result_type = SEARCH_RESULT_TYPE_CONST;
+					search_result.result.constant = cursor->operands.oir.constant_operand;
+					return search_result;
+				}
 
-			/**
-			 * This is what we're really after. An ASSN_CONST statement allows
-			 * us to simulate a lot
-			 */
-			} else if(cursor->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT){
-				search_result.result_type = SEARCH_RESULT_TYPE_CONST;
-				search_result.result.constant = cursor->operands.oir.constant_operand;
+				/**
+				 * If we have an ASSN statement then we've got some other variable. We
+				 * won't try to keep chaining with assignments as that is unlikely to 
+				 * work
+				 */
+				case THREE_ADDR_CODE_ASSN_STMT: {
+					search_result.result_type = SEARCH_RESULT_TYPE_VAR;
+					search_result.result.variable = cursor->operands.oir.operand1;
+					return search_result;
+				}
 
-			/**
-			 * TODO IF WE HAVE A LOCAL CONSTANT LOAD FOR A FLOAT THAT SHOULD WORK
-			 */
+				case THREE_ADDR_CODE_LOAD_STATEMENT: {
+					printf("TODO\n");
+					exit(1);
+				}
 
-			/**
-			 * This is not an ASSN or an ASSN_CONST statement, so we can't do anything
-			 * with it. We are not trying to simulate super complex things like loads,
-			 * binary operations, etc.. Since we've found it, we can break out the loop
-			 * here
-			 */
-			} else {
-				break;
+				/**
+				 * This is not an ASSN or an ASSN_CONST statement, so we can't do anything
+				 * with it. We are not trying to simulate super complex things like loads,
+				 * binary operations, etc.. Since we've found it, we can break out the loop
+				 * here
+				 */
+				default: {
+					return search_result;
+				}
 			}
 		}
 
