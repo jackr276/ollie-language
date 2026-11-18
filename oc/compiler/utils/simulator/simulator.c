@@ -812,13 +812,46 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 			}
 		}
 
+		/**
+		 * Signed branch less than - jump to if when the subtraction result's
+		 * sign is different from the signed overflow flag. This means that we've
+		 * either had no overflow and a negative result or overflow and a positive
+		 * result, meaning that the first operand is less than the second
+		 *
+		 * Condition to jump to physical if block: SF != OF
+		 */
 		case BRANCH_L: {
+			if(get_sign_flag(&flags) != get_overflow_flag(&flags)){
+				return if_block;
+			} else {
+				return else_block;
+			}
+		}
+
+		/**
+		 * Signed branch less than or equal - jump to if when the subtraction result's
+		 * sign is different from the signed overflow flag *OR* when the zero flag has
+		 * been set. This means that we've  either had no overflow and a negative result
+		 * or overflow and a positive result, meaning that the first operand is less than 
+		 * the second, or we just have the zero flag set meaning that they're equal
+		 *
+		 * Condition to jump to physical if block: ZF == 1 || (SF != OF)
+		 */
+		case BRANCH_LE: {
+			if((get_zero_flag(&flags) == 1) || (get_sign_flag(&flags) != get_overflow_flag(&flags))){
+				return if_block;
+			} else {
+				return else_block;
+			}
+		}
+
+		case BRANCH_B: {
 			//TODO
 
 			break;
 		}
 
-		case BRANCH_LE: {
+		case BRANCH_BE: {
 			//TODO
 
 			break;
@@ -843,18 +876,6 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 		}
 
 		case BRANCH_AE: {
-			//TODO
-
-			break;
-		}
-
-		case BRANCH_B: {
-			//TODO
-
-			break;
-		}
-
-		case BRANCH_BE: {
 			//TODO
 
 			break;
