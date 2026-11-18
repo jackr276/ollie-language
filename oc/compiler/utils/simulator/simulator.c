@@ -749,21 +749,41 @@ simulated_execution_result_t simulate_instruction_flags_after_execution(basic_bl
  */
 static inline basic_block_t* simulate_branch_without_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
 	/**
+	 * Get these two blocks out for easy use
+	 */
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
+
+	/**
 	 * Based on the branch type and flags exclusively we are able to
 	 * execute this branch
 	 */
 	branch_type_t branch_type = branch_statement->branch_info.branch_type;
 	switch(branch_type){
+		/**
+		 * Branch if not equal looks at the zero flag exclusively
+		 *
+		 * Condition to jump to physical if block: ZF == 0
+		 */
 		case BRANCH_NE: {
-			//TODO
-
-			break;
+			if(get_zero_flag(&flags) == 0){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
+		/**
+		 * Branch if equal looks at the zero flag exclusively
+		 *
+		 * Condition to jump to physical if block: ZF == 1
+		 */
 		case BRANCH_E: {
-			//TODO
-
-			break;
+			if(get_zero_flag(&flags) == 1){
+				return if_block;
+			} else {
+				return else_block;
+			}
 		}
 
 		case BRANCH_NZ: {
