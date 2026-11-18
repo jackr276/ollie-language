@@ -6610,6 +6610,40 @@ instruction_t* emit_indirect_function_call_instruction(three_addr_var_t* functio
 
 
 /**
+ * Directly emit an f32 constant
+ */
+three_addr_const_t* emit_f32_constant(float value, generic_type_t* f32_type){
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	/**
+	 * Populate all required fields
+	 */
+	constant->type = f32_type;
+	constant->const_type = FLOAT_CONST;
+	constant->constant_value.float_constant = value;
+
+	return constant;
+}
+
+
+/**
+ * Directly emit an f64 constant
+ */
+three_addr_const_t* emit_f64_constant(double value, generic_type_t* f64_type){
+	three_addr_const_t* constant = calloc(1, sizeof(three_addr_const_t));
+
+	/**
+	 * Populate all required fields
+	 */
+	constant->type = f64_type;
+	constant->const_type = DOUBLE_CONST;
+	constant->constant_value.double_constant = value;
+
+	return constant;
+}
+
+
+/**
  * Emit a constant directly based on whatever the type given is
  */
 three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type){
