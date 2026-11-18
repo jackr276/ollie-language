@@ -9216,6 +9216,31 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 */
 	basic_block_t* result_block = simulate_branch_execution_given_flags(branch_statement, comes_from_fp_comparison, simulation_result.flag_register);
 
+	/**
+	 * Now that we have our result block in hand, we know what we're going to be jumping to. We will need to
+	 * update the successors of this block with this knowledge, and replace the branch with a direct jump
+	 */
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
+
+	/**
+	 * First option is that the result is equal to the IF block. This means
+	 * that the else block is no longer a successor of the block that we're
+	 * in currently
+	 */
+	if(result_block == if_block){
+		delete_successor(block, else_block);
+
+	/**
+	 * Second option is that the result is equal to the ELSE block. This means
+	 * that the if block is no longer a successor of the block that we're
+	 * currently in
+	 */
+	} else {
+		delete_successor(block, if_block);
+	}
+
+
 	//TODO NONE OF THIS WORKS YET
 
 
