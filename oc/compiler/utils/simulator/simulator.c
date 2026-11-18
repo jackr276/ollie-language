@@ -4,7 +4,7 @@
  */
 
 #include "simulator.h"
-#include <stdint.h>
+#include "../../instruction/instruction.h"
 #include <math.h>
 #include <sys/types.h>
 
@@ -143,11 +143,21 @@ static search_result_t search_for_variable_assignment_in_block(basic_block_t* bl
 					 * Get the value out of here. The float values have had their bits stored inside of u_int32_t/u_int64_t
 					 * bitmaps, but it's easy enough to get them out with some address manipulation
 					 */
+					three_addr_const_t* final_constant = NULL;
+					if(local_constant->type->basic_type_token == F32){
+						float float_value = *((float*)(&(local_constant->local_constant_value.f32_bit_equivalent)));
+						final_constant = emit_f32_constant(float_value, local_constant->type);
+					} else {
+						double double_value = *((double*)(&(local_constant->local_constant_value.f64_bit_equivalent)));
+						final_constant = emit_f64_constant(double_value, local_constant->type);
+					}
 
-
-
-					printf("TODO\n");
-					exit(1);
+					/**
+					 * Package up and return the final result
+					 */
+					search_result.result_type = SEARCH_RESULT_TYPE_CONST;
+					search_result.result.constant = final_constant;
+					return search_result;
 				}
 
 				/**
