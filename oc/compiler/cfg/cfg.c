@@ -129,10 +129,11 @@ typedef struct {
 	cfg_result_type_t type;
 
 	/**
-	 * Does this operation set RFLAGS? This is usually set to false, it's
-	 * only ever used for binary operations
+	 * Does this operation set flags in a way that is sufficient to branch on?
+	 * Remember that some operations kind of just mangle the flags or have undefined
+	 * behavior. That is not sufficient for us here
 	 */
-	u_int8_t sets_rflags;
+	u_int8_t operation_sets_branchable_flags;
 
 	/**
 	 * The operator may or may not always be filled. Again usually
@@ -1801,11 +1802,11 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
+		 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
 		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
-		if(binary_results.sets_rflags == FALSE){
+		if(binary_results.operation_sets_branchable_flags == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
 		}
 
@@ -2077,11 +2078,12 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
-		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
-		 * bitwise inversing, etc., so this flag is very important to have set correctly
+		 * *NOT* set RFLAGS in a branch operable manner, we will need to emit a test if not zero
+		 * statement to get the flags populated. Settings RFLAGS generally does not happen for
+		 * things like float arithmetic, bitwise inversing, etc., so this flag is very important
+		 * to have set correctly
 		 */
-		if(conditional_results.sets_rflags == FALSE){
+		if(conditional_results.operation_sets_branchable_flags == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
 		}
 
@@ -4230,9 +4232,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			/**
-			 * Whether or not this sets RFLAGS depends on the type
+			 * Whether or not this sets branch actionable flags
 			 */
-			generic_results.sets_rflags = does_operator_set_branch_actionable_RFLAGS(unary_operator_node->unary_operator, operand_type);
+			generic_results.operation_sets_branchable_flags = does_operator_set_branch_actionable_RFLAGS(unary_operator_node->unary_operator, operand_type);
 
 			//Package up and return our results
 			generic_results.starting_block = basic_block;
@@ -4347,7 +4349,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			//These never set RFLAGS
-			generic_results.sets_rflags = FALSE;
+			generic_results.operation_sets_branchable_flags = FALSE;
 
 			//Package up and return
 			generic_results.starting_block = basic_block;
@@ -4375,7 +4377,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, logical_not_statement);
 
 			//These always set RFLAGS
-			generic_results.sets_rflags = TRUE;
+			generic_results.operation_sets_branchable_flags = TRUE;
 
 			//Package up and return the result
 			generic_results.operator = EXCLAMATION;
@@ -4418,7 +4420,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, bitwise_not);
 
 			//These never set RFLAGS
-			generic_results.sets_rflags = FALSE;
+			generic_results.operation_sets_branchable_flags = FALSE;
 
 			//Package up and return the results
 			generic_results.operator = B_NOT;
@@ -4465,7 +4467,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			/**
 			 * Whether or not this actually sets RFLAGS depends on the type of the operand
 			 */
-			generic_results.sets_rflags = does_operator_set_branch_actionable_RFLAGS(MINUS, operand_type);
+			generic_results.operation_sets_branchable_flags = does_operator_set_branch_actionable_RFLAGS(MINUS, operand_type);
 
 			//Package up and return the results
 			generic_results.operator = MINUS;
@@ -4543,7 +4545,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			//These never set RFLAGS
-			generic_results.sets_rflags = FALSE;
+			generic_results.operation_sets_branchable_flags = FALSE;
 
 			//Package up and return the geneirc results
 			generic_results.operator = SINGLE_AND;
@@ -4704,7 +4706,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	/**
 	 * A ternary expression should never be considered to set condition codes
 	 */
-	return_package.sets_rflags = FALSE;
+	return_package.operation_sets_branchable_flags = FALSE;
 
 	//Add the final things in here
 	return_package.starting_block = starting_block;
@@ -5782,10 +5784,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	/**
 	 * Inside of the result package we will store the determination as to whether or
-	 * not this binary operation sets RFLAGS or not. This is important when it comes 
+	 * not this binary operation sets branch operable flags or not. This is important when it comes 
 	 * time for branch emittal
 	 */
-	package.sets_rflags = does_operator_set_branch_actionable_RFLAGS(logical_or_expr->binary_operator, final_result_type);
+	package.operation_sets_branchable_flags = does_operator_set_branch_actionable_RFLAGS(logical_or_expr->binary_operator, final_result_type);
 
 	//Package up and return
 	package.final_block = current_block;
