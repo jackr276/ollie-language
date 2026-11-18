@@ -152,6 +152,11 @@ static inline void trigger_ice_panic(char* message){
  */
 static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
 	/**
+	 * We must first now delete all unreachable blocks that may have now been orphanced
+	 */
+	delete_all_unreachable_blocks(function_entry_block, function_blocks);
+
+	/**
 	 * First clean up all of the existing control relations
 	 */
 	cleanup_all_control_relations(function_blocks);
@@ -9248,10 +9253,6 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	instruction_t* jump_to_result = emit_jmp_instruction(result_block);
 	insert_instruction_before_given(jump_to_result, branch_statement);
 	delete_statement(branch_statement);
-
-
-	print_OIR_block(stdout, block, DO_NOT_EMIT_DOMINANCE_FRONTIER);
-
 	return TRUE;
 }
 
@@ -10370,6 +10371,12 @@ static void simplify(cfg_t* cfg){
 			 * unneccessary control flow
 			 */
 			perform_branch_reduction_pass(function_blocks, function_entry, function_exit);
+
+			/**
+			 * Step 4: Finally once we've done all of that, we should reorder all of our function
+			 * blocks so that the blocks that were deleted(if any) no longer show up anywhere
+			 */
+			order_function_blocks(function_blocks, function_entry);
 		}
 
 		/**
