@@ -181,12 +181,11 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
 	return search_result;
 }
 
-
+//======================================= Constant Operation Helpers ========================================
 /**
- * Simulate the subtraction of 2 constants. We will always do raw_constant1 - raw_constant2
+ * Simulate the subtraction of 2 *INTEGER* constants. We will always do raw_constant1 - raw_constant2
  *
- * Integer subtraction(subX) can set: CF, OF, SF, ZF, AF, PF
- * TODO REWORK
+ * Integer subtraction(subX) will set: CF, OF, SF, ZF, AF, PF
  */
 static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -203,7 +202,7 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	/**
 	 * Get a sign bit mask that has 1 where the sign bit would be
 	 */
-	u_int64_t sign_bit_mask = (u_int64_t)(1) << (operand_bit_width - 1);
+	u_int64_t sign_bit_mask = (u_int64_t)(1UL) << (operand_bit_width - 1);
 
 	/**
 	 * Cut down both operands to be mask sized
@@ -217,10 +216,9 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	 */
 	u_int64_t result = (raw_constant1 - raw_constant2) & mask;
 
-	//TODO BREAK OUT WHAT WE CAN INTO DIFFERENT FUNCTIONS AS HELPERS
-
-
 	/**
+	 * CARRY FLAG
+	 *
 	 * Unsigned overflow occurs when the first operand is less than the second
 	 */
 	if(raw_constant1 < raw_constant2){
@@ -228,8 +226,11 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	}
 
 	/**
+	 * OVERFLOW FLAG
+	 *
 	 * Signed overflow occurs when the operands have different signs and the
-	 * result's sign differs from A
+	 * result's sign differs from A, signifying that we have gone from negative
+	 * to positive or positive to negative
 	 *
 	 * raw_constant1 ^ raw_constant2 = sign bit is 1 if they have different signs
 	 * raw_constant1 ^ result = sign bit is 1 if they have different signs
@@ -243,13 +244,8 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	}
 
 	/**
-	 * Zero flag is set if we're 0
-	 */
-	if(result == 0){
-		set_zero_flag(&execution_result.flag_register);
-	}
-
-	/**
+	 * SIGN FLAG
+	 *
 	 * Set sign flag if the sign bit is 1. We can figure this
 	 * out be bitwise ANDing with the sign bit
 	 */
@@ -258,16 +254,39 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 	}
 
 	/**
-	 * Set auxiliary carry when we had to borrow from bit 4. This will only
-	 * happen when raw_constant1 ^ raw_constant2 ^ result is nonzero TODO
-	 * DOC WHY WITH EXAMPLE
+	 * ZERO FLAG
+	 *
+	 * Zero flag is set if we're 0
+	 */
+	if(result == 0){
+		set_zero_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * AUXILIARY CARRY FLAG
+	 *
+	 * The auxiliary carry flag is set when we had to perform a borrow
+	 * from bit 4 into bit 3. If we did this, we'll see a a 1 inside of 
+	 * the 4th bit
+	 *
+	 * Example: 16 - 5 = 11
+	 * 		   0001 0000
+	 * 		 - 0000 0101
+	 * 		 = 0000 1111
+	 *
+	 * In this case we had to borrow from bit 4. To identify this in a convenient
+	 * bitwise expression, we can do the following.
+	 * 		1.) The value in bit 4 for the result(R4) is A4 ^ B4 for subtraction with *NO* carry
+	 * 		2.) If there is a carry into bit 4 then R4 = A4 ^ B4 ^ 1. Therefore
+	 * 			due to the properties of XOR, we can rearrange to get 1 = R4 ^ A4 ^ B4
 	 */
 	if(((raw_constant1 ^ raw_constant2 ^ result) & 0x10) != 0){
 		set_auxiliary_carry_flag(&execution_result.flag_register);
 	}
 
-
 	/**
+	 * PARITY FLAG
+	 *
 	 * Set the parity flag when the lowest 8 bits of the result contain an
 	 * even number of set bits. This is how the x86 parity flag is set. The
 	 * GCC __builtin_parity returns 0 if we contain an even number of set
@@ -567,6 +586,7 @@ static simulated_execution_result_t simulate_flags_from_f64_constant_comparison(
 	return result;
 }
 
+//======================================= Constant Operation Helpers ========================================
 
 /**
  * Simulate a test if not zero statement. This simulator will decide first if it's even possible to simulate
@@ -656,7 +676,7 @@ static simulated_execution_result_t simulate_test_if_not_zero_flags_after_execut
  * not are just checking to see if the value is zero or not. As such, we really
  * only need to check if we have a zero here
  */
-simulated_execution_result_t simulate_logical_not_flags_after_execution(basic_block_t* block, instruction_t* instruction){
+simulated_execution_result_t simulate_logical_not_flags_after_execution(instruction_t* instruction){
 	/**
 	 * First extract the logical not operand and search for it's assignment
 	 * within the block
@@ -717,7 +737,7 @@ simulated_execution_result_t simulate_logical_not_flags_after_execution(basic_bl
  * NOTE: floating point negation should never actually be used to set flags. In the event that 
  * we encounter a floating point negation that is supposedly setting flags here, we will panic
  */
-static simulated_execution_result_t simulate_negation_flags_after_execution(basic_block_t* block, instruction_t* instruction){
+static simulated_execution_result_t simulate_negation_flags_after_execution(instruction_t* instruction){
 	/**
 	 * First extract the negation operand and its type. In the event that we have
 	 * a floating point operand we will panic
@@ -746,13 +766,13 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(basi
 }
 
 
-static simulated_execution_result_t simulate_binary_operation_flags_after_execution(basic_block_t* block, instruction_t* instruction){
+static simulated_execution_result_t simulate_binary_operation_flags_after_execution(instruction_t* instruction){
 	//TODO
 	return BLANK_SIMULATED_EXECUTION_RESULT;
 }
 
 
-static simulated_execution_result_t simulate_binary_operation_with_constant_flags_after_execution(basic_block_t* block, instruction_t* instruction){
+static simulated_execution_result_t simulate_binary_operation_with_constant_flags_after_execution(instruction_t* instruction){
 	//TODO
 	return BLANK_SIMULATED_EXECUTION_RESULT;
 }
@@ -777,19 +797,19 @@ simulated_execution_result_t simulate_instruction_flags_after_execution(basic_bl
 		}
 
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
-			return simulate_logical_not_flags_after_execution(block, instruction);
+			return simulate_logical_not_flags_after_execution(instruction);
 		}
 
 		case THREE_ADDR_CODE_NEG_STATEMENT: {
-			return simulate_negation_flags_after_execution(block, instruction);
+			return simulate_negation_flags_after_execution(instruction);
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_STMT: {
-			return simulate_binary_operation_flags_after_execution(block, instruction);
+			return simulate_binary_operation_flags_after_execution(instruction);
 		}
 
 		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT: {
-			return simulate_binary_operation_with_constant_flags_after_execution(block, instruction);
+			return simulate_binary_operation_with_constant_flags_after_execution(instruction);
 		}
 
 		/**
