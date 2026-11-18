@@ -9266,7 +9266,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
  * In the event that we do remove a branch, we will return TRUE from this function. It is the caller's responsibility
  * to then do any other passes that they deem necessary such as mark and sweep, clean, control flow relation recalcuation, etc
  */
-static inline u_int8_t branch_elimination_pass(basic_block_t* function_entry, basic_block_t* function_exit, dynamic_array_t* function_blocks){
+static inline u_int8_t branch_elimination_pass(dynamic_array_t* function_blocks){
 	/**
 	 * Did we perform any branch elimination? By default assume no
 	 */
@@ -10349,7 +10349,7 @@ static void simplify(cfg_t* cfg){
 		 * one that can, we will remove the conditional branch entirely and just make it take the
 		 * path that we can prove it always would take
 		 */
-		u_int8_t branch_elimination_occurred = branch_elimination_pass(function_entry, function_exit, function_blocks);
+		u_int8_t branch_elimination_occurred = branch_elimination_pass(function_blocks);
 		if(branch_elimination_occurred == TRUE){
 			/**
 			 * Step 1: we have altered the control flow in at least one way, possibly more, if we have done

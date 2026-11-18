@@ -481,11 +481,7 @@ static inline u_int8_t does_OIR_statement_alter_flags(instruction_t* statement){
 				case STAR:
 				case F_SLASH:
 				case MOD: {
-					if(IS_FLOATING_POINT(type_operating_on) == FALSE){
-						return TRUE;
-					} else {
-						return FALSE;
-					}
+					return !(IS_FLOATING_POINT(type_operating_on));
 				}
 
 				/**

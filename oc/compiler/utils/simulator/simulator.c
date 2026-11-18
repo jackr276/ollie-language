@@ -71,7 +71,7 @@ static inline void trigger_ice_panic(char* message){
  * An important note: we are not seeking to simplify or remove instructions in any way. We just wish to look
  * for where this variable was assigned to see if there's a simple value that we can report back
  */
-static search_result_t search_for_variable_assignment_in_block(basic_block_t* block, instruction_t* start_instruction, three_addr_var_t* variable){
+static search_result_t search_for_variable_assignment_in_block(instruction_t* start_instruction, three_addr_var_t* variable){
 	search_result_t search_result = BLANK_SEARCH_RESULT;
 
 	/**
@@ -586,7 +586,7 @@ static simulated_execution_result_t simulate_test_if_not_zero_statement(basic_bl
 		 * this was assigned to be a constant. If that's the case, we will be able to simulate this
 		 * further
 		 */
-		search_result_t search_result = search_for_variable_assignment_in_block(block, instruction->previous_statement, operand);
+		search_result_t search_result = search_for_variable_assignment_in_block(instruction->previous_statement, operand);
 
 		/**
 		 * This is usually what happens - we found nothing or we found a variable assignment. In this case it's not possible
@@ -657,7 +657,7 @@ simulated_execution_result_t simulate_logical_not_statement(basic_block_t* block
 	 */
 	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
 	generic_type_t* operand_type = logical_not_operand->type;
-	search_result_t search_result = search_for_variable_assignment_in_block(block, instruction, logical_not_operand);
+	search_result_t search_result = search_for_variable_assignment_in_block(instruction, logical_not_operand);
 
 	/**
 	 * This is usually what happens - we found nothing or we found a variable assignment. In this case it's not possible
@@ -724,7 +724,7 @@ static simulated_execution_result_t simulate_negation_statement(basic_block_t* b
 	/**
 	 * Attempt to find the variable's assignment inside of the block
 	 */
-	search_result_t search_result = search_for_variable_assignment_in_block(block, instruction, logical_not_operand);
+	search_result_t search_result = search_for_variable_assignment_in_block(instruction, logical_not_operand);
 	if(search_result.result_type != SEARCH_RESULT_TYPE_CONST){
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
