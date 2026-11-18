@@ -10326,10 +10326,28 @@ static void simplify(cfg_t* cfg){
 		 * one that can, we will remove the conditional branch entirely and just make it take the
 		 * path that we can prove it always would take
 		 */
-		u_int8_t branch_reduction_occurred = branch_elimination_pass(function_entry, function_exit, function_blocks);
-		if(branch_reduction_occurred == TRUE){
-			//TODO DETERMINE WHAT WE NEED TO DO IN HERE
+		u_int8_t branch_elimination_occurred = branch_elimination_pass(function_entry, function_exit, function_blocks);
+		if(branch_elimination_occurred == TRUE){
+			/**
+			 * Step 1: we have altered the control flow in at least one way, possibly more, if we have done
+			 * a branch elimination. Before going forward we'll need to recompute all of the control flow 
+			 * relations based on this new CFG
+			 */
+			recompute_all_control_flow_relations_for_function(function_blocks, function_entry, function_exit);
 
+			/**
+			 * Step 2: Since we were able to remove a branch, odds are that there are some statements that used
+			 * to be used for the branch that are now useless. We will run a mark and sweep pass to eliminate
+			 * all orphaned statements
+			 */
+			perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
+
+			/**
+			 * Step 3: After we've removed dead code, we may end up with blocks that could
+			 * be compressed further. We will run a branch reduction pass to eliminate
+			 * unneccessary control flow
+			 */
+			perform_branch_reduction_pass(function_blocks, function_entry, function_exit);
 		}
 
 		/**
