@@ -748,37 +748,11 @@ simulated_execution_result_t simulate_instruction_flags_after_execution(basic_bl
  * always returns the block that the branch would take given the flags
  */
 static inline basic_block_t* simulate_branch_without_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
-
-	return NULL;
-}
-
-
-/**
- * TODO DOC
- */
-static inline basic_block_t* simulate_branch_with_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
-	return NULL;
-}
-
-
-/**
- * Given the flags at the time of branch execution, determine which branch in the given branch
- * statement we'd jump to. This will always return a valid block, because a branch must always execute
- * in a way that gives one block back
- */
-basic_block_t* simulate_branch_execution_given_flags(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags){
 	/**
-	 * We will execute the branch differently based on whether or not we're
-	 * branching based on a fp comparison
+	 * Based on the branch type and flags exclusively we are able to
+	 * execute this branch
 	 */
-	if(comes_from_fp_comparison == FALSE){
-		return simulate_branch_without_parity_consideration(branch_statement, flags);
-	} else {
-		return simulate_branch_with_parity_consideration(branch_statement, flags);
-	}
-
-
-	//TODO YOU NEED TO PAY ATTENTION TO THE PARITY FLAG WHEN DOING THESE
+	branch_type_t branch_type = branch_statement->branch_info.branch_type;
 	switch(branch_type){
 		case BRANCH_NE: {
 			//TODO
@@ -858,5 +832,32 @@ basic_block_t* simulate_branch_execution_given_flags(instruction_t* branch_state
 		}
 	}
 
-	return branch_execution_result;
+
+	return NULL;
+}
+
+
+/**
+ * TODO DOC
+ */
+static inline basic_block_t* simulate_branch_with_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
+	return NULL;
+}
+
+
+/**
+ * Given the flags at the time of branch execution, determine which branch in the given branch
+ * statement we'd jump to. This will always return a valid block, because a branch must always execute
+ * in a way that gives one block back
+ */
+basic_block_t* simulate_branch_execution_given_flags(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags){
+	/**
+	 * We will execute the branch differently based on whether or not we're
+	 * branching based on a fp comparison
+	 */
+	if(comes_from_fp_comparison == FALSE){
+		return simulate_branch_without_parity_consideration(branch_statement, flags);
+	} else {
+		return simulate_branch_with_parity_consideration(branch_statement, flags);
+	}
 }
