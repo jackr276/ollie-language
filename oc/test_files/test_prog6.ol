@@ -11,7 +11,7 @@ fn tester() -> void{
 /**
  * Demonstrate the functionality of saturating add for positive and negative overflows
  */
-pub fn main() -> i32{
+pub fn main(argc:i32, argv:char**) -> i32{
 	let x:mut i32 = -2U;
 	let aa:mut i32 = --3;
 	let my_val:mut i32 = x + -32;
@@ -22,7 +22,7 @@ pub fn main() -> i32{
 		x++;	
 	}
 	
-	if(!x) {
+	if(!argc) {
 		++x;
 	} else {
 		--x;
