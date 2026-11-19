@@ -473,10 +473,12 @@ instruction_t* emit_dec_instruction(three_addr_var_t* decrementee, u_int32_t lin
 /**
  * Emit a negation(negX) statement
  */
-instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_number);
+instruction_t* emit_negation_statement(three_addr_var_t* assignee, three_addr_var_t* negatee, u_int32_t line_number);
 
 /**
  * Emit a bitwise not instruction
+ *
+ * TODO UPDATE THIS AS WELL
  */
 instruction_t* emit_not_instruction(three_addr_var_t* var, u_int32_t line_number);
 

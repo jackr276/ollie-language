@@ -6678,28 +6678,18 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 /**
  * Emit a negation statement
  */
-instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_number){
+instruction_t* emit_negation_statement(three_addr_var_t* assignee, three_addr_var_t* negatee, u_int32_t line_number){
 	//First we'll create the negation
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 	stmt->statement_type = THREE_ADDR_CODE_NEG_STATEMENT;
-
+	
 	/**
-	 * If this is not a temporary variable, then we'll
-	 * emit an exact copy and let the SSA system handle it
+	 * Package this up with everything that we need
 	 */
-	if(negatee->variable_type != VARIABLE_TYPE_TEMP){
-		stmt->operands.oir.assignee = emit_var_copy(negatee);
-
-	//Otherwise, we'll need to spawn a new temporary variable
-	} else {
-		stmt->operands.oir.assignee = emit_temp_var(negatee->type);
-	}
-
-	//No matter what this is the op1
+	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.operand1 = negatee;
-
-	//Give it back
 	stmt->line_number = line_number;
+
 	return stmt;
 }
 
