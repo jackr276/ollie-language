@@ -18680,44 +18680,55 @@ static void handle_negation_instruction(instruction_window_t* window){
 		insert_instruction_after_given(final_assignment, negation_instruction);
 		reconstruct_window(window, final_assignment);
 
-	//Otherwise it is a floating point variable so we will need to do
-	//some extra work here
-	//
-	//
-	//TODO FIX THIS UP TOO
-	//
+	/**
+	 * For floating point variables we perform negation by XORING the float bit value
+	 * with a value that has a 1 as the MSB. This has the effect of flipping the sign
+	 * bit and negating
+	 *
+	 * Example:
+	 *  t4 <- neg x_1
+	 *
+	 * Will become:
+	 * movss x_1, t5
+	 * movss .LC0(%rip), t6
+	 * xorps t6, t5
+	 * movss t5, t4
+	 */
 	} else {
-		//Find out what size we have
-		variable_size_t size = get_type_size(negation_instruction->operands.oir.assignee->type);
+		/**
+		 * Extract the values that we're working with and the type
+		 */
+		three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
+		three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
+		generic_type_t* operand_type = operand1->type;
 
-		//This is purely for bookkeeping. The IR works by having different variables for the source/destination. Since we will
-		//only be working with the destination, we have this symbolic move here that will later be coalesced away to fully track ownership
-		instruction_t* direct_move_instruction = emit_move_instruction(negation_instruction->operands.oir.assignee, negation_instruction->operands.oir.operand1);
+		/**
+		 * Before we do anything else, we will first move the first operand into a temporary
+		 * holding variable. We do this to avoid clobbering it's value
+		 */
+		if(operand1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* operand_move = emit_move_instruction(emit_temp_var(operand_type), operand1);
+			insert_instruction_before_given(operand_move, negation_instruction);
 
-		//This goes in before the move
-		insert_instruction_before_given(direct_move_instruction, negation_instruction);
-
-		//The local constant value. Will be allocated based on the size that we have
-		local_constant_t* local_constant;
-
-		//The move instruction that we need to allocate as well
-		instruction_t* local_constant_load_instruction;
-
-		//The holder for the final xorpX instruction
-		instruction_t* xorpX_instruction;
+			/**
+			 * This destination now is the first operand
+			 */
+			operand1 = operand_move->operands.x86.destination_register;
+		}
 
 		//We'll need to emit the appropriate constant based on whether we have a float or not
-		switch(size){
-			case DOUBLE_PRECISION:
-				//Let's see if we can find it
-				local_constant = get_xmm128_local_constant(&(cfg_reference->local_xmm128_constants), 0, 0x8000000000000000);
-
-				//If we can't we need to create it
+		switch(get_type_size(operand_type)){
+			case DOUBLE_PRECISION: {
+				/**
+				 * See if we already have the needed local constant. If not we'll need to make it ourselves
+				 */
+				local_constant_t* local_constant = get_xmm128_local_constant(&(cfg_reference->local_xmm128_constants), 0, 0x8000000000000000);
 				if(local_constant == NULL){
-					//Allocate a local constant with a 1 at the end of the first 64 bits
+					/**
+					 * Allocate a local constant with a 1 at the end of the first 64 bits and
+					 * add it to the CFG
+					 */
 					local_constant = xmm128_local_constant_alloc(f64, 0, 0x8000000000000000);
-
-					//Add this into the function
 					add_local_constant_to_cfg(cfg_reference, local_constant);
 				}
 
@@ -18728,8 +18739,9 @@ static void handle_negation_instruction(instruction_window_t* window){
 				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
 
 				break;
+			}
 
-			case SINGLE_PRECISION:
+			case SINGLE_PRECISION: {
 				//Let's see if we can find it
 				local_constant = get_xmm128_local_constant(&(cfg_reference->local_xmm128_constants), 0, 0x80000000);
 
@@ -18749,10 +18761,15 @@ static void handle_negation_instruction(instruction_window_t* window){
 				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
 
 				break;
+			}
 
-			default:
-				printf("Fatal internal compiler error: unreachable path hit in negation selector\n");
-				exit(1);
+			/**
+			 * Anything else here we have to panic
+			 */
+			default: {
+				trigger_ice_panic("Invalid variable size given in float negation selector");
+				return;
+			}
 		}
 
 		//First we will insert the local constant load
