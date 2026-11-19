@@ -18716,7 +18716,11 @@ static void handle_negation_instruction(instruction_window_t* window){
 			operand1 = operand_move->operands.x86.destination_register;
 		}
 
-		//We'll need to emit the appropriate constant based on whether we have a float or not
+		/**
+		 * We'll need to get the appropriate local constant loaded that has a 1 in the MSB. This
+		 * is what we will use to flip the sign bit
+		 */
+		three_addr_var_t* loaded_local_constant = NULL;
 		switch(get_type_size(operand_type)){
 			case DOUBLE_PRECISION: {
 				/**
@@ -18732,34 +18736,35 @@ static void handle_negation_instruction(instruction_window_t* window){
 					add_local_constant_to_cfg(cfg_reference, local_constant);
 				}
 
-				//Emit the load instruction with the aligned load set to true
-				local_constant_load_instruction = emit_local_constant_from_memory_load(f64, local_constant, TRUE);
-
-				//Emit the xorpd instruction that will do the actual bitflip
-				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
-
+				/**
+				 * Emit the load instruction with the aligned load set to true and insert it before the negation
+				 */
+				instruction_t* local_constant_load_instruction = emit_local_constant_from_memory_load(f64, local_constant, TRUE);
+				insert_instruction_before_given(local_constant_load_instruction, negation_instruction);
+				loaded_local_constant = local_constant_load_instruction->operands.x86.destination_register;
 				break;
 			}
 
 			case SINGLE_PRECISION: {
-				//Let's see if we can find it
-				local_constant = get_xmm128_local_constant(&(cfg_reference->local_xmm128_constants), 0, 0x80000000);
-
-				//If we can't we need to create it
+				/**
+				 * See if we already have the needed local constant. If not we'll make it ourselves
+				 */
+				local_constant_t* local_constant = get_xmm128_local_constant(&(cfg_reference->local_xmm128_constants), 0, 0x80000000);
 				if(local_constant == NULL){
-					//Allocate a local constant with a 1 at the end of the first 32 bits
+					/**
+					 * Allocate a local constant with a 1 at the end of the 32 bits and add it
+					 * to the CFG
+					 */
 					local_constant = xmm128_local_constant_alloc(f64, 0, 0x80000000);
-
-					//Add this into the function
 					add_local_constant_to_cfg(cfg_reference, local_constant);
 				}
 
-				//Emit the load instruction with the aligned load set to true
-				local_constant_load_instruction = emit_local_constant_from_memory_load(f32, local_constant, TRUE);
-
-				//Emit the xorpd instruction that will do the actual bitflip
-				xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
-
+				/**
+				 * Emit the load instruction with the aligned load set to true and insert it before the negation
+				 */
+				instruction_t* local_constant_load_instruction = emit_local_constant_from_memory_load(f32, local_constant, TRUE);
+				insert_instruction_before_given(local_constant_load_instruction, negation_instruction);
+				loaded_local_constant = local_constant_load_instruction->operands.x86.destination_register;
 				break;
 			}
 
@@ -18771,6 +18776,9 @@ static void handle_negation_instruction(instruction_window_t* window){
 				return;
 			}
 		}
+
+			//Emit the xorpd instruction that will do the actual bitflip
+			xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
 
 		//First we will insert the local constant load
 		insert_instruction_before_given(local_constant_load_instruction, negation_instruction);
