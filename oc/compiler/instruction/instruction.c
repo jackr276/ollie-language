@@ -4455,15 +4455,17 @@ static void print_neg_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 	}
 
-	//Now we'll print out the destination register
-	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	/**
+	 * Print out what we're negating
+	 */
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
-	//Show this if we're in the intermediate mode
-	if(mode == PRINTING_LIVE_RANGES){
-		printf(" /* SOURCE ");
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
-		printf(" */ ");
-	}
+	/**
+	 * And the implied destination that is should be the same LR/register as the source
+	 */
+	fprintf(fl, " /* Destination ");
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, " */ ");
 
 	//And give it a newlinw and we're done
 	fprintf(fl, "\n");
