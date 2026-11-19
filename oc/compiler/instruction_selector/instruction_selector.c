@@ -14,6 +14,7 @@
 #include "../utils/use_count_tracker/use_count_tracker.h"
 #include "../graph_analyzer/graph_analyzer.h"
 #include "../utils/constants.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -18576,6 +18577,31 @@ static inline instruction_t* emit_local_constant_from_memory_load(generic_type_t
 
 
 /**
+ * Select the given "neg" instruction given the variable size
+ */
+static inline instruction_type_t select_neg_instruction(variable_size_t size){
+	switch(size){
+		case QUAD_WORD:
+			return NEGQ;
+
+		case DOUBLE_WORD:
+			return NEGL;
+
+		case WORD:
+			return NEGW;
+
+		case BYTE:
+			return NEGB;
+
+		//Panic on any other input
+		default:
+			trigger_ice_panic("Invalid size for negation instruction");
+			return NO_INSTRUCTION_SELECTED;
+	}
+}
+
+
+/**
  * Handle a negation instruction. It should be noted that there
  * are 2 different kinds of negation selection processes, one for
  * floating point instructions and one for GP instructions
@@ -18615,42 +18641,35 @@ static void handle_negation_instruction(instruction_window_t* window){
 		 */
 		three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
 		three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
+		generic_type_t* operand_type = operand1->type;
 
+		/**
+		 * If this is not a temporary variable then we will need to emit and insert
+		 * a temp var here
+		 */
 		if(operand1->variable_type != VARIABLE_TYPE_TEMP){
+			instruction_t* temp_assignment = emit_move_instruction(emit_temp_var(operand_type), operand1);
+			insert_instruction_before_given(temp_assignment, negation_instruction);
 
+			/**
+			 * This now is the first operand
+			 */
+			operand1 = temp_assignment->operands.x86.destination_register;
 		}
 
-
-
-
-		//Find out what size we have
-		variable_size_t size = get_type_size(negation_instruction->operands.oir.assignee->type);
-
-		switch(size){
-			case QUAD_WORD:
-				negation_instruction->instruction_type = NEGQ;
-				break;
-			case DOUBLE_WORD:
-				negation_instruction->instruction_type = NEGL;
-				break;
-			case WORD:
-				negation_instruction->instruction_type = NEGW;
-				break;
-			case BYTE:
-				negation_instruction->instruction_type = NEGB;
-				break;
-			//Panic on any other input
-			default:
-				trigger_ice_panic("Invalid size for negation instruction");
-				break;
-		}
-
-		//Now we'll just translate the assignee to be the destination(and source in this case) register
-		negation_instruction->operands.x86.source_register1 = negation_instruction->operands.oir.operand1;
-		negation_instruction->operands.x86.destination_register = negation_instruction->operands.oir.assignee;
+		/**
+		 * Fill these values in and select the instruction type
+		 */
+		negation_instruction->operands.x86.source_register1 = operand1;
+		negation_instruction->operands.x86.destination_register = assignee;
+		negation_instruction->instruction_type = select_neg_instruction(get_type_size(operand_type));
 
 	//Otherwise it is a floating point variable so we will need to do
 	//some extra work here
+	//
+	//
+	//TODO FIX THIS UP TOO
+	//
 	} else {
 		//Find out what size we have
 		variable_size_t size = get_type_size(negation_instruction->operands.oir.assignee->type);
