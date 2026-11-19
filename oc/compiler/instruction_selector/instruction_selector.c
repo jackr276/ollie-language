@@ -18777,20 +18777,26 @@ static void handle_negation_instruction(instruction_window_t* window){
 			}
 		}
 
-			//Emit the xorpd instruction that will do the actual bitflip
-			xorpX_instruction = emit_direct_xmm_xorpX_instruction(negation_instruction->operands.oir.assignee, local_constant_load_instruction->operands.x86.destination_register);
-
-		//First we will insert the local constant load
-		insert_instruction_before_given(local_constant_load_instruction, negation_instruction);
-
-		//Following that, we will insert the xorpX instruction
+		/**
+		 * Now that we have the local constant and temp var op1 in hand, we can emit the xorpX instruction
+		 * now to flip the sign bit
+		 */
+		instruction_t* xorpX_instruction = emit_direct_xmm_xorpX_instruction(operand1, loaded_local_constant);
 		insert_instruction_before_given(xorpX_instruction, negation_instruction);
 
-		//This negation instruction itself is useless, so we will scrap it
-		delete_statement(negation_instruction);
+		/**
+		 * The only thing left now is to emit an assignment from the first operand that we've just
+		 * negated into the given assignee
+		 */
+		instruction_t* final_assignment = emit_move_instruction(assignee, operand1);
+		insert_instruction_before_given(final_assignment, negation_instruction);
 
-		//Reconstruct the entire window around the xor instruction
-		reconstruct_window(window, xorpX_instruction);
+		/**
+		 * We can now delete the old negation instruction and rebuild around the final
+		 * assignment instruction
+		 */
+		delete_statement(negation_instruction);
+		reconstruct_window(window, final_assignment);
 	}
 }
 
