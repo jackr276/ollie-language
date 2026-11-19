@@ -18596,8 +18596,33 @@ static void handle_negation_instruction(instruction_window_t* window){
 	//Grab this pointer for convenience
 	instruction_t* negation_instruction = window->instruction1;
 
-	//If this is not a floating point variable we take the if path
+	/**
+	 * For non-floating point values, we will need to emit a temporary assignment
+	 * for the first operand in the event that it is not a temporary variable because
+	 * negation will modify the variable inplace.
+	 *
+	 * Example:
+	 *  t4 <- neg x_1
+	 * 
+	 * Transforms into
+	 * movl x_1, t5
+	 * negl t5
+	 * movl t5, t4
+	 */
 	if(IS_FLOATING_POINT(negation_instruction->operands.oir.assignee->type) == FALSE){
+		/**
+		 * Extract both operands first
+		 */
+		three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
+		three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
+
+		if(operand1->variable_type != VARIABLE_TYPE_TEMP){
+
+		}
+
+
+
+
 		//Find out what size we have
 		variable_size_t size = get_type_size(negation_instruction->operands.oir.assignee->type);
 
@@ -18614,10 +18639,10 @@ static void handle_negation_instruction(instruction_window_t* window){
 			case BYTE:
 				negation_instruction->instruction_type = NEGB;
 				break;
-			//This should never happen
+			//Panic on any other input
 			default:
-				printf("Fatal internal compiler error: unreachable path hit in negation selector\n");
-				exit(1);
+				trigger_ice_panic("Invalid size for negation instruction");
+				break;
 		}
 
 		//Now we'll just translate the assignee to be the destination(and source in this case) register
