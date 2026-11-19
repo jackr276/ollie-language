@@ -18632,8 +18632,8 @@ static void handle_negation_instruction(instruction_window_t* window){
 	 * 
 	 * Transforms into
 	 * movl x_1, t5
-	 * negl t5
-	 * movl t5, t4
+	 * negl t5 <--- Assignee is an imaginary t6
+	 * movl t6, t4
 	 */
 	if(IS_FLOATING_POINT(negation_instruction->operands.oir.assignee->type) == FALSE){
 		/**
@@ -18658,11 +18658,27 @@ static void handle_negation_instruction(instruction_window_t* window){
 		}
 
 		/**
+		 * We will always create a new value for the negation assignee as well 
+		 * to symbolically represent that it does assign
+		 */
+		three_addr_var_t* negation_assignee = emit_temp_var(operand_type);
+
+		/**
 		 * Fill these values in and select the instruction type
 		 */
 		negation_instruction->operands.x86.source_register1 = operand1;
-		negation_instruction->operands.x86.destination_register = assignee;
+		negation_instruction->operands.x86.destination_register = negation_assignee;
 		negation_instruction->instruction_type = select_neg_instruction(get_type_size(operand_type));
+
+		/**
+		 * Finally emit one last assignment of our negation assignee over to the original assignee
+		 * that was given to us in the OIR instruction. This may or may not be coalesced away
+		 * by the live range coalescer but we'll want to have this just in case, as the assignee
+		 * is technically overwritten
+		 */
+		instruction_t* final_assignment = emit_move_instruction(assignee, negation_assignee);
+		insert_instruction_after_given(final_assignment, negation_instruction);
+		reconstruct_window(window, final_assignment);
 
 	//Otherwise it is a floating point variable so we will need to do
 	//some extra work here
