@@ -1098,6 +1098,45 @@ static inline basic_block_t* simulate_branch_with_parity_consideration(instructi
 					return else_block;
 				}
 			}
+		}
+
+		/**
+		 * BRANCH_AE/BRANCH_GE behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
+		 */
+		case BRANCH_AE:
+		case BRANCH_GE: {
+			/**
+			 * For branching *WITHOUT* an inverted branch, we *DO NOT* need to add
+			 * a parity check. We want a NaN to go to the logical else, which is also
+			 * the physical else in this case, and since a NaN sets CF=1, this branch
+			 * goes to the else block already
+			 * 	
+			 * Condition(to jump to phyiscal if block): CF == 0 
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				if(get_carry_flag(&flags) == 0){
+					return if_block;
+				} else {
+					return else_block;
+				}
+
+			/**
+			 * For branching with an inverted branch, we *DO* need to add a parity
+			 * check that will have us jump to the physical if(logical else in this case).
+			 * Since NaN sets CF=1, if we do not have this parity check, a NaN will send
+			 * us to the physical else(logical if) in this case
+			 *
+			 * Condition(jump to physical if block): PF == 1 || CF == 0
+			 */
+			} else {
+				if((get_parity_flag(&flags) == 1) || (get_carry_flag(&flags) == 0)){
+					return if_block;
+				} else {
+					return else_block;
+				}
+			}
+		}
 
 		/**
 		 * Any unrecognized branch should be a panic on our part
