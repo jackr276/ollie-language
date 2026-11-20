@@ -4478,15 +4478,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
 
 			/**
-			 * First assign over to a temporary variable so we don't modify the original one
-			 */
-			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, line_number);
-			add_statement(current_block, temp_assignment);
-
-			/**
 			 * Now emit and add the actual bitwise not logic
 			 */
-			instruction_t* bitwise_not = emit_not_instruction(temp_assignment->operands.oir.assignee, line_number);
+			instruction_t* bitwise_not = emit_not_instruction(assignee, line_number);
 			add_statement(current_block, bitwise_not);
 
 			//These never set RFLAGS

@@ -6699,29 +6699,18 @@ instruction_t* emit_negation_statement(three_addr_var_t* assignee, three_addr_va
 /**
  * Emit a not instruction 
  */
-instruction_t* emit_not_instruction(three_addr_var_t* var, u_int32_t line_number){
+instruction_t* emit_not_instruction(three_addr_var_t* assignee, three_addr_var_t* operand, u_int32_t line_number){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-	stmt->statement_type = THREE_ADDR_CODE_BITWISE_NOT_STMT;
 
 	/**
-	 * If this is not a temporary variable, then we'll
-	 * need to emit an exact copy and let the SSA system
-	 * hanlde it
+	 * Package this up with everything that we need
 	 */
-	if(var->variable_type != VARIABLE_TYPE_TEMP){
-		stmt->operands.oir.assignee = emit_var_copy(var);
-
-	//Otherwise just make a new temp var for the assignee
-	} else {
-		stmt->operands.oir.assignee = emit_temp_var(var->type);
-	}
-
-	//No matter what this is op1
-	stmt->operands.oir.operand1 = var;
-
-	//Give the statement back
+	stmt->statement_type = THREE_ADDR_CODE_BITWISE_NOT_STMT;
+	stmt->operands.oir.operand1 = operand;
 	stmt->line_number = line_number;
+	stmt->operands.oir.assignee = assignee;
+
 	return stmt;
 }
 
