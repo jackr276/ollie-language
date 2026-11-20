@@ -13,7 +13,7 @@ pub fn indirect_sse_negate(x:f64, y:f64) -> f64 {
 }
 
 
-//Dummy
 pub fn main() -> i32 {
-	ret 0;
+	OUNIT: [exit_status = 23]
+	ret <i32>@indirect_gp_negate(-7, -11) + <i32>@indirect_sse_negate(-2.0, -3.0);
 }

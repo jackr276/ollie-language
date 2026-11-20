@@ -4455,15 +4455,17 @@ static void print_neg_instruction(FILE* fl, instruction_t* instruction, variable
 			break;
 	}
 
-	//Now we'll print out the destination register
-	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	/**
+	 * Print out what we're negating
+	 */
+	print_variable(fl, instruction->operands.x86.source_register1, mode);
 
-	//Show this if we're in the intermediate mode
-	if(mode == PRINTING_LIVE_RANGES){
-		printf(" /* SOURCE ");
-		print_variable(fl, instruction->operands.x86.source_register1, mode);
-		printf(" */ ");
-	}
+	/**
+	 * And the implied destination that is should be the same LR/register as the source
+	 */
+	fprintf(fl, " /* Destination ");
+	print_variable(fl, instruction->operands.x86.destination_register, mode);
+	fprintf(fl, " */ ");
 
 	//And give it a newlinw and we're done
 	fprintf(fl, "\n");
@@ -6678,28 +6680,18 @@ three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_
 /**
  * Emit a negation statement
  */
-instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_number){
+instruction_t* emit_negation_statement(three_addr_var_t* assignee, three_addr_var_t* negatee, u_int32_t line_number){
 	//First we'll create the negation
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 	stmt->statement_type = THREE_ADDR_CODE_NEG_STATEMENT;
-
+	
 	/**
-	 * If this is not a temporary variable, then we'll
-	 * emit an exact copy and let the SSA system handle it
+	 * Package this up with everything that we need
 	 */
-	if(negatee->variable_type != VARIABLE_TYPE_TEMP){
-		stmt->operands.oir.assignee = emit_var_copy(negatee);
-
-	//Otherwise, we'll need to spawn a new temporary variable
-	} else {
-		stmt->operands.oir.assignee = emit_temp_var(negatee->type);
-	}
-
-	//No matter what this is the op1
+	stmt->operands.oir.assignee = assignee;
 	stmt->operands.oir.operand1 = negatee;
-
-	//Give it back
 	stmt->line_number = line_number;
+
 	return stmt;
 }
 
@@ -6707,29 +6699,18 @@ instruction_t* emit_neg_instruction(three_addr_var_t* negatee, u_int32_t line_nu
 /**
  * Emit a not instruction 
  */
-instruction_t* emit_not_instruction(three_addr_var_t* var, u_int32_t line_number){
+instruction_t* emit_not_instruction(three_addr_var_t* assignee, three_addr_var_t* operand, u_int32_t line_number){
 	//First allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
-	stmt->statement_type = THREE_ADDR_CODE_BITWISE_NOT_STMT;
 
 	/**
-	 * If this is not a temporary variable, then we'll
-	 * need to emit an exact copy and let the SSA system
-	 * hanlde it
+	 * Package this up with everything that we need
 	 */
-	if(var->variable_type != VARIABLE_TYPE_TEMP){
-		stmt->operands.oir.assignee = emit_var_copy(var);
-
-	//Otherwise just make a new temp var for the assignee
-	} else {
-		stmt->operands.oir.assignee = emit_temp_var(var->type);
-	}
-
-	//No matter what this is op1
-	stmt->operands.oir.operand1 = var;
-
-	//Give the statement back
+	stmt->statement_type = THREE_ADDR_CODE_BITWISE_NOT_STMT;
+	stmt->operands.oir.operand1 = operand;
 	stmt->line_number = line_number;
+	stmt->operands.oir.assignee = assignee;
+
 	return stmt;
 }
 
