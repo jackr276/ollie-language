@@ -18802,10 +18802,40 @@ static void handle_negation_instruction(instruction_window_t* window){
 
 
 /**
- * Handle a bitwise not(one's complement) instruction. Very simple - all we need to do is select the suffix and
- * add it over
+ * Convert a three address code bitwise not statement into a notX instruction. Remember
+ * that this will only ever be encountered for integer(GP) values
+ *
+ * Example:
+ * t3 <- not x_1
+ *
+ * Will become:
+ * movl x_1, t3
+ * notl t3
+ *
  */
-static inline void handle_not_instruction(instruction_t* instruction){
+static void handle_not_instruction(instruction_t* instruction){
+	three_addr_var_t* assignee = instruction->operands.oir.assignee;
+	three_addr_var_t* operand = instruction->operands.oir.operand1;
+
+	/**
+	 * If the operand is not a temporary variable, we will need to emit
+	 * an assignment instruction because the notX commands will modify
+	 * the register inplace
+	 */
+	if(operand->variable_type != VARIABLE_TYPE_TEMP){
+		/**
+		 * Emit the temp assignment as an x86 movX directly
+		 */
+		instruction_t* temp_assignment = emit_move_instruction(emit_temp_var(operand->type), operand);
+		insert_instruction_before_given(temp_assignment, instruction);
+
+		/**
+		 * This now is the operand
+		 */
+		operand = temp_assignment->operands.oir.assignee;
+	}
+
+
 	//Find out what size we have
 	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
 
