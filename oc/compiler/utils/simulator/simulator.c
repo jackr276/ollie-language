@@ -1046,13 +1046,32 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 
 
 /**
- * TODO DOC
+ * For branches that derive from some kind of floating point comparsion, we will need to consider the possibility
+ * of a NaN oeprator that should cause us to fall through to the logically false condition. Regular OIR to x86 assembly
+ * inserts parity jumps(JP) to the appropriate block to handle this. In our case, we'll need to consider the branch
+ * category and the flags to determine what the proper block is
  */
 static inline basic_block_t* simulate_branch_with_parity_consideration(instruction_t* branch_statement, RFLAGS_t flags){
-	printf("TODO NOT DONE YET\n");
-	exit(1);
+	/**
+	 * Extract the category, type if and else blocks before starting to simulate
+	 */
+	branch_category_t branch_category = branch_statement->branch_info.branch_category;
+	branch_type_t branch_type = branch_statement->branch_info.branch_type;
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
 
-	return NULL;
+
+	switch(branch_type){
+
+
+		/**
+		 * Any unrecognized branch should be a panic on our part
+		 */
+		case NO_BRANCH: {
+			trigger_ice_panic("Invalid branch type of NO_BRANCH encountered in simulator");
+			exit(1);
+		}
+	}
 }
 
 
