@@ -18832,7 +18832,7 @@ static void handle_not_instruction(instruction_t* instruction){
 		/**
 		 * This now is the operand
 		 */
-		operand = temp_assignment->operands.oir.assignee;
+		operand = temp_assignment->operands.x86.destination_register;
 	}
 
 	/**
