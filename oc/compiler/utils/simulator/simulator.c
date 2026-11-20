@@ -186,6 +186,9 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
  * Simulate the subtraction of 2 *INTEGER* constants. We will always do raw_constant1 - raw_constant2
  *
  * Integer subtraction(subX) will set: CF, OF, SF, ZF, AF, PF
+ *
+ *
+ * TOOD THIS IS OUR BLUEPRINT
  */
 static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -766,15 +769,100 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 
 
 /**
+ * For binary operation instructions, we store their overall "destination type" inside of the "result_type" field.
+ * However, due to legacy implementations, this field is not always going to be populated. This special unpacker
+ * function here will contain all the logic for every kind of binary operation to unpack and return that field
+ */
+static inline generic_type_t* get_destination_type_for_binary_operation_instruction(instruction_t* instruction){
+	//First thing we do is default to using the type storage field
+	generic_type_t* destination_type = instruction->type_storage.result_type;
+
+	/**
+	 * If that ended up being NULL, now we'll have to go into our specific
+	 * decision logic based on what kind of binary operation it is
+	 */
+	if(destination_type == NULL){
+		switch(instruction->op){
+			case PLUS:
+			case MINUS:
+			case L_SHIFT:
+			case R_SHIFT:
+			case SINGLE_OR:
+			case SINGLE_AND:
+			case CARROT:
+			case MOD:
+			case STAR:
+			case F_SLASH:
+				destination_type = instruction->operands.oir.assignee->type;
+				break;
+
+			/**
+			 * Relational operators follow a different pattern than above. We still
+			 * attempt to get the result type from the type storage, but if we cannot
+			 * find it, then we have to rely on a special helper to get the operand
+			 * type for a logical operation. Still this relies on acutal three address
+			 * variables, and if we don't have those, then we have to resort to exclusively
+			 * using the op1 type
+			 */
+			case L_THAN:
+			case G_THAN:
+			case L_THAN_OR_EQ:
+			case G_THAN_OR_EQ:
+			case DOUBLE_EQUALS:
+			case NOT_EQUALS:
+				if(instruction->operands.oir.operand2 != NULL){
+					destination_type = get_operand_type_for_relational_operation(cfg_reference->type_symtab, 
+															   					 instruction->operands.oir.operand1->type,
+															   					 instruction->operands.oir.operand2->type);
+				} else {
+					destination_type = instruction->operands.oir.operand1->type;
+				}
+
+				break;
+
+			/**
+			 * For logical and/or, we will be grabbing the *assignee* type if we are unable to determine the
+			 * destination type from the type storage field on the instruction
+			 */
+			case DOUBLE_AND:
+			case DOUBLE_OR:
+				destination_type = instruction->operands.oir.assignee->type;
+				break;
+
+			default:
+				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
+				exit(1);
+		}
+	}
+
+	return destination_type;
+}
+
+
+/**
  * Simulate the state of the flags register after a given binary operation has executed. This simulator
  * has been designed to handle 2 main scenarios where possible given an expression a <BIN OP> b:
  * 	1.) a and b are both really constants. In that case we can simulate the result as is
  * 	2.) a and b are equal to one another. In that case we'll often be able to simulate flags at least for
  * 		comparison
  *
- * We're going into this assuming that this is a flag setting operation
+ * NOTE: we will only do this for binary operations that do set flags. If we encounter a binary operation
+ * that does not set flags we will panic
  */
 static simulated_execution_result_t simulate_binary_operation_flags_after_execution(instruction_t* instruction){
+	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
+	three_addr_var_t* operand2 = instruction->operands.oir.operand2;
+
+
+	generic_type_t* operand_type;
+	if(instruction->type_storage.result_type != NULL){
+		operand_type = instruction->type_storage.result_type;
+	} else {
+
+	}
+
+
+
 
 	//TODO
 	return BLANK_SIMULATED_EXECUTION_RESULT;
@@ -785,6 +873,9 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
  * Simulate the state of the flags register after a given binary operation with constant has executed. This simulator
  * has been designed to handle one scenario where simulation is possible, that being if the first operand is really
  * a constant somewhere else. All other scenarios lead to nothing
+ *
+ * NOTE: we will only do this for binary operations that do set flags. If we encounter a binary operation
+ * that does not set flags we will panic
  */
 static simulated_execution_result_t simulate_binary_operation_with_constant_flags_after_execution(instruction_t* instruction){
 	//TODO
@@ -799,7 +890,7 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
  *
  * There is no guarantee that an instruction passed into this simulator can be simulated
  */
-simulated_execution_result_t simulate_instruction_flags_after_execution(basic_block_t* block, instruction_t* instruction){
+simulated_execution_result_t simulate_instruction_flags_after_execution(instruction_t* instruction){
 	/**
 	 * We will go based on the statement type and make call outs as appropriate. Note
 	 * that not all statements can be simulated. If it's not in our predetermined list

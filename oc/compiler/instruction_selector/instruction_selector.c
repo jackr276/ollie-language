@@ -9134,10 +9134,6 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
  * Eliminate the given branch if at all possible
  *
  * TODO DOC
- *
- *
- * TODO WE SHOULD BE DOING THIS FOR CONDITIONAL MOVES AS WELL!!!
- *
  */
 static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	/**
@@ -9204,7 +9200,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * now after a large amount of simplification has occurred, because we should be able to knock out
 	 * a lot of constant statements that we otherwise couldn't
 	 */
-	simulated_execution_result_t simulation_result = simulate_instruction_flags_after_execution(block, flag_setting_statement);
+	simulated_execution_result_t simulation_result = simulate_instruction_flags_after_execution(flag_setting_statement);
 
 	/**
 	 * If we find that it's impossible to simulate this bail out now, returning FALSE so that
