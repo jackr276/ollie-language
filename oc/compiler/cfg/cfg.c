@@ -4463,9 +4463,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * x = ~a
 		 *
 		 * Becomes:
-		 * t <- a
-		 * bitwise not t
-		 * x <- t
+		 * t3 <- bitwise not a
+		 * x <- t3
 		 */
 		case B_NOT: {
 			/**
@@ -4474,13 +4473,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 			current_block = unary_package.final_block;
 
-			//The assignee will always be a variable
-			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
+			/**
+			 * Extract the operand and generate a temp var assignee to use
+			 */
+			three_addr_var_t* not_operand = unpack_result_package(&unary_package, current_block, line_number);
+			three_addr_var_t* assignee = emit_temp_var(not_operand->type);
 
 			/**
 			 * Now emit and add the actual bitwise not logic
 			 */
-			instruction_t* bitwise_not = emit_not_instruction(assignee, line_number);
+			instruction_t* bitwise_not = emit_not_instruction(assignee, not_operand, line_number);
 			add_statement(current_block, bitwise_not);
 
 			//These never set RFLAGS
@@ -4491,7 +4493,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			generic_results.starting_block = basic_block;
 			generic_results.final_block = current_block;
 			generic_results.type = CFG_RESULT_TYPE_VAR;
-			generic_results.result_value.result_var = bitwise_not->operands.oir.assignee;
+			generic_results.result_value.result_var = assignee;
 			return generic_results;
 		}
 
