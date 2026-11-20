@@ -4393,9 +4393,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * x = ~a
 		 *
 		 * Becomes:
-		 * t <- a
-		 * bitwise not t
-		 * x <- t
+		 * t3 <- bitwise not a
+		 * x <- t3
 		 */
 		case B_NOT: {
 			/**
@@ -4404,19 +4403,16 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			unary_package = emit_unary_expression(current_block, unary_expression_child);
 			current_block = unary_package.final_block;
 
-			//The assignee will always be a variable
-			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
-
 			/**
-			 * First assign over to a temporary variable so we don't modify the original one
+			 * Extract the operand and generate a temp var assignee to use
 			 */
-			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, line_number);
-			add_statement(current_block, temp_assignment);
+			three_addr_var_t* not_operand = unpack_result_package(&unary_package, current_block, line_number);
+			three_addr_var_t* assignee = emit_temp_var(not_operand->type);
 
 			/**
 			 * Now emit and add the actual bitwise not logic
 			 */
-			instruction_t* bitwise_not = emit_not_instruction(temp_assignment->operands.oir.assignee, line_number);
+			instruction_t* bitwise_not = emit_not_instruction(assignee, not_operand, line_number);
 			add_statement(current_block, bitwise_not);
 
 			//These never set RFLAGS
@@ -4427,7 +4423,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			generic_results.starting_block = basic_block;
 			generic_results.final_block = current_block;
 			generic_results.type = CFG_RESULT_TYPE_VAR;
-			generic_results.result_value.result_var = bitwise_not->operands.oir.assignee;
+			generic_results.result_value.result_var = assignee;
 			return generic_results;
 		}
 
@@ -4436,9 +4432,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * x = -a
 		 *
 		 * Becomes:
-		 * t <- a
-		 * negate t
-		 * x <- t
+		 * x <- negate a
 		 */
 		case MINUS: {
 			/**
@@ -4449,19 +4443,14 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			//The result will always be a variable that we can unpack
-			three_addr_var_t* assignee = unpack_result_package(&unary_package, current_block, line_number);
-			generic_type_t* operand_type = assignee->type;
+			three_addr_var_t* negatee = unpack_result_package(&unary_package, current_block, line_number);
+			generic_type_t* operand_type = negatee->type;
 
 			/**
-			 * Now assign to a temporary variable so that the actual value isn't affected by the negation
+			 * Emit the negation instruction with a temporary variable as the assignee and the negatee
+			 * as our operand
 			 */
-			instruction_t* temp_assignment = emit_assignment_instruction(emit_temp_var(assignee->type), assignee, line_number);
-			add_statement(current_block, temp_assignment);
-
-			/**
-			 * Once we have the temp to use emit the negation using it
-			 */
-			instruction_t* negation_instruction = emit_neg_instruction(temp_assignment->operands.oir.assignee, line_number);
+			instruction_t* negation_instruction = emit_negation_statement(emit_temp_var(operand_type), negatee, line_number);
 			add_statement(current_block, negation_instruction);
 
 			/**
