@@ -745,10 +745,8 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
 	generic_type_t* operand_type = logical_not_operand->type;
 	if(IS_FLOATING_POINT(operand_type) == TRUE){
-		trigger_ice_panic("Floating point negation has been marked for use as a flag setting statement");
+		trigger_ice_panic("Floating point negation has been invalidly marked for use as a flag setting statement");
 	}
-
-	printf("HERE\n\n\n");
 
 	/**
 	 * Attempt to find the variable's assignment inside of the block
@@ -757,8 +755,6 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 	if(search_result.result_type != SEARCH_RESULT_TYPE_CONST){
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
-
-	printf("HERE\n\n\n");
 
 	/**
 	 * If we get here we know that the execution result is a pure constant and it's not a floating point
