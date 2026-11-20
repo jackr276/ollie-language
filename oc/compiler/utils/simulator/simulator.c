@@ -792,9 +792,10 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case CARROT:
 			case MOD:
 			case STAR:
-			case F_SLASH:
+			case F_SLASH: {
 				destination_type = instruction->operands.oir.assignee->type;
 				break;
+			}
 
 			/**
 			 * Relational operators follow a different pattern than above. We still
@@ -809,25 +810,20 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 			case L_THAN_OR_EQ:
 			case G_THAN_OR_EQ:
 			case DOUBLE_EQUALS:
-			case NOT_EQUALS:
-				if(instruction->operands.oir.operand2 != NULL){
-					destination_type = get_operand_type_for_relational_operation(cfg_reference->type_symtab, 
-															   					 instruction->operands.oir.operand1->type,
-															   					 instruction->operands.oir.operand2->type);
-				} else {
-					destination_type = instruction->operands.oir.operand1->type;
-				}
-
+			case NOT_EQUALS: {
+				destination_type = instruction->operands.oir.operand1->type;
 				break;
+			}
 
 			/**
 			 * For logical and/or, we will be grabbing the *assignee* type if we are unable to determine the
 			 * destination type from the type storage field on the instruction
 			 */
 			case DOUBLE_AND:
-			case DOUBLE_OR:
+			case DOUBLE_OR: {
 				destination_type = instruction->operands.oir.assignee->type;
 				break;
+			}
 
 			default:
 				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
@@ -850,22 +846,59 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
  * that does not set flags we will panic
  */
 static simulated_execution_result_t simulate_binary_operation_flags_after_execution(instruction_t* instruction){
+	/**
+	 * Extract both operands and use the helper to determine the overall operand
+	 * type that we have for this instruction
+	 */
 	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
 	three_addr_var_t* operand2 = instruction->operands.oir.operand2;
+	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
 
-
-	generic_type_t* operand_type;
-	if(instruction->type_storage.result_type != NULL){
-		operand_type = instruction->type_storage.result_type;
-	} else {
-
+	/**
+	 * First attempt to find the first operand's result inside of the block. If it's not possible
+	 * to find it then we'll bail out now
+	 */
+	search_result_t op1_result = search_for_variable_assignment_in_block(instruction, operand1);
+	if(op1_result.result_type == SEARCH_RESULT_TYPE_NONE){
+		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
+	/**
+	 * Then attempt to find the second operand's result inside of the block. Again if it's not possible
+	 * to find it then we'll bail out now
+	 */
+	search_result_t op2_result = search_for_variable_assignment_in_block(instruction, operand2);
+	if(op1_result.result_type == SEARCH_RESULT_TYPE_NONE){
+		return BLANK_SIMULATED_EXECUTION_RESULT;
+	}
 
+	/**
+	 * Now that we've gotten here, we know that we've found the assignments for both variables 
+	 * inside of the binary operation. We will now go through case by case to see if it's
+	 * possible for us to simulate
+	 *
+	 * Case 1: they are both constants. This is our ideal scenario as we can simulate this easily
+	 */
+	if(op1_result.result_type == SEARCH_RESULT_TYPE_CONST && op2_result.result_type == SEARCH_RESULT_TYPE_CONST){
+		printf("TODO SIMULATION WITH TWO CONSTANTS\n");
+		exit(1);
 
-
-	//TODO
-	return BLANK_SIMULATED_EXECUTION_RESULT;
+	/**
+	 * TODO DOC
+	 */
+	} else if(op1_result.result_type == SEARCH_RESULT_TYPE_VAR 
+				&& op2_result.result_type == SEARCH_RESULT_TYPE_VAR
+				&& variables_equal(op1_result.result.variable, op2_result.result.variable) == TRUE){
+		printf("TODO BOTH VALUES ARE EQUAL\n");
+		exit(1);
+	
+	/**
+	 * Otherwise we have some combo of variable and constant that is of no use to us, so return a blank
+	 * simulation result
+	 */
+	} else {
+		return BLANK_SIMULATED_EXECUTION_RESULT;
+	}
 }
 
 
