@@ -18835,11 +18835,10 @@ static void handle_not_instruction(instruction_t* instruction){
 		operand = temp_assignment->operands.oir.assignee;
 	}
 
-
-	//Find out what size we have
-	variable_size_t size = get_type_size(instruction->operands.oir.assignee->type);
-
-	switch(size){
+	/**
+	 * Select the appropriate instruction type given the variable size
+	 */
+	switch(get_type_size(operand->type)){
 		case QUAD_WORD:
 			instruction->instruction_type = NOTQ;
 			break;
@@ -18853,12 +18852,18 @@ static void handle_not_instruction(instruction_t* instruction){
 			instruction->instruction_type = NOTB;
 			break;
 		default:
+			trigger_ice_panic("Invalid variable size given in bitwise not selector");
 			break;
 	}
 
-	//Now we'll just translate the assignee to be the destination(and source in this case) register
-	instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
-	instruction->operands.x86.destination_register = instruction->operands.oir.assignee;
+	/**
+	 * Update the source and destination registers to be the values that we've provided. 
+	 * When the register allocator gets ahold of this, we will be forcing these two into
+	 * the same LR. This is due to the way that the notX instruction modifies values
+	 * inplace
+	 */
+	instruction->operands.x86.source_register1 = operand;
+	instruction->operands.x86.destination_register = assignee;
 }
 
 
