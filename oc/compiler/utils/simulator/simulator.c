@@ -765,12 +765,27 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 }
 
 
+/**
+ * Simulate the state of the flags register after a given binary operation has executed. This simulator
+ * has been designed to handle 2 main scenarios where possible given an expression a <BIN OP> b:
+ * 	1.) a and b are both really constants. In that case we can simulate the result as is
+ * 	2.) a and b are equal to one another. In that case we'll often be able to simulate flags at least for
+ * 		comparison
+ *
+ * We're going into this assuming that this is a flag setting operation
+ */
 static simulated_execution_result_t simulate_binary_operation_flags_after_execution(instruction_t* instruction){
+
 	//TODO
 	return BLANK_SIMULATED_EXECUTION_RESULT;
 }
 
 
+/**
+ * Simulate the state of the flags register after a given binary operation with constant has executed. This simulator
+ * has been designed to handle one scenario where simulation is possible, that being if the first operand is really
+ * a constant somewhere else. All other scenarios lead to nothing
+ */
 static simulated_execution_result_t simulate_binary_operation_with_constant_flags_after_execution(instruction_t* instruction){
 	//TODO
 	return BLANK_SIMULATED_EXECUTION_RESULT;
