@@ -1214,6 +1214,42 @@ static inline basic_block_t* simulate_branch_with_parity_consideration(instructi
 			}
 		}
 
+		/**
+		 * For not equals or not zero branches, we do need to do parity checking because we consider
+		 * a NaN to never be equal with anything else. In Ollie, NaN != <anything>, so if the parity
+		 * flag is set we'll need to jump to the if block. We'll also jump to true if we're not equal.
+		 * Since the parity conditions match up for both inverse branching(jump to physical if, logical else)
+		 * and normal branching(jump to physical if, logical if), we don't need any special logic for this
+		 *
+		 * Condition(to jump to phyiscal if block): PF == 1 || ZF == 0
+		 */
+		case BRANCH_NE:
+		case BRANCH_NZ: {
+			if((get_parity_flag(&flags) == 1) || (get_zero_flag(&flags) == 0)){
+				return if_block;
+			} else {
+				return else_block;
+			}
+		}
+
+		/**
+		 * For regular equals branches, we need to do parity checking because like with the
+		 * not equals case, NaN != <anything>. In the event that we do see the parity flag
+		 * checked we'll need to jump to the physical else condition. We'll jump to true if they are
+		 * equal. Since the parity conditions match up for both inverse branching(jump to physical else,
+		 * logical if) and normal branching(jump to physical else, logical else), we don't need
+		 * to add any special logic here
+		 *
+		 * Condition(to jump to phyiscal if block): PF == 0 && ZF == 1
+		 */
+		case BRANCH_E:
+		case BRANCH_Z: {
+			if((get_parity_flag(&flags) == 0) && (get_zero_flag(&flags) == 1)) {
+				return if_block;
+			} else {
+				return else_block;
+			}
+		}
 
 		/**
 		 * Any unrecognized branch should be a panic on our part
