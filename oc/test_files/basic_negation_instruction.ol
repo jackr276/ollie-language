@@ -9,5 +9,6 @@ pub fn negate_int(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
+	OUNIT: [exit_status = 1]
 	ret @negate_int(-1);
 }
