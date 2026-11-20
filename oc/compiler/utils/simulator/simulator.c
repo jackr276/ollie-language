@@ -911,8 +911,25 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
  * that does not set flags we will panic
  */
 static simulated_execution_result_t simulate_binary_operation_with_constant_flags_after_execution(instruction_t* instruction){
-	//TODO
-	return BLANK_SIMULATED_EXECUTION_RESULT;
+	/**
+	 * Extract the first operand, the constant oeprand, and determine the operand type for what we're trying
+	 * to simulate
+	 */
+	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
+	three_addr_const_t* constant_operand = instruction->operands.oir.constant_operand;
+	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
+
+	/**
+	 * Attempt to find operand1 inside of the block. If we do not find a *constant* value that it
+	 * is equal to, then there is nothing more to be done and we will return a blank result
+	 */
+	search_result_t op1_result = search_for_variable_assignment_in_block(instruction, operand1);
+	if(op1_result.result_type != SEARCH_RESULT_TYPE_CONST){
+		return BLANK_SIMULATED_EXECUTION_RESULT;
+	}
+
+	printf("TODO SIMULATION WITH TWO CONSTANTS\n");
+	exit(1);
 }
 
 
