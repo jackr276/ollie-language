@@ -1177,6 +1177,43 @@ static inline basic_block_t* simulate_branch_with_parity_consideration(instructi
 			}
 		}
 
+		/**
+		 * BRANCH_L/BRANCH_B behaves differently for floating point based on whether
+		 * or not our logical if matches our physical if block or not
+		 */
+		case BRANCH_LE:
+		case BRANCH_BE: {
+			/**
+			 * For a regular branch, our physical if is also our logical if. For this reason
+			 * we'll want any NaN's to jump to the physical else. Since a NaN would set
+			 * the CF=1, we will need to add a parity check beforehand that takes us
+			 * to the else in the event that the PF is set
+			 *
+			 * Condition(to jump to phyiscal if block): PF == 0 && (CF == 1 || ZF == 1)
+			 */
+			if(branch_category == BRANCH_CATEGORY_NORMAL){
+				if((get_parity_flag(&flags) == 0) && ((get_carry_flag(&flags) == 1) || (get_zero_flag(&flags) == 1))){
+					return if_block;
+				} else {
+					return else_block;
+				}
+
+			/**
+			 * For an inverse branch, our physical if is our logical else. For this reason
+			 * we'll want any NaN's to jump to the physical if. For this reason, we'll
+			 * add a parity check right beforehand to account for the NaN case
+			 *
+			 * Condition(to jump to phyiscal if block): PF == 1 || (CF == 1 || ZF == 1)
+			 */
+			} else {
+				if((get_parity_flag(&flags) == 1) || ((get_carry_flag(&flags) == 1) || (get_zero_flag(&flags) == 1))){
+					return if_block;
+				} else {
+					return else_block;
+				}
+			}
+		}
+
 
 		/**
 		 * Any unrecognized branch should be a panic on our part
