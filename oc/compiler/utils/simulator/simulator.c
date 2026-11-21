@@ -907,15 +907,21 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	if(op1_result.result_type == SEARCH_RESULT_TYPE_CONST && op2_result.result_type == SEARCH_RESULT_TYPE_CONST){
 		switch(instruction->op){
 			case CARROT: {
-
+				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+				return simulate_flags_from_bitwise_xor_with_constants(op1_raw_const, op2_raw_const, operand_type);
 			}
 
 			case SINGLE_AND: {
-
+				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+				return simulate_flags_from_bitwise_and_with_constants(op1_raw_const, op2_raw_const, operand_type);
 			}
 
 			case SINGLE_OR: {
-
+				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+				return simulate_flags_from_bitwise_or_with_constants(op1_raw_const, op2_raw_const, operand_type);
 			}
 
 			case L_THAN:
@@ -924,7 +930,6 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 			case G_THAN_OR_EQ:
 			case DOUBLE_EQUALS:
 			case NOT_EQUALS:
-			case EXCLAMATION:
 			case DOUBLE_AND:
 			case DOUBLE_OR: {
 			}
@@ -995,15 +1000,21 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 	 */
 	switch(instruction->op){
 		case CARROT: {
-
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			return simulate_flags_from_bitwise_xor_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
 		case SINGLE_AND: {
-
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			return simulate_flags_from_bitwise_and_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
 		case SINGLE_OR: {
-
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			return simulate_flags_from_bitwise_or_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
 		case L_THAN:
@@ -1012,7 +1023,6 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS:
-		case EXCLAMATION:
 		case DOUBLE_AND:
 		case DOUBLE_OR: {
 		}
