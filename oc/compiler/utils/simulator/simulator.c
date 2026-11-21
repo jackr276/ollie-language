@@ -370,8 +370,7 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
 /**
  * Simulate a bitwise OR statement given 2 constants and their type
  *
- * Bitwise OR can set: SF, ZF, PF
- * TODO REWORK
+ * Bitwise OR will set: SF, ZF, PF
  */
 static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -386,26 +385,35 @@ static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t
 	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
 
 	/**
-	 * Perform the bitwise OR and then use the mask to retain only the
-	 * bits that we're after
+	 * Get a sign bit mask that has 1 where the sign bit would be
+	 */
+	u_int64_t sign_bit_mask = (u_int64_t)(1UL) << (operand_bit_width - 1);
+
+	/**
+	 * Cut down both operands to be mask sized
+	 */
+	raw_constant1 &= mask;
+	raw_constant2 &= mask;
+
+	/**
+	 * Perform the bitwise OR and then use the mask to retain only
+	 * what we're after
 	 */
 	u_int64_t result = (raw_constant1 | raw_constant2) & mask;
+
+	/**
+	 * Sign flag is set if the sign bit is set. We'll use the
+	 * mask to get this
+	 */
+	if((result & sign_bit_mask) != 0){
+		set_sign_flag(&execution_result.flag_register);
+	}
 
 	/**
 	 * Zero flag is set if we're 0
 	 */
 	if(result == 0){
 		set_zero_flag(&execution_result.flag_register);
-	}
-
-	/**
-	 * TODO REDO SIGN BIT
-	 *
-	 *
-	 * Set sign flag if the sign bit is 1
-	 */
-	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
-		set_sign_flag(&execution_result.flag_register);
 	}
 
 	/**
