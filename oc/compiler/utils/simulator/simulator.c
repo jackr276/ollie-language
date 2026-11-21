@@ -998,11 +998,9 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 
 
 /**
- * Simulate the state of the flags register after a given binary operation has executed. This simulator
- * has been designed to handle 2 main scenarios where possible given an expression a <BIN OP> b:
- * 	1.) a and b are both really constants. In that case we can simulate the result as is
- * 	2.) a and b are equal to one another. In that case we'll often be able to simulate flags at least for
- * 		comparison
+ * Simulate the state of the flags register after a given binary operation has executed if possible. This is
+ * of course only possible if we are able to trace back both of the variable operands to constant assignments
+ * up earlier in the block
  *
  * NOTE: we will only do this for binary operations that do set flags. If we encounter a binary operation
  * that does not set flags we will panic
@@ -1017,132 +1015,107 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
 
 	/**
-	 * First attempt to find the first operand's result inside of the block. If it's not possible
-	 * to find it then we'll bail out now
+	 * First attempt to find the first operand's result inside of the block. If it's not a constant
+	 * then there's nothing more we can do
 	 */
 	search_result_t op1_result = search_for_variable_assignment_in_block(instruction, operand1);
-	if(op1_result.result_type == SEARCH_RESULT_TYPE_NONE){
+	if(op1_result.result_type != SEARCH_RESULT_TYPE_CONST){
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
 	/**
-	 * Then attempt to find the second operand's result inside of the block. Again if it's not possible
-	 * to find it then we'll bail out now
+	 * Then attempt to find the second operand's result inside of the block. Again if it's not a constant
+	 * then there's nothing more that we can do
 	 */
 	search_result_t op2_result = search_for_variable_assignment_in_block(instruction, operand2);
-	if(op1_result.result_type == SEARCH_RESULT_TYPE_NONE){
+	if(op1_result.result_type != SEARCH_RESULT_TYPE_CONST){
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
-	/**
-	 * Now that we've gotten here, we know that we've found the assignments for both variables 
-	 * inside of the binary operation. We will now go through case by case to see if it's
-	 * possible for us to simulate
-	 *
-	 * Case 1: they are both constants. This is our ideal scenario as we can simulate this easily
-	 */
-	if(op1_result.result_type == SEARCH_RESULT_TYPE_CONST && op2_result.result_type == SEARCH_RESULT_TYPE_CONST){
-		switch(instruction->op){
-			case CARROT: {
-				/**
-				 * Sanity check at this point - no floats allowed
-				 */
-				if(IS_FLOATING_POINT(operand_type) == TRUE){
-					trigger_ice_panic("Invalid floating point operand for ^ operator");
-				}
-
-				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
-				return simulate_flags_from_bitwise_xor_with_constants(op1_raw_const, op2_raw_const, operand_type);
-			}
-
-			case SINGLE_AND: {
-				/**
-				 * Sanity check at this point - no floats allowed
-				 */
-				if(IS_FLOATING_POINT(operand_type) == TRUE){
-					trigger_ice_panic("Invalid floating point operand for & operator");
-				}
-
-				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
-				return simulate_flags_from_bitwise_and_with_constants(op1_raw_const, op2_raw_const, operand_type);
-			}
-
-			case SINGLE_OR: {
-				/**
-				 * Sanity check at this point - no floats allowed
-				 */
-				if(IS_FLOATING_POINT(operand_type) == TRUE){
-					trigger_ice_panic("Invalid floating point operand for | operator");
-				}
-
-				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
-				return simulate_flags_from_bitwise_or_with_constants(op1_raw_const, op2_raw_const, operand_type);
-			}
-
-			case PLUS: {
-				/**
-				 * Sanity check - we cannot use floats to simulate addition for the purpose of branch
-				 */
-				if(IS_FLOATING_POINT(operand_type) == TRUE){
-					trigger_ice_panic("Invalid floating point operand for + operator");
-				}
-
-				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
-				return simulate_flags_from_addition_with_constants(op1_raw_const, op2_raw_const, operand_type);
-			}
-
-			case MINUS: {
-				/**
-				 * Sanity check - we cannot use floats to simulate subtraction for the purpose of branch
-				 */
-				if(IS_FLOATING_POINT(operand_type) == TRUE){
-					trigger_ice_panic("Invalid floating point operand for - operator");
-				}
-
-				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
-				return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
-			}
-
-			case L_THAN:
-			case L_THAN_OR_EQ:
-			case G_THAN:
-			case G_THAN_OR_EQ:
-			case DOUBLE_EQUALS:
-			case NOT_EQUALS: {
-				//TODO FALLTHROUGH TO MAKE THIS WORK
-				return BLANK_SIMULATED_EXECUTION_RESULT;
-			}
-
+	switch(instruction->op){
+		case CARROT: {
 			/**
-			 * We should never get to anything else. If we do then this is a compiler failure
+			 * Sanity check at this point - no floats allowed
 			 */
-			default: {
-				sprintf(compiler_error_info, "Operator %s does not set branch actionable flags and is therefore invalid for simulation", operator_token_to_string(instruction->op));
-				trigger_ice_panic(compiler_error_info);
-				return BLANK_SIMULATED_EXECUTION_RESULT;
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for ^ operator");
 			}
+
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+			return simulate_flags_from_bitwise_xor_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
-	/**
-	 * TODO DOC
-	 */
-	} else if(op1_result.result_type == SEARCH_RESULT_TYPE_VAR 
-				&& op2_result.result_type == SEARCH_RESULT_TYPE_VAR
-				&& variables_equal(op1_result.result.variable, op2_result.result.variable) == TRUE){
-		printf("TODO BOTH VALUES ARE EQUAL\n");
-		return BLANK_SIMULATED_EXECUTION_RESULT;
-	
-	/**
-	 * Otherwise we have some combo of variable and constant that is of no use to us, so return a blank
-	 * simulation result
-	 */
-	} else {
-		return BLANK_SIMULATED_EXECUTION_RESULT;
+		case SINGLE_AND: {
+			/**
+			 * Sanity check at this point - no floats allowed
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for & operator");
+			}
+
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+			return simulate_flags_from_bitwise_and_with_constants(op1_raw_const, op2_raw_const, operand_type);
+		}
+
+		case SINGLE_OR: {
+			/**
+			 * Sanity check at this point - no floats allowed
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for | operator");
+			}
+
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+			return simulate_flags_from_bitwise_or_with_constants(op1_raw_const, op2_raw_const, operand_type);
+		}
+
+		case PLUS: {
+			/**
+			 * Sanity check - we cannot use floats to simulate addition for the purpose of branch
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for + operator");
+			}
+
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+			return simulate_flags_from_addition_with_constants(op1_raw_const, op2_raw_const, operand_type);
+		}
+
+		case MINUS: {
+			/**
+			 * Sanity check - we cannot use floats to simulate subtraction for the purpose of branch
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for - operator");
+			}
+
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+			return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
+		}
+
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS: {
+			//TODO FALLTHROUGH TO MAKE THIS WORK
+			return BLANK_SIMULATED_EXECUTION_RESULT;
+		}
+
+		/**
+		 * We should never get to anything else. If we do then this is a compiler failure
+		 */
+		default: {
+			sprintf(compiler_error_info, "Operator %s does not set branch actionable flags and is therefore invalid for simulation", operator_token_to_string(instruction->op));
+			trigger_ice_panic(compiler_error_info);
+			return BLANK_SIMULATED_EXECUTION_RESULT;
+		}
 	}
 }
 
