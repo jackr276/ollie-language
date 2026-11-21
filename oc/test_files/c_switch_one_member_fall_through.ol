@@ -4,10 +4,7 @@
 * that also does a fall-through
 */
 
-
-pub fn main() -> i32 {
-	let x:mut i32 = 5;
-
+pub fn c_switch_member_fallthrough(x:mut i32) -> i32 {
 	switch(x){
 		case 5:
 			x++;
@@ -17,6 +14,11 @@ pub fn main() -> i32 {
 			break;
 	}
 
-	OUNIT: [exit_status = 5]
 	ret x;
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 5]
+	ret @c_switch_member_fallthrough(5);
 }

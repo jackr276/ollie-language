@@ -928,7 +928,7 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
-	printf("TODO SIMULATION WITH TWO CONSTANTS\n");
+	printf("TODO BIN OP CONST SIMULATION WITH TWO CONSTANTS\n");
 	exit(1);
 }
 
