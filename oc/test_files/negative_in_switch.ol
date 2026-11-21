@@ -34,7 +34,7 @@ fn negative_c_style(arg:i32) -> i32{
 fn negative_ollie_style(arg:i32) -> i32{
 	let x:mut i32 = 32;
 
-	switch(x){
+	switch(arg){
 		case -3 -> {
 			x = 32;
 		}
@@ -61,8 +61,7 @@ fn negative_ollie_style(arg:i32) -> i32{
 
 
 pub fn main() -> i32 {
-	@negative_c_style(3);
-	@negative_ollie_style(3);
-
-	ret 0;
+	//Should return 10 + 32 = 42
+	OUNIT: [exit_status = 42]
+	ret @negative_c_style(3) + @negative_ollie_style(-3);
 }

@@ -24,11 +24,11 @@ pub fn my_fn(param:inner_struct) -> i32 {
 }
 
 
-pub fn main() -> i32 {
+pub fn main(argc:i32, argv:char**) -> i32 {
 	let outer1:mut outer_struct = {[1, 2, 3, 4, 5], {1, 2.0}, 5};
 	let outer2:mut outer_struct = {[1, 2, 3, 4, 5], {5, 5.0d}, 5};
 
-	let x:i32 = 5;
+	let x:i32 = argc;
 
 	/**
 	 * Use the ternary struct assignment as the parameter 
