@@ -1095,15 +1095,25 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 				return simulate_flags_from_addition_with_constants(op1_raw_const, op2_raw_const, operand_type);
 			}
 
+			case MINUS: {
+				/**
+				 * Sanity check - we cannot use floats to simulate subtraction for the purpose of branch
+				 */
+				if(IS_FLOATING_POINT(operand_type) == TRUE){
+					trigger_ice_panic("Invalid floating point operand for - operator");
+				}
+
+				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+				return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
+			}
+
 			case L_THAN:
 			case L_THAN_OR_EQ:
 			case G_THAN:
 			case G_THAN_OR_EQ:
 			case DOUBLE_EQUALS:
 			case NOT_EQUALS: {
-			}
-
-			case MINUS: {
 				//TODO FALLTHROUGH TO MAKE THIS WORK
 				return BLANK_SIMULATED_EXECUTION_RESULT;
 			}
@@ -1219,18 +1229,28 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 			return simulate_flags_from_addition_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
+		case MINUS: {
+			/**
+			 * Sanity check - we cannot use floats to simulate subtraction for the purpose of branch
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for - operator");
+			}
+
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
+		}
+
 		case L_THAN:
 		case L_THAN_OR_EQ:
 		case G_THAN:
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS: { 
-
-		}
-
-		case MINUS: {
-			//TODO FALLTHROUGH TO MAKE THIS WORK
+			//TODO
 			return BLANK_SIMULATED_EXECUTION_RESULT;
+
 		}
 
 		/**
