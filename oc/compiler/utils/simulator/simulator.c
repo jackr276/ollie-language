@@ -186,9 +186,6 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
  * Simulate the subtraction of 2 *INTEGER* constants. We will always do raw_constant1 - raw_constant2
  *
  * Integer subtraction(subX) will set: CF, OF, SF, ZF, AF, PF
- *
- *
- * TOOD THIS IS OUR BLUEPRINT
  */
 static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -307,10 +304,9 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
 /**
  * Simulate a bitwise AND statement given 2 constants and their type
  *
- * Bitwise AND can set: SF, ZF, PF
+ * Bitwise AND will set: SF, ZF, PF
  *
  * NOTE: bitwise AND can also be used to represent the TEST command in this context
- * TODO REWORK
  */
 static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
@@ -325,26 +321,35 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
 	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
 
 	/**
-	 * Perform the bitwise AND and then use the mask to retain only the
-	 * bits that we're after
+	 * Get a sign bit mask that has 1 where the sign bit would be
+	 */
+	u_int64_t sign_bit_mask = (u_int64_t)(1UL) << (operand_bit_width - 1);
+
+	/**
+	 * Cut down both operands to be mask sized
+	 */
+	raw_constant1 &= mask;
+	raw_constant2 &= mask;
+
+	/**
+	 * Perform the bitwise AND and then use the mask to retain only
+	 * what we're after
 	 */
 	u_int64_t result = (raw_constant1 & raw_constant2) & mask;
+
+	/**
+	 * Sign flag is set if the sign bit is set. We'll use the
+	 * mask to get this
+	 */
+	if((result & sign_bit_mask) != 0){
+		set_sign_flag(&execution_result.flag_register);
+	}
 
 	/**
 	 * Zero flag is set if we're 0
 	 */
 	if(result == 0){
 		set_zero_flag(&execution_result.flag_register);
-	}
-
-	/**
-	 * TODO REDO SIGN BIT
-	 *
-	 *
-	 * Set sign flag if the sign bit is 1
-	 */
-	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
-		set_sign_flag(&execution_result.flag_register);
 	}
 
 	/**
@@ -881,7 +886,7 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	 */
 	if(op1_result.result_type == SEARCH_RESULT_TYPE_CONST && op2_result.result_type == SEARCH_RESULT_TYPE_CONST){
 		printf("TODO SIMULATION WITH TWO CONSTANTS\n");
-		exit(1);
+		return BLANK_SIMULATED_EXECUTION_RESULT;
 
 	/**
 	 * TODO DOC
@@ -890,7 +895,7 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 				&& op2_result.result_type == SEARCH_RESULT_TYPE_VAR
 				&& variables_equal(op1_result.result.variable, op2_result.result.variable) == TRUE){
 		printf("TODO BOTH VALUES ARE EQUAL\n");
-		exit(1);
+		return BLANK_SIMULATED_EXECUTION_RESULT;
 	
 	/**
 	 * Otherwise we have some combo of variable and constant that is of no use to us, so return a blank
@@ -929,7 +934,7 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 	}
 
 	printf("TODO BIN OP CONST SIMULATION WITH TWO CONSTANTS\n");
-	exit(1);
+	return BLANK_SIMULATED_EXECUTION_RESULT;
 }
 
 
