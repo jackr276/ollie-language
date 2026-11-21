@@ -929,9 +929,7 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 			case G_THAN:
 			case G_THAN_OR_EQ:
 			case DOUBLE_EQUALS:
-			case NOT_EQUALS:
-			case DOUBLE_AND:
-			case DOUBLE_OR: {
+			case NOT_EQUALS: {
 			}
 
 			case PLUS:
@@ -1022,9 +1020,8 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 		case G_THAN:
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
-		case NOT_EQUALS:
-		case DOUBLE_AND:
-		case DOUBLE_OR: {
+		case NOT_EQUALS: { 
+
 		}
 
 		case PLUS:
