@@ -1,0 +1,44 @@
+/**
+ * Author: Jack Robbins
+ * This header file defines the APIs used for the OIR simulator. The OIR simulator allows us
+ * to simulate the execution of chains of instructoins. This is particularly useful when it comes
+ * to branch reduction when we're able to simplify branching statements
+ */
+
+#ifndef OIR_SIMULATOR_H
+#define OIR_SIMULATOR_H
+
+#include "../x86_cpu_flags.h"
+#include "../basic_block/basic_block.h"
+#include <sys/types.h>
+
+/**
+ * A simluated execution returns the flag register after execution
+ * and a boolean denoting whether a simulation was even possible. If
+ * the simulation was not possible, the flags register is junk
+ */
+typedef struct simulated_execution_result_t simulated_execution_result_t;
+struct simulated_execution_result_t{
+	RFLAGS_t flag_register;
+	u_int8_t simulation_possible;
+};
+
+#define BLANK_SIMULATED_EXECUTION_RESULT (simulated_execution_result_t){{0}, FALSE}
+
+/**
+ * Simulate the execution of the given instruction. The simulation will not return the actual value result, instead
+ * we will return a struct that contains a boolean noting whether we even could simulate this, and a flag register
+ * that represents the state of RFLAGS after this instruction executes
+ *
+ * There is no guarantee that an instruction passed into this simulator can be simulated
+ */
+simulated_execution_result_t simulate_instruction_flags_after_execution(instruction_t* instruction);
+
+/**
+ * Given the flags at the time of branch execution, determine which branch in the given branch
+ * statement we'd jump to. This will always return a valid block, because a branch must always execute
+ * in a way that gives one block back
+ */
+basic_block_t* simulate_branch_execution_given_flags(instruction_t* branch_statement, u_int8_t comes_from_fp_comparison, RFLAGS_t flags);
+
+#endif /* OIR_SIMULATOR_H */

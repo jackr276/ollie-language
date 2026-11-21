@@ -25,6 +25,8 @@
  * jne A <-----  if(inverted)
  * jmp B <----- else
  */
+#include "constants.h"
+#include <sys/types.h>
 typedef enum {
 	BRANCH_CATEGORY_NORMAL,
 	BRANCH_CATEGORY_INVERSE
@@ -87,8 +89,6 @@ typedef enum {
 	THREE_ADDR_CODE_BITWISE_NOT_STMT,
 	//A logical not statement
 	THREE_ADDR_CODE_LOGICAL_NOT_STMT,
-	//An indirection statement
-	THREE_ADDR_CODE_DEREF_STMT,
 	//Binary op with const
 	THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT,
 	//Regular two address assignment

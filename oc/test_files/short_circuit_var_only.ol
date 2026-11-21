@@ -41,7 +41,7 @@ fn test_while_and(arg:i32) -> i32 {
 }
 
 pub fn test_if_and(arg:i32) -> i32 {
-	let x:mut u32 = 232;
+	let x:mut u32 = arg;
 
 	if(x && arg){
 		x = x - 3;
@@ -54,7 +54,7 @@ pub fn test_if_and(arg:i32) -> i32 {
 }
 
 pub fn main(arg:i32, argv:char**) -> i32{
-	let x:mut u32 = 232;
+	let x:mut u32 = arg;
 	
 	if(x || arg){
 		x = x - 3;

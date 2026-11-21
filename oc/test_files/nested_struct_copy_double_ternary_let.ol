@@ -22,14 +22,10 @@ pub fn my_fn(param:inner_struct) -> i32 {
 	ret 3 * param:x;
 }
 
-
-pub fn main() -> i32 {
+pub fn nested_struct_double_ternary(x:i32, y:i32) -> i32 {
 	let outer1:mut outer_struct = {[1, 2, 3, 4, 5], {1, 2.0}, 5};
 	let outer2:mut outer_struct = {[1, 2, 3, 4, 5], {5, 5.0d}, 5};
 	let outer3:mut outer_struct = {[1, 2, 3, 4, 5], {7, 7.0d}, 5};
-
-	let x:i32 = 6;
-	let y:i32 = 7;
 
 	/**
 	 * Copy all of the way over here with our nested struct. We should
@@ -43,6 +39,11 @@ pub fn main() -> i32 {
 	 * Use the ternary struct assignment as the parameter 
 	 * Should return 7 * 3 = 21
 	 */
-	 OUNIT: [exit_status = 21]
 	ret @my_fn(final_struct);
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 21]
+	ret @nested_struct_double_ternary(6, 7);
 }

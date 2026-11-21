@@ -129,10 +129,11 @@ typedef struct {
 	cfg_result_type_t type;
 
 	/**
-	 * Does this operation set RFLAGS? This is usually set to false, it's
-	 * only ever used for binary operations
+	 * Does this operation set flags in a way that is sufficient to branch on?
+	 * Remember that some operations kind of just mangle the flags or have undefined
+	 * behavior. That is not sufficient for us here
 	 */
-	u_int8_t sets_rflags;
+	u_int8_t operation_sets_branchable_flags;
 
 	/**
 	 * The operator may or may not always be filled. Again usually
@@ -167,14 +168,6 @@ typedef struct {
 	basic_block_t* original_block;
 	basic_block_t* copied_block;
 } block_mapping_t;
-
-
-//Enum for branch conditional types
-typedef enum {
-	BRANCH_CONDITIONAL_UNKNOWN,
-	BRANCH_CONDITIONAL_ALWAYS_TRUE,
-	BRANCH_CONDITIONAL_ALWAYS_FALSE
-} branch_conditional_truthfullness_t;
 
 
 /**
@@ -1778,28 +1771,6 @@ static inline cfg_result_package_t emit_branch_conditional_expression(basic_bloc
 
 
 /**
- * Is a branch conditional always true? We can detect this by determining if something is a plain
- * constant(think while(true)) or not.
- */
-static inline branch_conditional_truthfullness_t get_branch_conditional_truthfullness(generic_ast_node_t* branch_conditional){
-	//Not a constant then don't care, just get out
-	if(branch_conditional->ast_node_type != AST_NODE_TYPE_CONSTANT){
-		return BRANCH_CONDITIONAL_UNKNOWN;
-	}
-
-	/**
-	 * If we know the result is 0, then we're always false. Otherwise
-	 * we know it's always true
-	 */
-	if(is_constant_node_value_0(branch_conditional) == TRUE){
-		return BRANCH_CONDITIONAL_ALWAYS_FALSE;
-	} else {
-		return BRANCH_CONDITIONAL_ALWAYS_TRUE;
-	}
-}
-
-
-/**
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
@@ -1807,9 +1778,8 @@ static inline branch_conditional_truthfullness_t get_branch_conditional_truthful
 static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, basic_block_t* if_block, basic_block_t* else_block, branch_category_t branch_category){
 	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
-
-	//Keep track of the current block
 	basic_block_t* current_block = starting_block;
+	u_int32_t line_number = conditional_node->line_number;
 
 	/**
 	 * The first thing that we need to do is emit the conditional. However - this conditional
@@ -1818,50 +1788,6 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 	 * short circuit optimization here
 	 */
 	if(is_op_short_circuit_eligible(conditional_node->binary_operator) == FALSE){
-		/**
-		 * If we are able to off the bat determine whether or not this is true, then this
-		 * branch itself is going to be useless. Instead of emitting things, we will just
-		 * optimize as we go right here and jump either to if or else based on
-		 * the branch type and trutfulness
-		 */
-		branch_conditional_truthfullness_t truthfullness = get_branch_conditional_truthfullness(conditional_node);
-
-		switch(truthfullness){
-			/**
-			 * We have something that is provable to always be true. 
-			 *
-			 * If regular branch -> jump to if always
-			 * If inverse branch -> jump to else always
-			 */
-			case BRANCH_CONDITIONAL_ALWAYS_TRUE:
-				if(branch_category == BRANCH_CATEGORY_NORMAL){
-					emit_jump(current_block, if_block);
-				} else {
-					emit_jump(current_block, else_block);
-				}
-
-				return results;
-
-			/**
-			 * We have something that is provable to always be false. 
-			 *
-			 * If regular branch -> jump to else always
-			 * If inverse branch -> jump to if always
-			 */
-			case BRANCH_CONDITIONAL_ALWAYS_FALSE:
-				if(branch_category == BRANCH_CATEGORY_NORMAL){
-					emit_jump(current_block, else_block);
-				} else {
-					emit_jump(current_block, if_block);
-				}
-
-				return results;
-
-			//Anything else it's impossible to determine so we process normally
-			default:
-				break;
-		}
-
 		/**
 		 * Let the helper emit the conditional, extract and update the final block
 		 */
@@ -1872,16 +1798,16 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * The conditional decider is the variable that represents the flags set by the equation that we're using
 		 * to decide this branch
 		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, conditional_node->line_number);
+		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, line_number);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
+		 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
 		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
 		 */
-		if(binary_results.sets_rflags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
+		if(binary_results.operation_sets_branchable_flags == FALSE){
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
 		}
 
 		/**
@@ -1910,7 +1836,9 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		//Flag that this sets condition codes
 		conditional_decider->sets_cc = TRUE;
 
-		//Now let's try to decide the branch type
+		/**
+		 * Select the appropriate branch type and then emit the branch statement
+		 */
 		branch_type_t branch_type = select_appropriate_branch_statement(binary_results.operator, branch_category, type_signed);
 
 		//Now we can finall spit this one out
@@ -1919,7 +1847,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 																conditional_decider,
 																branch_type,
 																branch_category,
-																conditional_node->line_number);
+																line_number);
 
 		//Add it into the block
 		add_statement(current_block, branch_statement);
@@ -2119,6 +2047,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_block, generic_ast_node_t* conditional_node, symtab_label_record_t* if_destination_label, basic_block_t* else_block){
 	//Allcoate the results
 	cfg_result_package_t results = INITIALIZE_BLANK_CFG_RESULT;
+	u_int32_t line_number = conditional_node->line_number;
 
 	/**
 	 * We only allocate this storage if it is needed. If we get here and it's unallocated, now
@@ -2145,16 +2074,17 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		/**
 		 * Unpack the conditional decider using result unpacking
 		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, conditional_node->line_number);
+		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, line_number);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set RFLAGS, we will need to emit a test if not zero statement to get the flags
-		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
-		 * bitwise inversing, etc., so this flag is very important to have set correctly
+		 * *NOT* set RFLAGS in a branch operable manner, we will need to emit a test if not zero
+		 * statement to get the flags populated. Settings RFLAGS generally does not happen for
+		 * things like float arithmetic, bitwise inversing, etc., so this flag is very important
+		 * to have set correctly
 		 */
-		if(conditional_results.sets_rflags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, conditional_node->line_number);
+		if(conditional_results.operation_sets_branchable_flags == FALSE){
+			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
 		}
 
 		/**
@@ -2190,7 +2120,7 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 																conditional_decider,
 																branch_type,
 																BRANCH_CATEGORY_NORMAL,
-																conditional_node->line_number);
+																line_number);
 		
 		//Store the if destination for later
 		branch_statement->optional_storage.jumping_to_label = if_destination_label;
@@ -4302,9 +4232,9 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			/**
-			 * Whether or not this sets RFLAGS depends on the type
+			 * Whether or not this sets branch actionable flags
 			 */
-			generic_results.sets_rflags = does_operator_set_branch_actionable_RFLAGS(unary_operator_node->unary_operator, operand_type);
+			generic_results.operation_sets_branchable_flags = does_operator_set_branch_actionable_RFLAGS(unary_operator_node->unary_operator, operand_type);
 
 			//Package up and return our results
 			generic_results.starting_block = basic_block;
@@ -4419,7 +4349,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			//These never set RFLAGS
-			generic_results.sets_rflags = FALSE;
+			generic_results.operation_sets_branchable_flags = FALSE;
 
 			//Package up and return
 			generic_results.starting_block = basic_block;
@@ -4447,7 +4377,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, logical_not_statement);
 
 			//These always set RFLAGS
-			generic_results.sets_rflags = TRUE;
+			generic_results.operation_sets_branchable_flags = TRUE;
 
 			//Package up and return the result
 			generic_results.operator = EXCLAMATION;
@@ -4486,7 +4416,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			add_statement(current_block, bitwise_not);
 
 			//These never set RFLAGS
-			generic_results.sets_rflags = FALSE;
+			generic_results.operation_sets_branchable_flags = FALSE;
 
 			//Package up and return the results
 			generic_results.operator = B_NOT;
@@ -4526,7 +4456,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			/**
 			 * Whether or not this actually sets RFLAGS depends on the type of the operand
 			 */
-			generic_results.sets_rflags = does_operator_set_branch_actionable_RFLAGS(MINUS, operand_type);
+			generic_results.operation_sets_branchable_flags = does_operator_set_branch_actionable_RFLAGS(MINUS, operand_type);
 
 			//Package up and return the results
 			generic_results.operator = MINUS;
@@ -4604,7 +4534,7 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			}
 
 			//These never set RFLAGS
-			generic_results.sets_rflags = FALSE;
+			generic_results.operation_sets_branchable_flags = FALSE;
 
 			//Package up and return the geneirc results
 			generic_results.operator = SINGLE_AND;
@@ -4765,7 +4695,7 @@ static cfg_result_package_t emit_ternary_expression(basic_block_t* starting_bloc
 	/**
 	 * A ternary expression should never be considered to set condition codes
 	 */
-	return_package.sets_rflags = FALSE;
+	return_package.operation_sets_branchable_flags = FALSE;
 
 	//Add the final things in here
 	return_package.starting_block = starting_block;
@@ -5843,10 +5773,10 @@ static cfg_result_package_t emit_binary_expression(basic_block_t* basic_block, g
 
 	/**
 	 * Inside of the result package we will store the determination as to whether or
-	 * not this binary operation sets RFLAGS or not. This is important when it comes 
+	 * not this binary operation sets branch operable flags or not. This is important when it comes 
 	 * time for branch emittal
 	 */
-	package.sets_rflags = does_operator_set_branch_actionable_RFLAGS(logical_or_expr->binary_operator, final_result_type);
+	package.operation_sets_branchable_flags = does_operator_set_branch_actionable_RFLAGS(logical_or_expr->binary_operator, final_result_type);
 
 	//Package up and return
 	package.final_block = current_block;
@@ -6407,6 +6337,10 @@ static inline void emit_branch_for_switch_statement(basic_block_t* basic_block, 
 	//Add the statement into the block
 	add_statement(basic_block, branch_instruction);
 
+	/**
+	 * Add the if and else destination in that order in as real
+	 * successors to the given block
+	 */
 	add_real_successor(basic_block, if_destination);
 	add_real_successor(basic_block, else_destination);
 }

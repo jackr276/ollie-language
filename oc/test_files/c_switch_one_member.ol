@@ -3,10 +3,7 @@
 * Test a case where we have a c swtich with one non-default member
 */
 
-
-pub fn main() -> i32 {
-	let x:mut i32 = 5;
-
+pub fn c_switch_one_member(x:mut i32) -> i32 {
 	switch(x){
 		case 5:
 			x++;
@@ -17,6 +14,11 @@ pub fn main() -> i32 {
 			break;
 	}
 
-	OUNIT: [exit_status = 6]
 	ret x;
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 6]
+	ret @c_switch_one_member(5);
 }

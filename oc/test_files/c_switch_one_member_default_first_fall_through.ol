@@ -5,10 +5,8 @@
 */
 
 
-pub fn main() -> i32 {
+pub fn c_switch_fallthrough(x:mut i32) -> i32 {
 	//This should hit the default
-	let x:mut i32 = 5;
-
 	switch(x){
 		default:
 			x--;
@@ -17,7 +15,12 @@ pub fn main() -> i32 {
 			x++;
 			break;
 	}
-
-	OUNIT: [exit_status = 5]
+	
 	ret x;
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 5]
+	ret @c_switch_fallthrough(5);
 }

@@ -62,6 +62,15 @@ typedef enum {
 } forced_signedness_type_t;
 
 /**
+ * Will we be printing these out as instructions or as three address code
+ * statements?
+ */
+typedef enum {
+	PRINT_THREE_ADDRESS_CODE,
+	PRINT_INSTRUCTION
+} instruction_printing_mode_t;
+
+/**
  * A generic struct that encapsulates most of our instructions
  */
 struct instruction_t{
@@ -402,6 +411,149 @@ static inline u_int8_t does_operator_set_branch_actionable_RFLAGS(ollie_token_t 
 		/**
 		 * Operators like bitwise not(~) do not set flags
 		 * at all so we exclude them
+		 */
+		default: {
+			return FALSE;
+		}
+	}
+}
+
+
+/**
+ * Does the given OIR statement alter flags in any way? This drops the strict
+ * requirement of the flags being branch eligible
+ */
+static inline u_int8_t does_OIR_statement_alter_flags(instruction_t* statement){
+	switch(statement->statement_type){
+		/**
+		 * For binary operations and negation, whether or not we alter flags depends on what
+		 * we're operating over and the operand itself
+		 */
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_NEG_STATEMENT: 
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
+			/**
+			 * Extract the type that we're operating on to determine
+			 * if we set flags or not
+			 */
+			generic_type_t* type_operating_on = NULL;
+			if(statement->type_storage.result_type != NULL){
+				type_operating_on = statement->type_storage.result_type;
+			} else {
+				type_operating_on = statement->operands.oir.operand1->type;
+			}
+
+			/**
+			 * Based on the operator we will determine if flags are set or
+			 * unchanged by this operation
+			 */
+			switch(statement->op){
+				/**
+				 * All of the below will always set flags no matter what
+				 */
+				case L_THAN:
+				case L_THAN_OR_EQ:
+				case G_THAN:
+				case G_THAN_OR_EQ:
+				case DOUBLE_EQUALS:
+				case NOT_EQUALS:
+				case EXCLAMATION:
+				case CARROT:
+				case SINGLE_AND:
+				case SINGLE_OR:
+				case DOUBLE_AND:
+				case DOUBLE_OR:
+				case PLUSPLUS:
+				case MINUSMINUS:
+				case L_SHIFT:
+				case R_SHIFT: {
+					return TRUE;
+				}
+
+				/**
+				 * +, -, *, / and % all mangle the flags when they are done over integers. If
+				 * done over floating point operands, then no flags are touched. To be specific,
+				 * the x86 standard lists these as "undefined" for integer operands, meaning that
+				 * no guarnatees are made at an architecture level as to what the values are
+				 */
+				case PLUS:
+				case MINUS:
+				case STAR:
+				case F_SLASH:
+				case MOD: {
+					return !(IS_FLOATING_POINT(type_operating_on));
+				}
+
+				/**
+				 * Anything else is undefined and false
+				 */
+				default: {
+					return FALSE;
+				}
+			}
+		}
+
+		/**
+		 * All of the following are going to set flags no matter what, so we have to
+		 * include them below
+		 */
+		case THREE_ADDR_CODE_INC_STMT:
+		case THREE_ADDR_CODE_DEC_STMT:
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
+		case THREE_ADDR_CODE_CLEAR_STMT: {
+			return TRUE;
+		}
+
+		/**
+		 * By default assume no condition codes are set
+		 */
+		default: {
+			return FALSE;
+		}
+	}
+}
+
+
+/**
+ * Does the given OIR statement set the RFLAGS register in a way that is sufficient
+ * to be branched on? This means that incomplete or undefined flag setting will
+ * be ignored(example: division, shifting, inc/dec, etc)
+ */
+static inline u_int8_t does_OIR_statement_set_branch_eligible_flags(instruction_t* statement){
+	switch(statement->statement_type){
+		/**
+		 * For the following statement types, whether or not we set condition
+		 * codes depends entirely on the type that we're operating over.
+		 */
+		case THREE_ADDR_CODE_NEG_STATEMENT: 
+		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
+		case THREE_ADDR_CODE_LOGICAL_NOT_STMT:
+		case THREE_ADDR_CODE_BIN_OP_STMT: {
+			/**
+			 * Extract the type that we're operating on to determine
+			 * if we set flags or not
+			 */
+			generic_type_t* type_operating_on = NULL;
+			if(statement->type_storage.result_type != NULL){
+				type_operating_on = statement->type_storage.result_type;
+			} else {
+				type_operating_on = statement->operands.oir.operand1->type;
+			}
+
+			return does_operator_set_branch_actionable_RFLAGS(statement->op, type_operating_on);
+		}
+
+		/**
+		 * Test if not zero is purpose built to always set condition codes, so we will
+		 * always return TRUE in that case
+		 */
+		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
+			return TRUE;
+		}
+
+		/**
+		 * By default assume no condition codes are set
 		 */
 		default: {
 			return FALSE;

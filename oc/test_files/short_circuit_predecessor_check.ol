@@ -4,10 +4,10 @@
 */
 
 
-pub fn main(arg:i32, argv:char**) -> i32{
-	let x:mut u32 = 232;
+pub fn main(argc:i32, argv:char**) -> i32{
+	let x:mut u32 = argc;
 	
-	if(x || arg){
+	if(x || argc){
 		x = x - 3;
 	} else {
 	 	x = x + 3;
