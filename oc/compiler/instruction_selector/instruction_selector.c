@@ -9131,9 +9131,14 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 
 
 /**
- * Eliminate the given branch if at all possible
+ * Eliminate the given branch if possible. To do this, we'll need to trace up
+ * the block to find the statement that this branch "relies on". If we are able
+ * to prove what flags that statement will set via a simulation, then we will
+ * be able to determine what path the branch will always take, and eliminate the branch
+ * accordingly
  *
- * TODO DOC
+ * NOTE: this function returns TRUE if the branch could be eliminated, and FALSE if not.
+ * There is no issue if the branch cannot be eliminated - most branches cannot be
  */
 static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	/**
@@ -9184,7 +9189,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * sets the flags, but sets them in a way that s eligible for branching
 	 */
 	if(does_OIR_statement_set_branch_eligible_flags(flag_setting_statement) == FALSE){
-		trigger_ice_panic("Branch was found to rely on statement that cannot set the RFLAGS register");
+		trigger_ice_panic("Branch was found to rely on statement that cannot adequately the RFLAGS register");
 	}
 
 	/**
@@ -9195,10 +9200,8 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 
 	/**
 	 * If we make it to here, we now have a branch statement and the statement that sets the flags 
-	 * for this given branch statement. There is now a good chance that we can cheaply determine
-	 * whether or not we know if this branch will always execute. It is important that we're doing this
-	 * now after a large amount of simplification has occurred, because we should be able to knock out
-	 * a lot of constant statements that we otherwise couldn't
+	 * for this given branch statement. There is now a chance that we can cheaply determine
+	 * whether or not we know what path this branch will always take
 	 */
 	simulated_execution_result_t simulation_result = simulate_instruction_flags_after_execution(flag_setting_statement);
 
