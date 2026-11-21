@@ -925,6 +925,8 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 
 			case PLUS:
 			case MINUS: {
+				//TODO FALLTHROUGH TO MAKE THIS WORK
+				return BLANK_SIMULATED_EXECUTION_RESULT;
 			}
 
 			/**
