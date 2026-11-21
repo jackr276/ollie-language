@@ -187,7 +187,7 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
  *
  * Integer subtraction(subX) will set: CF, OF, SF, ZF, AF, PF
  */
-static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+static simulated_execution_result_t simulate_flags_from_subtraction_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
 	 * Initialize our results. If we get here then we know that this is going to work
 	 */
@@ -308,7 +308,7 @@ static simulated_execution_result_t simulate_subtraction_with_constants(u_int64_
  *
  * NOTE: bitwise AND can also be used to represent the TEST command in this context
  */
-static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+static simulated_execution_result_t simulate_flags_from_bitwise_and_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
 	 * Initialize our results. If we get here then we know that this is going to work
 	 */
@@ -372,7 +372,7 @@ static simulated_execution_result_t simulate_bitwise_and_with_constants(u_int64_
  *
  * Bitwise OR will set: SF, ZF, PF
  */
-static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+static simulated_execution_result_t simulate_flags_from_bitwise_or_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
 	 * Initialize our results. If we get here then we know that this is going to work
 	 */
@@ -434,11 +434,9 @@ static simulated_execution_result_t simulate_bitwise_or_with_constants(u_int64_t
 /**
  * Simulate a bitwise XOR statement given 2 constants and their type
  *
- * Bitwise XOR can set: SF, ZF, PF
- *
- * TODO REWORK
+ * Bitwise XOR will set: SF, ZF, PF
  */
-static simulated_execution_result_t simulate_bitwise_xor_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+static simulated_execution_result_t simulate_flags_from_bitwise_xor_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
 	/**
 	 * Initialize our results. If we get here then we know that this is going to work
 	 */
@@ -451,25 +449,35 @@ static simulated_execution_result_t simulate_bitwise_xor_with_constants(u_int64_
 	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
 
 	/**
-	 * Perform the bitwise XOR and then use the mask to retain only the
-	 * bits that we're after
+	 * Get a sign bit mask that has 1 where the sign bit would be
+	 */
+	u_int64_t sign_bit_mask = (u_int64_t)(1UL) << (operand_bit_width - 1);
+
+	/**
+	 * Cut down both operands to be mask sized
+	 */
+	raw_constant1 &= mask;
+	raw_constant2 &= mask;
+
+	/**
+	 * Perform the bitwise XOR and then use the mask to retain only
+	 * what we're after
 	 */
 	u_int64_t result = (raw_constant1 ^ raw_constant2) & mask;
+
+	/**
+	 * Sign flag is set if the sign bit is set. We'll use the
+	 * mask to get this
+	 */
+	if((result & sign_bit_mask) != 0){
+		set_sign_flag(&execution_result.flag_register);
+	}
 
 	/**
 	 * Zero flag is set if we're 0
 	 */
 	if(result == 0){
 		set_zero_flag(&execution_result.flag_register);
-	}
-
-	/**
-	 * TODO REDO SIGN BIT
-	 *
-	 * Set sign flag if the sign bit is 1
-	 */
-	if(((result >> (operand_bit_width - 1)) & 0x01) == 1){
-		set_sign_flag(&execution_result.flag_register);
 	}
 
 	/**
@@ -659,8 +667,7 @@ static simulated_execution_result_t simulate_test_if_not_zero_flags_after_execut
 	 */
 	if(IS_FLOATING_POINT(operand_type) == FALSE){
 		u_int64_t raw_constant_value = constant_operand->constant_value.unsigned_long_constant;
-		//TODO REWORK
-		return simulate_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
+		return simulate_flags_from_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
 
 	/**
 	 * Case 2: for floating point constants, the test if not 0 instruction will be turned into
@@ -722,8 +729,7 @@ simulated_execution_result_t simulate_logical_not_flags_after_execution(instruct
 	 */
 	if(IS_FLOATING_POINT(operand_type) == FALSE){
 		u_int64_t raw_constant_value = constant_operand->constant_value.unsigned_long_constant;
-		//TODO REWORK
-		return simulate_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
+		return simulate_flags_from_bitwise_and_with_constants(raw_constant_value, raw_constant_value, operand_type);
 
 	/**
 	 * Case 2: for floating point constants, the test if not 0 instruction will be turned into
@@ -777,7 +783,7 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 	 * value. In this case we are able to simulate the execution of the negation. Integer negation
 	 * is in reality equivalent to doing "0 - x", so that is what we will simulate for our flags
 	 */
-	return simulate_subtraction_with_constants(0UL, search_result.result.constant->constant_value.unsigned_long_constant, operand_type);
+	return simulate_flags_from_subtraction_with_constants(0UL, search_result.result.constant->constant_value.unsigned_long_constant, operand_type);
 }
 
 
