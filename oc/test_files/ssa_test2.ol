@@ -2,8 +2,8 @@
 * SSA Testing
 */
 
-pub fn main(argc:i32, argv:char**) -> i32{
-	let x:mut u32 = argc;
+pub fn main() -> i32{
+	let x:mut u32 = 33;
 	defer {
 		x++;
 	};

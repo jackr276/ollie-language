@@ -2,10 +2,10 @@
 * SSA Testing
 */
 
-pub fn main(argc:i32, argv:char**) -> i32{
-	let x:mut i32 = 3222;
+pub fn main() -> i32{
+	let x:mut i32 = 33;
 
-	x = argc;
+	x = 3222;
 
 	if(x <= 32) {
 		if(x == 70) {

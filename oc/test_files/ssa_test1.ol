@@ -4,7 +4,9 @@
 
 
 // Test function
-fn tester(x:mut u32) -> i32 {
+fn tester() -> i32 {
+	let x:mut u32 = 232;
+
 	if(x == 327) {
 		ret x;
 	}
@@ -16,7 +18,11 @@ fn tester(x:mut u32) -> i32 {
 
 
 
-pub fn test_fn(x:mut i32, y:mut i32, z:mut i32) -> i32 {
+pub fn main() -> i32{
+	let y:mut i32 = 23;
+	let x:mut i32 = 3;
+	let z:mut i32 = 322;
+
 	//Statically known use - the goal of SSA
 	if(x > 4) {
 		y = x - 2;
@@ -38,10 +44,7 @@ pub fn test_fn(x:mut i32, y:mut i32, z:mut i32) -> i32 {
 		w++;
 	} while (w != x - y);
 
-	ret w;
-}
+	
 
-//Dummy
-pub fn main() -> i32{
 	ret 0;
 }

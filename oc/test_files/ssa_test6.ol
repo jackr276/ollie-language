@@ -6,11 +6,11 @@
 let glob_x:mut u32 = 3232;
 let glog_y:i32 = -232;
 
-pub fn main(argc:i32, argv:char**) -> i32{
+pub fn main() -> i32{
 	let x:mut i32 = 33;
-	let y:mut i32 = argc + 1;
+	let y:mut i32 = 3232;
 
-	x = argc;
+	x = 3222;
 
 	if(x <= 32) {
 		x = x + 22;
