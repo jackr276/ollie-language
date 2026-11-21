@@ -1044,21 +1044,55 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	if(op1_result.result_type == SEARCH_RESULT_TYPE_CONST && op2_result.result_type == SEARCH_RESULT_TYPE_CONST){
 		switch(instruction->op){
 			case CARROT: {
+				/**
+				 * Sanity check at this point - no floats allowed
+				 */
+				if(IS_FLOATING_POINT(operand_type) == TRUE){
+					trigger_ice_panic("Invalid floating point operand for ^ operator");
+				}
+
 				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
 				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
 				return simulate_flags_from_bitwise_xor_with_constants(op1_raw_const, op2_raw_const, operand_type);
 			}
 
 			case SINGLE_AND: {
+				/**
+				 * Sanity check at this point - no floats allowed
+				 */
+				if(IS_FLOATING_POINT(operand_type) == TRUE){
+					trigger_ice_panic("Invalid floating point operand for & operator");
+				}
+
 				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
 				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
 				return simulate_flags_from_bitwise_and_with_constants(op1_raw_const, op2_raw_const, operand_type);
 			}
 
 			case SINGLE_OR: {
+				/**
+				 * Sanity check at this point - no floats allowed
+				 */
+				if(IS_FLOATING_POINT(operand_type) == TRUE){
+					trigger_ice_panic("Invalid floating point operand for | operator");
+				}
+
 				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
 				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
 				return simulate_flags_from_bitwise_or_with_constants(op1_raw_const, op2_raw_const, operand_type);
+			}
+
+			case PLUS: {
+				/**
+				 * Sanity check - we cannot use floats to simulate addition for the purpose of branch
+				 */
+				if(IS_FLOATING_POINT(operand_type) == TRUE){
+					trigger_ice_panic("Invalid floating point operand for + operator");
+				}
+
+				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+				return simulate_flags_from_addition_with_constants(op1_raw_const, op2_raw_const, operand_type);
 			}
 
 			case L_THAN:
@@ -1069,7 +1103,6 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 			case NOT_EQUALS: {
 			}
 
-			case PLUS:
 			case MINUS: {
 				//TODO FALLTHROUGH TO MAKE THIS WORK
 				return BLANK_SIMULATED_EXECUTION_RESULT;
@@ -1135,21 +1168,55 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 	 */
 	switch(instruction->op){
 		case CARROT: {
+			/**
+			 * Sanity check at this point - no floats allowed
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for ^ operator");
+			}
+
 			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
 			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
 			return simulate_flags_from_bitwise_xor_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
 		case SINGLE_AND: {
+			/**
+			 * Sanity check at this point - no floats allowed
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for & operator");
+			}
+
 			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
 			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
 			return simulate_flags_from_bitwise_and_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
 		case SINGLE_OR: {
+			/**
+			 * Sanity check at this point - no floats allowed
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for | operator");
+			}
+
 			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
 			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
 			return simulate_flags_from_bitwise_or_with_constants(op1_raw_const, op2_raw_const, operand_type);
+		}
+					
+		case PLUS: {
+			/**
+			 * Sanity check - we cannot use floats to simulate addition for the purpose of branch
+			 */
+			if(IS_FLOATING_POINT(operand_type) == TRUE){
+				trigger_ice_panic("Invalid floating point operand for + operator");
+			}
+
+			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			return simulate_flags_from_addition_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
 		case L_THAN:
@@ -1161,7 +1228,6 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 
 		}
 
-		case PLUS:
 		case MINUS: {
 			//TODO FALLTHROUGH TO MAKE THIS WORK
 			return BLANK_SIMULATED_EXECUTION_RESULT;
