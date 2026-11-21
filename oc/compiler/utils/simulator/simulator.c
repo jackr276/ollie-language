@@ -8,6 +8,12 @@
 #include <math.h>
 #include <sys/types.h>
 
+/**
+ * For storing any compiler errors that we print out
+ */
+static char compiler_error_info[ERROR_SIZE * 3];
+
+
 //Special search result type for block searching
 typedef struct search_result_t search_result_t;
 
@@ -899,8 +905,37 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	 * Case 1: they are both constants. This is our ideal scenario as we can simulate this easily
 	 */
 	if(op1_result.result_type == SEARCH_RESULT_TYPE_CONST && op2_result.result_type == SEARCH_RESULT_TYPE_CONST){
-		printf("TODO SIMULATION WITH TWO CONSTANTS\n");
-		return BLANK_SIMULATED_EXECUTION_RESULT;
+		switch(instruction->op){
+			case CARROT:
+			case SINGLE_AND:
+			case SINGLE_OR:
+				//TODO
+
+
+			case L_THAN:
+			case L_THAN_OR_EQ:
+			case G_THAN:
+			case G_THAN_OR_EQ:
+			case DOUBLE_EQUALS:
+			case NOT_EQUALS:
+			case EXCLAMATION:
+			case DOUBLE_AND:
+			case DOUBLE_OR: {
+			}
+
+			case PLUS:
+			case MINUS: {
+			}
+
+			/**
+			 * We should never get to anything else. If we do then this is a compiler failure
+			 */
+			default: {
+				sprintf(compiler_error_info, "Operator %s does not set branch actionable flags and is therefore invalid for simulation", operator_token_to_string(instruction->op));
+				trigger_ice_panic(compiler_error_info);
+				return BLANK_SIMULATED_EXECUTION_RESULT;
+			}
+		}
 
 	/**
 	 * TODO DOC
