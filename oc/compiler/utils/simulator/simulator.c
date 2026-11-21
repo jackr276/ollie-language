@@ -1104,8 +1104,21 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS: {
-			//TODO FALLTHROUGH TO MAKE THIS WORK
-			return BLANK_SIMULATED_EXECUTION_RESULT;
+			/**
+			 * For comparison operators over integers, the "cmpX" instruction
+			 * is the exact same flag-wise as an integer subtraction under the
+			 * hood. As such, we'll use the integer subtraction helper to determine
+			 * the flags for all integer comparison operators
+			 */
+			if(IS_FLOATING_POINT(operand_type) == FALSE){
+				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
+				return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
+
+			} else {
+				//TODO FALLTHROUGH TO MAKE THIS WORK
+				return BLANK_SIMULATED_EXECUTION_RESULT;
+			}
 		}
 
 		/**
@@ -1221,9 +1234,21 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 		case G_THAN_OR_EQ:
 		case DOUBLE_EQUALS:
 		case NOT_EQUALS: { 
-			//TODO
-			return BLANK_SIMULATED_EXECUTION_RESULT;
+			/**
+			 * For comparison operators over integers, the "cmpX" instruction
+			 * is the exact same flag-wise as an integer subtraction under the
+			 * hood. As such, we'll use the integer subtraction helper to determine
+			 * the flags for all integer comparison operators
+			 */
+			if(IS_FLOATING_POINT(operand_type) == FALSE){
+				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+				return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
 
+			} else {
+				//TODO FALLTHROUGH TO MAKE THIS WORK
+				return BLANK_SIMULATED_EXECUTION_RESULT;
+			}
 		}
 
 		/**
