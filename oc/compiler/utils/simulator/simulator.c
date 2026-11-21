@@ -1290,8 +1290,8 @@ static inline basic_block_t* simulate_branch_without_parity_consideration(instru
 		/**
 		 * Any unrecognized branch requires a panic on our part
 		 */
-		case NO_BRANCH: {
-			trigger_ice_panic("Invalid branch type of NO_BRANCH encountered in simulator");
+		default: {
+			trigger_ice_panic("Invalid branch type encountered in simulator");
 			return NULL;
 		}
 	}
@@ -1507,9 +1507,9 @@ static inline basic_block_t* simulate_branch_with_parity_consideration(instructi
 		/**
 		 * Any unrecognized branch should be a panic on our part
 		 */
-		case NO_BRANCH: {
-			trigger_ice_panic("Invalid branch type of NO_BRANCH encountered in simulator");
-			exit(1);
+		default: {
+			trigger_ice_panic("Invalid branch type encountered in simulator");
+			return NULL;
 		}
 	}
 }
