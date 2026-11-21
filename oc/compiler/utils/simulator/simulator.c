@@ -906,11 +906,17 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	 */
 	if(op1_result.result_type == SEARCH_RESULT_TYPE_CONST && op2_result.result_type == SEARCH_RESULT_TYPE_CONST){
 		switch(instruction->op){
-			case CARROT:
-			case SINGLE_AND:
-			case SINGLE_OR:
-				//TODO
+			case CARROT: {
 
+			}
+
+			case SINGLE_AND: {
+
+			}
+
+			case SINGLE_OR: {
+
+			}
 
 			case L_THAN:
 			case L_THAN_OR_EQ:
@@ -984,8 +990,48 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
-	printf("TODO BIN OP CONST SIMULATION WITH TWO CONSTANTS\n");
-	return BLANK_SIMULATED_EXECUTION_RESULT;
+	/**
+	 * Simulate based on all of the valid operands that we have
+	 */
+	switch(instruction->op){
+		case CARROT: {
+
+		}
+
+		case SINGLE_AND: {
+
+		}
+
+		case SINGLE_OR: {
+
+		}
+
+		case L_THAN:
+		case L_THAN_OR_EQ:
+		case G_THAN:
+		case G_THAN_OR_EQ:
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS:
+		case EXCLAMATION:
+		case DOUBLE_AND:
+		case DOUBLE_OR: {
+		}
+
+		case PLUS:
+		case MINUS: {
+			//TODO FALLTHROUGH TO MAKE THIS WORK
+			return BLANK_SIMULATED_EXECUTION_RESULT;
+		}
+
+		/**
+		 * We should never get to anything else. If we do then this is a compiler failure
+		 */
+		default: {
+			sprintf(compiler_error_info, "Operator %s does not set branch actionable flags and is therefore invalid for simulation", operator_token_to_string(instruction->op));
+			trigger_ice_panic(compiler_error_info);
+			return BLANK_SIMULATED_EXECUTION_RESULT;
+		}
+	}
 }
 
 
