@@ -5,9 +5,7 @@
 */
 
 
-pub fn main() -> i32 {
-	let x:mut i32 = 4;
-
+pub fn switch_one_member(x:mut i32) -> i32 {
 	switch(x){
 		case 5 -> {
 			x++;
@@ -18,6 +16,11 @@ pub fn main() -> i32 {
 		}
 	}
 
-	OUNIT: [exit_status = 3]
 	ret x;
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 3]
+	ret @switch_one_member(4);
 }

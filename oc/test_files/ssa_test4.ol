@@ -2,13 +2,13 @@
 * SSA Testing
 */
 
-pub fn main() -> i32{
-	let x:mut u32 = 33;
+pub fn main(argc:i32, argv:char**) -> i32{
+	let x:mut u32 = 32;
 
-	x = 3222;
+	x = argc;
 
 	for(let i:mut u32 = 3; i <= 323; ++i){
-		x = 3;
+		x = i - 15;
 		break when( x == 5);
 	}
 

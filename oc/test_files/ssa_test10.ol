@@ -2,10 +2,7 @@
 * SSA Testing
 */
 
-fn other_test(a:mut i32*) -> void{
-	let l:mut i32 = 33;
-	let j:mut i32 = 3232;
-
+fn other_test(a:mut i32*, l:mut i32, j:mut i32) -> void{
 	if(l == 32) {
 		l = l + 3222;
 		j = 323;
@@ -24,9 +21,9 @@ fn other_test(a:mut i32*) -> void{
 
 
 
-pub fn main() -> i32{
-	let x:mut i32 = 33;
-	let y:mut i32 = 3232;
+pub fn main(argc:i32, argv:char**) -> i32{
+	let x:mut i32 = argc;
+	let y:mut i32 = argc + 1;
 
 	if(x <= 32) {
 		x = x + 22;

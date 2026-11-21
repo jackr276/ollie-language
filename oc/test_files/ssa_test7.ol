@@ -4,13 +4,7 @@
 
 //Global variables
 
-fn other_test() -> void{
-	let l:mut i32 = 33;
-	let j:mut i32 = 3232;
-	let glob_x:mut u32 = 3232;
-	let glog_y:i32 = -232;
-
-
+fn other_test(l:mut i32, j:mut i32, glob_x:mut u32, glog_y:i32) -> void{
 	if(l == 32)  {
 		glob_x = 23;
 		l = l + 3222;
@@ -24,12 +18,7 @@ fn other_test() -> void{
 }
 
 
-fn tester() -> void{
-	let x:mut i32 = 33;
-	let y:mut i32 = 3232;
-
-let glob_x:mut u32 = 3232;
-let glog_y:i32 = -232;
+fn tester(x:mut i32, y:mut i32, glob_x:mut u32, glog_y:i32) -> void{
 	if(x <= 32) {
 		x = x + 22;
 	} else if(x == 23)  {
@@ -45,13 +34,13 @@ let glog_y:i32 = -232;
 
 
 
-pub fn main() -> i32{
-	let x:mut i32 = 33;
-	let y:mut i32 = 3232;
+pub fn main(argc:i32, argv:char**) -> i32{
+	let x:mut i32 = argc + 1;
+	let y:mut i32 = argc + 2;
+	let glob_x:mut u32 = argc + 3;
+	let glog_y:i32 = argc + 4;
 
-let glob_x:mut u32 = 3232;
-let glog_y:i32 = -232;
-	x = 3222;
+	x = argc + 5;
 	for(let _:mut i32 = 2; _ < 23; _++) {
 		if(x <= 32) {
 			x = x + 22;

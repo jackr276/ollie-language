@@ -8,12 +8,12 @@ fn println(a:mut i32) -> void{
 	ret;
 }
 
-pub fn main() -> i32{
-	let x:mut i32 = 33;
-	let y:mut i32 = 3232;
+pub fn main(argc:i32, argv:char**) -> i32{
+	let x:mut i32 = argc + 1;
+	let y:mut i32 = argc + 2;
 
 
-	let abc:mut i32 = 3232;
+	let abc:mut i32 = argc - 1;
 
 	defer{
 	@println(abc);
