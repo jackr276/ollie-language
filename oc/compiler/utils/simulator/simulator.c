@@ -1028,7 +1028,7 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	 * then there's nothing more that we can do
 	 */
 	search_result_t op2_result = search_for_variable_assignment_in_block(instruction, operand2);
-	if(op1_result.result_type != SEARCH_RESULT_TYPE_CONST){
+	if(op2_result.result_type != SEARCH_RESULT_TYPE_CONST){
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
@@ -1126,7 +1126,7 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 					return simulate_flags_from_f32_constant_comparison(op1_raw_const, op2_raw_const);
 				} else {
 					double op1_raw_const = op1_result.result.constant->constant_value.double_constant;
-					float op2_raw_const = op2_result.result.constant->constant_value.float_constant;
+					double op2_raw_const = op2_result.result.constant->constant_value.double_constant;
 					return simulate_flags_from_f64_constant_comparison(op1_raw_const, op2_raw_const);
 				}
 			}

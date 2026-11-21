@@ -41,7 +41,7 @@ pub fn simulate_not_equals_bin_op() -> i32 {
 	 */	
 	let nan_helper:i32 = ~0;
 	let x:f32 = *(<f32*>(&nan_helper));
-	let y:f32 = 0.00;
+	let y:f32 = 0.01;
 
 	if(x != y) {
 		ret 10;

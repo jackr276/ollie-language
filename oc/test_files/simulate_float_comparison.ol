@@ -28,8 +28,8 @@ pub fn simulate_equals_bin_op_with_const() -> i32 {
 
 
 pub fn simulate_not_equals_bin_op() -> i32 {
-	let x:f32 = 0.00;
-	let y:f32 = 0.00;
+	let x:f32 = 1.00;
+	let y:f32 = 1.00;
 
 	if(x != y) {
 		ret -1555;
