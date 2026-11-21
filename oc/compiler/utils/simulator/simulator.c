@@ -1115,9 +1115,20 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 				u_int64_t op2_raw_const = op2_result.result.constant->constant_value.unsigned_long_constant;
 				return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
 
+			/**
+			 * Otherwise we have a floating point comparison. We will simulate this using the appropriate
+			 * f32 or f64 float comparison helpers
+			 */
 			} else {
-				//TODO FALLTHROUGH TO MAKE THIS WORK
-				return BLANK_SIMULATED_EXECUTION_RESULT;
+				if(operand_type->basic_type_token == F32){
+					float op1_raw_const = op1_result.result.constant->constant_value.float_constant;
+					float op2_raw_const = op2_result.result.constant->constant_value.float_constant;
+					return simulate_flags_from_f32_constant_comparison(op1_raw_const, op2_raw_const);
+				} else {
+					double op1_raw_const = op1_result.result.constant->constant_value.double_constant;
+					float op2_raw_const = op2_result.result.constant->constant_value.float_constant;
+					return simulate_flags_from_f64_constant_comparison(op1_raw_const, op2_raw_const);
+				}
 			}
 		}
 
@@ -1245,9 +1256,20 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 				u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
 				return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
 
+			/**
+			 * Otherwise we have a floating point comparison. We will simulate this using the appropriate
+			 * f32 or f64 float comparison helpers
+			 */
 			} else {
-				//TODO FALLTHROUGH TO MAKE THIS WORK
-				return BLANK_SIMULATED_EXECUTION_RESULT;
+				if(operand_type->basic_type_token == F32){
+					float op1_raw_const = op1_result.result.constant->constant_value.float_constant;
+					float op2_raw_const = constant_operand->constant_value.float_constant;
+					return simulate_flags_from_f32_constant_comparison(op1_raw_const, op2_raw_const);
+				} else {
+					double op1_raw_const = op1_result.result.constant->constant_value.double_constant;
+					double op2_raw_const = constant_operand->constant_value.double_constant;
+					return simulate_flags_from_f64_constant_comparison(op1_raw_const, op2_raw_const);
+				}
 			}
 		}
 
