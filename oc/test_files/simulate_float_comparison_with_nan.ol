@@ -5,11 +5,7 @@
  */
 
 pub fn simulate_equals_bin_op() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 	let y:f32 = 7.25;
 
 	if(x == y) {
@@ -21,11 +17,7 @@ pub fn simulate_equals_bin_op() -> i32 {
 
 
 pub fn simulate_equals_bin_op_with_const() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 
 	if(x == -1.012) {
 		ret 3;
@@ -36,11 +28,7 @@ pub fn simulate_equals_bin_op_with_const() -> i32 {
 
 
 pub fn simulate_not_equals_bin_op() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 	let y:f32 = 0.01;
 
 	if(x != y) {
@@ -52,11 +40,7 @@ pub fn simulate_not_equals_bin_op() -> i32 {
 
 
 pub fn simulate_not_equals_bin_op_with_const() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 
 	if(x != 17.1) {
 		ret 3;
@@ -67,11 +51,7 @@ pub fn simulate_not_equals_bin_op_with_const() -> i32 {
 
 
 pub fn simulate_g_than_bin_op() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 	let y:f32 = 9.99;
 
 	if(x > y) {
@@ -83,11 +63,7 @@ pub fn simulate_g_than_bin_op() -> i32 {
 
 
 pub fn simulate_g_than_bin_op_with_const() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 
 	if(x > -11.1232) {
 		ret 3;
@@ -98,11 +74,7 @@ pub fn simulate_g_than_bin_op_with_const() -> i32 {
 
 
 pub fn simulate_l_than_bin_op() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 	let y:f32 = 9.19191;
 
 	if(x < y) {
@@ -114,11 +86,7 @@ pub fn simulate_l_than_bin_op() -> i32 {
 
 
 pub fn simulate_l_than_bin_op_with_const() -> i32 {
-	/**
-	 * Force a Nan by having all 1's
-	 */	
-	let nan_helper:i32 = ~0;
-	let x:f32 = *(<f32*>(&nan_helper));
+	let x:f32 = 0.0 / 0.0;
 
 	if(x < -11.3333) {
 		ret 3;

@@ -5853,11 +5853,11 @@ static generic_ast_node_t* multiplicative_expression(ollie_token_stream_t* token
 		if(right_child_is_constant == TRUE){
 			switch(op.tok){
 				/**
-				 * Division we need to block division by 0
+				 * Division we need to block division by 0, unless it's a floating point value. That will go through
 				 */
 				case F_SLASH:
-					if(is_constant_node_value_0(right_child) == TRUE){
-						return print_and_return_error("Attempt to modulo by 0", parser_line_num);
+					if(IS_FLOATING_POINT(right_child->inferred_type) == FALSE && is_constant_node_value_0(right_child) == TRUE){
+						return print_and_return_error("Attempt to divide by 0", parser_line_num);
 					}
 
 					break;
