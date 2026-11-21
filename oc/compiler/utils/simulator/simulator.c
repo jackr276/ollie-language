@@ -308,6 +308,124 @@ static simulated_execution_result_t simulate_flags_from_subtraction_with_constan
 
 
 /**
+ * Simulate the addition of 2 *INTEGER* constants. We will always do raw_constant1 + raw_constant2
+ *
+ * Integer addition(addX) will set: CF, OF, SF, ZF, AF, PF
+ */
+static simulated_execution_result_t simulate_flags_from_addition_with_constants(u_int64_t raw_constant1, u_int64_t raw_constant2, generic_type_t* operand_type){
+	/**
+	 * Initialize our results. If we get here then we know that this is going to work
+	 */
+	simulated_execution_result_t execution_result = {{0}, TRUE};
+
+	/**
+	 * Get the actual operand bit width and then create an appropriate mask
+	 */
+	u_int64_t operand_bit_width = operand_type->type_size * 8;
+	u_int64_t mask = UINT64_MAX >> (64 - operand_bit_width);
+
+	/**
+	 * Get a sign bit mask that has 1 where the sign bit would be
+	 */
+	u_int64_t sign_bit_mask = (u_int64_t)(1UL) << (operand_bit_width - 1);
+
+	/**
+	 * Cut down both operands to be mask sized
+	 */
+	raw_constant1 &= mask;
+	raw_constant2 &= mask;
+
+	/**
+	 * Perform the addition and then use the mask to retain only
+	 * what we're after
+	 */
+	u_int64_t result = (raw_constant1 + raw_constant2) & mask;
+
+	/**
+	 * CARRY FLAG
+	 *
+	 * Unsigned overflow occurs when the result is smaller than the first operand,
+	 * signifying that an overflow occurred
+	 */
+	if(result < raw_constant1){
+		set_carry_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * OVERFLOW FLAG
+	 *
+	 * Signed overflow occurs when the operators have the same sign originally but
+	 * the result has a different sign
+	 *
+	 * ~(raw_constant1 ^ raw_constant2) -> MSB is 1 if both operands have the same sign
+	 * (raw_constant1 ^ result) -> MSB is 1 if the result and first constant have different signs
+	 *
+	 * If we AND these together, the MSB will be 1 only if the two original operands had the same
+	 * sign, but the result had a different sign, signifying a signed overflow
+	 */
+	if(((~(raw_constant1 ^ raw_constant2)) & (raw_constant1 ^ result) & sign_bit_mask) != 0){
+		set_overflow_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * SIGN FLAG
+	 *
+	 * Set sign flag if the sign bit is 1. We can figure this
+	 * out be bitwise ANDing with the sign bit
+	 */
+	if((result & sign_bit_mask) != 0){
+		set_sign_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * ZERO FLAG
+	 *
+	 * Zero flag is set if we're 0
+	 */
+	if(result == 0){
+		set_zero_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * AUXILIARY CARRY FLAG
+	 *
+	 * The auxiliary carry flag is set when we had to perform a borrow
+	 * from bit 4 into bit 3. If we did this, we'll see a a 1 inside of 
+	 * the 4th bit
+	 *
+	 * Example: 16 - 5 = 11
+	 * 		   0001 0000
+	 * 		 - 0000 0101
+	 * 		 = 0000 1111
+	 *
+	 * In this case we had to borrow from bit 4. To identify this in a convenient
+	 * bitwise expression, we can do the following.
+	 * 		1.) The value in bit 4 for the result(R4) is A4 ^ B4 for subtraction with *NO* carry
+	 * 		2.) If there is a carry into bit 4 then R4 = A4 ^ B4 ^ 1. Therefore
+	 * 			due to the properties of XOR, we can rearrange to get 1 = R4 ^ A4 ^ B4
+	 */
+	if(((raw_constant1 ^ raw_constant2 ^ result) & 0x10) != 0){
+		set_auxiliary_carry_flag(&execution_result.flag_register);
+	}
+
+	/**
+	 * PARITY FLAG
+	 *
+	 * Set the parity flag when the lowest 8 bits of the result contain an
+	 * even number of set bits. This is how the x86 parity flag is set. The
+	 * GCC __builtin_parity returns 0 if we contain an even number of set
+	 * bits, so for our parity flag we'll set it when __builtin_parity returns
+	 * 0 on the lowest 8 bits
+	 */
+	if(__builtin_parity(result & 0xFF) == 0){
+		set_parity_flag(&execution_result.flag_register);
+	}
+
+	return execution_result;
+}
+
+
+/**
  * Simulate a bitwise AND statement given 2 constants and their type
  *
  * Bitwise AND will set: SF, ZF, PF
@@ -344,6 +462,9 @@ static simulated_execution_result_t simulate_flags_from_bitwise_and_with_constan
 	u_int64_t result = (raw_constant1 & raw_constant2) & mask;
 
 	/**
+	 * SIGN FLAG
+	 *
+	 *
 	 * Sign flag is set if the sign bit is set. We'll use the
 	 * mask to get this
 	 */
@@ -352,6 +473,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_and_with_constan
 	}
 
 	/**
+	 * ZERO FLAG
+	 *
 	 * Zero flag is set if we're 0
 	 */
 	if(result == 0){
@@ -359,6 +482,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_and_with_constan
 	}
 
 	/**
+	 * PARITY FLAG
+	 *
 	 * Set the parity flag when the lowest 8 bits of the result contain an
 	 * even number of set bits. This is how the x86 parity flag is set. The
 	 * GCC __builtin_parity returns 0 if we contain an even number of set
@@ -408,6 +533,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_or_with_constant
 	u_int64_t result = (raw_constant1 | raw_constant2) & mask;
 
 	/**
+	 * SIGN FLAG
+	 *
 	 * Sign flag is set if the sign bit is set. We'll use the
 	 * mask to get this
 	 */
@@ -416,6 +543,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_or_with_constant
 	}
 
 	/**
+	 * ZERO FLAG
+	 *
 	 * Zero flag is set if we're 0
 	 */
 	if(result == 0){
@@ -423,6 +552,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_or_with_constant
 	}
 
 	/**
+	 * PARITY FLAG
+	 *
 	 * Set the parity flag when the lowest 8 bits of the result contain an
 	 * even number of set bits. This is how the x86 parity flag is set. The
 	 * GCC __builtin_parity returns 0 if we contain an even number of set
@@ -472,6 +603,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_xor_with_constan
 	u_int64_t result = (raw_constant1 ^ raw_constant2) & mask;
 
 	/**
+	 * SIGN FLAG
+	 *
 	 * Sign flag is set if the sign bit is set. We'll use the
 	 * mask to get this
 	 */
@@ -480,6 +613,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_xor_with_constan
 	}
 
 	/**
+	 * ZERO FLAG
+	 *
 	 * Zero flag is set if we're 0
 	 */
 	if(result == 0){
@@ -487,6 +622,8 @@ static simulated_execution_result_t simulate_flags_from_bitwise_xor_with_constan
 	}
 
 	/**
+	 * PARITY FLAG
+	 *
 	 * Set the parity flag when the lowest 8 bits of the result contain an
 	 * even number of set bits. This is how the x86 parity flag is set. The
 	 * GCC __builtin_parity returns 0 if we contain an even number of set
