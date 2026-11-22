@@ -24,6 +24,7 @@ void initialize_ast_system(){
 	created_nodes = dynamic_array_alloc();
 }
 
+
 /**
  * Coerce a constant node's value to fit the value of it's "inferred type". This should be used after
  * we've done some constant operations inside of the parser that may require us to update the internal

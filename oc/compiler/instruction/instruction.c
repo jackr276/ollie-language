@@ -7081,8 +7081,616 @@ three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* con
 
 
 /**
+ * TODO DOCUMENT
+ */
+void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, generic_type_t* new_type){
+	//We have an inferred type here
+	generic_type_t* inferred_type = dealias_type(constant_node->inferred_type);
+
+	//Extract the basic type token from our inferred type
+	ollie_token_t basic_type_token = inferred_type->basic_type_token;
+
+	/**
+	 * If we have a  pointer, we will need to internally consider it as a U64
+	 * for the reasons of conversion. This will not impact the end type
+	 * and will only impact our internal logic here
+	 */
+	if(inferred_type->type_class == TYPE_CLASS_POINTER){
+		basic_type_token = U64;
+	}
+
+	switch(constant_node->constant_type){
+		/**
+		 * Now in here, we'll go based on the basic type of what our inferred
+		 * type is and perform a move operation(just reassignment) to have the appropriate
+		 * expansion
+		 */
+		case CHAR_CONST:
+			switch(basic_type_token){
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.char_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.char_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.char_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.char_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.char_value;
+					break;
+
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.char_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.char_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.char_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.char_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case BYTE_CONST:
+			switch(basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_byte_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.signed_byte_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case BYTE_CONST_FORCE_U:
+			switch(basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.unsigned_byte_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case SHORT_CONST:
+			switch(basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.signed_short_value;
+					break;
+
+				default:
+					break;
+			}
+		
+			break;
+
+		case SHORT_CONST_FORCE_U:
+			switch(basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.unsigned_short_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case INT_CONST_FORCE_U:
+			switch(basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.unsigned_int_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case INT_CONST:
+			switch(basic_type_token){
+				case CHAR:
+					constant_node->constant_type = CHAR_CONST;
+					constant_node->constant_value.char_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case F32:
+					constant_node->constant_type = FLOAT_CONST;
+					constant_node->constant_value.float_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.signed_int_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		//Floats can be coerced into being ints(signed/unsigned), longs(signed/unsigned) and double
+		case FLOAT_CONST:
+			switch(basic_type_token){
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.float_value;
+					break;
+				case U32:
+					constant_node->constant_type = INT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.float_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.float_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.float_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.float_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case LONG_CONST_FORCE_U:
+			switch(basic_type_token){
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.unsigned_long_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.unsigned_long_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		case LONG_CONST:
+			switch(basic_type_token){
+				case U8:
+					constant_node->constant_type = BYTE_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_byte_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case I8:
+					constant_node->constant_type = BYTE_CONST;
+					constant_node->constant_value.signed_byte_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case U16:
+					constant_node->constant_type = SHORT_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_short_value = constant_node->constant_value.signed_long_value;
+					break;
+					
+				case I16:
+					constant_node->constant_type = SHORT_CONST;
+					constant_node->constant_value.signed_short_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case U32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.unsigned_int_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case I32:
+					constant_node->constant_type = INT_CONST;
+					constant_node->constant_value.signed_int_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				case F64:
+					constant_node->constant_type = DOUBLE_CONST;
+					constant_node->constant_value.double_value = constant_node->constant_value.signed_long_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+
+		//Doubles can only ever be coerced to a long due to the 64-bit nature
+		case DOUBLE_CONST:
+			switch(basic_type_token){
+				case U64:
+					constant_node->constant_type = LONG_CONST_FORCE_U;
+					constant_node->constant_value.unsigned_long_value = constant_node->constant_value.double_value;
+					break;
+					
+				case I64:
+					constant_node->constant_type = LONG_CONST;
+					constant_node->constant_value.signed_long_value = constant_node->constant_value.double_value;
+					break;
+
+				default:
+					break;
+			}
+
+			break;
+
+		//This should never happen
+		default:
+			printf("Fatal internal compiler error: Unsupported constant type found in coercer %d.\n", constant_node->constant_type);
+			exit(1);
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
  * Convert any given constant into an i64(signed long). This is mainly used for lea helpers
  * where we want to guarantee that everything is consistent
+ *
+ *
+ * TODO DEPRECATE
  */
 three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generic_type_t* i64_type){
 	//Go based on the first one's type
