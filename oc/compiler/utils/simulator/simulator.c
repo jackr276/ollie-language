@@ -59,6 +59,13 @@ static inline void trigger_ice_panic(char* message){
 }
 
 
+
+static inline search_result_t search_for_constant_in_addressing_expression(addressing_operands_t* operands){
+
+}
+
+
+
 /**
  * Search this entire block only, starting at the start instruction and working our way *BACKWARDS*,
  * until we find what was assigned to equal "variable" or until we hit the start of the block. Based
@@ -1007,8 +1014,7 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
  */
 static simulated_execution_result_t simulate_binary_operation_flags_after_execution(instruction_t* instruction){
 	/**
-	 * Extract both operands and use the helper to determine the overall operand
-	 * type that we have for this instruction
+	 * Extract the first operand and get the type that we're after
 	 */
 	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
 	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
@@ -1023,12 +1029,31 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	}
 
 	/**
-	 * Remember that 
+	 * Remember that binary operations may or may not have a LOAD attached as
+	 * their second operand. In the event that they do, we'll still want to 
+	 * search that LOAD to see if it is a constant float load. Otherwise, we'll
+	 * use the standard procedure to get what we're after
+	 *
+	 *
+	 * Case 1: there is no memory access so we can search for operand2 and go from there
 	 */
+	search_result_t op2_result = BLANK_SEARCH_RESULT;
 	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+		search_result_t op2_result = search_for_variable_assignment_in_block(instruction, instruction->operands.oir.operand2);
 
+	/**
+	 * Case 2: we do have memory access. In this case we'll have a LOAD with the addressing information
+	 * stored in the source_address_expression. We will scan that to determine if we have a float
+	 * load or if we have nothing useful
+	 */
 	} else {
+		//TODO
 
+	}
+
+
+	if(op2_result.result_type != SEARCH_RESULT_TYPE_CONST){
+		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
 
 
@@ -1036,10 +1061,8 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	 * Then attempt to find the second operand's result inside of the block. Again if it's not a constant
 	 * then there's nothing more that we can do
 	 */
-	search_result_t op2_result = search_for_variable_assignment_in_block(instruction, operand2);
-	if(op2_result.result_type != SEARCH_RESULT_TYPE_CONST){
-		return BLANK_SIMULATED_EXECUTION_RESULT;
-	}
+
+
 
 	switch(instruction->op){
 		case CARROT: {
