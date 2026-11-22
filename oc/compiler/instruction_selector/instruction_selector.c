@@ -9181,7 +9181,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	 * At this point we just quit, it's not worth more searching
 	 */
 	if(flag_setting_statement == NULL){
-		return FALSE;	
+		trigger_ice_panic("Branch was found to have no statement that sets flags for it within the current block");
 	}
 
 	/**
