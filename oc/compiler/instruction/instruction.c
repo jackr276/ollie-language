@@ -7107,52 +7107,52 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.char_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.char_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.char_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.char_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.char_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.char_constant;
 					break;
 					
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.char_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.char_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.unsigned_int_value = constant->constant_value.char_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.char_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.char_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.char_constant;
 					break;
 
 				case F32:
 					constant->const_type = FLOAT_CONST;
-					constant->constant_value.float_value = constant->constant_value.char_value;
+					constant->constant_value.float_constant = constant->constant_value.char_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.char_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.char_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.char_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.char_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.char_value;
+					constant->constant_value.double_constant = constant->constant_value.char_constant;
 					break;
 
 				default:
@@ -7165,52 +7165,52 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
-					constant->constant_value.char_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.char_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.signed_byte_constant;
 					break;
 					
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST_FORCE_U;
-					constant->constant_value.unsigned_int_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case F32:
 					constant->const_type = FLOAT_CONST;
-					constant->constant_value.float_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.float_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.signed_byte_value;
+					constant->constant_value.double_constant = constant->constant_value.signed_byte_constant;
 					break;
 
 				default:
@@ -7223,52 +7223,52 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
-					constant->constant_value.char_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.char_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 					
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST_FORCE_U;
-					constant->constant_value.unsigned_int_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case F32:
 					constant->const_type = FLOAT_CONST;
-					constant->constant_value.float_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.float_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.unsigned_byte_value;
+					constant->constant_value.double_constant = constant->constant_value.unsigned_byte_constant;
 					break;
 
 				default:
@@ -7281,52 +7281,52 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
-					constant->constant_value.char_value = constant->constant_value.signed_short_value;
+					constant->constant_value.char_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.signed_short_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.signed_short_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.signed_short_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST_FORCE_U;
-					constant->constant_value.unsigned_int_value = constant->constant_value.signed_short_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.signed_short_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case F32:
 					constant->const_type = FLOAT_CONST;
-					constant->constant_value.float_value = constant->constant_value.signed_short_value;
+					constant->constant_value.float_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.signed_short_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.signed_short_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.signed_short_value;
+					constant->constant_value.double_constant = constant->constant_value.signed_short_constant;
 					break;
 
 				default:
@@ -7339,52 +7339,52 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
-					constant->constant_value.char_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.char_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST_FORCE_U;
-					constant->constant_value.unsigned_int_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case F32:
 					constant->const_type = FLOAT_CONST;
-					constant->constant_value.float_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.float_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.unsigned_short_value;
+					constant->constant_value.double_constant = constant->constant_value.unsigned_short_constant;
 					break;
 
 				default:
@@ -7397,52 +7397,52 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
-					constant->constant_value.char_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.char_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case F32:
 					constant->const_type = FLOAT_CONST;
-					constant->constant_value.float_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.float_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.unsigned_int_value;
+					constant->constant_value.double_constant = constant->constant_value.unsigned_integer_constant;
 					break;
 
 				default:
@@ -7455,52 +7455,52 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
-					constant->constant_value.char_value = constant->constant_value.signed_int_value;
+					constant->constant_value.char_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.signed_int_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.signed_int_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.signed_int_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.signed_int_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST_FORCE_U;
-					constant->constant_value.unsigned_int_value = constant->constant_value.signed_int_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case F32:
 					constant->const_type = FLOAT_CONST;
-					constant->constant_value.float_value = constant->constant_value.signed_int_value;
+					constant->constant_value.float_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.signed_int_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.signed_int_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.signed_int_value;
+					constant->constant_value.double_constant = constant->constant_value.signed_integer_constant;
 					break;
 
 				default:
@@ -7514,26 +7514,26 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.float_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.float_constant;
 					break;
 				case U32:
 					constant->const_type = INT_CONST_FORCE_U;
-					constant->constant_value.unsigned_int_value = constant->constant_value.float_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.float_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.float_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.float_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.float_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.float_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.float_value;
+					constant->constant_value.double_constant = constant->constant_value.float_constant;
 					break;
 
 				default:
@@ -7546,42 +7546,42 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.unsigned_long_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.unsigned_long_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.unsigned_long_constant;
 					break;
 					
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.unsigned_long_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.unsigned_int_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.unsigned_long_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.unsigned_long_constant;
 					break;
 
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.unsigned_long_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.unsigned_long_value;
+					constant->constant_value.double_constant = constant->constant_value.unsigned_long_constant;
 					break;
 
 				default:
@@ -7594,42 +7594,42 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
-					constant->constant_value.unsigned_byte_value = constant->constant_value.signed_long_value;
+					constant->constant_value.unsigned_byte_constant = constant->constant_value.signed_long_constant;
 					break;
 
 				case I8:
 					constant->const_type = BYTE_CONST;
-					constant->constant_value.signed_byte_value = constant->constant_value.signed_long_value;
+					constant->constant_value.signed_byte_constant = constant->constant_value.signed_long_constant;
 					break;
 
 				case U16:
 					constant->const_type = SHORT_CONST_FORCE_U;
-					constant->constant_value.unsigned_short_value = constant->constant_value.signed_long_value;
+					constant->constant_value.unsigned_short_constant = constant->constant_value.signed_long_constant;
 					break;
 					
 				case I16:
 					constant->const_type = SHORT_CONST;
-					constant->constant_value.signed_short_value = constant->constant_value.signed_long_value;
+					constant->constant_value.signed_short_constant = constant->constant_value.signed_long_constant;
 					break;
 
 				case U32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.unsigned_int_value = constant->constant_value.signed_long_value;
+					constant->constant_value.unsigned_integer_constant = constant->constant_value.signed_long_constant;
 					break;
 
 				case I32:
 					constant->const_type = INT_CONST;
-					constant->constant_value.signed_int_value = constant->constant_value.signed_long_value;
+					constant->constant_value.signed_integer_constant = constant->constant_value.signed_long_constant;
 					break;
 
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.signed_long_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.signed_long_constant;
 					break;
 
 				case F64:
 					constant->const_type = DOUBLE_CONST;
-					constant->constant_value.double_value = constant->constant_value.signed_long_value;
+					constant->constant_value.double_constant = constant->constant_value.signed_long_constant;
 					break;
 
 				default:
@@ -7644,12 +7644,12 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			switch(basic_type_token){
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
-					constant->constant_value.unsigned_long_value = constant->constant_value.double_value;
+					constant->constant_value.unsigned_long_constant = constant->constant_value.double_constant;
 					break;
 					
 				case I64:
 					constant->const_type = LONG_CONST;
-					constant->constant_value.signed_long_value = constant->constant_value.double_value;
+					constant->constant_value.signed_long_constant = constant->constant_value.double_constant;
 					break;
 
 				default:
