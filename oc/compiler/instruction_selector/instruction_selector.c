@@ -4235,7 +4235,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_BASE_ADDRESS_ONLY: {
 					//Make sure that constant can be signed(i64) and then negate it
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the first operand, constant and flip the mode
@@ -4262,7 +4262,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_OFFSET_ONLY: {
 					//Make sure that we can go negative here if need be by forcing to an i64, then subtract the other constant from it
-					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					coerce_three_address_constant_to_given_type(operands_to_combine->address_offset, i64);
 					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
@@ -4287,7 +4287,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 					//Make sure that we can go negative here if need be by forcing to an i64, then subtract the other constant from it
-					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					coerce_three_address_constant_to_given_type(operands_to_combine->address_offset, i64);
 					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
@@ -4312,7 +4312,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_RIP_RELATIVE: {
 					//Convert this constant to an i64 and negate it
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the offset and operand over and flip the mode
@@ -4339,7 +4339,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_RIP_RELATIVE_WITH_OFFSET: {
 					//Convert the existing offset to an i64 so that we can go negative if need be, then subtract the other constant from it
-					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					coerce_three_address_constant_to_given_type(operands_to_combine->address_offset, i64);
 					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
@@ -4364,7 +4364,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 					//Convert this to an i64 so that we can go negative if need be, then subtract the other constant from it
-					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					coerce_three_address_constant_to_given_type(operands_to_combine->address_offset, i64);
 					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the operand over
@@ -4389,7 +4389,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_ONLY: {
 					//Convert this to an i64 so that we know for sure we can negate and then negate it
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy over the contsant, first operand and flip the mode
@@ -4416,7 +4416,7 @@ static inline void combine_constant_binary_operation_with_address_operand1(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 					//Convert this to an i64 so that we know for sure we can negate, then negate it
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy over the contsant, first operand and flip the mode
@@ -5177,7 +5177,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_ONLY: {
 					//Force this constant to be an i64 and then negate it
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the constant and second operand and update the mode
@@ -5204,7 +5204,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_AND_OFFSET: {
 					//Convert the existing offset to an i64 so that it can go negative, then subtract the other constant from it
-					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					coerce_three_address_constant_to_given_type(operands_to_combine->address_offset, i64);
 					subtract_constants(operands_to_combine->address_offset, constant_binary_operation->operands.oir.constant_operand);
 
 					//Copy the address operand over
@@ -5235,8 +5235,8 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_OFFSET_AND_SCALE: {
 					//Convert both of these constants to i64's so that they can go negative
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(operands_to_combine->address_offset, i64);
 
 					//Multiply the existing constant by the address multiplier, then subtract it from our given offset
 					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
@@ -5270,7 +5270,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 */
 				case ADDRESSING_MODE_REGISTERS_AND_SCALE: {
 					//Convert the constant first and then negate it
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Multiply the existing constant by the address multiplier
@@ -5306,7 +5306,7 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 */
 				case ADDRESSING_MODE_INDEX_AND_SCALE: {
 					//Convert the constant first and then negate it
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
 					negate_three_address_consant(constant_binary_operation->operands.oir.constant_operand);
 
 					//Multiply the existing constant by the address multiplier
@@ -5342,8 +5342,8 @@ static inline void combine_constant_binary_operation_with_address_operand2(instr
 				 */
 				case ADDRESSING_MODE_INDEX_OFFSET_AND_SCALE: {
 					//First force these both to i64's
-					convert_constant_to_i64(constant_binary_operation->operands.oir.constant_operand, i64);
-					convert_constant_to_i64(operands_to_combine->address_offset, i64);
+					coerce_three_address_constant_to_given_type(constant_binary_operation->operands.oir.constant_operand, i64);
+					coerce_three_address_constant_to_given_type(operands_to_combine->address_offset, i64);
 
 					//Multiply the existing constant by the address multiplier, then subtract the given constant from it
 					multiply_constant_by_raw_int64_value(constant_binary_operation->operands.oir.constant_operand, i64, operands_to_combine->address_multiplier);
