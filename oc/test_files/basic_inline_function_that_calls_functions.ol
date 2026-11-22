@@ -18,13 +18,13 @@ inline fn make_add_decision(use_int:bool) -> i32 {
 	if(use_int) {
 		ret @add_ints(1, 2, 3, 4, 5, 6);
 	} else {
-		ret @add_floats(1, 2, 3, 4, 5, 6);
+		ret @add_floats(7, 8, 9, 10, 11, 12);
 	}
 }
 
 
 pub fn main() -> i32 {
-	//Should return 42 in the end
-	OUNIT: [exit_status = 42]
+	//Should return 21 + 57 in the end
+	OUNIT: [exit_status = 78]
 	ret @make_add_decision(true) + @make_add_decision(false);
 }

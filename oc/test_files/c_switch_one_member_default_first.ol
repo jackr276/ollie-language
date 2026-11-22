@@ -5,9 +5,7 @@
 */
 
 
-pub fn main() -> i32 {
-	let x:mut i32 = 5;
-
+pub fn c_switch_one_member_default_first(x:mut i32) -> i32 {
 	switch(x){
 		default:
 			x--;
@@ -18,6 +16,11 @@ pub fn main() -> i32 {
 			break;
 	}
 
-	OUNIT: [exit_status = 6]
 	ret x;
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 6]
+	ret @c_switch_one_member_default_first(5);
 }

@@ -227,6 +227,16 @@ three_addr_const_t* emit_constant_copy(three_addr_const_t* constant);
 three_addr_const_t* emit_constant(generic_ast_node_t* const_node);
 
 /**
+ * Directly emit an f32 constant
+ */
+three_addr_const_t* emit_f32_constant(float value, generic_type_t* f32_type);
+
+/**
+ * Directly emit an f64 constant
+ */
+three_addr_const_t* emit_f64_constant(double value, generic_type_t* f64_type);
+
+/**
  * Emit a constant directly based on whatever the type given is
  */
 three_addr_const_t* emit_direct_integer_or_char_constant(int64_t value, generic_type_t* type);

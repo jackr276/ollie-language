@@ -13,8 +13,9 @@
 #include "../utils/value_numbering_table/value_numbering_table.h"
 #include "../utils/use_count_tracker/use_count_tracker.h"
 #include "../graph_analyzer/graph_analyzer.h"
+#include "../optimizer/optimizer.h"
 #include "../utils/constants.h"
-#include <assert.h>
+#include "../utils/simulator/simulator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/select.h>
@@ -43,6 +44,9 @@ static three_addr_var_t* instruction_pointer_variable;
 //A reference to our CFG
 static cfg_t* cfg_reference;
 
+//Generic reusable BFS traversal queue
+static heap_queue_t bfs_traversal_queue;
+
 //Maintain a reference to the use count tracker
 static use_count_tracker_t use_count_tracker;
 
@@ -54,26 +58,6 @@ typedef struct instruction_copy_pair_t instruction_copy_pair_t;
 
 //For storing optional const/var operands
 typedef struct operand_value_t operand_value_t;
-
-/**
- * Will we be printing these out as instructions or as three address code
- * statements?
- */
-typedef enum {
-	PRINT_THREE_ADDRESS_CODE,
-	PRINT_INSTRUCTION
-} instruction_printing_mode_t;
-
-/**
- * Determine what kind of simplification that we need to do. Some simplifications
- * require a complete rework of the control flow
- */
-typedef enum {
-	NO_SIMPLIFICATION,
-	SIMPLIFICATION_INSTRUCTIONS_ONLY,
-	SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW,
-} simplification_type_t;
-
 
 /**
  * What is the alignment type for a given variable. Most of the time
@@ -146,6 +130,7 @@ static instruction_t* emit_register_movement_instruction_directly(three_addr_var
 static void convert_array_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* array_initializer, instruction_t* original_instruction);
 static void convert_struct_initializer_into_OIR_stores(addressing_operands_t* base_address, three_addr_initializer_t* struct_initializer, instruction_t* original_instruction);
 static inline three_addr_var_t* create_and_insert_converting_move_instruction(instruction_t* after_instruction, three_addr_var_t* source, generic_type_t* destination_type);
+static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement);
 static instruction_t* generate_OIR_lea_from_addressing_operands(addressing_operands_t* address_operands, three_addr_var_t* assignee);
 
 
@@ -157,6 +142,29 @@ static instruction_t* generate_OIR_lea_from_addressing_operands(addressing_opera
 static inline void trigger_ice_panic(char* message){
 	fprintf(stderr, "Fatal Internal Compiler Error: %s\n", message);
 	exit(1);
+}
+
+
+/**
+ * This simple helper first cleans up the old control flow relations(dominators, dominance frontiers, etc) for a given function
+ * and then recomputes them all. This is usually only done after some kind of mark/sweep/clean pass where we may end up
+ * with blocks that are useless
+ */
+static inline void recompute_all_control_flow_relations_for_function(dynamic_array_t* function_blocks, basic_block_t* function_entry_block, basic_block_t* function_exit_block){
+	/**
+	 * We must first now delete all unreachable blocks that may have now been orphanced
+	 */
+	delete_all_unreachable_blocks(function_entry_block, function_blocks);
+
+	/**
+	 * First clean up all of the existing control relations
+	 */
+	cleanup_all_control_relations(function_blocks);
+
+	/**
+	 * Now let the graph analyzer go through and recalculate everything else
+	 */
+	calculate_all_control_flow_relations_for_function(function_entry_block, function_exit_block, function_blocks);
 }
 
 
@@ -700,53 +708,6 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 
 
 /**
- * Is this instruction going to be used to set condition codes? If so, we
- * don't want to accidentally value number the thing and remove it
- */
-static inline u_int8_t does_instruction_set_condition_codes(instruction_t* instruction){
-	switch(instruction->instruction_type){
-		case THREE_ADDR_CODE_BIN_OP_STMT:
-		case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:
-			//Use the flag to determine this
-			return instruction->operands.oir.assignee->sets_cc;
-
-		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT:
-			return TRUE;
-
-		default:
-			return FALSE;
-	}
-}
-
-
-/**
- * Does the block that we're passing in end in a direct(jmp) jump to
- * the very next block. If so, we'll return what block the jump goes to.
- * If not, we'll return null.
- */
-static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
-	//If it's null then leave
-	if(block->exit_statement == NULL){
-		return NULL;
-	}
-
-	switch(block->exit_statement->statement_type){
-		//Direct jump, just use the if block
-		case THREE_ADDR_CODE_JUMP_STMT:
-			return block->exit_statement->branch_info.if_block;
-
-		//In a branch statement, the else block is the direct jump
-		case THREE_ADDR_CODE_BRANCH_STMT:
-			return block->exit_statement->branch_info.else_block;
-
-		//By default no
-		default:
-			return NULL;
-	}
-}
-
-
-/**
  * Is the given expression eligible for value numbering? Note that all
  * expressions will have the algorithm run, but only expressions that
  * we explicitly approve of here will attempt to be subsituted for
@@ -887,172 +848,156 @@ static inline u_int8_t is_integer_to_sse_conversion_instruction(instruction_type
 
 
 /**
- * The first step in our instruction selector is to get the instructions stored in
- * a straight line in the exact way that we want them to be. This is done with a breadth-first
- * search traversal of the simplified CFG that has been optimized. 
+ * Does the block that we're passing in end in a direct(jmp) jump to
+ * the very next block. If so, we'll return what block the jump goes to.
+ * If not, we'll return null.
+ */
+static inline basic_block_t* does_block_end_in_jump(basic_block_t* block){
+	//If it's null then leave
+	if(block->exit_statement == NULL){
+		return NULL;
+	}
+
+	switch(block->exit_statement->statement_type){
+		case THREE_ADDR_CODE_JUMP_STMT:
+			return block->exit_statement->branch_info.if_block;
+
+		case THREE_ADDR_CODE_BRANCH_STMT:
+			return block->exit_statement->branch_info.else_block;
+
+		default:
+			return NULL;
+	}
+}
+
+
+/**
+ * We want the function-level CFG to be stored in a way that optimizes jmp instructions
+ * being one after the other. This is done with a breadth-first traversal of the simplified
+ * function level CFG
  *
  * One special consideration we'll take is ordering nodes with a given jump next to eachother.
  * For example, if block .L15 ends in a direct jump to .L16, we'll endeavor to have .L16 right
  * after .L15 so that in a later stage, we can eliminate that jump.
  */
-static void order_blocks(cfg_t* cfg){
-	//Run through every function and wipe the visited status and direct successor
-	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Get the entry block and the related function blocks
-		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-		dynamic_array_t* function_blocks = &(function_entry->function_defined_in->function_blocks);
-
-		//Run through every function block
-		for(int32_t j = 0; j < function_blocks->current_index; j++){
-			basic_block_t* function_block = dynamic_array_get_at(function_blocks, j);
-
-			/**
-			 * Wipe out the visited status and the direct successor. This
-			 * orderer will be doing the direct successor setting itself
-			 * so we need a fresh start
-			 */
-			function_block->visited = FALSE;
-			function_block->direct_successor = NULL;
-		}
-	}
-	
+static void order_function_blocks(dynamic_array_t* function_blocks, basic_block_t* function_entry){
 	/**
-	 * We will perform a breadth first search and use the "direct successor" area
-	 * of the blocks to store them all in one chain per function. The functions themselves
-	 * are separated and stored individually, because in ollie a function is the smallest unit
-	 * of procedures
+	 * Step 1: run through all function blocks and reset all of the direct successors
+	 * and visited statuses
 	 */
-	
-	//We'll need to use a queue every time, we may as well just have one big one
-	heap_queue_t queue = heap_queue_alloc();
-
-	//For each function
-	for(int32_t _ = 0; _ < cfg->function_entry_blocks.current_index; _++){
-		//Grab the function block out
-		basic_block_t* func_block = dynamic_array_get_at(&(cfg->function_entry_blocks), _);
-
-		//These get reset for every function because each function has its own separate ordering
-		basic_block_t* previous = NULL;
-
-		//This function start block is the begging of our BFS	
-		enqueue(&queue, func_block);
-		
-		//So long as the queue is not empty
-		while(queue_is_empty(&queue) == FALSE){
-			//Grab this block off of the queue
-			basic_block_t* current = dequeue(&queue);
-
-			//If previous is NULL, this is the first block
-			if(previous == NULL){
-				previous = current;
-
-			/**
-			 * We need to handle the rare case where we reach two of the same blocks(maybe the block points
-			 * to itself) but neither have been visited. We make sure that, in this event, we do not set the
-			 * block to be it's own direct successor
-			 */
-			} else if(previous != current && current->visited == FALSE){
-				//We'll add this in as a direct successor
-				previous->direct_successor = current;
-
-				//Add this in as well
-				previous = current;
-			}
-
-			//Make sure that we flag this as visited
-			current->visited = TRUE;
-
-			//Let's first check for our special case - us jumping to a given block as the very last statement. If
-			//this turns back something that isn't null, it'll be the first thing we add in
-			basic_block_t* direct_end_jump = does_block_end_in_jump(current);
-
-			//If this is the case, we'll add it in first
-			if(direct_end_jump != NULL && direct_end_jump->visited == FALSE){
-				//Add it into the queue
-				enqueue(&queue, direct_end_jump);
-			}
-
-			/**
-			 * Run through all of the successors. Note that we guarantee that all
-			 * successors here are real, so we don't need to filter
-			 */
-			for(int32_t idx = 0; idx < current->successors.current_index; idx++){
-				/**
-				 * Now as we go through here, if the direct end jump wasn't NULL, we'll have already added it in. We don't
-				 * want to have that happen again, so we'll make sure that if it's not NULL we don't double add it
-				 */
-				basic_block_t* successor = get_edge_at_index(&(current->successors), idx)->block;
-
-				//If we had that jumping to block case happen, make sure we skip over it to avoid double adding
-				if(successor == direct_end_jump){
-					continue;
-				}
-
-				//If the block is completely empty(function end block), we'll also skip
-				if(successor->leader_statement == NULL){
-					successor->visited = TRUE;
-					continue;
-				}
-
-				//Otherwise it's not, so we'll add it in
-				if(successor->visited == FALSE){
-					enqueue(&queue, successor);
-				}
-			}
-		}
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* block = dynamic_array_get_at(function_blocks, i);
+		block->visited = FALSE;
+		block->direct_successor = NULL;
 	}
 
-	//Destroy the queue when done
-	heap_queue_dealloc(&queue);
+	/**
+	 * Wipe whatever is in here away so we're ready to use it again for our traversal
+	 */
+	heap_queue_clear(&bfs_traversal_queue);
+
+	/**
+	 * First enqueue the function entry block. Then, so long as the
+	 * queue is not empty we keep traversing it.
+	 */
+	basic_block_t* previous_block = NULL;
+	enqueue(&bfs_traversal_queue, function_entry);
+	while(queue_is_empty(&bfs_traversal_queue) == FALSE){
+		/**
+		 * Get the current block off of the queue. If it's already been
+		 * visited we can just continue along
+		 */
+		basic_block_t* current = dequeue(&bfs_traversal_queue);
+		if(current->visited == TRUE){
+			continue;
+		}
+
+		/**
+		 * If the previous block is not NULL, we'll need to create
+		 * a link using the direct successor field between the previous
+		 * and current blocks
+		 */
+		if(previous_block != NULL){
+			previous_block->direct_successor = current;
+		}
+
+		/**
+		 * The current block has been visited and it
+		 * is now the previous block
+		 */
+		current->visited = TRUE;
+		previous_block = current;
+
+		/**
+		 * If we can determine the jump that this block ends in, we will
+		 * enqueue that first. This will let the blocks that we jump to directly
+		 * show up right after the jump, allowing us to remove the jump
+		 */
+		basic_block_t* ending_jump = does_block_end_in_jump(current);
+		if(ending_jump != NULL && ending_jump->visited == FALSE){
+			enqueue(&bfs_traversal_queue, ending_jump);
+
+		/**
+		 * If we couldn't add it be sure to NULL it out to avoid it being
+		 * skipped down the line
+		 */
+		} else {
+			ending_jump = NULL;
+		}
+
+		/**
+		 * Now go through and enqueue all the successors. Make sure that we're
+		 * only enqueueing ones that have not been visited
+		 */
+		for(int32_t i = 0; i < current->successors.current_index; i++){
+			basic_block_t* successor = get_edge_at_index(&(current->successors), i)->block;
+			
+			/**
+			 * We've already added the ending jump so don't readd it
+			 */
+			if(successor == ending_jump){
+				continue;
+			}
+
+			/**
+			 * Already visited so skip it
+			 */
+			if(successor->visited == TRUE){
+				continue;
+			}
+
+			/**
+			 * Skip every empty block. This is mostly just to avoid
+			 * the virtual exit block
+			 */
+			if(successor->leader_statement == NULL){
+				successor->visited = TRUE;
+				continue;
+			}
+
+			/**
+			 * Otherwise we can enqueue this
+			 */
+			enqueue(&bfs_traversal_queue, successor);
+		}
+	}
 }
 
 
 /**
- * Print a block our for reading
-*/
-static void print_ordered_block(basic_block_t* block, instruction_printing_mode_t mode){
-	//If this is some kind of switch block, we first print the jump table
-	if(block->jump_table != NULL){
-		print_jump_table(stdout, block->jump_table);
+ * Run through all functions and invoke the orderer on them all. This should
+ * only be used if you explicitly want to order every single function
+ */
+static inline void order_all_functions(cfg_t* cfg){
+	/**
+	 * Run through all functions and just invoke the helper for each one
+	 */
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
+		dynamic_array_t* function_blocks = &(function_entry->function_defined_in->function_blocks);
+		
+		order_function_blocks(function_blocks, function_entry);
 	}
-
-	//Switch here based on the type of block that we have
-	switch(block->block_type){
-		//Function entry blocks need extra printing
-		case BLOCK_TYPE_FUNC_ENTRY:
-			printf("%s:\n", block->function_defined_in->func_name.string);
-			print_passed_parameter_stack_data_area(&(block->function_defined_in->stack_passed_parameters));
-			print_local_stack_data_area(&(block->function_defined_in->local_stack));
-			break;
-
-		//By default just print the name
-		default:
-			printf(".L%d:\n", block->block_id);
-			break;
-	}
-
-	//Now grab a cursor and print out every statement that we 
-	//have
-	instruction_t* cursor = block->leader_statement;
-
-	//So long as it isn't null
-	while(cursor != NULL){
-		//Based on what mode we're given here, we call the appropriate
-		//print statement
-		if(mode == PRINT_THREE_ADDRESS_CODE){
-			//Hand off to printing method
-			print_three_addr_code_stmt(stdout, cursor);
-		} else {
-			print_instruction(stdout, cursor, PRINTING_VAR_IN_INSTRUCTION);
-		}
-
-
-		//Move along to the next one
-		cursor = cursor->next_statement;
-	}
-
-	//For spacing
-	printf("\n");
 }
 
 
@@ -1061,17 +1006,12 @@ static void print_ordered_block(basic_block_t* block, instruction_printing_mode_
  * We print much less here than the debug printer in the CFG, because all dominance
  * relations are now useless
  */
-static void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
-	//Run through all of the functions
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract the entry block. This is our starting point
+static inline void print_ordered_blocks(cfg_t* cfg, instruction_printing_mode_t mode){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
-		//So long as this one isn't NULL
 		while(current != NULL){
-			//Print it
-			print_ordered_block(current, mode);
-			//Advance to the direct successor
+			print_ordered_block(stdout, current, mode);
 			current = current->direct_successor;
 		}
 	}
@@ -6840,14 +6780,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * OR 
 	 *  t4 <- x | x
 	 *  t4 <- x
+	 *
+	 *
+	 * NOTE: if we have an assignee that is flagged as setting condition codes, we specifically
+	 * will not perform this optimization and we'll let other areas handle it
 	 */
 	if(window->instruction1->statement_type == THREE_ADDR_CODE_BIN_OP_STMT
+		&& window->instruction1->operands.oir.assignee->sets_cc == FALSE
 		&& variables_equal(window->instruction1->operands.oir.operand1, window->instruction1->operands.oir.operand2) == TRUE){
 		//Grab this out
 		instruction_t* binary_operation = window->instruction1; 
-
-		//We'll need this for some of our optimizations
-		three_addr_const_t* simplification_constant;
 
 		//We will also need the result type, especially for float determination
 		generic_type_t* result_type = get_destination_type_for_binary_operation_instruction(binary_operation);
@@ -6860,10 +6802,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * addition and multiplying by 2 are not exactly the same. As such we're
 			 * only doing this if we have a non floating point computation type
 			 */
-			case PLUS:
+			case PLUS: {
 				if(IS_FLOATING_POINT(result_type) == FALSE){
 					//Emit the 2 for our doubling operation
-					simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
+					three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(2, result_type);
 					
 					//Op2 is no longer needed
 					binary_operation->operands.oir.operand2 = NULL;
@@ -6880,8 +6822,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					//This does count as a change
 					changed = TRUE;
 				}
-
 				break;
+			}
 
 			/**
 			 * For minus, if we have a floating point computation type
@@ -6889,10 +6831,10 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * subtraction may not truly result in 0. As such we will only
 			 * take this step if we do *not* have floating points
 			 */
-			case MINUS:
+			case MINUS: {
 				if(IS_FLOATING_POINT(result_type) == FALSE){
 					//Spit out the 0 constant to use here
-					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+					three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 					//Remove these two operands
 					binary_operation->operands.oir.operand1 = NULL;
@@ -6912,6 +6854,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 
 				break;
+			}
 
 			/**
 			 * Any number "xor'd" with itself will always be 0 due to the 
@@ -6919,9 +6862,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * an assignment of a zero constant. These will only ever be integers
 			 * so we don't need to worry about anything regarding floating point here
 			 */
-			case CARROT:
+			case CARROT: {
 				//Get out our 0 constant
-				simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+				three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
 				//Remove these variables
 				binary_operation->operands.oir.operand1 = NULL;
@@ -6936,8 +6879,8 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				//This is a change
 				changed = TRUE;
-
 				break;
+			}
 
 			/**
 			 * Any number bitwise and'd/or'd with itself is just going to return that exact
@@ -6946,7 +6889,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * floating point here
 			 */
 			case SINGLE_AND:
-			case SINGLE_OR:
+			case SINGLE_OR: {
 				//Delete the second operand
 				binary_operation->operands.oir.operand2 = NULL;
 
@@ -6957,56 +6900,49 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
 				break;
+			}
 
 			/**
 			 * For logical AND, if two things are the same then the
 			 * logical and result is just one
 			 */
 			case DOUBLE_AND:
-			case DOUBLE_OR:
+			case DOUBLE_OR: {
+				//Hang onto the actual assignee
+				three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
+
+				//Get rid of the second operand and the op
+				binary_operation->operands.oir.operand2 = NULL;
+				binary_operation->op = BLANK;
+
+				//Turn this into a test to see if op1 is 0 or not, that's all we need
+				binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+
+				//Emit a temporary assignee for the test not zero
+				binary_operation->operands.oir.assignee = emit_temp_var(u8);
+
 				/**
-				 * We will only go ahead with this optimization if we do
-				 * not set condition codes. This really is just a precaution,
-				 * as this should never have gotten here anyway if it does(optimizer
-				 * does it's own simplification), but we need to check
+				 * Since we aren't setting condition codes, we need to emit a setne statement
+				 * as well as an assignment over to the actual assignee for this to work
 				 */
-				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
-					//Hang onto the actual assignee
-					three_addr_var_t* final_assignee = binary_operation->operands.oir.assignee;
+				instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->operands.oir.assignee);
 
-					//Get rid of the second operand and the op
-					binary_operation->operands.oir.operand2 = NULL;
-					binary_operation->op = BLANK;
+				//This goes in right after our assignee
+				insert_instruction_after_given(setne, binary_operation);
 
-					//Turn this into a test to see if op1 is 0 or not, that's all we need
-					binary_operation->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
+				//Now we'll need a final assignment
+				instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->operands.oir.assignee, binary_operation->line_number);
 
-					//Emit a temporary assignee for the test not zero
-					binary_operation->operands.oir.assignee = emit_temp_var(u8);
+				//This goes in after our other statement
+				insert_instruction_after_given(final_assignment, setne);
 
-					/**
-					 * Since we aren't setting condition codes, we need to emit a setne statement
-					 * as well as an assignment over to the actual assignee for this to work
-					 */
-					instruction_t* setne = emit_setne_code(emit_temp_var(u8), binary_operation->operands.oir.assignee);
+				//Rebuild the entire window around this
+				reconstruct_window(window, final_assignment);
 
-					//This goes in right after our assignee
-					insert_instruction_after_given(setne, binary_operation);
-
-					//Now we'll need a final assignment
-					instruction_t* final_assignment = emit_assignment_instruction(final_assignee, setne->operands.oir.assignee, binary_operation->line_number);
-
-					//This goes in after our other statement
-					insert_instruction_after_given(final_assignment, setne);
-
-					//Rebuild the entire window around this
-					reconstruct_window(window, final_assignment);
-
-					//This is a change
-					changed = TRUE;
-				}
-
+				//This is a change
+				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * x == x / x >= x / x <= x is always true, so we will turn this into a
@@ -7016,27 +6952,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 */
 			case DOUBLE_EQUALS:
 			case G_THAN_OR_EQ:
-			case L_THAN_OR_EQ:
-				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
-					//Spit the constant out
-					simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
+			case L_THAN_OR_EQ: {
+				//Spit the constant out
+				three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(1, result_type);
 
-					//Remove these variables
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2 = NULL;
+				//Remove these variables
+				binary_operation->operands.oir.operand1 = NULL;
+				binary_operation->operands.oir.operand2 = NULL;
 
-					//Avoid any confusion with the op as well
-					binary_operation->op = BLANK;
+				//Avoid any confusion with the op as well
+				binary_operation->op = BLANK;
 
-					//Convert this into a regular assignment
-					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-					binary_operation->operands.oir.constant_operand = simplification_constant;
+				//Convert this into a regular assignment
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				binary_operation->operands.oir.constant_operand = simplification_constant;
 
-					//This is a change
-					changed = TRUE;
-				}
-
+				//This is a change
+				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * x != x / x < x / x > x is always false, so we will turn this into a
@@ -7046,27 +6980,25 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 */
 			case NOT_EQUALS:
 			case G_THAN:
-			case L_THAN:
-				if(binary_operation->operands.oir.assignee->sets_cc == FALSE){
-					//Spit the constant out
-					simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
+			case L_THAN: {
+				//Spit the constant out
+				three_addr_const_t* simplification_constant = emit_direct_integer_or_char_constant(0, result_type);
 
-					//Remove these variables
-					binary_operation->operands.oir.operand1 = NULL;
-					binary_operation->operands.oir.operand2 = NULL;
+				//Remove these variables
+				binary_operation->operands.oir.operand1 = NULL;
+				binary_operation->operands.oir.operand2 = NULL;
 
-					//Avoid any confusion with the op as well
-					binary_operation->op = BLANK;
+				//Avoid any confusion with the op as well
+				binary_operation->op = BLANK;
 
-					//Convert this into a regular assignment
-					binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
-					binary_operation->operands.oir.constant_operand = simplification_constant;
+				//Convert this into a regular assignment
+				binary_operation->statement_type = THREE_ADDR_CODE_ASSN_CONST_STMT;
+				binary_operation->operands.oir.constant_operand = simplification_constant;
 
-					//This is a change
-					changed = TRUE;
-				}
-
+				//This is a change
+				changed = TRUE;
 				break;
+			}
 
 			/**
 			 * By default we can't do anything so we'll need to just break out
@@ -7247,7 +7179,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		}
 	}
 
-
 	/**
 	 * ------------------ Converting adjacent binary operations into LEA statements ----------------------------------
 	 * If we have two adjacent binary operations where one is a bin_op_with_const
@@ -7261,9 +7192,12 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 * Can become
 	 * t21 <- 4(t19, t18)
 	 *
+	 * NOTE: we cannot do this if the second instruction's assignee is noted as setting condition codes
+	 * because a lea would destroy any use of condition codes
 	 */
 	if(is_instruction_binary_operation(window->instruction1) == TRUE
 		&& is_instruction_binary_operation_with_const(window->instruction2) == TRUE
+		&& window->instruction2->operands.oir.assignee->sets_cc == FALSE
 		&& window->instruction1->op == PLUS
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -7320,9 +7254,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * Can become
 	 * t22 <- (t19, ^t8_0, 4)
+	 *
+	 * NOTE: we can only do this combination if the second instruction's assignee
+	 * does not set condition codes. Lea statements do not set condition codes, which
+	 * is why we can't do this in that case
 	 */
 	if(is_instruction_binary_operation_with_const(window->instruction1) == TRUE
 		&& is_instruction_binary_operation(window->instruction2) == TRUE
+		&& window->instruction2->operands.oir.assignee->sets_cc == FALSE
 		&& (window->instruction1->op == STAR || window->instruction1->op == PLUS)
 		&& window->instruction2->op == PLUS
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP
@@ -7436,11 +7375,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	 *
 	 * 	Turns into:
 	 * 		t46 <- 18+global_var(t3)
+	 *
+	 * NOTE: if the second operand is noted as setting condition codes, this cannot be allowed because lea
+	 * statements do not ever set condition codes
 	 */
 	if(window->instruction2 != NULL
 		&& window->instruction1->statement_type == THREE_ADDR_CODE_LEA_STMT
 		&& window->instruction1->operands.oir.assignee->variable_type == VARIABLE_TYPE_TEMP //Make sure it's a temp var
 		&& window->instruction2->statement_type == THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT 
+		&& window->instruction2->operands.oir.assignee->sets_cc == FALSE
 		&& variables_equal(window->instruction1->operands.oir.assignee, window->instruction2->operands.oir.operand1) == TRUE){
 
 		//Grab these for convenience
@@ -8998,11 +8941,11 @@ static u_int8_t global_value_number_block(value_numbering_table_t* table, basic_
 			 * doing this computation, we will replace the result with a copy from the
 			 * found result into this value
 			 *
-			 * Important caveat: if this instruction sets condition codes(like a CMP instruction), we
-			 * actually can't replace it even if we do find it. This is because we rely on the condition
-			 * code setting for any branch/conditional movement to work
+			 * Important caveat: if the assignee of this instruction is found to be setting
+			 * condition codes then we cannot do any simplification because we'd trample
+			 * the condition codes if we did
 			 */
-			if(found_result != NULL && does_instruction_set_condition_codes(cursor) == FALSE){
+			if(found_result != NULL && cursor->operands.oir.assignee->sets_cc == FALSE){
 				//This is now an assignment statement
 				cursor->statement_type = THREE_ADDR_CODE_ASSN_STMT;
 
@@ -9188,764 +9131,170 @@ static u_int8_t global_value_numbering_pass(basic_block_t* function_entry_block,
 
 
 /**
- * Mark definitions(assignment) of a three address variable within a given
- * function. The current_function parameter is an optimization step designed to help
- * us weed out useless blocks. Note that the variable passed in may be null. If it is,
- * we just leave immediately
- */
-static void mark_and_add_definition(dynamic_array_t* current_function_blocks, three_addr_var_t* variable, dynamic_array_t* worklist){
-	//If the variable is NULL, we leave
-	if(variable == NULL){
-		return;
-	}
-
-	/**
-	 * There is no point in trying to mark a variable like this, we will
-	 * never find the definition since they exist by default
-	 */
-	if(variable == stack_pointer_variable || variable == instruction_pointer_variable){
-		return;
-	}
-
-	/**
-	 * Similarly, for all of these variable types, there is also no point
-	 * ever in marking them
-	 */
-	switch(variable->variable_type){
-		case VARIABLE_TYPE_LOCAL_CONSTANT:
-		case VARIABLE_TYPE_FUNCTION_ADDRESS:
-		case VARIABLE_TYPE_STACK_PARAM_MEMORY_ADDRESS:
-			return;
-		default:
-			break;
-	}
-
-	/**
-	 * If this variable has a stack region, then we will be marking
-	 * said stack region. We know that this discriminating union is a stack
-	 * region because of the if-check above that rules out local constants
-	 */
-	if(variable->associated_memory_region.stack_region != NULL){
-		mark_stack_region(variable->associated_memory_region.stack_region);
-	}
-
-	//Run through everything here
-	for(int32_t _ = 0; _ < current_function_blocks->current_index; _++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(current_function_blocks, _);
-
-		//This is always where we start
-		instruction_t* stmt = block->exit_statement;
-
-		//Our logic is based on the variable type
-		switch(variable->variable_type){
-			case VARIABLE_TYPE_NON_TEMP:
-			case VARIABLE_TYPE_MEMORY_ADDRESS:
-				stmt = block->exit_statement;
-
-				//So long as this isn't NULL
-				while(stmt != NULL){
-					//If it's marked we're out of here
-					if(stmt->mark == TRUE || stmt->operands.oir.assignee == NULL){
-						stmt = stmt->previous_statement;
-						continue;
-					}
-
-					//Is the assignee our variable AND it's unmarked?
-					if(stmt->operands.oir.assignee->linked_var == variable->linked_var
-						&& stmt->operands.oir.assignee->ssa_generation == variable->ssa_generation){
-
-						dynamic_array_add(worklist, stmt);
-						stmt->mark = TRUE;
-						block->contains_mark = TRUE;
-						return;
-					}
-
-					//Advance the statement
-					stmt = stmt->previous_statement;
-				}
-
-				break;
-
-			case VARIABLE_TYPE_TEMP:
-				//So long as this isn't NULL
-				while(stmt != NULL){
-					//If this is the case, we'll just go onto the next one
-					if(stmt->mark == TRUE || stmt->operands.oir.assignee == NULL){
-						stmt = stmt->previous_statement;
-						continue;
-					}
-
-					//Is the assignee our variable AND it's unmarked?
-					if(stmt->operands.oir.assignee->variable_id == variable->variable_id){
-						dynamic_array_add(worklist, stmt);
-						stmt->mark = TRUE;
-						block->contains_mark = TRUE;
-						return;
-					}
-
-					//Advance the statement
-					stmt = stmt->previous_statement;
-				}
-
-				break;
-
-			default:
-				printf("Fatal internal compiler error: attempting to mark invalid variable type: %s\n", variable_type_to_string(variable->variable_type));
-				exit(1);
-		}
-	}
-}
-
-
-/**
- * The sweep algorithm will go through and remove every operation that has not been marked
+ * Eliminate the given branch if possible. To do this, we'll need to trace up
+ * the block to find the statement that this branch "relies on". If we are able
+ * to prove what flags that statement will set via a simulation, then we will
+ * be able to determine what path the branch will always take, and eliminate the branch
+ * accordingly
  *
- * procedure sweep:
- * 	for each operation i:
- * 		if is is unmarked then:
- * 			if i is a branch then
- * 			  rewrite i with a jump to i's nearest
- * 			  marked postdominator
- *
- * 			if i is not a jump then:
- * 			  delete i
+ * NOTE: this function returns TRUE if the branch could be eliminated, and FALSE if not.
+ * There is no issue if the branch cannot be eliminated - most branches cannot be
  */
-static simplification_type_t sweep(dynamic_array_t* function_blocks, basic_block_t* function_entry_block){
-	//By default assume we did nothing
-	simplification_type_t result = NO_SIMPLIFICATION;
-
-	//For each and every operation in every basic block
-	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the block out
-		basic_block_t* block = dynamic_array_get_at(function_blocks, _);
-
-		//Holder for the postdom
-		basic_block_t* nearest_marked_postdom;
-
-		//Grab the statement out
-		instruction_t* stmt = block->leader_statement;
-
-		//For each statement in the block
-		while(stmt != NULL){
-			//If it's useful, ignore it
-			if(stmt->mark == TRUE){
-				stmt = stmt->next_statement;
-				continue;
-			}
-
-			//A holder for when we perform deletions
-			instruction_t* temp;
-
-			/**
-			 * Some statements like jumps and branches
-			 * require special attention
-			 */
-			switch(stmt->statement_type){
-				/**
-				 * We *never* delete jump statements because
-				 * they are critical to the control flow. They
-				 * may be cleaned up by other optimizations, but for
-				 * here we leave them
-				 */
-				case THREE_ADDR_CODE_JUMP_STMT:
-					stmt = stmt->next_statement;
-
-					break;
-
-				/**
-				 * If we have a branch that is now useless,
-				 * we'll need to replace it with a jump to
-				 * it's nearest marked postdominator
-				 */
-				case THREE_ADDR_CODE_BRANCH_STMT:
-					//We'll first find the nearest marked postdominator
-					nearest_marked_postdom = get_nearest_marked_postdominator(block);
-
-					//We now need to unlink the successors that were in this branch
-					delete_successor(block, stmt->branch_info.if_block);
-					delete_successor(block, stmt->branch_info.else_block);
-
-					//This is now useless
-					delete_statement(stmt);
-
-					/**
-					 * Emit the jump statement to the nearest marked postdominator
-					 * NOTE: the emit jump adds the successor in for us, so we don't need to
-					 * do so here
-					 */
-					stmt = emit_jump(block, nearest_marked_postdom);
-
-					//We have done instructions and control flow here
-					result = SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW;
-
-					break;
-
-				/**
-				 * By default no special treatment, we're just deleting
-				 */
-				default:
-					//Perform the deletion and advancement
-					temp = stmt;
-
-					/**
-					 * If we are deleting an indirect jump address calculation statement,
-					 * then this statements jump table is useless
-					 */
-					if(temp->statement_type == THREE_ADDR_CODE_INDIRECT_JUMP_STMT){
-						//We'll need to deallocate this jump table
-						jump_table_dealloc(block->jump_table);
-
-						//Flag it as null
-						block->jump_table = NULL;
-					}
-					
-					//Advance the statement
-					stmt = stmt->next_statement;
-					//Delete the statement, now that we know it is not a jump
-					delete_statement(temp);
-
-					//If we havent' flagged already, not that we did instructions
-					if(result == NO_SIMPLIFICATION){
-						result = SIMPLIFICATION_INSTRUCTIONS_ONLY;
-					}
-
-					break;
-			}
-		}
-	}
-	
+static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
 	/**
-	 * Once we've done all of the actual sweeping inside of the blocks, we will now also clean up
-	 * the stack from any unmarked regions. If a region is unmarked, it is entirely useless and as such
-	 * we'll just get rid of it
+	 * Extract the block that we're in and the variable that we rely on
 	 */
+	basic_block_t* block = branch_statement->block_contained_in;
+	three_addr_var_t* relies_on_var = branch_statement->relies_on;
 
 	/**
-	 * Invoke the stack sweeper. This function will go through an remove any stack regions
-	 * that have been flagged as unimportant
+	 * We will now need to crawl our way up the block looking for where this
+	 * "relies on" variable was set. It should be the assignee of some other
+	 * statement. We only search for this locally within the block
 	 */
-	sweep_stack_data_area(&(function_entry_block->function_defined_in->local_stack));
-
-	//Give back the simplification result
-	return result;
-}
-
-
-/**
- * Reset all of the marked instructions for a given block
- */
-static inline void reset_marks_for_block(basic_block_t* block){
-	//Start at the top
-	instruction_t* cursor = block->leader_statement;
-
-	//Crawl through the block
+	instruction_t* cursor = branch_statement->previous_statement;
+	instruction_t* flag_setting_statement = NULL;
 	while(cursor != NULL){
-		//Unmark it
-		cursor->mark = FALSE;
-
-		//Go down the block by one
-		cursor = cursor->next_statement;
-	}
-
-	//Remove that this has a mark
-	block->contains_mark = FALSE;
-}
-
-
-/**
- * Run through and reset all of the marks on every instruction in a given
- * function. This is done in anticipation of us using the mark/sweep algorithm
- * again after branch optimizations
- */
-static inline void reset_all_marks(dynamic_array_t* function_blocks){
-	//Run through every block
-	for(int32_t i = 0; i < function_blocks->current_index; i++){
-		//Block to work on
-		basic_block_t* current = dynamic_array_get_at(function_blocks, i);
-
-		//Let the helper do it
-		reset_marks_for_block(current);
-	}
-}
-
-
-/**
- * Mark all values inside of the special three address initializer. Note that
- * this helper can be called recursively because initializers themselves can
- * be recursive
- */
-static void mark_initializer_values(three_addr_initializer_t* initializer, dynamic_array_t* function_blocks, dynamic_array_t* worklist){
-	//Run through every single initializer result
-	for(int32_t i = 0; i < initializer->results.results_current_index; i++){
-		initializer_result_t* result = get_intializer_result_at_index(initializer, i);
-
-		switch(result->result_type){
-			case INITIALIZER_RESULT_TYPE_VARIABLE:
-				mark_and_add_definition(function_blocks, result->value.variable_value, worklist);
-				break;
-
-			case INITIALIZER_RESULT_TYPE_SUB_INITIALIZER:
-				mark_initializer_values(result->value.initializer_value, function_blocks, worklist);
-				break;
-
-			//Constants don't need to be marked at all
-			case INITIALIZER_RESULT_TYPE_CONSTANT:
-				break;
+		/**
+		 * If we find a statement where the assignee is equal to what we rely
+		 * on then we've found it
+		 */
+		if(variables_equal(relies_on_var, cursor->operands.oir.assignee) == TRUE){
+			flag_setting_statement = cursor;
+			break;
 		}
+
+		/**
+		 * Sanity check: if this is not the statement that we're relying on to set
+		 * the flags for branching *BUT* it still tramples the flags in some way,
+		 * that means that we've got an issue
+		 */
+		if(does_OIR_statement_alter_flags(cursor) == TRUE){
+			trigger_ice_panic("RFLAGS register trampling detected in branch reduction");
+		}
+
+		cursor = cursor->previous_statement;
 	}
+
+	/**
+	 * We made it here and we never found the statement that sets the flags. 
+	 * At this point we just quit, it's not worth more searching
+	 */
+	if(flag_setting_statement == NULL){
+		trigger_ice_panic("Branch was found to have no statement that sets flags for it within the current block");
+	}
+
+	/**
+	 * Validate that the statement that is allegedly setting these flags not only
+	 * sets the flags, but sets them in a way that s eligible for branching
+	 */
+	if(does_OIR_statement_set_branch_eligible_flags(flag_setting_statement) == FALSE){
+		trigger_ice_panic("Branch was found to rely on statement that cannot adequately the RFLAGS register");
+	}
+
+	/**
+	 * VERY IMPORTANT - we need to determine whether this flag setting statement uses FP comparison
+	 * or not. This is exteremely important when it comes to the branch simulation down the road
+	 */
+	u_int8_t comes_from_fp_comparison = does_statement_use_fp_comparison(flag_setting_statement);
+
+	/**
+	 * If we make it to here, we now have a branch statement and the statement that sets the flags 
+	 * for this given branch statement. There is now a chance that we can cheaply determine
+	 * whether or not we know what path this branch will always take
+	 */
+	simulated_execution_result_t simulation_result = simulate_instruction_flags_after_execution(flag_setting_statement);
+
+	/**
+	 * If we find that it's impossible to simulate this bail out now, returning FALSE so that
+	 * the caller knows that we didn't change anything
+	 */
+	if(simulation_result.simulation_possible == FALSE){
+		return FALSE;
+	}
+
+	/**
+	 * If we get here, then we know that it is in fact possible to simulate
+	 * the execution of this branch. We will use the flags that we got from 
+	 * the given simulation to make this branch determination
+	 */
+	basic_block_t* result_block = simulate_branch_execution_given_flags(branch_statement, comes_from_fp_comparison, simulation_result.flag_register);
+
+	/**
+	 * Now that we have our result block in hand, we know what we're going to be jumping to. We will need to
+	 * update the successors of this block with this knowledge, and replace the branch with a direct jump
+	 */
+	basic_block_t* if_block = branch_statement->branch_info.if_block;
+	basic_block_t* else_block = branch_statement->branch_info.else_block;
+
+	/**
+	 * First option is that the result is equal to the IF block. This means
+	 * that the else block is no longer a successor of the block that we're
+	 * in currently
+	 */
+	if(result_block == if_block){
+		delete_successor(block, else_block);
+
+	/**
+	 * Second option is that the result is equal to the ELSE block. This means
+	 * that the if block is no longer a successor of the block that we're
+	 * currently in
+	 */
+	} else {
+		delete_successor(block, if_block);
+	}
+
+	/**
+	 * Emit the unconditional jump to our result block, insert it before the branch,
+	 * and then delete the branch entirely and give back TRUE to signify that we were
+	 * able to eliminate a branch
+	 */
+	instruction_t* jump_to_result = emit_jmp_instruction(result_block);
+	insert_instruction_before_given(jump_to_result, branch_statement);
+	delete_statement(branch_statement);
+	return TRUE;
 }
 
 
 /**
- * Mark and add the definition for all of our given address operands
- */
-static inline void mark_addressing_operands(dynamic_array_t* current_function_blocks, dynamic_array_t* worklist, addressing_operands_t* address_operands){
-	mark_and_add_definition(current_function_blocks, address_operands->address_operand1, worklist);
-	mark_and_add_definition(current_function_blocks, address_operands->address_operand2, worklist);
-}
-
-
-/**
- * The mark algorithm will go through and mark every operation(three address code statement) as
- * critical or noncritical. We will then go back through and see which operations are setting
- * those critical values
+ * Ollie's branch eliminator relies on our ability to trace back from a branch's so-called "relies_on" field
+ * to determine if we have a statement that we can evaluate at compile time. If we can evaluate it, we will simulate
+ * the flags that said statement would generate, and from there remove the branch entirely by simulating the branch's
+ * execution.
  *
- * for each operation i:
- * 	clear i's mark
- * 	if i is critical then
- * 		mark i
- * 		add i to the worklist
- * 	while worklist not empty
- * 		remove i from the worklist i is x <- y op z
- * 		if def(y) is not marked then
- * 			mark def(y)
- * 			add def(y) to worklist
- * 		if def(z) is not marked then
- * 			mark def(z)
- * 			add def(y) to worklist
- * 		for each block b in RDF(block(i))
- * 			let j be the branch that ends b
- * 			if j is unmarked then
- * 				mark j
- * 				add j to worklist
+ * In the event that we do remove a branch, we will return TRUE from this function. It is the caller's responsibility
+ * to then do any other passes that they deem necessary such as mark and sweep, clean, control flow relation recalcuation, etc
  */
-static void mark(dynamic_array_t* function_blocks){
-	//First we'll need a worklist
-	dynamic_array_t worklist = dynamic_array_alloc();
+static inline u_int8_t branch_elimination_pass(dynamic_array_t* function_blocks){
+	/**
+	 * Did we perform any branch elimination? By default assume no
+	 */
+	u_int8_t elimination_occurred = FALSE;
 
-	//Now we'll go through every single operation in every single block
-	for(int32_t _ = 0; _ < function_blocks->current_index; _++){
-		//Grab the block we'll work on
-		basic_block_t* current = dynamic_array_get_at(function_blocks, _);
-
-		//Grab a cursor to the current statement
-		instruction_t* current_stmt = current->leader_statement;
+	/**
+	 * Run through every single function block hunting for ones that end in branches
+	 */
+	for(int32_t i = 0; i < function_blocks->current_index; i++){
+		basic_block_t* function_block = dynamic_array_get_at(function_blocks, i);
 
 		/**
-		 * We'll now go through and mark every statement that we
-		 * deem to be critical in the block. Statements are critical
-		 * if they:
-		 * 	1.) set a return value
-		 * 	2.) is an input/output statement
-		 * 	3.) affects the value in a storage location that could be
-		 * 		accessed outside of the procedure(i.e. a parameter that is a pointer)
+		 * Get the end statement. If it's not a branch, then this block is of no use to
+		 * us so toss it out and keep going
 		 */
-		while(current_stmt != NULL){
-			//Clear it's mark
-			current_stmt->mark = FALSE;
-
-			/**
-			 * We will go through every operation and determine its importance based on our rules
-			 */
-			switch(current_stmt->statement_type){
-				/**
-				 * Return statements are always considered important
-				 */
-				case THREE_ADDR_CODE_RET_STMT:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * Raise statements are equivalent to ret statements
-				 * and are thus also always considered important
-				 */
-				case THREE_ADDR_CODE_RAISE_STMT:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * Asm inline statements are also
-				 * always important because we don't 
-				 * analyze them, so the user assumes that
-				 * their direct code will be executed
-				 */
-				case THREE_ADDR_CODE_ASM_INLINE_STMT:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * Since we don't know whether or not a function
-				 * that is being called performs an important task,
-				 * we also always consider it to be important
-				 */
-				case THREE_ADDR_CODE_FUNC_CALL:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * Indirect function calls are the same as function calls. They will 
-				 * always count becuase we do not know whether or not the indirectly
-				 * called function performs some important task. As such, we will 
-				 * mark it as important
-				 */
-				case THREE_ADDR_CODE_INDIRECT_FUNC_CALL:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * And finally idle statements are considered important
-				 * because they literally do nothing, so if the user
-				 * put them there, we'll assume that it was for a good reason
-				 */
-				case THREE_ADDR_CODE_IDLE_STMT:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * All store statements are considered useful by the ollie optimizer,
-				 * regardless of the actual use count tracking
-				 */
-				case THREE_ADDR_CODE_STORE_STATEMENT:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * All initializers are basically like store statements. They are always considered
-				 * useful because we are writiing to memory
-				 */
-				case THREE_ADDR_CODE_INITIALIZER_STMT:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * Any/all memory copying statements are considered useful by the ollie
-				 * optimizer regardless of use count tracking
-				 */
-				case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT:
-					current_stmt->mark = TRUE;
-					dynamic_array_add(&worklist, current_stmt);
-					current->contains_mark = TRUE;
-					break;
-
-				/**
-				 * Special cases: these stack allocation and deallocation statements
-				 * do not have any variables in them(%rsp is inferred because it is the stack)
-				 * They must always be marked, and they may never be deleted. However, since there
-				 * are no variables in them to trace around, we will not add them to the worklist
-				 */
-				case THREE_ADDR_CODE_STACK_ALLOCATION_STMT:
-				case THREE_ADDR_CODE_STACK_DEALLOCATION_STMT:
-					current_stmt->mark = TRUE;
-					current->contains_mark = TRUE;
-					break;
-
-				//Let's see what other special cases we have
-				default:
-					break;
-			}
-
-			//Advance the current statement up
-			current_stmt = current_stmt->next_statement;
+		instruction_t* ending_branch = function_block->exit_statement;
+		if(ending_branch == NULL || ending_branch->statement_type != THREE_ADDR_CODE_BRANCH_STMT){
+			continue;
 		}
-	}
-
-	//Now that we've marked everything that is initially critical, we'll go through and trace
-	//these values back through the code
-	while(dynamic_array_is_empty(&worklist) == FALSE){
-		//Grab out the operation from the worklist(delete from back-most efficient)
-		instruction_t* stmt = dynamic_array_delete_from_back(&worklist);
-
-		//There are several unique cases that require extra attention
-		switch(stmt->statement_type){
-			//If it's a phi function, now we need to go back and mark everything that it came from
-			case THREE_ADDR_CODE_PHI_STMT: {
-				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
-					mark_and_add_definition(function_blocks, dynamic_array_get_at(&(stmt->parameters), i), &worklist);
-				}
-
-				break;
-			}
-
-			/**
-			 * If we have a function call then everything is important. Remember that by
-			 * now this has been converted away from parameter results to using the
-			 * regular parameter array
-			 */
-			case THREE_ADDR_CODE_FUNC_CALL: {
-				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
-					three_addr_var_t* parameter = dynamic_array_get_at(&(stmt->parameters), i);
-					mark_and_add_definition(function_blocks, parameter, &worklist);
-				}
-
-				break;
-			}
-
-			/**
-			 * An indirect function call behaves similarly to a function call, but we'll also
-			 * need to mark it's "op1" value as important. This is the value that stores
-			 * the memory address of the function that we're calling
-			 */
-			case THREE_ADDR_CODE_INDIRECT_FUNC_CALL: {
-				//Mark the op1 of this function as being important
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-
-				/**
-				 * Remember that by now this has been converted away from parameter results to using the
-				 * regular parameter array
-				 */
-				for(int32_t i = 0; i < stmt->parameters.current_index; i++){
-					three_addr_var_t* parameter = dynamic_array_get_at(&(stmt->parameters), i);
-					mark_and_add_definition(function_blocks, parameter, &worklist);
-				}
-
-				break;
-			}
-
-			/**
-			 * For an initializer statement there are special steps that we 
-			 * need to take to work on the 
-			 */
-			case THREE_ADDR_CODE_INITIALIZER_STMT:  {
-				//Mark the destination address
-				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
-
-				//Now let the recursive helper mark all of our initializer values
-				mark_initializer_values(stmt->operands.oir.initializer_operand, function_blocks, &worklist);
-				break;
-			}
-
-			/**
-			 * Leas have a source address that needs to be marked
-			 */
-			case THREE_ADDR_CODE_LEA_STMT: {
-				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
-				break;
-		    }
-
-			/**
-			 * Loads have a source address that needs to be marked
-			 */
-			case THREE_ADDR_CODE_LOAD_STATEMENT: {
-				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
-				break;
-		    }
-
-			/**
-			 * Stores have a destination address that needs to be marked as well as the operands
-			 */
-			case THREE_ADDR_CODE_STORE_STATEMENT: {
-				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-				break;
-		    }
-
-			/**
-			 * Memory copy statements use the source and destination addressing expressions
-			 */
-			case THREE_ADDR_CODE_MEMORY_COPY_STATEMENT: {
-				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
-				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
-				break;
-		    }
-
-			/**
-			 * Indirect jump statements do contain address operands but we will mark them differently
-			 */
-			case THREE_ADDR_CODE_INDIRECT_JUMP_STMT: {
-				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
-				mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.destination_address_expression));
-				break;
-		    }
-
-			/**
-			 * Branch and set statements maintain a special "relies on" field to hold what they rely on,
-			 * so we'll need to mark that as well
-			 */
-			case THREE_ADDR_CODE_BRANCH_STMT:
-			case THREE_ADDR_CODE_SETNE_STMT: {
-				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
-				break;
-			}
-
-			/**
-			 * Conditional movement statements need their "relies on" tag included
-			 * as well as the two actual operands
-			 */
-			case THREE_ADDR_CODE_CONDITIONAL_MOVEMENT_STMT: {
-				mark_and_add_definition(function_blocks, stmt->relies_on, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-				break;
-			}
-
-			/**
-			 * These require special treatment due to the potential for addressing expressions inside
-			 * of them
-			 */
-			case THREE_ADDR_CODE_BIN_OP_STMT:
-			case THREE_ADDR_CODE_BIN_OP_WITH_CONST_STMT:{
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-
-				/**
-				 * Remember that when we combine binary operations with address expressions we may end
-				 * up with addressing operands, so we'll need to mark those too
-				 */
-				if(stmt->memory_access_type == READ_FROM_MEMORY){
-					mark_addressing_operands(function_blocks, &worklist, &(stmt->operands.oir.source_address_expression));
-				}
-
-				break;
-			}
-
-			/**
-			 * By default we're just marking everything here. If it's NULL then mark_and_add defintion
-			 * will ignore
-			 */
-			default: {
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand1, &worklist);
-				mark_and_add_definition(function_blocks, stmt->operands.oir.operand2, &worklist);
-				break;
-			}
-		}
-
-		//Grab this out for convenience
-		basic_block_t* block = stmt->block_contained_in;
 
 		/**
-		 * Now we'll apply this logic to the branching/indirect jumping
-		 * statements here
-		 *
-		 * for each block b in RDF(block(i))
-		 * 	let j be the branch that ends b
-		 * 	if j is unmarked then
-		 * 		mark j
-		 * 		add j to worklist
+		 * By the time we get here, we know that we have a branch statement as the exit
+		 * statement. We will now call the helper to see if we're able to eliminate
+		 * this branch statement
 		 */
-		//If this block even has an RDF(it may now)
-		if(block->reverse_dominance_frontier.internal_array != NULL){
-			for(u_int16_t i = 0; i < block->reverse_dominance_frontier.current_index; i++){
-				//Grab the block out of the RDF
-				basic_block_t* rdf_block = dynamic_array_get_at(&(block->reverse_dominance_frontier), i);
-
-				//Grab out the exit statement
-				instruction_t* exit_statement = rdf_block->exit_statement;
-
-				//We'll now go based on what the exit statement is
-				switch(exit_statement->statement_type){
-					/**
-					 * An indirect jump means that we had some kind of switch statement. This
-					 * will be marked as important
-					 */
-					case THREE_ADDR_CODE_INDIRECT_JUMP_STMT:
-						//Avoids infinite loops
-						if(exit_statement->mark == FALSE){
-							//Mark it
-							exit_statement->mark = TRUE;
-							//Add it to the worklist
-							dynamic_array_add(&worklist, exit_statement);
-							//This now has a mark
-							rdf_block->contains_mark = TRUE;
-						}
-
-						break;
-
-					/**
-					 * This is the most common case, we'll have a branch that
-					 * ends the predecessor
-					 */
-					case THREE_ADDR_CODE_BRANCH_STMT:
-						//Avoids infinite loops
-						if(exit_statement->mark == FALSE){
-							//Mark it
-							exit_statement->mark = TRUE;
-							//Add it to the worklist
-							dynamic_array_add(&worklist, exit_statement);
-							//This now has a mark
-							rdf_block->contains_mark = TRUE;
-						}
-
-						break;
-
-					//By default just leave
-					default:
-						break;
-				}
-			}
-		}
+		elimination_occurred |= eliminate_branch_if_possible(ending_branch);
 	}
 
-	//And get rid of the worklist
-	dynamic_array_dealloc(&worklist);
-}
-
-
-/**
- * Perform a mark and sweep pass on the given function blocks. This will only
- * be triggered if we discover areas that we are able to simplify
- * using value numbering. The mark and sweep will happen first, followed
- * by the simplifier
- */
-static inline simplification_type_t perform_mark_and_sweep_pass(basic_block_t* function_entry, dynamic_array_t* function_blocks){
-	/**
-	 * First thing we'll do is reset the visited status of the CFG. This just ensures
-	 * that we won't have any issues with the CFG in terms of traversal
-	 */
-	reset_visited_status_for_function(function_blocks);
-
-	/**
-	 * Reset the marks for all of our blocks
-	 */
-	reset_all_marks(function_blocks);
-
-	/**
-	 * Now we will let the mark algorithm go through and flag instructions as important
-	 * as need be
-	 */
-	mark(function_blocks);
-
-	/**
-	 * Finally we can run sweep(). We will not run any clean() operation because we already
-	 * do that later on down the road regardless. Running this mark and sweep alone should
-	 * take care of any extra assignments that we don't want/need
-	 */
-	return sweep(function_blocks, function_entry);
-}
-
-
-/**
- * Emit a variable copy if and only if this is not a NULL pointer
- */
-static inline three_addr_var_t* emit_variable_copy_if_not_null(three_addr_var_t* variable){
-	return variable != NULL ? emit_var_copy(variable) : NULL;
+	return elimination_occurred;
 }
 
 
@@ -10750,9 +10099,16 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 * use unordered comparison statements in the event that they have
 		 * a float operand. As such, we'll just have to return whether or
 		 * not the operand is a float
+		 *
+		 * NOTE: remember that at this point it's still valid OIR to have a
+		 * test if not zero statement with a constant
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
-			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+			if(statement->operands.oir.operand1 != NULL){
+				return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+			} else {
+				return IS_FLOATING_POINT(statement->operands.oir.constant_operand->type);
+			}
 		}
 
 		/**
@@ -10910,11 +10266,13 @@ static void simplify(cfg_t* cfg){
 	 * functions along with it in each pass
 	 */
 	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
-		//Extract it
+		/**
+		 * Extract the function entry, function exit and function record
+		 */
 		basic_block_t* function_entry = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
-
-		//Extract the function record too
+		basic_block_t* function_exit = dynamic_array_get_at(&(cfg->function_exit_blocks), i);
 		symtab_function_record_t* function = function_entry->function_defined_in;
+		dynamic_array_t* function_blocks = &(function->function_blocks);
 
 		/**
 		 * Before we do any simplifying, we need to remediate all of the function
@@ -10924,13 +10282,13 @@ static void simplify(cfg_t* cfg){
 		 * true complexity of a function call. We will now do all of in depth
 		 * work to do this
 		 */
-		perform_call_lowering_in_function(&(function->function_blocks));
+		perform_call_lowering_in_function(function_blocks);
 
 		/**
 		 * Run the simplifier for the first time after we do our call lowering. We will
 		 * see the most simplification action in this step
 		 */
-		run_simplifier(&(function->function_blocks), function_entry);
+		run_simplifier(function_blocks, function_entry);
 
 		/**
 		 * Once we're confident that we've done all of the simplifying that we can, we 
@@ -10938,29 +10296,31 @@ static void simplify(cfg_t* cfg){
 		 * this pass optimizes anything, we will then retrigger the simplifier
 		 * to see if there are any more opportuntities
 		 */
-		u_int8_t simplification_occured = global_value_numbering_pass(function_entry, &(function->function_blocks));
+		u_int8_t simplification_occured = global_value_numbering_pass(function_entry, function_blocks);
 
 		/**
 		 * If we did do any global value numbering, then we'll need to come back
 		 * and resimplify to make sure we haven't missed anything post-simplify
 		 */
 		if(simplification_occured == TRUE){
-			//Run the mark and sweep
-			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
+			/**
+			 * Run mark and sweep. This will handle all control flow relation recomputation if the need arises
+			 */
+			simplification_type_t result = perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
 
 			/**
 			 * If we ended up doing control flow simplification, we are going to need
 			 * to reorder all of the blocks
 			 */
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
-				order_blocks(cfg);
+				order_function_blocks(function_blocks, function_entry);
 			}
 
 			/**
 			 * Run the simplifier after we've done mark and sweep. Be sure
 			 * that we fix the use counts every time that we do this
 			 */
-			run_simplifier(&(function->function_blocks), function_entry);
+			run_simplifier(function_blocks, function_entry);
 
 		/**
 		 * Otherwise we were not able to value number anything, but we still may have redundant instructions
@@ -10968,16 +10328,54 @@ static void simplify(cfg_t* cfg){
 		 * pass
 		 */
 		} else {
-			//Run the mark and sweep
-			simplification_type_t result = perform_mark_and_sweep_pass(function_entry, &(function->function_blocks));
+			/**
+			 * Run the mark and sweep pass. This will handle any control flow relation updates that are needed
+			 */
+			simplification_type_t result = perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
 
 			/**
 			 * If we ended up doing control flow simplification, we are going to need
 			 * to reorder all of the blocks
 			 */
 			if(result == SIMPLIFICATION_INSTRUCTIONS_AND_CONTROL_FLOW){
-				order_blocks(cfg);
+				order_function_blocks(function_blocks, function_entry);
 			}
+		}
+
+		/**
+		 * After we've done our global value numbering, we'll go through and determine if there
+		 * are any branch statements that can be proven to always take a certain path. If we find
+		 * one that can, we will remove the conditional branch entirely and just make it take the
+		 * path that we can prove it always would take
+		 */
+		u_int8_t branch_elimination_occurred = branch_elimination_pass(function_blocks);
+		if(branch_elimination_occurred == TRUE){
+			/**
+			 * Step 1: we have altered the control flow in at least one way, possibly more, if we have done
+			 * a branch elimination. Before going forward we'll need to recompute all of the control flow 
+			 * relations based on this new CFG
+			 */
+			recompute_all_control_flow_relations_for_function(function_blocks, function_entry, function_exit);
+
+			/**
+			 * Step 2: Since we were able to remove a branch, odds are that there are some statements that used
+			 * to be used for the branch that are now useless. We will run a mark and sweep pass to eliminate
+			 * all orphaned statements
+			 */
+			perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
+
+			/**
+			 * Step 3: After we've removed dead code, we may end up with blocks that could
+			 * be compressed further. We will run a branch reduction pass to eliminate
+			 * unneccessary control flow
+			 */
+			perform_branch_reduction_pass(function_blocks, function_entry, function_exit);
+
+			/**
+			 * Step 4: Finally once we've done all of that, we should reorder all of our function
+			 * blocks so that the blocks that were deleted(if any) no longer show up anywhere
+			 */
+			order_function_blocks(function_blocks, function_entry);
 		}
 
 		/**
@@ -10988,12 +10386,12 @@ static void simplify(cfg_t* cfg){
 		 * if we have at least one initializer that was simplified, which will tell us
 		 * that we need to trigger the simplifier
 		 */
-		if(lower_all_initializer_statements(&(function->function_blocks)) == TRUE){
+		if(lower_all_initializer_statements(function_blocks) == TRUE){
 			/**
 			 * After we do all of this, one run final simplifier pass to ensure everything
 			 * is in the simplest form that we can get it in
 			 */
-			run_simplifier(&(function->function_blocks), function_entry);
+			run_simplifier(function_blocks, function_entry);
 		}
 
 		/*
@@ -11003,12 +10401,12 @@ static void simplify(cfg_t* cfg){
 		 * point we find that we've converted at least one instruciton, we will
 		 * retrigger the simplifier
 		 */
-		if(convert_memory_copy_statements_into_loads_and_stores(&(function->function_blocks)) == TRUE){
+		if(convert_memory_copy_statements_into_loads_and_stores(function_blocks) == TRUE){
 			/**
 			 * Run the simplifier after we've done the conversion to make sure we are in
 			 * as simple a form as we can get
 			 */
-			run_simplifier(&(function->function_blocks), function_entry);
+			run_simplifier(function_blocks, function_entry);
 		}
 
 		/**
@@ -18471,7 +17869,6 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 			//Now add this in after the setnp instruction
 			insert_instruction_after_given(first_move_to_dest, zero_assignment);
 
-
 			//Now we need the final conditional move
 			instruction_t* conditional_move_to_dest = emit_cmovX_instruction(cmovne_destination, zero_assignment->operands.x86.destination_register, NOT_EQUALS, FALSE);
 
@@ -19481,8 +18878,8 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 
 			//This really should be impossible
 			default:
-				printf("Fatal internal compiler error: unreachable path hit in FP test if not zero selector\n");
-				exit(1);
+				trigger_ice_panic("unreachable path hit in FP test if not zero selector");
+				break;
 		}
 
 		//Transfer over the old op1
@@ -19697,6 +19094,12 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	u8 = lookup_type_name_only(cfg->type_symtab, "u8", NOT_MUTABLE)->type;
 
 	/**
+	 * Allocate the BFS traversal queue for any block ordering. This is reusable
+	 * so we don't constantly reallocate memory
+	 */
+	bfs_traversal_queue = heap_queue_alloc();
+
+	/**
 	 * Allocate any of these reusable memory regions that we'll
 	 * be using. We do this because it's cheaper to just use
 	 * 1 over and over instead of allocating fresh every single
@@ -19717,7 +19120,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * straight line. This step is also able to recognize and exploit some early optimizations,
 	 * such as when a block ends in a jump to the block right below it 
 	 */
-	order_blocks(cfg);
+	order_all_functions(cfg);
 
 	//Do we need to print intermediate representations?
 	u_int8_t print_irs = options->print_irs;
@@ -19754,6 +19157,7 @@ void select_all_instructions(compiler_options_t* options, cfg_t* cfg){
 	 * Now we'll deallocate all of the shared memory
 	 * regions that we've been using
 	 */
+	heap_queue_dealloc(&bfs_traversal_queue);
 	dynamic_string_dealloc(&value_name_searcher_string);
 	use_count_tracker_dealloc(&use_count_tracker);
 }

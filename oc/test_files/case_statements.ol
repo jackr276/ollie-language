@@ -2,8 +2,8 @@
 * This program is made for the purposes of testing case statements
 */
 
-pub fn main(arg:i32, argv:char**) -> i32{
-	let x:mut i32 = 32;
+pub fn main(argc:i32, argv:char**) -> i32{
+	let x:mut i32 = argc;
 
 	switch(x){
 		case 2 -> {

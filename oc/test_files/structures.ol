@@ -2,13 +2,13 @@
 * This program is made for the purposes of testing structures
 */
 
-pub fn main(arg:i32, argv:char**) -> i32{
+pub fn main(argc:i32, argv:char**) -> i32{
 	define struct s {
 		x:i32;
 		y:i32;
 	} as my_struct;
 
-	let x:mut i32 = 32;
+	let x:mut i32 = argc;
 	let _:mut u32 = 2;
 
 	switch(x){

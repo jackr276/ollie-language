@@ -24,11 +24,9 @@ pub fn my_fn(param:inner_struct) -> i32 {
 }
 
 
-pub fn main() -> i32 {
+pub fn nested_struct_copy(x:i32) -> i32 {
 	let outer1:mut outer_struct = {[1, 2, 3, 4, 5], {1, 2.0}, 5};
 	let outer2:mut outer_struct = {[1, 2, 3, 4, 5], {5, 5.0d}, 5};
-
-	let x:i32 = 6;
 
 	let final_struct:inner_struct = (x > 5) ? outer1:nested_inner
 										 else outer2:nested_inner;
@@ -37,6 +35,12 @@ pub fn main() -> i32 {
 	 * Use the ternary struct assignment as the parameter 
 	 * Should return 1 * 3 = 3
 	 */
-	OUNIT: [exit_status = 3]
 	ret @my_fn(final_struct);
+	
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 3]
+	ret @nested_struct_copy(6);
 }

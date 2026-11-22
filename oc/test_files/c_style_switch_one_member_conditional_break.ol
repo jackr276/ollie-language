@@ -4,11 +4,7 @@
 * inside of our case
 */
 
-
-pub fn main() -> i32 {
-	let x:mut i32 = 5;
-	let y:mut i32 = 2;
-
+pub fn c_style_switch_one_member(x:mut i32, y:mut i32) -> i32 {
 	switch(x){
 		default:
 			x--;
@@ -21,6 +17,11 @@ pub fn main() -> i32 {
 			break;
 	}
 
-	OUNIT: [exit_status = 5]
 	ret x;
+}
+
+
+pub fn main() -> i32 {
+	OUNIT: [exit_status = 5]
+	ret @c_style_switch_one_member(5, 2);
 }
