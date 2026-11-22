@@ -59,11 +59,58 @@ static inline void trigger_ice_panic(char* message){
 }
 
 
-
+/**
+ * Take a source addressing mode expression and attempt to extract the floating point constant
+ * from it in the event that this is a rip-relative local constant load expression
+ */
 static inline search_result_t search_for_constant_in_addressing_expression(addressing_operands_t* operands){
+	search_result_t search_result = BLANK_SEARCH_RESULT;
 
+	/**
+	 * If it's not rip-relative then this is something else and we can't use it at all
+	 */
+	if(operands->addressing_mode != ADDRESSING_MODE_RIP_RELATIVE){
+		return search_result;
+	}
+
+	/**
+	 * Extract the rip offset variable. If it's not stamped explicitly as a local constant then
+	 * we can't use this and we'll move along
+	 */
+	three_addr_var_t* local_constant_var = operands->rip_offset_var;
+	if(local_constant_var->variable_type != VARIABLE_TYPE_LOCAL_CONSTANT){
+		return search_result;
+	}
+
+	/**
+	 * Extract the local constant. If it's not a floating point type then this is useless
+	 * and we fail out
+	 */
+	local_constant_t* local_constant = local_constant_var->associated_memory_region.local_constant;
+	if(IS_FLOATING_POINT(local_constant->type) == FALSE){
+		return search_result;
+	}
+
+	/**
+	 * Get the value out of here. The float values have had their bits stored inside of u_int32_t/u_int64_t
+	 * bitmaps, but it's easy enough to get them out with some address manipulation
+	 */
+	three_addr_const_t* final_constant = NULL;
+	if(local_constant->type->basic_type_token == F32){
+		float float_value = *((float*)(&(local_constant->local_constant_value.f32_bit_equivalent)));
+		final_constant = emit_f32_constant(float_value, local_constant->type);
+	} else {
+		double double_value = *((double*)(&(local_constant->local_constant_value.f64_bit_equivalent)));
+		final_constant = emit_f64_constant(double_value, local_constant->type);
+	}
+
+	/**
+	 * Package up and return the final result
+	 */
+	search_result.result_type = SEARCH_RESULT_TYPE_CONST;
+	search_result.result.constant = final_constant;
+	return search_result;
 }
-
 
 
 /**
@@ -127,50 +174,7 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
 				 * us to claw that value back out of the local constant load
 				 */
 				case THREE_ADDR_CODE_LOAD_STATEMENT: {
-					/**
-					 * If it's not rip-relative then this is something else and we can't use it at all
-					 */
-					if(cursor->operands.oir.source_address_expression.addressing_mode != ADDRESSING_MODE_RIP_RELATIVE){
-						return search_result;
-					}
-
-					/**
-					 * Extract the rip offset variable. If it's not stamped explicitly as a local constant then
-					 * we can't use this and we'll move along
-					 */
-					three_addr_var_t* local_constant_var = cursor->operands.oir.source_address_expression.rip_offset_var;
-					if(local_constant_var->variable_type != VARIABLE_TYPE_LOCAL_CONSTANT){
-						return search_result;
-					}
-
-					/**
-					 * Extract the local constant. If it's not a floating point type then this is useless
-					 * and we fail out
-					 */
-					local_constant_t* local_constant = local_constant_var->associated_memory_region.local_constant;
-					if(IS_FLOATING_POINT(local_constant->type) == FALSE){
-						return search_result;
-					}
-
-					/**
-					 * Get the value out of here. The float values have had their bits stored inside of u_int32_t/u_int64_t
-					 * bitmaps, but it's easy enough to get them out with some address manipulation
-					 */
-					three_addr_const_t* final_constant = NULL;
-					if(local_constant->type->basic_type_token == F32){
-						float float_value = *((float*)(&(local_constant->local_constant_value.f32_bit_equivalent)));
-						final_constant = emit_f32_constant(float_value, local_constant->type);
-					} else {
-						double double_value = *((double*)(&(local_constant->local_constant_value.f64_bit_equivalent)));
-						final_constant = emit_f64_constant(double_value, local_constant->type);
-					}
-
-					/**
-					 * Package up and return the final result
-					 */
-					search_result.result_type = SEARCH_RESULT_TYPE_CONST;
-					search_result.result.constant = final_constant;
-					return search_result;
+					return search_for_constant_in_addressing_expression(&(cursor->operands.oir.source_address_expression));
 				}
 
 				/**
