@@ -1011,7 +1011,6 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	 * type that we have for this instruction
 	 */
 	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
-	three_addr_var_t* operand2 = instruction->operands.oir.operand2;
 	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
 
 	/**
@@ -1022,6 +1021,16 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	if(op1_result.result_type != SEARCH_RESULT_TYPE_CONST){
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
+
+	/**
+	 * Remember that 
+	 */
+	if(instruction->memory_access_type == NO_MEMORY_ACCESS){
+
+	} else {
+
+	}
+
 
 	/**
 	 * Then attempt to find the second operand's result inside of the block. Again if it's not a constant
@@ -1154,11 +1163,9 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
  */
 static simulated_execution_result_t simulate_binary_operation_with_constant_flags_after_execution(instruction_t* instruction){
 	/**
-	 * Extract the first operand, the constant oeprand, and determine the operand type for what we're trying
-	 * to simulate
+	 * Extract the first operand and determine the overall operand type for this instruction
 	 */
 	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
-	three_addr_const_t* constant_operand = instruction->operands.oir.constant_operand;
 	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
 
 	/**
@@ -1169,6 +1176,13 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 	if(op1_result.result_type != SEARCH_RESULT_TYPE_CONST){
 		return BLANK_SIMULATED_EXECUTION_RESULT;
 	}
+
+	/**
+	 * Once we get here we know that we have 2 constant operands, so we can begin simulating
+	 * accordingly based on them after we extract them
+	 */
+	three_addr_const_t* constant_operand1 = op1_result.result.constant;
+	three_addr_const_t* constant_operand2 = instruction->operands.oir.constant_operand;
 
 	/**
 	 * Simulate based on all of the valid operands that we have
@@ -1182,8 +1196,8 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 				trigger_ice_panic("Invalid floating point operand for ^ operator");
 			}
 
-			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			u_int64_t op1_raw_const = constant_operand1->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand2->constant_value.unsigned_long_constant;
 			return simulate_flags_from_bitwise_xor_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
@@ -1195,8 +1209,8 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 				trigger_ice_panic("Invalid floating point operand for & operator");
 			}
 
-			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			u_int64_t op1_raw_const = constant_operand1->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand2->constant_value.unsigned_long_constant;
 			return simulate_flags_from_bitwise_and_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
@@ -1208,8 +1222,8 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 				trigger_ice_panic("Invalid floating point operand for | operator");
 			}
 
-			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			u_int64_t op1_raw_const = constant_operand1->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand2->constant_value.unsigned_long_constant;
 			return simulate_flags_from_bitwise_or_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 					
@@ -1221,8 +1235,8 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 				trigger_ice_panic("Invalid floating point operand for + operator");
 			}
 
-			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			u_int64_t op1_raw_const = constant_operand1->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand2->constant_value.unsigned_long_constant;
 			return simulate_flags_from_addition_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
@@ -1234,8 +1248,8 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 				trigger_ice_panic("Invalid floating point operand for - operator");
 			}
 
-			u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-			u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+			u_int64_t op1_raw_const = constant_operand1->constant_value.unsigned_long_constant;
+			u_int64_t op2_raw_const = constant_operand2->constant_value.unsigned_long_constant;
 			return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
 		}
 
@@ -1252,8 +1266,8 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 			 * the flags for all integer comparison operators
 			 */
 			if(IS_FLOATING_POINT(operand_type) == FALSE){
-				u_int64_t op1_raw_const = op1_result.result.constant->constant_value.unsigned_long_constant;
-				u_int64_t op2_raw_const = constant_operand->constant_value.unsigned_long_constant;
+				u_int64_t op1_raw_const = constant_operand1->constant_value.unsigned_long_constant;
+				u_int64_t op2_raw_const = constant_operand2->constant_value.unsigned_long_constant;
 				return simulate_flags_from_subtraction_with_constants(op1_raw_const, op2_raw_const, operand_type);
 
 			/**
@@ -1262,12 +1276,12 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 			 */
 			} else {
 				if(operand_type->basic_type_token == F32){
-					float op1_raw_const = op1_result.result.constant->constant_value.float_constant;
-					float op2_raw_const = constant_operand->constant_value.float_constant;
+					float op1_raw_const = constant_operand1->constant_value.float_constant;
+					float op2_raw_const = constant_operand2->constant_value.float_constant;
 					return simulate_flags_from_f32_constant_comparison(op1_raw_const, op2_raw_const);
 				} else {
-					double op1_raw_const = op1_result.result.constant->constant_value.double_constant;
-					double op2_raw_const = constant_operand->constant_value.double_constant;
+					double op1_raw_const = constant_operand1->constant_value.double_constant;
+					double op2_raw_const = constant_operand2->constant_value.double_constant;
 					return simulate_flags_from_f64_constant_comparison(op1_raw_const, op2_raw_const);
 				}
 			}
