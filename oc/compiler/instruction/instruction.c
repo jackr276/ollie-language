@@ -7103,7 +7103,7 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 		 * type is and perform a move operation(just reassignment) to have the appropriate
 		 * expansion
 		 */
-		case CHAR_CONST:
+		case CHAR_CONST: {
 			switch(basic_type_token){
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
@@ -7160,8 +7160,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
-		case BYTE_CONST:
+		case BYTE_CONST: {
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
@@ -7218,8 +7219,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
-		case BYTE_CONST_FORCE_U:
+		case BYTE_CONST_FORCE_U: {
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
@@ -7276,8 +7278,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
-		case SHORT_CONST:
+		case SHORT_CONST: {
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
@@ -7334,8 +7337,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 		
 			break;
+		}
 
-		case SHORT_CONST_FORCE_U:
+		case SHORT_CONST_FORCE_U: {
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
@@ -7392,8 +7396,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
-		case INT_CONST_FORCE_U:
+		case INT_CONST_FORCE_U: {
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
@@ -7450,8 +7455,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
-		case INT_CONST:
+		case INT_CONST: {
 			switch(basic_type_token){
 				case CHAR:
 					constant->const_type = CHAR_CONST;
@@ -7508,9 +7514,10 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
 		//Floats can be coerced into being ints(signed/unsigned), longs(signed/unsigned) and double
-		case FLOAT_CONST:
+		case FLOAT_CONST: {
 			switch(basic_type_token){
 				case I32:
 					constant->const_type = INT_CONST;
@@ -7541,8 +7548,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
-		case LONG_CONST_FORCE_U:
+		case LONG_CONST_FORCE_U: {
 			switch(basic_type_token){
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
@@ -7589,8 +7597,9 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
-		case LONG_CONST:
+		case LONG_CONST: {
 			switch(basic_type_token){
 				case U8:
 					constant->const_type = BYTE_CONST_FORCE_U;
@@ -7637,10 +7646,10 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
-
+		}
 
 		//Doubles can only ever be coerced to a long due to the 64-bit nature
-		case DOUBLE_CONST:
+		case DOUBLE_CONST: {
 			switch(basic_type_token){
 				case U64:
 					constant->const_type = LONG_CONST_FORCE_U;
@@ -7657,11 +7666,13 @@ void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, g
 			}
 
 			break;
+		}
 
 		//This should never happen
-		default:
-			printf("Fatal internal compiler error: Unsupported constant type found in coercer %d.\n", constant_node->constant_type);
+		default: {
+			printf("Fatal internal compiler error: Unsupported constant type found in coercer %d.\n", constant->const_type);
 			exit(1);
+		}
 	}
 }
 
