@@ -2399,8 +2399,7 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * from memory. In these cases, we will call out to this function. This function creates a load instruction
  * that automatically grabs the value at the variable memory address
  *
- *
- * TODO LOOK AT ME I WANT A TEST FOR THIS
+ * TODO TYPE HERE
  */
 static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, u_int32_t line_number){
 	//Extract for use
@@ -2426,7 +2425,7 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
  * to move an identifier to some temporary location
  *
  *
- * TODO LOOK AT ME
+ * TODO TYPE HERE
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
 	//Extract the variable
@@ -4367,6 +4366,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		/**
 		 * The ! results in a logical not. This expression is largely handled in the simplifier,
 		 * it's just represented as an OIR expression for us
+		 *
+		 * TODO LOOK AT THIS
 		 */
 		case EXCLAMATION: {
 			/**
@@ -4401,6 +4402,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * Becomes:
 		 * t3 <- bitwise not a
 		 * x <- t3
+		 *
+		 * TODO LOOK AT THIS
 		 */
 		case B_NOT: {
 			/**
@@ -4439,6 +4442,8 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 *
 		 * Becomes:
 		 * x <- negate a
+		 *
+		 * TODO LOOK AT THIS
 		 */
 		case MINUS: {
 			/**
