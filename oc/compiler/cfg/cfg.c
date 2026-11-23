@@ -4450,8 +4450,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 *
 		 * Becomes:
 		 * x <- negate a
-		 *
-		 * TODO LOOK AT THIS
 		 */
 		case MINUS: {
 			/**
@@ -4463,13 +4461,20 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The result will always be a variable that we can unpack
 			three_addr_var_t* negatee = unpack_result_package(&unary_package, current_block, line_number);
-			generic_type_t* operand_type = negatee->type;
+
+			/**
+			 * The operand type comes from the child's inferred type, *NOT* the variable type. This is
+			 * especially important to consider when we have casting involved. It is this type that the
+			 * instruction selector will use to make decisions and not anything else
+			 */
+			generic_type_t* operand_type = unary_expression_child->inferred_type;
 
 			/**
 			 * Emit the negation instruction with a temporary variable as the assignee and the negatee
 			 * as our operand
 			 */
 			instruction_t* negation_instruction = emit_negation_statement(emit_temp_var(operand_type), negatee, line_number);
+			negation_instruction->type_storage.result_type = operand_type;
 			add_statement(current_block, negation_instruction);
 
 			/**

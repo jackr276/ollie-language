@@ -18037,6 +18037,23 @@ static void handle_negation_instruction(instruction_window_t* window){
 	instruction_t* negation_instruction = window->instruction1;
 
 	/**
+	 * Extract both operands first
+	 */
+	three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
+	three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
+
+	/**
+	 * VERY IMPORTANT - the operand type will always comes from the instruction
+	 * itself, *NOT* the given variable. This is especially important to consider
+	 * in the event of cast expressions. If a converting move is required, we will
+	 * add that now
+	 */
+	generic_type_t* operand_type = negation_instruction->type_storage.result_type;
+	if(is_converting_move_required(operand_type, operand1->type) == TRUE){
+		operand1 = create_and_insert_converting_move_instruction(negation_instruction, operand1, operand_type);
+	}
+
+	/**
 	 * For non-floating point values, we will need to emit a temporary assignment
 	 * for the first operand in the event that it is not a temporary variable because
 	 * negation will modify the variable inplace.
@@ -18050,13 +18067,6 @@ static void handle_negation_instruction(instruction_window_t* window){
 	 * movl t6, t4
 	 */
 	if(IS_FLOATING_POINT(negation_instruction->operands.oir.assignee->type) == FALSE){
-		/**
-		 * Extract both operands first
-		 */
-		three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
-		three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
-		generic_type_t* operand_type = operand1->type;
-
 		/**
 		 * If this is not a temporary variable then we will need to emit and insert
 		 * a temp var here
@@ -18109,13 +18119,6 @@ static void handle_negation_instruction(instruction_window_t* window){
 	 * movss t5, t4
 	 */
 	} else {
-		/**
-		 * Extract the values that we're working with and the type
-		 */
-		three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
-		three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
-		generic_type_t* operand_type = operand1->type;
-
 		/**
 		 * Before we do anything else, we will first move the first operand into a temporary
 		 * holding variable. We do this to avoid clobbering it's value

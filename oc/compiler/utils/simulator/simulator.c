@@ -859,7 +859,7 @@ simulated_execution_result_t simulate_logical_not_flags_after_execution(instruct
 	 * within the block
 	 */
 	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
-	generic_type_t* operand_type = logical_not_operand->type;
+	generic_type_t* operand_type = instruction->type_storage.result_type;
 	search_result_t search_result = search_for_variable_assignment_in_block(instruction, logical_not_operand);
 
 	/**
@@ -919,7 +919,7 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 	 * a floating point operand we will panic
 	 */
 	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
-	generic_type_t* operand_type = logical_not_operand->type;
+	generic_type_t* operand_type = instruction->type_storage.result_type;
 	if(IS_FLOATING_POINT(operand_type) == TRUE){
 		trigger_ice_panic("Floating point negation has been invalidly marked for use as a flag setting statement");
 	}
