@@ -947,11 +947,18 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 	}
 
 	/**
+	 * Extract the constant operand and coerce it to the type that was specified for the
+	 * given instruction itself
+	 */
+	three_addr_const_t* constant_operand = search_result.result.constant;
+	coerce_three_address_constant_to_given_type(constant_operand, operand_type);
+
+	/**
 	 * If we get here we know that the execution result is a pure constant and it's not a floating point
 	 * value. In this case we are able to simulate the execution of the negation. Integer negation
 	 * is in reality equivalent to doing "0 - x", so that is what we will simulate for our flags
 	 */
-	return simulate_flags_from_subtraction_with_constants(0UL, search_result.result.constant->constant_value.unsigned_long_constant, operand_type);
+	return simulate_flags_from_subtraction_with_constants(0UL, constant_operand->constant_value.unsigned_long_constant, operand_type);
 }
 
 
