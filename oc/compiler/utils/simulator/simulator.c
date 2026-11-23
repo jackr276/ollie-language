@@ -1089,6 +1089,15 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	three_addr_const_t* constant_operand1 = op1_result.result.constant;
 	three_addr_const_t* constant_operand2 = op2_result.result.constant;
 
+	/**
+	 * Coerce both of these constants to be of the given operand type. We do this to
+	 * ensure that we are accurately simulating what the Ollie compiler would truly
+	 * emit. Since the Ollie compiler cares about constant coercion, we will add that
+	 * here as well
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand1, operand_type);
+	coerce_three_address_constant_to_given_type(constant_operand2, operand_type);
+
 	switch(instruction->op){
 		case CARROT: {
 			/**
@@ -1231,6 +1240,15 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 	 */
 	three_addr_const_t* constant_operand1 = op1_result.result.constant;
 	three_addr_const_t* constant_operand2 = instruction->operands.oir.constant_operand;
+
+	/**
+	 * Coerce both of these constants to be of the given operand type. We do this to
+	 * ensure that we are accurately simulating what the Ollie compiler would truly
+	 * emit. Since the Ollie compiler cares about constant coercion, we will add that
+	 * here as well
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand1, operand_type);
+	coerce_three_address_constant_to_given_type(constant_operand2, operand_type);
 
 	/**
 	 * Simulate based on all of the valid operands that we have
