@@ -18,6 +18,6 @@ pub fn logical_not_with_coercion() -> i32 {
 
 
 pub fn main() -> i32 {
-	OUNIT:[exit_status = 5]
+	OUNIT:[exit_status = 11]
 	ret @logical_not_with_coercion();
 }
