@@ -1810,6 +1810,8 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 *
 		 *
 		 * TODO THIS IS BAD
+		 *
+		 * TODO WE SHOULD HAVE TRACING LOGIC
 		 */
 		if(binary_results.operation_sets_branchable_flags == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
