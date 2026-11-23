@@ -815,6 +815,13 @@ static simulated_execution_result_t simulate_test_if_not_zero_flags_after_execut
 	}
 
 	/**
+	 * Once we have the constant operand, we will want to coerce it to be the exact operand type
+	 * that we are after. We'll do this now to make sure that we are truly simulating what would
+	 * have happened in the normal execution flow
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand, operand_type);
+
+	/**
 	 * Case 1: for non-floating point constants, the test command is simply the
 	 * "andX" instruction without setting results. This is easy enough to simulate
 	 * for us
@@ -875,6 +882,13 @@ simulated_execution_result_t simulate_logical_not_flags_after_execution(instruct
 	 * Extract the constant operand and go from here
 	 */
 	three_addr_const_t* constant_operand = search_result.result.constant;
+
+	/**
+	 * Once we have the constant operand, we will want to coerce it to be the exact operand type
+	 * that we are after. We'll do this now to make sure that we are truly simulating what would
+	 * have happened in the normal execution flow
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand, operand_type);
 
 	/**
 	 * Case 1: for non-floating point constants, the test command is simply the
