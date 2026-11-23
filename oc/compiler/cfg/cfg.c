@@ -1805,6 +1805,11 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
 		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
+		 *
+		 * TODO TEST THIS
+		 *
+		 *
+		 * TODO THIS IS BAD
 		 */
 		if(binary_results.operation_sets_branchable_flags == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
@@ -2082,6 +2087,9 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * statement to get the flags populated. Settings RFLAGS generally does not happen for
 		 * things like float arithmetic, bitwise inversing, etc., so this flag is very important
 		 * to have set correctly
+		 *
+		 *
+		 * TODO THIS IS BAD!!!!!
 		 */
 		if(conditional_results.operation_sets_branchable_flags == FALSE){
 			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
@@ -4361,8 +4369,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		/**
 		 * The ! results in a logical not. This expression is largely handled in the simplifier,
 		 * it's just represented as an OIR expression for us
-		 *
-		 * TODO LOOK AT THIS
 		 */
 		case EXCLAMATION: {
 			/**
