@@ -2398,8 +2398,6 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * There are several cases when we are emitting an identifier that we want to automatically emit a load
  * from memory. In these cases, we will call out to this function. This function creates a load instruction
  * that automatically grabs the value at the variable memory address
- *
- * TODO TYPE HERE
  */
 static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, u_int32_t line_number){
 	//Extract for use
@@ -2423,9 +2421,6 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 /**
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
- *
- *
- * TODO TYPE HERE
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
 	//Extract the variable
@@ -4382,6 +4377,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			//Emit and add the logical not expression
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
 			add_statement(current_block, logical_not_statement);
+
+			/**
+			 * Store the inferred type inside of the type storage area. This will be used by the instruction
+			 * selector down the road to emit converting moves if need be. This is especially important for
+			 * casting operations. We can't use the parent because it's a bool always
+			 */
+			logical_not_statement->type_storage.result_type = unary_expression_child->inferred_type;
 
 			//These always set RFLAGS
 			generic_results.operation_sets_branchable_flags = TRUE;

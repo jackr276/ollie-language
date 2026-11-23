@@ -17721,21 +17721,38 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	//Is this value *exclusively* used by a branch?
 	u_int8_t used_by_branch_only = logical_not->operands.oir.assignee->sets_cc;
 
-	//Let's also determine if this is a floating point logical not or not
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->operands.oir.operand1->type);
+	/**
+	 * Extract the operand and the operand type. The actual type of the operand 
+	 * comes from the stored result type, not the operand itself. It is very important
+	 * that we use this type, especially for cast expressions
+	 */
+	three_addr_var_t* operand = logical_not->operands.oir.operand1;
+	generic_type_t* operand_type = logical_not->type_storage.result_type;
+	if(is_converting_move_required(operand_type, operand->type) == TRUE){
+		operand = create_and_insert_converting_move_instruction(logical_not, operand, operand_type);
+	}
 
-	//This is the most common case - it is *not* being used by a floating
-	//point value
+	/**
+	 * Let's alos determine if this is a floating point operation or not
+	 */
+	u_int8_t is_floating_point = IS_FLOATING_POINT(operand_type);
+
+	/**
+	 * This is the most common case - it is *not* being used by a floating
+	 * point value
+	 */
 	if(is_floating_point == FALSE){
 		//Emit the test instruction
-		instruction_t* test_instruction = emit_direct_test_instruction(logical_not->operands.oir.operand1, logical_not->operands.oir.operand1); 
+		instruction_t* test_instruction = emit_direct_test_instruction(operand, operand); 
 
 		//Insert this right before the instruction we have
 		insert_instruction_before_given(test_instruction, logical_not);
 
-		//If we are just being used by a branch, then the test instruction should
-		//be all that we need. If we are *not* just being used by a branch, then 
-		//we will need more than just the test instruction
+		/**
+		 * If we are just being used by a branch, then the test instruction should
+		 * be all that we need. If we are *not* just being used by a branch, then 
+		 * we will need more than just the test instruction
+		 */
 		if(used_by_branch_only == FALSE){
 			//Set to 1 if we're zero
 			instruction_t* set_if_equal = emit_sete_instruction(logical_not->operands.oir.assignee);
@@ -17795,7 +17812,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	 */
 	} else {
 		//This is the variable that we will be comparing against
-		three_addr_var_t* comparing_against = emit_temp_var(logical_not->operands.oir.operand1->type);
+		three_addr_var_t* comparing_against = emit_temp_var(operand_type);
 
 		//First emit a PXOR instruction to zero out a variable. This is the variable that we will compare against
 		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(comparing_against);
@@ -17804,7 +17821,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		insert_instruction_before_given(pxor_instruction, logical_not);
 
 		//Now no matter what we also are going to need an unordered comparison instruction
-		instruction_t* unordered_comparison = emit_float_comparison_instruction(comparing_against, logical_not->operands.oir.operand1, TRUE);
+		instruction_t* unordered_comparison = emit_float_comparison_instruction(comparing_against, operand, TRUE);
 
 		//Insert this in right before the logical not
 		insert_instruction_before_given(unordered_comparison, logical_not);
