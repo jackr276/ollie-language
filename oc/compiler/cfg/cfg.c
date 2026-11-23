@@ -2398,6 +2398,9 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * There are several cases when we are emitting an identifier that we want to automatically emit a load
  * from memory. In these cases, we will call out to this function. This function creates a load instruction
  * that automatically grabs the value at the variable memory address
+ *
+ *
+ * TODO LOOK AT ME I WANT A TEST FOR THIS
  */
 static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, u_int32_t line_number){
 	//Extract for use
@@ -2421,6 +2424,9 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 /**
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
+ *
+ *
+ * TODO LOOK AT ME
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
 	//Extract the variable
