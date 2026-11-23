@@ -10091,7 +10091,7 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 * to return TRUE if the operand is a floating point value
 		 */
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
-			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+			return IS_FLOATING_POINT(statement->type_storage.result_type);
 		}
 
 		/**
