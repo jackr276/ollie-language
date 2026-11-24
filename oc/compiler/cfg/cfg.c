@@ -2431,6 +2431,8 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 /**
  * Emit the identifier machine code. This function is to be used in the instance where we want
  * to move an identifier to some temporary location
+ *
+ * TODO CONVERTING MOVE
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
 	//Extract the variable
