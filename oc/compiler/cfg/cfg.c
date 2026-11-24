@@ -1854,7 +1854,18 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 			 * the true operand type that we're working with
 			 */
 			case CFG_RESULT_TYPE_VAR: {
-										  
+				/**
+				 * The conditional decider(for now) is just the result variable
+				 */
+				conditional_decider = binary_results.result_value.result_var;
+
+				/**
+				 * The type that we're branching on may be different than our decider's
+				 * type. This is because some binary statements(think relational operators) 
+				 * may always return a boolean even if they're operating over floats. We will
+				 * enlist our helper to search the block and find what we need
+				 */
+				branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
 
 				/**
 				 * If the binary results package reports that whatever operation that it performs does
@@ -1863,9 +1874,17 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				 * bitwise inversing, etc., so this flag is very important to have set correctly
 				 */
 				if(binary_results.operation_sets_branchable_flags == FALSE){
-					conditional_decider = emit_test_not_zero(current_block, branching_on_type, conditional_decider, line_number);
-				}
+					/**
+					 * Emit and add the test not zero statement
+					 */
+					instruction_t* test_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), conditional_decider, branching_on_type, line_number);
+					add_statement(current_block, test_not_zero);
 
+					/**
+					 * The decider now is the test not zero statement's assignee
+					 */
+					conditional_decider = test_not_zero->operands.oir.assignee;
+				}
 			}
 
 			/**
@@ -1880,7 +1899,7 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				/**
 				 * Emit and add the constant test if not zero
 				 */
-				instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), constant, line_number);
+				instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), constant, branching_on_type, line_number);
 				add_statement(current_block, test_if_not_zero);
 
 				/**
@@ -1898,9 +1917,6 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 				break;
 			}
 		}
-
-
-		generic_type_t* branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
 
 		/**
 		 * Flag that the conditional decider sets condition codes. We can also determine
