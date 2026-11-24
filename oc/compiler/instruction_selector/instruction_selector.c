@@ -18242,11 +18242,12 @@ static void handle_not_instruction(instruction_t* instruction){
 	 * is the case, then we will insert our converting move right before the
 	 * given instruction
 	 */
-	if(is_converting_move_required())
-
+	if(is_converting_move_required(operand_type, operand->type) == TRUE){
+		operand = create_and_insert_converting_move_instruction(instruction, operand, operand_type);
+	}
 
 	/**
-	 * If the operand is not a temporary variable, we will need to emit
+	 * If the operand is still not a temporary variable, we will need to emit
 	 * an assignment instruction because the notX commands will modify
 	 * the register inplace
 	 */
@@ -18254,7 +18255,7 @@ static void handle_not_instruction(instruction_t* instruction){
 		/**
 		 * Emit the temp assignment as an x86 movX directly
 		 */
-		instruction_t* temp_assignment = emit_move_instruction(emit_temp_var(operand->type), operand);
+		instruction_t* temp_assignment = emit_move_instruction(emit_temp_var(operand_type), operand);
 		insert_instruction_before_given(temp_assignment, instruction);
 
 		/**
@@ -18266,7 +18267,7 @@ static void handle_not_instruction(instruction_t* instruction){
 	/**
 	 * Select the appropriate instruction type given the variable size
 	 */
-	switch(get_type_size(operand->type)){
+	switch(get_type_size(operand_type)){
 		case QUAD_WORD:
 			instruction->instruction_type = NOTQ;
 			break;
