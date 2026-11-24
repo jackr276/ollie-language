@@ -1841,21 +1841,49 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * to decide this branch. We will also trace our way up here to determine the type that we are branching
 		 * on. This is important in deciding our branch type down the line. Once we have this we can also determine
 		 * the signedness of our branch
-		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, line_number);
-
-		/**
+		 * 
 		 * We can have either a variable or a constant in our given results. We handle
 		 * each case differently. In the end we'll have a conditional decider and a type
 		 * to branch based on in either case
 		 */
+		three_addr_var_t* conditional_decider = NULL;
+		generic_type_t* branching_on_type = NULL;
 		switch(binary_results.type){
 			case CFG_RESULT_TYPE_VAR: {
+										  
+
+				/**
+				 * If the binary results package reports that whatever operation that it performs does
+				 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
+				 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+				 * bitwise inversing, etc., so this flag is very important to have set correctly
+				 */
+				if(binary_results.operation_sets_branchable_flags == FALSE){
+					conditional_decider = emit_test_not_zero(current_block, branching_on_type, conditional_decider, line_number);
+				}
 
 			}
 
+			/**
+			 * If we have a constant, we're going to need to emit a test if not zero
+			 * statement for sure. The type that we will branch on is going to
+			 * be the constant's type
+			 */
 			case CFG_RESULT_TYPE_CONST: {
+				three_addr_const_t* constant = binary_results.result_value.result_const;
+				branching_on_type = constant->type;
 
+				/**
+				 * Emit and add the constant test if not zero
+				 */
+				instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), constant, line_number);
+				add_statement(current_block, test_if_not_zero);
+
+				/**
+				 * The conditional decider is now just the assignee of this statement
+				 */
+				conditional_decider = test_if_not_zero->operands.oir.assignee;
+				break;
 			}
 
 			/**
@@ -1868,25 +1896,14 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		}
 
 
-
-
-
-
 		generic_type_t* branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
-		u_int8_t type_signed = is_type_signed(branching_on_type);
 
 		/**
-		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
-		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
-		 * bitwise inversing, etc., so this flag is very important to have set correctly
+		 * Flag that the conditional decider sets condition codes. We can also determine
+		 * the signedness now as well
 		 */
-		if(binary_results.operation_sets_branchable_flags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, branching_on_type, conditional_decider, line_number);
-		}
-
-		//Flag that this sets condition codes
 		conditional_decider->sets_cc = TRUE;
+		u_int8_t type_signed = is_type_signed(branching_on_type);
 
 		/**
 		 * Select the appropriate branch type and then emit the branch statement
