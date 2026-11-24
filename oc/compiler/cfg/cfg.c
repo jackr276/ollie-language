@@ -1849,6 +1849,10 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		three_addr_var_t* conditional_decider = NULL;
 		generic_type_t* branching_on_type = NULL;
 		switch(binary_results.type){
+			/**
+			 * If our result is a variable, then we will need to do some extra searching to get
+			 * the true operand type that we're working with
+			 */
 			case CFG_RESULT_TYPE_VAR: {
 										  
 

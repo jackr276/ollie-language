@@ -6857,7 +6857,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node, 
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested, u_int32_t line_number){
+instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested, generic_type_t* testing_type, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -6868,6 +6868,12 @@ instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_var
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
 
+	/**
+	 * Store the type that we're testing based off of inside of the instruction's type storage. Remember
+	 * that this may be different than the operand's type, so it's important to store
+	 */
+	stmt->type_storage.result_type = testing_type;
+
 	//And give the statement back
 	stmt->line_number = line_number;
 	return stmt;
@@ -6877,13 +6883,19 @@ instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_var
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested, u_int32_t line_number){
+instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested, generic_type_t* testing_type,  u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//The assignee/op1 is passed through
 	stmt->operands.oir.assignee = destination_variable;
 	stmt->operands.oir.constant_operand = being_tested;
+
+	/**
+	 * Store the type that we're testing based off of inside of the instruction's type storage. Remember
+	 * that this may be different than the operand's type, so it's important to store
+	 */
+	stmt->type_storage.result_type = testing_type;
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
