@@ -10111,16 +10111,9 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 * use unordered comparison statements in the event that they have
 		 * a float operand. As such, we'll just have to return whether or
 		 * not the operand is a float
-		 *
-		 * NOTE: remember that at this point it's still valid OIR to have a
-		 * test if not zero statement with a constant
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
-			if(statement->operands.oir.operand1 != NULL){
-				return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
-			} else {
-				return IS_FLOATING_POINT(statement->operands.oir.constant_operand->type);
-			}
+			return IS_FLOATING_POINT(statement->type_storage.result_type);
 		}
 
 		/**
@@ -18878,14 +18871,25 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 	//Grab out what we're really after
 	instruction_t* instruction = window->instruction1;
 
+	/**
+	 * Extract the operand type. Note that this may be different than
+	 * the type of the variable being tested, so we'll emit and insert
+	 * a converting move if that's the case
+	 */
+	generic_type_t* operand_type = instruction->type_storage.result_type;
+	three_addr_var_t* operand = instruction->operands.oir.operand1;
+	if(is_converting_move_required(operand_type, operand->type) == TRUE){
+		operand = create_and_insert_converting_move_instruction(instruction, operand, operand_type);
+	}
+
 	//We expect the most common case to be non-floating point
-	if(IS_FLOATING_POINT(instruction->operands.oir.operand1->type) == FALSE){
+	if(IS_FLOATING_POINT(operand_type) == FALSE){
 		//Get the appopriate set statement here
-		instruction->instruction_type = select_appropriate_test_statement(instruction->operands.oir.operand1->variable_size);
+		instruction->instruction_type = select_appropriate_test_statement(operand->variable_size);
 
 		//Op1 is both sourced because we are testing against ourselves
-		instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
-		instruction->operands.x86.source_register2 = instruction->operands.oir.operand1;
+		instruction->operands.x86.source_register1 = operand;
+		instruction->operands.x86.source_register2 = operand;
 		
 		//Rebuild the window around this instruction
 		reconstruct_window(window, instruction);
@@ -18895,11 +18899,8 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 	 * be using a constant. Instead, we can zero out a given XMM register and use that instead
 	 */
 	} else {
-		//Grab this for use
-		generic_type_t* fp_type = instruction->operands.oir.operand1->type;
-
 		//Let's first zero out a given XMM register
-		three_addr_var_t* zeroed_out = emit_temp_var(fp_type);
+		three_addr_var_t* zeroed_out = emit_temp_var(operand_type);
 
 		//Emit the PXOR instruction to wipe it out
 		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(zeroed_out);
@@ -18927,7 +18928,7 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		}
 
 		//Transfer over the old op1
-		instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
+		instruction->operands.x86.source_register1 = operand;
 
 		//And the second source is the register we just zeroed out
 		instruction->operands.x86.source_register2 = zeroed_out;
