@@ -1843,6 +1843,35 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		 * the signedness of our branch
 		 */
 		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, line_number);
+
+		/**
+		 * We can have either a variable or a constant in our given results. We handle
+		 * each case differently. In the end we'll have a conditional decider and a type
+		 * to branch based on in either case
+		 */
+		switch(binary_results.type){
+			case CFG_RESULT_TYPE_VAR: {
+
+			}
+
+			case CFG_RESULT_TYPE_CONST: {
+
+			}
+
+			/**
+			 * Anything else is impossible for us to branch on - so we won't do it
+			 */
+			default: {
+				trigger_ice_panic("Invalid result type to branch on");
+				break;
+			}
+		}
+
+
+
+
+
+
 		generic_type_t* branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
 		u_int8_t type_signed = is_type_signed(branching_on_type);
 
