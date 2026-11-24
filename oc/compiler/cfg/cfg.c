@@ -2536,12 +2536,19 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	symtab_variable_record_t* variable = ident_node->variable;
 	side_type_t side = ident_node->side;
 
+	/**
+	 * The inferred type comes from the identifier node itself, whereas the variable
+	 * type is the type that the variable was originally defined with. Due to casting,
+	 * there may be a discrepancy between these two. We will insert converting moves
+	 * where appropriate in the event of a discrepancy
+	 */
 	generic_type_t* inferred_type = ident_node->inferred_type;
 	generic_type_t* variable_type = variable->type_defined_as;
 
-	//Go based on it's membership
 	switch(variable->membership){
-		//For an enum just turn it into a constant
+		/**
+		 * For an enum just turn it into a constant
+		 */
 		case ENUM_MEMBER: {
 			return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(variable->enum_member_value, variable->type_defined_as), variable->type_defined_as, ident_node->line_number);
 		}
@@ -2610,7 +2617,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		 * Function parameters(note these are not stack passed) are regular variable emittals
 		 */
 		case FUNCTION_PARAMETER: {
-			//RHS can have special rules
+			/**
+			 * RHS can have special rules
+			 */
 			if(side == SIDE_TYPE_RIGHT){
 				/**
 				 * If we're on the RHS and we have a special "stack variable", we need to automatically
@@ -2622,14 +2631,30 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
 
 				/**
-				 * Otherwise again just emit the variable
+				 * For regular parameters, we may have undergone casting for this specific identifier
+				 * node that requires us to have a variable that is a different type when compared to the given
+				 * variable
 				 */
 				} else {
-					return emit_var(variable);
+					/**
+					 * They're the same so a regular emittal is fine
+					 */
+					if(variable_type == inferred_type){
+						return emit_var(variable);
+
+					/**
+					 * Otherwise they're different types, so we'll emit an assignment to a temp var of the
+					 * given type
+					 */
+					} else {
+						instruction_t* move_statement = emit_assignment_instruction(emit_temp_var(inferred_type), emit_var(variable), ident_node->line_number);
+						add_statement(basic_block, move_statement);
+						return move_statement->operands.oir.assignee;
+					}
 				}
 
 			/**
-			 * Otherwise we're just emitting the variable
+			 * Otherwise we're on the LHS and we're just emitting the variable
 			 */
 			} else {
 				return emit_var(variable);
@@ -2705,14 +2730,30 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
 
 				/**
-				 * Otherwise again just emit the variable
+				 * For regular variables, we may have undergone casting for this specific identifier
+				 * node that requires us to have a variable that is a different type when compared to the given
+				 * variable
 				 */
 				} else {
-					return emit_var(variable);
+					/**
+					 * They're the same so a regular emittal is fine
+					 */
+					if(variable_type == inferred_type){
+						return emit_var(variable);
+
+					/**
+					 * Otherwise they're different types, so we'll emit an assignment to a temp var of the
+					 * given type
+					 */
+					} else {
+						instruction_t* move_statement = emit_assignment_instruction(emit_temp_var(inferred_type), emit_var(variable), ident_node->line_number);
+						add_statement(basic_block, move_statement);
+						return move_statement->operands.oir.assignee;
+					}
 				}
 
 			/**
-			 * Otherwise we're just emitting the variable
+			 * Otherwise we're just emitting the variable on the LHS
 			 */
 			} else {
 				return emit_var(variable);
