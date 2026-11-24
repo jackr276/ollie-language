@@ -4423,16 +4423,24 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			/**
-			 * Extract the operand and generate a temp var assignee to use
+			 * Extract the not operand and the operand type. Do note that these may be different in
+			 * the case of casting. We will make an assignee with the type of the operan
 			 */
 			three_addr_var_t* not_operand = unpack_result_package(&unary_package, current_block, line_number);
-			three_addr_var_t* assignee = emit_temp_var(not_operand->type);
+			generic_type_t* operand_type = unary_expression_child->inferred_type;
+			three_addr_var_t* assignee = emit_temp_var(operand_type);
 
 			/**
 			 * Now emit and add the actual bitwise not logic
 			 */
 			instruction_t* bitwise_not = emit_not_instruction(assignee, not_operand, line_number);
 			add_statement(current_block, bitwise_not);
+
+			/**
+			 * IMPORTANT - we will store the operand type in the special type storage slot. This will
+			 * be used by the instruction selector down the road to emit the x86 code
+			 */
+			bitwise_not->type_storage.result_type = operand_type;
 
 			//These never set RFLAGS
 			generic_results.operation_sets_branchable_flags = FALSE;

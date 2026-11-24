@@ -18228,11 +18228,22 @@ static void handle_negation_instruction(instruction_window_t* window){
  * Will become:
  * movl x_1, t3
  * notl t3
- *
  */
 static void handle_not_instruction(instruction_t* instruction){
+	/**
+	 * Extract the assignee, operand and operand type
+	 */
 	three_addr_var_t* assignee = instruction->operands.oir.assignee;
 	three_addr_var_t* operand = instruction->operands.oir.operand1;
+	generic_type_t* operand_type = instruction->type_storage.result_type;
+
+	/**
+	 * There is a chance that we need to emit a converting move here. If that
+	 * is the case, then we will insert our converting move right before the
+	 * given instruction
+	 */
+	if(is_converting_move_required())
+
 
 	/**
 	 * If the operand is not a temporary variable, we will need to emit
