@@ -1834,6 +1834,8 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 					 */
 					conditional_decider = test_not_zero->operands.oir.assignee;
 				}
+
+				break;
 			}
 
 			/**
@@ -2158,6 +2160,8 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 					 */
 					conditional_decider = test_not_zero->operands.oir.assignee;
 				}
+
+				break;
 			}
 
 			/**
