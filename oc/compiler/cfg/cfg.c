@@ -1780,7 +1780,34 @@ static inline cfg_result_package_t emit_branch_conditional_expression(basic_bloc
  * type
  */
 static inline generic_type_t* get_branching_on_type_for_decider(basic_block_t* block, three_addr_var_t* decider){
-	
+	/**
+	 * Starting at the exit statement, trace our way up the block until we find 
+	 * the instruction that assigns to our decider
+	 */
+	instruction_t* cursor = block->exit_statement;
+	while(cursor != NULL){
+		/**
+		 * We've found it - now we're able to search this statement for an operand
+		 * type. If it has an operand type(binary operation, logical not, etc.) then 
+		 * we will be using that. Otherwise, we'll be defaulting back to the decider's
+		 * type. Either way this is our end case
+		 */
+		if(variables_equal(decider, cursor->operands.oir.assignee) == TRUE){
+			if(cursor->type_storage.result_type != NULL){
+				return cursor->type_storage.result_type;
+			} else {
+				return decider->type;
+			}
+		}
+
+		cursor = cursor->previous_statement;
+	}
+
+	/**
+	 * If we make it down here then we found nothing. We will default to the
+	 * decider's type in this case
+	 */
+	return decider->type;
 }
 
 
