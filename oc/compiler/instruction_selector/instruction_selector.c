@@ -7955,8 +7955,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				//Otherwise, the value is not 0
 				} else {
+					three_addr_const_t* constant_operand = current_instruction->operands.oir.constant_operand;
+					three_addr_var_t* operand1 = current_instruction->operands.oir.operand1;
+
+					//Extract the type that we're testing on
+					generic_type_t* testing_on_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, operand1->type, constant_operand->type);
+
 					//First we add a test instruction
-					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1, current_instruction->line_number);
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), operand1, testing_on_type, current_instruction->line_number);
 								
 					//The result of this will be used for our set instruction
 					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
@@ -7990,10 +7996,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * simplifiable
 			 */
 			case DOUBLE_OR: {
+				three_addr_const_t* constant_operand = current_instruction->operands.oir.constant_operand;
+				three_addr_var_t* operand1 = current_instruction->operands.oir.operand1;
+
 				//First option - the value is 0. If it is, then anything else is irrelevant
-				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
+				if(is_constant_value_zero(constant_operand) == TRUE){
+					//Extract the type that we're testing on
+					generic_type_t* testing_on_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, operand1->type, constant_operand->type);
+
 					//First we add a test instruction
-					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1, current_instruction->line_number);
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), operand1, testing_on_type, current_instruction->line_number);
 								
 					//The result of this will be used for our set instruction
 					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
