@@ -2489,23 +2489,40 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * There are several cases when we are emitting an identifier that we want to automatically emit a load
  * from memory. In these cases, we will call out to this function. This function creates a load instruction
  * that automatically grabs the value at the variable memory address
+ *
+ * We are also provided with the "result_type". This is necessary because some loads happen after a variable has
+ * been casted to a different type. If this is the case then we will emit an additional assignment after the fact
+ * to represent the move
  */
-static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, u_int32_t line_number){
-	//Extract for use
-	generic_type_t* type = variable->type_defined_as;
+static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, generic_type_t* result_type, u_int32_t line_number){
+	/**
+	 * Extract the variable type(different from the result type sometimes) and emit a memory
+	 * address variable
+	 */
+	generic_type_t* variable_type = variable->type_defined_as;
+	three_addr_var_t* memory_address_var = emit_memory_address_var(variable);
 
-	//Emit the memory address var for later on
-	three_addr_var_t* memory_address = emit_memory_address_var(variable);
-
-	//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-	//a reference
-	instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(type), memory_address, type, line_number);
-
-	//Add it to the block
+	/**
+	 * Emit and add the load instruction. The load instruction should always use the type that the variable
+	 * came with
+	 */
+	instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(variable_type), memory_address_var, variable_type, line_number);
 	add_statement(block, load_instruction);
 
-	//Just give back the temp var here
-	return load_instruction->operands.oir.assignee;
+	/**
+	 * Our result is initially the load instruction's assignee. If we have a difference
+	 * in types, we are going to emit an assignment instruction here so that what we
+	 * return is guarnateed to have the required type
+	 */
+	three_addr_var_t* result = load_instruction->operands.oir.assignee;
+	if(result_type != variable_type){
+		instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(result_type), result, line_number);
+		add_statement(block, move_instruction);
+
+		result = move_instruction->operands.oir.assignee;
+	}
+
+	return result;
 }
 
 
@@ -2516,12 +2533,13 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
  * TODO CONVERTING MOVE
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
-	//Extract the variable
+	/**
+	 * Extract the variable and the given side of the node
+	 */
 	symtab_variable_record_t* variable = ident_node->variable;
-	//Are we on the left or right of an equation?
 	side_type_t side = ident_node->side;
 
-	generic_type_t* ident_node_type = ident_node->inferred_type;
+	generic_type_t* inferred_type = ident_node->inferred_type;
 	generic_type_t* variable_type = variable->type_defined_as;
 
 	//Go based on it's membership
@@ -2551,10 +2569,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
 			 */
 			if(side == SIDE_TYPE_RIGHT){
-				//Let the helper emit our load from memory
-				return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
 
-			//Otherwise emit a normal variable
+			/**
+			 * Otherwise emit a normal variable
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -2580,10 +2599,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
 			 */
 			if(side == SIDE_TYPE_RIGHT){
-				//Let the helper emit our load from memory
-				return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
 
-			//Otherwise emit a normal variable
+			/**
+			 * Otherwise emit a normal variable
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -2602,15 +2622,18 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * from memory in any way
 				 */
 				if(variable->storage_class == STORAGE_CLASS_STACK){
-					//Let the helper emit our load from memory
-					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
 
-				//Otherwise again just emit the variable
+				/**
+				 * Otherwise again just emit the variable
+				 */
 				} else {
 					return emit_var(variable);
 				}
 
-			//Otherwise we're just emitting the variable
+			/**
+			 * Otherwise we're just emitting the variable
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -2642,7 +2665,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * address
 				 */
 				if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
-					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
 				} else {
 					return emit_memory_address_var(variable);
 				}
@@ -2673,22 +2696,27 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				return emit_memory_address_var(variable);
 			}
 
-			//RHS can have special rules
+			/** 
+			 * RHS can have special rules for identifier loads
+			 */
 			if(side == SIDE_TYPE_RIGHT){
 				/**
 				 * If we're on the RHS and we have a special "stack variable", we need to automatically
 				 * load that variable out of memory for use in whatever is happening in the caller
 				 */
 				if(variable->storage_class == STORAGE_CLASS_STACK){
-					//Let the helper emit our load from memory
-					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
 
-				//Otherwise again just emit the variable
+				/**
+				 * Otherwise again just emit the variable
+				 */
 				} else {
 					return emit_var(variable);
 				}
 
-			//Otherwise we're just emitting the variable
+			/**
+			 * Otherwise we're just emitting the variable
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -3826,7 +3854,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * to automatically be loaded(like arrays)
 			 */
 			} else if(is_type_stack_passed_by_reference(base_address_variable->type_defined_as) == TRUE){
-				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable, root->line_number);
+				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable, base_address_variable->type_defined_as, root->line_number);
 
 			/**
 			 * Otherwise in our final case we'll need to account for the case where we have a struct
