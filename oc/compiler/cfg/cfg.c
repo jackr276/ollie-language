@@ -1771,6 +1771,20 @@ static inline cfg_result_package_t emit_branch_conditional_expression(basic_bloc
 
 
 /**
+ * In order to properly emit a test if not zero statement, we need to know the proper type that we are
+ * branching on. This is different than the type of the result variable itself. Note that some operations
+ * like logical not that have floating point operands return a bool result. Obviously, we cannot branch
+ * based on a boolean in this case. To do this, we will trace our way up the block until we find out where
+ * the decider was assigned. We will then use the "result_type" field in that instruction(if it exists) as
+ * our branching on type. In the event that we find nothing(this is possible), we will just return the decider's
+ * type
+ */
+static inline generic_type_t* get_branching_on_type_for_decider(basic_block_t* block, three_addr_var_t* decider){
+	
+}
+
+
+/**
  * Emit a branch statement with an if destination and else destination. We will also handle the emittal of the conditional node here
  * for the purposes of doing the branch. The returned result package will include the starting & ending blocks for the branch. The
  * branch category is also given and will be used when we're accounting for how to place things
@@ -1796,9 +1810,11 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 		/**
 		 * The conditional decider is the variable that represents the flags set by the equation that we're using
-		 * to decide this branch
+		 * to decide this branch. We will also trace our way up here to determine the type that we are branching
+		 * on. This is important in deciding our branch type down the line
 		 */
 		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, line_number);
+		generic_type_t* branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
@@ -2439,6 +2455,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	symtab_variable_record_t* variable = ident_node->variable;
 	//Are we on the left or right of an equation?
 	side_type_t side = ident_node->side;
+
+	generic_type_t* ident_node_type = ident_node->inferred_type;
+	generic_type_t* variable_type = variable->type_defined_as;
 
 	//Go based on it's membership
 	switch(variable->membership){
@@ -4414,8 +4433,6 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 		 * Becomes:
 		 * t3 <- bitwise not a
 		 * x <- t3
-		 *
-		 * TODO LOOK AT THIS
 		 */
 		case B_NOT: {
 			/**
