@@ -1707,8 +1707,9 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 /**
  * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
+ * and that is going to depend on the type that we're given
  */
-static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, u_int32_t line_number){
+static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, generic_type_t* type_branching_on, three_addr_var_t* tested_variable, u_int32_t line_number){
 	//If we don't have a temp var, then we just go right to the emission
 	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
 		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
@@ -1838,49 +1839,21 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 		/**
 		 * The conditional decider is the variable that represents the flags set by the equation that we're using
 		 * to decide this branch. We will also trace our way up here to determine the type that we are branching
-		 * on. This is important in deciding our branch type down the line
+		 * on. This is important in deciding our branch type down the line. Once we have this we can also determine
+		 * the signedness of our branch
 		 */
 		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, line_number);
 		generic_type_t* branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
+		u_int8_t type_signed = is_type_signed(branching_on_type);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
 		 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
 		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
 		 * bitwise inversing, etc., so this flag is very important to have set correctly
-		 *
-		 * TODO TEST THIS
-		 *
-		 *
-		 * TODO THIS IS BAD
-		 *
-		 * TODO WE SHOULD HAVE TRACING LOGIC
 		 */
 		if(binary_results.operation_sets_branchable_flags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
-		}
-
-		/**
-		 * Let's try to grab the final result type. Remember that the comparison type may be different than
-		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
-		 * the assignee type
-		 */
-		u_int8_t type_signed = FALSE;
-		if(current_block->exit_statement != NULL
-			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
-
-			/**
-			 * If we have a result use that, otherwise use the assignee
-			 */
-			if(current_block->exit_statement->type_storage.result_type != NULL){
-				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
-			} else {
-				type_signed = is_type_signed(current_block->exit_statement->operands.oir.assignee->type);
-			}
-
-		} else {
-			type_signed = is_type_signed(conditional_decider->type);
+			conditional_decider = emit_test_not_zero(current_block, branching_on_type, conditional_decider, line_number);
 		}
 
 		//Flag that this sets condition codes
@@ -2122,9 +2095,14 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		current_block = conditional_results.final_block;
 
 		/**
-		 * Unpack the conditional decider using result unpacking
+		 * Unpack the conditional decider using result unpacking. Once we have the decider, we will trace our
+		 * way up the block in an attempt to find the original instruction and extract the operand type. Remember
+		 * that the operand type and final result type our often different for given OIR operations. Once we have that,
+		 * we can assign the type_signed flag
 		 */
 		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, line_number);
+		generic_type_t* branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
+		u_int8_t type_signed = is_type_signed(branching_on_type);
 
 		/**
 		 * If the binary results package reports that whatever operation that it performs does
@@ -2132,33 +2110,9 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		 * statement to get the flags populated. Settings RFLAGS generally does not happen for
 		 * things like float arithmetic, bitwise inversing, etc., so this flag is very important
 		 * to have set correctly
-		 *
-		 *
-		 * TODO THIS IS BAD!!!!!
 		 */
 		if(conditional_results.operation_sets_branchable_flags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
-		}
-
-		/**
-		 * Let's try to grab the final result type. Remember that the comparison type may be different than
-		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
-		 * the assignee type
-		 */
-		u_int8_t type_signed = FALSE;
-		if(current_block->exit_statement != NULL
-			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
-
-			//If we have a result type use that, otherwise take from op1
-			if(current_block->exit_statement->type_storage.result_type != NULL){
-				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
-			} else {
-				type_signed = is_type_signed(current_block->exit_statement->operands.oir.operand1->type);
-			}
-
-		} else {
-			type_signed = is_type_signed(conditional_decider->type);
+			conditional_decider = emit_test_not_zero(current_block, branching_on_type, conditional_decider, line_number);
 		}
 
 		//Flag that this sets condition codes
