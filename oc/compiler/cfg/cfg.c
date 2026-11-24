@@ -1706,57 +1706,6 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 
 /**
- * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
- * and that is going to depend on the type that we're given
- */
-static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, generic_type_t* type_branching_on, three_addr_var_t* tested_variable, u_int32_t line_number){
-	//If we don't have a temp var, then we just go right to the emission
-	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
-		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
-
-		/**
-		 * Emit the instruction
-		 */
-		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-		add_statement(basic_block, test_if_not_zero);
-
-		//Give back the final assignee
-		return test_if_not_zero->operands.oir.assignee;
-
-	/**
-	 * Otherwise if we have a temp variable, we should look to see if this is really
-	 * a constant assignment. If it is a constant then the constant that was assigned
-	 * will be the last statement in the current block, and its assignee will be equal
-	 * to the result that we got
-	 */
-	} else {
-		if(basic_block->exit_statement != NULL
-	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal(basic_block->exit_statement->operands.oir.assignee, tested_variable) == TRUE){
-			//Use the constant enhancment to make this happen
-			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->operands.oir.constant_operand, line_number);
-
-			//Add it in
-			add_statement(basic_block, test_if_not_zero);
-
-			//Give back the result
-			return test_if_not_zero->operands.oir.assignee;
-
-		} else {
-			/**
-			 * Emit and add the instruction
-			 */
-			instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-			add_statement(basic_block, test_if_not_zero);
-
-			//Give back the final assignee
-			return test_if_not_zero->operands.oir.assignee;
-		}
-	}
-}
-
-
-/**
  * Emit the conditional for a branch. This can be a ternary or binary expression
  */
 static inline cfg_result_package_t emit_branch_conditional_expression(basic_block_t* starting_block, generic_ast_node_t* branch_node){
@@ -2161,28 +2110,93 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		current_block = conditional_results.final_block;
 
 		/**
-		 * Unpack the conditional decider using result unpacking. Once we have the decider, we will trace our
-		 * way up the block in an attempt to find the original instruction and extract the operand type. Remember
-		 * that the operand type and final result type our often different for given OIR operations. Once we have that,
-		 * we can assign the type_signed flag
+		 * The conditional decider is the variable that represents the flags set by the equation that we're using
+		 * to decide this branch. We will also trace our way up here to determine the type that we are branching
+		 * on. This is important in deciding our branch type down the line. Once we have this we can also determine
+		 * the signedness of our branch
+		 * 
+		 * We can have either a variable or a constant in our given results. We handle
+		 * each case differently. In the end we'll have a conditional decider and a type
+		 * to branch based on in either case
 		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, line_number);
-		generic_type_t* branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
-		u_int8_t type_signed = is_type_signed(branching_on_type);
+		three_addr_var_t* conditional_decider = NULL;
+		generic_type_t* branching_on_type = NULL;
+		switch(conditional_results.type){
+			/**
+			 * If our result is a variable, then we will need to do some extra searching to get
+			 * the true operand type that we're working with
+			 */
+			case CFG_RESULT_TYPE_VAR: {
+				/**
+				 * The conditional decider(for now) is just the result variable
+				 */
+				conditional_decider = conditional_results.result_value.result_var;
 
-		/**
-		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set RFLAGS in a branch operable manner, we will need to emit a test if not zero
-		 * statement to get the flags populated. Settings RFLAGS generally does not happen for
-		 * things like float arithmetic, bitwise inversing, etc., so this flag is very important
-		 * to have set correctly
-		 */
-		if(conditional_results.operation_sets_branchable_flags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, branching_on_type, conditional_decider, line_number);
+				/**
+				 * The type that we're branching on may be different than our decider's
+				 * type. This is because some binary statements(think relational operators) 
+				 * may always return a boolean even if they're operating over floats. We will
+				 * enlist our helper to search the block and find what we need
+				 */
+				branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
+
+				/**
+				 * If the binary results package reports that whatever operation that it performs does
+				 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
+				 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+				 * bitwise inversing, etc., so this flag is very important to have set correctly
+				 */
+				if(conditional_results.operation_sets_branchable_flags == FALSE){
+					/**
+					 * Emit and add the test not zero statement
+					 */
+					instruction_t* test_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), conditional_decider, branching_on_type, line_number);
+					add_statement(current_block, test_not_zero);
+
+					/**
+					 * The decider now is the test not zero statement's assignee
+					 */
+					conditional_decider = test_not_zero->operands.oir.assignee;
+				}
+			}
+
+			/**
+			 * If we have a constant, we're going to need to emit a test if not zero
+			 * statement for sure. The type that we will branch on is going to
+			 * be the constant's type
+			 */
+			case CFG_RESULT_TYPE_CONST: {
+				three_addr_const_t* constant = conditional_results.result_value.result_const;
+				branching_on_type = constant->type;
+
+				/**
+				 * Emit and add the constant test if not zero
+				 */
+				instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), constant, branching_on_type, line_number);
+				add_statement(current_block, test_if_not_zero);
+
+				/**
+				 * The conditional decider is now just the assignee of this statement
+				 */
+				conditional_decider = test_if_not_zero->operands.oir.assignee;
+				break;
+			}
+
+			/**
+			 * Anything else is impossible for us to branch on - so we won't do it
+			 */
+			default: {
+				trigger_ice_panic("Invalid result type to branch on");
+				break;
+			}
 		}
 
-		//Flag that this sets condition codes
+		/**
+		 * Flag that the conditional decider sets condition codes. We can also determine
+		 * the signedness now as well
+		 */
 		conditional_decider->sets_cc = TRUE;
+		u_int8_t type_signed = is_type_signed(branching_on_type);
 
 		//Now let's try to decide the branch type
 		branch_type_t branch_type = select_appropriate_branch_statement(conditional_results.operator, BRANCH_CATEGORY_NORMAL, type_signed);
