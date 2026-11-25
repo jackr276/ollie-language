@@ -9277,7 +9277,7 @@ static u_int8_t eliminate_branch_if_possible(instruction_t* branch_statement){
  * In the event that we do remove a branch, we will return TRUE from this function. It is the caller's responsibility
  * to then do any other passes that they deem necessary such as mark and sweep, clean, control flow relation recalcuation, etc
  */
-static inline u_int8_t branch_elimination_pass(dynamic_array_t* function_blocks){
+static inline u_int8_t eliminate_branches_in_function(dynamic_array_t* function_blocks){
 	/**
 	 * Did we perform any branch elimination? By default assume no
 	 */
@@ -9307,6 +9307,79 @@ static inline u_int8_t branch_elimination_pass(dynamic_array_t* function_blocks)
 	}
 
 	return elimination_occurred;
+}
+
+
+/**
+ * Perform branch elimination over the entire set of function blocks. Branch elimination
+ * in ollie is made possible when we are able to successfully simulate the flags that
+ * lead up to a branch. If we are able to do this, then we can know for sure which path
+ * the branch will always take and eliminate the branch entirely.
+ *
+ * Branch elimination utilitizes a standard "while(change)" pattern that ensures that
+ * we eliminate all possible branches. We will keep running pass after pass until the 
+ * CFG is in its most reduced form
+ */
+static inline void perform_branch_elimination(dynamic_array_t* function_blocks, basic_block_t* function_entry, basic_block_t* function_exit){
+	/**
+	 * By default assume that no elimination has happened
+	 */
+	u_int8_t elimination_occurred = FALSE;
+
+	/**
+	 * Loop until we get a run where no branch elimination occurred
+	 */
+	while(TRUE){
+		/**
+		 * Let the helper eliminate all possible branches that it can see in this function. In the
+		 * event that nothing was eliminated, we will break out of the loop and exit
+		 */
+		u_int8_t branch_elimination_occurred = eliminate_branches_in_function(function_blocks);
+		if(branch_elimination_occurred == FALSE){
+			break;
+		}
+
+		/**
+		 * Update the overall elimination flag so that we'll know if we
+		 * did any elimination upon leaving this loop
+		 */
+		elimination_occurred |= branch_elimination_occurred;
+
+		/**
+		 * If we make it here then we were able to eliminate at least 1 branch from the function CFG. Branch
+		 * reduction changes successor/predecessor relationships, and will corrupt existing dominance and control
+		 * flow relations. We will now do a 3-step process to remediate all of this
+		 *
+		 * Step 1: we have altered the control flow in at least one way, possibly more, if we have done
+		 * a branch elimination. Before going forward we'll need to recompute all of the control flow 
+		 * relations based on this new CFG
+		 */
+		recompute_all_control_flow_relations_for_function(function_blocks, function_entry, function_exit);
+
+		/**
+		 * Step 2: Since we were able to remove a branch, odds are that there are some statements that used
+		 * to be used for the branch that are now useless. We will run a mark and sweep pass to eliminate
+		 * all orphaned statements
+		 */
+		perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
+
+		/**
+		 * Step 3: After we've removed dead code, we may end up with blocks that could
+		 * be compressed further. We will run a branch reduction pass to eliminate
+		 * unneccessary control flow
+		 */
+		perform_branch_reduction_pass(function_blocks, function_entry, function_exit);
+	}
+
+	/**
+	 * Once we've reached a stable equilibrium on the CFG, in the event that we did have any
+	 * elimination at all, we'll want to reorder our function blocks entirely to make sure
+	 * that dead or empty blocks do not show up anymore. We'll save cycles by only doing this
+	 * at the very end
+	 */
+	if(elimination_occurred == TRUE){
+		order_function_blocks(function_blocks, function_entry);
+	}
 }
 
 
@@ -10353,35 +10426,7 @@ static void simplify(cfg_t* cfg){
 		 * one that can, we will remove the conditional branch entirely and just make it take the
 		 * path that we can prove it always would take
 		 */
-		u_int8_t branch_elimination_occurred = branch_elimination_pass(function_blocks);
-		if(branch_elimination_occurred == TRUE){
-			/**
-			 * Step 1: we have altered the control flow in at least one way, possibly more, if we have done
-			 * a branch elimination. Before going forward we'll need to recompute all of the control flow 
-			 * relations based on this new CFG
-			 */
-			recompute_all_control_flow_relations_for_function(function_blocks, function_entry, function_exit);
-
-			/**
-			 * Step 2: Since we were able to remove a branch, odds are that there are some statements that used
-			 * to be used for the branch that are now useless. We will run a mark and sweep pass to eliminate
-			 * all orphaned statements
-			 */
-			perform_mark_and_sweep_pass(function_blocks, function_entry, function_exit);
-
-			/**
-			 * Step 3: After we've removed dead code, we may end up with blocks that could
-			 * be compressed further. We will run a branch reduction pass to eliminate
-			 * unneccessary control flow
-			 */
-			perform_branch_reduction_pass(function_blocks, function_entry, function_exit);
-
-			/**
-			 * Step 4: Finally once we've done all of that, we should reorder all of our function
-			 * blocks so that the blocks that were deleted(if any) no longer show up anywhere
-			 */
-			order_function_blocks(function_blocks, function_entry);
-		}
+		perform_branch_elimination(function_blocks, function_entry, function_exit);
 
 		/**
 		 * The second to last thing that we'll need to do is run through the function and
