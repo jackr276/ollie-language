@@ -9322,6 +9322,11 @@ static inline u_int8_t eliminate_branches_in_function(dynamic_array_t* function_
  */
 static inline void perform_branch_elimination(dynamic_array_t* function_blocks, basic_block_t* function_entry, basic_block_t* function_exit){
 	/**
+	 * By default assume that no elimination has happened
+	 */
+	u_int8_t elimination_occurred = FALSE;
+
+	/**
 	 * Loop until we get a run where no branch elimination occurred
 	 */
 	while(TRUE){
@@ -9331,13 +9336,19 @@ static inline void perform_branch_elimination(dynamic_array_t* function_blocks, 
 		 */
 		u_int8_t branch_elimination_occurred = eliminate_branches_in_function(function_blocks);
 		if(branch_elimination_occurred == FALSE){
-			return;
+			break;
 		}
+
+		/**
+		 * Update the overall elimination flag so that we'll know if we
+		 * did any elimination upon leaving this loop
+		 */
+		elimination_occurred |= branch_elimination_occurred;
 
 		/**
 		 * If we make it here then we were able to eliminate at least 1 branch from the function CFG. Branch
 		 * reduction changes successor/predecessor relationships, and will corrupt existing dominance and control
-		 * flow relations. We will now do a 4-step process to remediate all of this
+		 * flow relations. We will now do a 3-step process to remediate all of this
 		 *
 		 * Step 1: we have altered the control flow in at least one way, possibly more, if we have done
 		 * a branch elimination. Before going forward we'll need to recompute all of the control flow 
@@ -9358,11 +9369,15 @@ static inline void perform_branch_elimination(dynamic_array_t* function_blocks, 
 		 * unneccessary control flow
 		 */
 		perform_branch_reduction_pass(function_blocks, function_entry, function_exit);
+	}
 
-		/**
-		 * Step 4: Finally once we've done all of that, we should reorder all of our function
-		 * blocks so that the blocks that were deleted(if any) no longer show up anywhere
-		 */
+	/**
+	 * Once we've reached a stable equilibrium on the CFG, in the event that we did have any
+	 * elimination at all, we'll want to reorder our function blocks entirely to make sure
+	 * that dead or empty blocks do not show up anymore. We'll save cycles by only doing this
+	 * at the very end
+	 */
+	if(elimination_occurred == TRUE){
 		order_function_blocks(function_blocks, function_entry);
 	}
 }
