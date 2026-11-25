@@ -1021,9 +1021,10 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 				break;
 			}
 
-			default:
+			default: {
 				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
 				exit(1);
+			}
 		}
 	}
 
