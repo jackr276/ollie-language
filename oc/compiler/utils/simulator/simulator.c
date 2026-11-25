@@ -157,13 +157,23 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
 				}
 
 				/**
-				 * If we have an ASSN statement then we've got some other variable. We
-				 * won't try to keep chaining with assignments as that is unlikely to 
-				 * work
+				 * If we have a regular assignment statement, there is a chance that this
+				 * is the end of the road for us. However, there is also a chance that this
+				 * is just another temp assignment along the way to the constant value that
+				 * we're after. See the below example:
+				 *
+				 * x_1 <- 5
+				 * t3 <- x_1
+				 * t4 <- logical not t3
+				 *
+				 * We should be able to trace our way up from t3 all the way to x1, so long as
+				 * we're in the same block
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT: {
 					search_result.result_type = SEARCH_RESULT_TYPE_VAR;
 					search_result.result.variable = cursor->operands.oir.operand1;
+
+
 					return search_result;
 				}
 
