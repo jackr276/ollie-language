@@ -5751,7 +5751,10 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		final_node = being_casted_expression;
 	}
 
-	//Give back whatever we say the final node is
+	/**
+	 * Flag that this node was casted and then give it back
+	 */
+	final_node->was_casted = TRUE;
 	return final_node;
 }
 

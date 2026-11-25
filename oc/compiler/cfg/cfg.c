@@ -2493,10 +2493,8 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * We are also provided with the "result_type". This is necessary because some loads happen after a variable has
  * been casted to a different type. If this is the case then we will emit an additional assignment after the fact
  * to represent the move
- *
- * TODO UPDATE THIS TO BE ONLY IF IT WAS CASTED
  */
-static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, generic_type_t* result_type, u_int32_t line_number){
+static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, generic_type_t* result_type, u_int8_t was_casted, u_int32_t line_number){
 	/**
 	 * Extract the variable type(different from the result type sometimes) and emit a memory
 	 * address variable
@@ -2512,12 +2510,15 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 	add_statement(block, load_instruction);
 
 	/**
-	 * Our result is initially the load instruction's assignee. If we have a difference
-	 * in types, we are going to emit an assignment instruction here so that what we
-	 * return is guarnateed to have the required type
+	 * Our result is initially the load instruction's assignee. If we *DID* cast the
+	 * result, *AND* we have a difference in types, we are going to emit an assignment
+	 * instruction here so that what we return is guarnateed to have the required type
+	 *
+	 * NOTE: this will only ever apply for nodes that were casted. If a node was not casted, we will
+	 * leave this to the instruction selector to handle in the event of converting moves
 	 */
 	three_addr_var_t* result = load_instruction->operands.oir.assignee;
-	if(is_converting_move_required(result_type, variable_type)){
+	if(was_casted == TRUE && is_converting_move_required(result_type, variable_type) == TRUE){
 		instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(result_type), result, line_number);
 		add_statement(block, move_instruction);
 
@@ -2546,6 +2547,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 	 */
 	generic_type_t* inferred_type = ident_node->inferred_type;
 	generic_type_t* variable_type = variable->type_defined_as;
+	u_int8_t was_casted = ident_node->was_casted;
 
 	switch(variable->membership){
 		/**
@@ -2575,7 +2577,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
 			 */
 			if(side == SIDE_TYPE_RIGHT){
-				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
+				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
 			/**
 			 * Otherwise emit a normal variable
@@ -2605,7 +2607,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
 			 */
 			if(side == SIDE_TYPE_RIGHT){
-				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
+				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
 			/**
 			 * Otherwise emit a normal variable
@@ -2630,7 +2632,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * from memory in any way
 				 */
 				if(variable->storage_class == STORAGE_CLASS_STACK){
-					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
 				/**
 				 * For regular parameters, we may have undergone casting for this specific identifier
@@ -2693,7 +2695,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * address
 				 */
 				if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
-					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 				} else {
 					return emit_memory_address_var(variable);
 				}
@@ -2733,7 +2735,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * load that variable out of memory for use in whatever is happening in the caller
 				 */
 				if(variable->storage_class == STORAGE_CLASS_STACK){
-					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
 				/**
 				 * For regular variables, we may have undergone casting for this specific identifier
@@ -3902,7 +3904,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * to automatically be loaded(like arrays)
 			 */
 			} else if(is_type_stack_passed_by_reference(base_address_variable->type_defined_as) == TRUE){
-				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable, base_address_variable->type_defined_as, root->line_number);
+				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable, base_address_variable->type_defined_as, FALSE, root->line_number);
 
 			/**
 			 * Otherwise in our final case we'll need to account for the case where we have a struct
