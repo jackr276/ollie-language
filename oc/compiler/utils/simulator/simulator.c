@@ -170,11 +170,21 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
 				 * we're in the same block
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT: {
+					/**
+					 * Populate the search result first - there is a chance that this is as
+					 * far as we can go and this will be our end result
+					 */
 					search_result.result_type = SEARCH_RESULT_TYPE_VAR;
 					search_result.result.variable = cursor->operands.oir.operand1;
 
-
-					return search_result;
+					/**
+					 * However, like in the example above, there is also a chance
+					 * that we may find a constant assignment if we just keep searching.
+					 * We will change the variable that we are looking for and keep
+					 * going
+					 */
+					variable = search_result.result.variable;
+					break;
 				}
 
 				/**
