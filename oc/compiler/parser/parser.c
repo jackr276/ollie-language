@@ -5692,14 +5692,20 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 	 */
 	if(being_casted_expression->ast_node_type != AST_NODE_TYPE_CONSTANT){
 		switch(castability){
-			//If it is castable we just change the type
-			case CASTABLE:
+			/**
+			 * If it is castable we just change the inferred type and let
+			 * the downstream system handle
+			 */
+			case CASTABLE: {
 				being_casted_expression->inferred_type = casting_to_type;
 				final_node = being_casted_expression;
 				break;
-				
-			//Castable with truncation requires a special AST node to handle
-			case CASTABLE_WITH_TRUNCATION:
+			}
+
+			/**
+			 * Castable with truncation requires a special AST node to handle
+			 */
+			case CASTABLE_WITH_TRUNCATION: {
 				//Create the final node and our inferred type
 				final_node = ast_node_alloc(AST_NODE_TYPE_TRUNCATING_CAST, side);
 				
@@ -5710,10 +5716,12 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 				//This is the child of our node
 				add_child_node(final_node, being_casted_expression);
 				break;
+			}
 
-			default:
-				fprintf(stderr, "Fatal internal compiler error: invalid castability type detected\n");
-				exit(1);
+			default: {
+				trigger_ice_panic("Invalid castability type detected");
+				break;
+			}
 		}
 
 	} else {
@@ -5743,7 +5751,10 @@ static generic_ast_node_t* cast_expression(ollie_token_stream_t* token_stream, s
 		final_node = being_casted_expression;
 	}
 
-	//Give back whatever we say the final node is
+	/**
+	 * Flag that this node was casted and then give it back
+	 */
+	final_node->was_casted = TRUE;
 	return final_node;
 }
 

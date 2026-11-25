@@ -1706,56 +1706,6 @@ instruction_t* emit_jump(basic_block_t* basic_block, basic_block_t* destination_
 
 
 /**
- * Emit a test instruction. Note that this is different depending on what kind of testing that we're doing(GP vs SSE)
- */
-static inline three_addr_var_t* emit_test_not_zero(basic_block_t* basic_block, three_addr_var_t* tested_variable, u_int32_t line_number){
-	//If we don't have a temp var, then we just go right to the emission
-	if(tested_variable->variable_type != VARIABLE_TYPE_TEMP
-		|| IS_FLOATING_POINT(tested_variable->type) == TRUE){
-
-		/**
-		 * Emit the instruction
-		 */
-		instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-		add_statement(basic_block, test_if_not_zero);
-
-		//Give back the final assignee
-		return test_if_not_zero->operands.oir.assignee;
-
-	/**
-	 * Otherwise if we have a temp variable, we should look to see if this is really
-	 * a constant assignment. If it is a constant then the constant that was assigned
-	 * will be the last statement in the current block, and its assignee will be equal
-	 * to the result that we got
-	 */
-	} else {
-		if(basic_block->exit_statement != NULL
-	 		&& basic_block->exit_statement->statement_type == THREE_ADDR_CODE_ASSN_CONST_STMT
-			&& variables_equal(basic_block->exit_statement->operands.oir.assignee, tested_variable) == TRUE){
-			//Use the constant enhancment to make this happen
-			instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), basic_block->exit_statement->operands.oir.constant_operand, line_number);
-
-			//Add it in
-			add_statement(basic_block, test_if_not_zero);
-
-			//Give back the result
-			return test_if_not_zero->operands.oir.assignee;
-
-		} else {
-			/**
-			 * Emit and add the instruction
-			 */
-			instruction_t* test_if_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), tested_variable, line_number);
-			add_statement(basic_block, test_if_not_zero);
-
-			//Give back the final assignee
-			return test_if_not_zero->operands.oir.assignee;
-		}
-	}
-}
-
-
-/**
  * Emit the conditional for a branch. This can be a ternary or binary expression
  */
 static inline cfg_result_package_t emit_branch_conditional_expression(basic_block_t* starting_block, generic_ast_node_t* branch_node){
@@ -1767,6 +1717,47 @@ static inline cfg_result_package_t emit_branch_conditional_expression(basic_bloc
 		default:
 			return emit_binary_expression(starting_block, branch_node);
 	}
+}
+
+
+/**
+ * In order to properly emit a test if not zero statement, we need to know the proper type that we are
+ * branching on. This is different than the type of the result variable itself. Note that some operations
+ * like logical not that have floating point operands return a bool result. Obviously, we cannot branch
+ * based on a boolean in this case. To do this, we will trace our way up the block until we find out where
+ * the decider was assigned. We will then use the "result_type" field in that instruction(if it exists) as
+ * our branching on type. In the event that we find nothing(this is possible), we will just return the decider's
+ * type
+ */
+static inline generic_type_t* get_branching_on_type_for_decider(basic_block_t* block, three_addr_var_t* decider){
+	/**
+	 * Starting at the exit statement, trace our way up the block until we find 
+	 * the instruction that assigns to our decider
+	 */
+	instruction_t* cursor = block->exit_statement;
+	while(cursor != NULL){
+		/**
+		 * We've found it - now we're able to search this statement for an operand
+		 * type. If it has an operand type(binary operation, logical not, etc.) then 
+		 * we will be using that. Otherwise, we'll be defaulting back to the decider's
+		 * type. Either way this is our end case
+		 */
+		if(variables_equal(decider, cursor->operands.oir.assignee) == TRUE){
+			if(cursor->type_storage.result_type != NULL){
+				return cursor->type_storage.result_type;
+			} else {
+				return decider->type;
+			}
+		}
+
+		cursor = cursor->previous_statement;
+	}
+
+	/**
+	 * If we make it down here then we found nothing. We will default to the
+	 * decider's type in this case
+	 */
+	return decider->type;
 }
 
 
@@ -1796,45 +1787,94 @@ static cfg_result_package_t emit_branch(basic_block_t* starting_block, generic_a
 
 		/**
 		 * The conditional decider is the variable that represents the flags set by the equation that we're using
-		 * to decide this branch
+		 * to decide this branch. We will also trace our way up here to determine the type that we are branching
+		 * on. This is important in deciding our branch type down the line. Once we have this we can also determine
+		 * the signedness of our branch
+		 * 
+		 * We can have either a variable or a constant in our given results. We handle
+		 * each case differently. In the end we'll have a conditional decider and a type
+		 * to branch based on in either case
 		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&binary_results, current_block, line_number);
-
-		/**
-		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
-		 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
-		 * bitwise inversing, etc., so this flag is very important to have set correctly
-		 */
-		if(binary_results.operation_sets_branchable_flags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
-		}
-
-		/**
-		 * Let's try to grab the final result type. Remember that the comparison type may be different than
-		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
-		 * the assignee type
-		 */
-		u_int8_t type_signed = FALSE;
-		if(current_block->exit_statement != NULL
-			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
-
+		three_addr_var_t* conditional_decider = NULL;
+		generic_type_t* branching_on_type = NULL;
+		switch(binary_results.type){
 			/**
-			 * If we have a result use that, otherwise use the assignee
+			 * If our result is a variable, then we will need to do some extra searching to get
+			 * the true operand type that we're working with
 			 */
-			if(current_block->exit_statement->type_storage.result_type != NULL){
-				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
-			} else {
-				type_signed = is_type_signed(current_block->exit_statement->operands.oir.assignee->type);
+			case CFG_RESULT_TYPE_VAR: {
+				/**
+				 * The conditional decider(for now) is just the result variable
+				 */
+				conditional_decider = binary_results.result_value.result_var;
+
+				/**
+				 * The type that we're branching on may be different than our decider's
+				 * type. This is because some binary statements(think relational operators) 
+				 * may always return a boolean even if they're operating over floats. We will
+				 * enlist our helper to search the block and find what we need
+				 */
+				branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
+
+				/**
+				 * If the binary results package reports that whatever operation that it performs does
+				 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
+				 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+				 * bitwise inversing, etc., so this flag is very important to have set correctly
+				 */
+				if(binary_results.operation_sets_branchable_flags == FALSE){
+					/**
+					 * Emit and add the test not zero statement
+					 */
+					instruction_t* test_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), conditional_decider, branching_on_type, line_number);
+					add_statement(current_block, test_not_zero);
+
+					/**
+					 * The decider now is the test not zero statement's assignee
+					 */
+					conditional_decider = test_not_zero->operands.oir.assignee;
+				}
+
+				break;
 			}
 
-		} else {
-			type_signed = is_type_signed(conditional_decider->type);
+			/**
+			 * If we have a constant, we're going to need to emit a test if not zero
+			 * statement for sure. The type that we will branch on is going to
+			 * be the constant's type
+			 */
+			case CFG_RESULT_TYPE_CONST: {
+				three_addr_const_t* constant = binary_results.result_value.result_const;
+				branching_on_type = constant->type;
+
+				/**
+				 * Emit and add the constant test if not zero
+				 */
+				instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), constant, branching_on_type, line_number);
+				add_statement(current_block, test_if_not_zero);
+
+				/**
+				 * The conditional decider is now just the assignee of this statement
+				 */
+				conditional_decider = test_if_not_zero->operands.oir.assignee;
+				break;
+			}
+
+			/**
+			 * Anything else is impossible for us to branch on - so we won't do it
+			 */
+			default: {
+				trigger_ice_panic("Invalid result type to branch on");
+				break;
+			}
 		}
 
-		//Flag that this sets condition codes
+		/**
+		 * Flag that the conditional decider sets condition codes. We can also determine
+		 * the signedness now as well
+		 */
 		conditional_decider->sets_cc = TRUE;
+		u_int8_t type_signed = is_type_signed(branching_on_type);
 
 		/**
 		 * Select the appropriate branch type and then emit the branch statement
@@ -2072,44 +2112,95 @@ static cfg_result_package_t emit_user_defined_branch(basic_block_t* starting_blo
 		current_block = conditional_results.final_block;
 
 		/**
-		 * Unpack the conditional decider using result unpacking
+		 * The conditional decider is the variable that represents the flags set by the equation that we're using
+		 * to decide this branch. We will also trace our way up here to determine the type that we are branching
+		 * on. This is important in deciding our branch type down the line. Once we have this we can also determine
+		 * the signedness of our branch
+		 * 
+		 * We can have either a variable or a constant in our given results. We handle
+		 * each case differently. In the end we'll have a conditional decider and a type
+		 * to branch based on in either case
 		 */
-		three_addr_var_t* conditional_decider = unpack_result_package(&conditional_results, current_block, line_number);
+		three_addr_var_t* conditional_decider = NULL;
+		generic_type_t* branching_on_type = NULL;
+		switch(conditional_results.type){
+			/**
+			 * If our result is a variable, then we will need to do some extra searching to get
+			 * the true operand type that we're working with
+			 */
+			case CFG_RESULT_TYPE_VAR: {
+				/**
+				 * The conditional decider(for now) is just the result variable
+				 */
+				conditional_decider = conditional_results.result_value.result_var;
 
-		/**
-		 * If the binary results package reports that whatever operation that it performs does
-		 * *NOT* set RFLAGS in a branch operable manner, we will need to emit a test if not zero
-		 * statement to get the flags populated. Settings RFLAGS generally does not happen for
-		 * things like float arithmetic, bitwise inversing, etc., so this flag is very important
-		 * to have set correctly
-		 */
-		if(conditional_results.operation_sets_branchable_flags == FALSE){
-			conditional_decider = emit_test_not_zero(current_block, conditional_decider, line_number);
-		}
+				/**
+				 * The type that we're branching on may be different than our decider's
+				 * type. This is because some binary statements(think relational operators) 
+				 * may always return a boolean even if they're operating over floats. We will
+				 * enlist our helper to search the block and find what we need
+				 */
+				branching_on_type = get_branching_on_type_for_decider(current_block, conditional_decider);
 
-		/**
-		 * Let's try to grab the final result type. Remember that the comparison type may be different than
-		 * the actual assignee type. If we can grab it then we will use that, otherwise we will use
-		 * the assignee type
-		 */
-		u_int8_t type_signed = FALSE;
-		if(current_block->exit_statement != NULL
-			&& is_binary_operation(current_block->exit_statement)
-			&& variables_equal(current_block->exit_statement->operands.oir.assignee, conditional_decider) == TRUE){
+				/**
+				 * If the binary results package reports that whatever operation that it performs does
+				 * *NOT* set branchable flags, we will need to emit a test if not zero statement to get the flags
+				 * populated. Settings RFLAGS generally does not happen for things like float arithmetic,
+				 * bitwise inversing, etc., so this flag is very important to have set correctly
+				 */
+				if(conditional_results.operation_sets_branchable_flags == FALSE){
+					/**
+					 * Emit and add the test not zero statement
+					 */
+					instruction_t* test_not_zero = emit_test_if_not_zero_statement(emit_temp_var(u8), conditional_decider, branching_on_type, line_number);
+					add_statement(current_block, test_not_zero);
 
-			//If we have a result type use that, otherwise take from op1
-			if(current_block->exit_statement->type_storage.result_type != NULL){
-				type_signed = is_type_signed(current_block->exit_statement->type_storage.result_type);
-			} else {
-				type_signed = is_type_signed(current_block->exit_statement->operands.oir.operand1->type);
+					/**
+					 * The decider now is the test not zero statement's assignee
+					 */
+					conditional_decider = test_not_zero->operands.oir.assignee;
+				}
+
+				break;
 			}
 
-		} else {
-			type_signed = is_type_signed(conditional_decider->type);
+			/**
+			 * If we have a constant, we're going to need to emit a test if not zero
+			 * statement for sure. The type that we will branch on is going to
+			 * be the constant's type
+			 */
+			case CFG_RESULT_TYPE_CONST: {
+				three_addr_const_t* constant = conditional_results.result_value.result_const;
+				branching_on_type = constant->type;
+
+				/**
+				 * Emit and add the constant test if not zero
+				 */
+				instruction_t* test_if_not_zero = emit_test_if_not_zero_for_const_statement(emit_temp_var(u8), constant, branching_on_type, line_number);
+				add_statement(current_block, test_if_not_zero);
+
+				/**
+				 * The conditional decider is now just the assignee of this statement
+				 */
+				conditional_decider = test_if_not_zero->operands.oir.assignee;
+				break;
+			}
+
+			/**
+			 * Anything else is impossible for us to branch on - so we won't do it
+			 */
+			default: {
+				trigger_ice_panic("Invalid result type to branch on");
+				break;
+			}
 		}
 
-		//Flag that this sets condition codes
+		/**
+		 * Flag that the conditional decider sets condition codes. We can also determine
+		 * the signedness now as well
+		 */
 		conditional_decider->sets_cc = TRUE;
+		u_int8_t type_signed = is_type_signed(branching_on_type);
 
 		//Now let's try to decide the branch type
 		branch_type_t branch_type = select_appropriate_branch_statement(conditional_results.operator, BRANCH_CATEGORY_NORMAL, type_signed);
@@ -2398,39 +2489,71 @@ static three_addr_var_t* emit_direct_constant_assignment(basic_block_t* basic_bl
  * There are several cases when we are emitting an identifier that we want to automatically emit a load
  * from memory. In these cases, we will call out to this function. This function creates a load instruction
  * that automatically grabs the value at the variable memory address
+ *
+ * We are also provided with the "result_type". This is necessary because some loads happen after a variable has
+ * been casted to a different type. If this is the case then we will emit an additional assignment after the fact
+ * to represent the move
  */
-static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, u_int32_t line_number){
-	//Extract for use
-	generic_type_t* type = variable->type_defined_as;
+static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* block, symtab_variable_record_t* variable, generic_type_t* result_type, u_int8_t was_casted, u_int32_t line_number){
+	/**
+	 * Extract the variable type(different from the result type sometimes) and emit a memory
+	 * address variable
+	 */
+	generic_type_t* variable_type = variable->type_defined_as;
+	three_addr_var_t* memory_address_var = emit_memory_address_var(variable);
 
-	//Emit the memory address var for later on
-	three_addr_var_t* memory_address = emit_memory_address_var(variable);
-
-	//Emit the load instruction. We need to be sure to use the "true type" here in case we are dealing with 
-	//a reference
-	instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(type), memory_address, type, line_number);
-
-	//Add it to the block
+	/**
+	 * Emit and add the load instruction. The load instruction should always use the type that the variable
+	 * came with
+	 */
+	instruction_t* load_instruction = emit_load_base_address_only(emit_temp_var(variable_type), memory_address_var, variable_type, line_number);
 	add_statement(block, load_instruction);
 
-	//Just give back the temp var here
-	return load_instruction->operands.oir.assignee;
+	/**
+	 * Our result is initially the load instruction's assignee. If we *DID* cast the
+	 * result, *AND* we have a difference in types, we are going to emit an assignment
+	 * instruction here so that what we return is guarnateed to have the required type
+	 *
+	 * NOTE: this will only ever apply for nodes that were casted. If a node was not casted, we will
+	 * leave this to the instruction selector to handle in the event of converting moves
+	 */
+	three_addr_var_t* result = load_instruction->operands.oir.assignee;
+	if(was_casted == TRUE && is_converting_move_required(result_type, variable_type) == TRUE){
+		instruction_t* move_instruction = emit_assignment_instruction(emit_temp_var(result_type), result, line_number);
+		add_statement(block, move_instruction);
+
+		result = move_instruction->operands.oir.assignee;
+	}
+
+	return result;
 }
 
 
 /**
- * Emit the identifier machine code. This function is to be used in the instance where we want
- * to move an identifier to some temporary location
+ * Emit an identifier from a given node. This helper will take into account type coercion and
+ * casting that has occurred for the given identifier node
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
-	//Extract the variable
+	/**
+	 * Extract the variable and the given side of the node
+	 */
 	symtab_variable_record_t* variable = ident_node->variable;
-	//Are we on the left or right of an equation?
 	side_type_t side = ident_node->side;
 
-	//Go based on it's membership
+	/**
+	 * The inferred type comes from the identifier node itself, whereas the variable
+	 * type is the type that the variable was originally defined with. Due to casting,
+	 * there may be a discrepancy between these two. We will insert converting moves
+	 * where appropriate in the event of a discrepancy
+	 */
+	generic_type_t* inferred_type = ident_node->inferred_type;
+	generic_type_t* variable_type = variable->type_defined_as;
+	u_int8_t was_casted = ident_node->was_casted;
+
 	switch(variable->membership){
-		//For an enum just turn it into a constant
+		/**
+		 * For an enum just turn it into a constant
+		 */
 		case ENUM_MEMBER: {
 			return emit_direct_constant_assignment(basic_block, emit_direct_integer_or_char_constant(variable->enum_member_value, variable->type_defined_as), variable->type_defined_as, ident_node->line_number);
 		}
@@ -2455,10 +2578,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
 			 */
 			if(side == SIDE_TYPE_RIGHT){
-				//Let the helper emit our load from memory
-				return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
-			//Otherwise emit a normal variable
+			/**
+			 * Otherwise emit a normal variable
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -2484,10 +2608,11 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 			 * we're on the RHS of the equation, we'll want to auto-load the variable for the caller
 			 */
 			if(side == SIDE_TYPE_RIGHT){
-				//Let the helper emit our load from memory
-				return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+				return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
-			//Otherwise emit a normal variable
+			/**
+			 * Otherwise emit a normal variable
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -2497,7 +2622,9 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 		 * Function parameters(note these are not stack passed) are regular variable emittals
 		 */
 		case FUNCTION_PARAMETER: {
-			//RHS can have special rules
+			/**
+			 * RHS can have special rules
+			 */
 			if(side == SIDE_TYPE_RIGHT){
 				/**
 				 * If we're on the RHS and we have a special "stack variable", we need to automatically
@@ -2506,15 +2633,34 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * from memory in any way
 				 */
 				if(variable->storage_class == STORAGE_CLASS_STACK){
-					//Let the helper emit our load from memory
-					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
-				//Otherwise again just emit the variable
+				/**
+				 * For regular parameters, we may have undergone casting for this specific identifier
+				 * node that requires us to have a variable that is a different type when compared to the given
+				 * variable
+				 */
 				} else {
-					return emit_var(variable);
+					/**
+					 * This node *WAS* casted *AND* the type warrants a converting move, so we will add the temporary
+					 * assignment and return the variable with the updated type
+					 */
+					if(was_casted == TRUE && is_converting_move_required(inferred_type, variable_type) == TRUE){
+						instruction_t* move_statement = emit_assignment_instruction(emit_temp_var(inferred_type), emit_var(variable), ident_node->line_number);
+						add_statement(basic_block, move_statement);
+						return move_statement->operands.oir.assignee;
+
+					/**
+					 * No casting/they're the same so regular emittal is fine
+					 */
+					} else {
+						return emit_var(variable);
+					}
 				}
 
-			//Otherwise we're just emitting the variable
+			/**
+			 * Otherwise we're on the LHS and we're just emitting the variable
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -2546,7 +2692,7 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * address
 				 */
 				if(is_type_stack_passed_by_copy(variable->type_defined_as) == FALSE){
-					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 				} else {
 					return emit_memory_address_var(variable);
 				}
@@ -2577,22 +2723,43 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				return emit_memory_address_var(variable);
 			}
 
-			//RHS can have special rules
+			/** 
+			 * RHS can have special rules for identifier loads
+			 */
 			if(side == SIDE_TYPE_RIGHT){
 				/**
 				 * If we're on the RHS and we have a special "stack variable", we need to automatically
 				 * load that variable out of memory for use in whatever is happening in the caller
 				 */
 				if(variable->storage_class == STORAGE_CLASS_STACK){
-					//Let the helper emit our load from memory
-					return emit_automatic_load_from_memory(basic_block, variable, ident_node->line_number);
+					return emit_automatic_load_from_memory(basic_block, variable, inferred_type, was_casted, ident_node->line_number);
 
-				//Otherwise again just emit the variable
+				/**
+				 * For regular variables, we may have undergone casting for this specific identifier
+				 * node that requires us to have a variable that is a different type when compared to the given
+				 * variable
+				 */
 				} else {
-					return emit_var(variable);
+					/**
+					 * This node *WAS* casted *AND* the type warrants a converting move, so we will add the temporary
+					 * assignment and return the variable with the updated type
+					 */
+					if(was_casted == TRUE && is_converting_move_required(inferred_type, variable_type) == TRUE){
+						instruction_t* move_statement = emit_assignment_instruction(emit_temp_var(inferred_type), emit_var(variable), ident_node->line_number);
+						add_statement(basic_block, move_statement);
+						return move_statement->operands.oir.assignee;
+
+					/**
+					 * No casting/they're the same so regular emittal is fine
+					 */
+					} else {
+						return emit_var(variable);
+					}
 				}
 
-			//Otherwise we're just emitting the variable
+			/**
+			 * Otherwise we're just emitting the variable on the LHS
+			 */
 			} else {
 				return emit_var(variable);
 			}
@@ -3730,7 +3897,7 @@ static cfg_result_package_t emit_postfix_expression_rec(basic_block_t* basic_blo
 			 * to automatically be loaded(like arrays)
 			 */
 			} else if(is_type_stack_passed_by_reference(base_address_variable->type_defined_as) == TRUE){
-				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable, root->line_number);
+				*base_address = emit_automatic_load_from_memory(basic_block, base_address_variable, base_address_variable->type_defined_as, FALSE, root->line_number);
 
 			/**
 			 * Otherwise in our final case we'll need to account for the case where we have a struct
@@ -4376,6 +4543,13 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			instruction_t* logical_not_statement = emit_logical_not_instruction(emit_temp_var(u8), assignee, line_number);
 			add_statement(current_block, logical_not_statement);
 
+			/**
+			 * Store the inferred type inside of the type storage area. This will be used by the instruction
+			 * selector down the road to emit converting moves if need be. This is especially important for
+			 * casting operations. We can't use the parent because it's a bool always
+			 */
+			logical_not_statement->type_storage.result_type = unary_expression_child->inferred_type;
+
 			//These always set RFLAGS
 			generic_results.operation_sets_branchable_flags = TRUE;
 
@@ -4404,16 +4578,24 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 			current_block = unary_package.final_block;
 
 			/**
-			 * Extract the operand and generate a temp var assignee to use
+			 * Extract the not operand and the operand type. Do note that these may be different in
+			 * the case of casting. We will make an assignee with the type of the operan
 			 */
 			three_addr_var_t* not_operand = unpack_result_package(&unary_package, current_block, line_number);
-			three_addr_var_t* assignee = emit_temp_var(not_operand->type);
+			generic_type_t* operand_type = unary_expression_child->inferred_type;
+			three_addr_var_t* assignee = emit_temp_var(operand_type);
 
 			/**
 			 * Now emit and add the actual bitwise not logic
 			 */
 			instruction_t* bitwise_not = emit_not_instruction(assignee, not_operand, line_number);
 			add_statement(current_block, bitwise_not);
+
+			/**
+			 * IMPORTANT - we will store the operand type in the special type storage slot. This will
+			 * be used by the instruction selector down the road to emit the x86 code
+			 */
+			bitwise_not->type_storage.result_type = operand_type;
 
 			//These never set RFLAGS
 			generic_results.operation_sets_branchable_flags = FALSE;
@@ -4444,13 +4626,20 @@ static cfg_result_package_t emit_unary_operation(basic_block_t* basic_block, gen
 
 			//The result will always be a variable that we can unpack
 			three_addr_var_t* negatee = unpack_result_package(&unary_package, current_block, line_number);
-			generic_type_t* operand_type = negatee->type;
+
+			/**
+			 * The operand type comes from the child's inferred type, *NOT* the variable type. This is
+			 * especially important to consider when we have casting involved. It is this type that the
+			 * instruction selector will use to make decisions and not anything else
+			 */
+			generic_type_t* operand_type = unary_expression_child->inferred_type;
 
 			/**
 			 * Emit the negation instruction with a temporary variable as the assignee and the negatee
 			 * as our operand
 			 */
 			instruction_t* negation_instruction = emit_negation_statement(emit_temp_var(operand_type), negatee, line_number);
+			negation_instruction->type_storage.result_type = operand_type;
 			add_statement(current_block, negation_instruction);
 
 			/**

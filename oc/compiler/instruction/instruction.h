@@ -186,6 +186,14 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var);
  * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
  * that they share is the overall variable that they're linked back to, which stores their type information,
  * etc.
+ */
+three_addr_var_t* emit_var_with_given_type(symtab_variable_record_t* var, generic_type_t* inferred_type);
+
+/**
+ * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
+ * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
+ * that they share is the overall variable that they're linked back to, which stores their type information,
+ * etc.
  *
  * This version of emit var specifically will never use the "alias" field. It's designed specifically
  * for special cases in function inlining and is *not* meant for general use
@@ -554,12 +562,12 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node, 
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested, u_int32_t line_number);
+instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested, generic_type_t* testing_type, u_int32_t line_number);
 
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested, u_int32_t line_number);
+instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested, generic_type_t* testing_type, u_int32_t line_number);
 
 /**
  * Emit an idle statement

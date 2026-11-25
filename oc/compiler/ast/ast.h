@@ -175,6 +175,10 @@ struct generic_ast_node_t{
 	//Is the given statement(switch or in) eligible to internally be a true switch?
 	u_int8_t is_switch_eligible;
 	/**
+	 * Was this given node casted?
+	 */
+	u_int8_t was_casted;
+	/**
 	 * Return Region Forwarding(RRF) in OIR refers to the ability for us to 
 	 * forward the region that we would copy a return-by-copy function's value
 	 * into to the return by copy function itself, and have that function use

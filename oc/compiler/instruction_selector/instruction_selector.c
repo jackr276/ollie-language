@@ -7955,8 +7955,14 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 				//Otherwise, the value is not 0
 				} else {
+					three_addr_const_t* constant_operand = current_instruction->operands.oir.constant_operand;
+					three_addr_var_t* operand1 = current_instruction->operands.oir.operand1;
+
+					//Extract the type that we're testing on
+					generic_type_t* testing_on_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, operand1->type, constant_operand->type);
+
 					//First we add a test instruction
-					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1, current_instruction->line_number);
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), operand1, testing_on_type, current_instruction->line_number);
 								
 					//The result of this will be used for our set instruction
 					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
@@ -7990,10 +7996,16 @@ static u_int8_t simplify_window(instruction_window_t* window){
 			 * simplifiable
 			 */
 			case DOUBLE_OR: {
+				three_addr_const_t* constant_operand = current_instruction->operands.oir.constant_operand;
+				three_addr_var_t* operand1 = current_instruction->operands.oir.operand1;
+
 				//First option - the value is 0. If it is, then anything else is irrelevant
-				if(is_constant_value_zero(current_instruction->operands.oir.constant_operand) == TRUE){
+				if(is_constant_value_zero(constant_operand) == TRUE){
+					//Extract the type that we're testing on
+					generic_type_t* testing_on_type = get_operand_type_for_logical_operation(cfg_reference->type_symtab, operand1->type, constant_operand->type);
+
 					//First we add a test instruction
-					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), current_instruction->operands.oir.operand1, current_instruction->line_number);
+					instruction_t* test_instruction = test_instruction = emit_test_if_not_zero_statement(emit_temp_var(u8), operand1, testing_on_type, current_instruction->line_number);
 								
 					//The result of this will be used for our set instruction
 					instruction_t* setne_instruction = emit_setne_code(emit_temp_var(u8), test_instruction->operands.oir.assignee);
@@ -10091,7 +10103,7 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 * to return TRUE if the operand is a floating point value
 		 */
 		case THREE_ADDR_CODE_LOGICAL_NOT_STMT: {
-			return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
+			return IS_FLOATING_POINT(statement->type_storage.result_type);
 		}
 
 		/**
@@ -10099,16 +10111,9 @@ static inline u_int8_t does_statement_use_fp_comparison(instruction_t* statement
 		 * use unordered comparison statements in the event that they have
 		 * a float operand. As such, we'll just have to return whether or
 		 * not the operand is a float
-		 *
-		 * NOTE: remember that at this point it's still valid OIR to have a
-		 * test if not zero statement with a constant
 		 */
 		case THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT: {
-			if(statement->operands.oir.operand1 != NULL){
-				return IS_FLOATING_POINT(statement->operands.oir.operand1->type);
-			} else {
-				return IS_FLOATING_POINT(statement->operands.oir.constant_operand->type);
-			}
+			return IS_FLOATING_POINT(statement->type_storage.result_type);
 		}
 
 		/**
@@ -17721,21 +17726,38 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	//Is this value *exclusively* used by a branch?
 	u_int8_t used_by_branch_only = logical_not->operands.oir.assignee->sets_cc;
 
-	//Let's also determine if this is a floating point logical not or not
-	u_int8_t is_floating_point = IS_FLOATING_POINT(logical_not->operands.oir.operand1->type);
+	/**
+	 * Extract the operand and the operand type. The actual type of the operand 
+	 * comes from the stored result type, not the operand itself. It is very important
+	 * that we use this type, especially for cast expressions
+	 */
+	three_addr_var_t* operand = logical_not->operands.oir.operand1;
+	generic_type_t* operand_type = logical_not->type_storage.result_type;
+	if(is_converting_move_required(operand_type, operand->type) == TRUE){
+		operand = create_and_insert_converting_move_instruction(logical_not, operand, operand_type);
+	}
 
-	//This is the most common case - it is *not* being used by a floating
-	//point value
+	/**
+	 * Let's alos determine if this is a floating point operation or not
+	 */
+	u_int8_t is_floating_point = IS_FLOATING_POINT(operand_type);
+
+	/**
+	 * This is the most common case - it is *not* being used by a floating
+	 * point value
+	 */
 	if(is_floating_point == FALSE){
 		//Emit the test instruction
-		instruction_t* test_instruction = emit_direct_test_instruction(logical_not->operands.oir.operand1, logical_not->operands.oir.operand1); 
+		instruction_t* test_instruction = emit_direct_test_instruction(operand, operand); 
 
 		//Insert this right before the instruction we have
 		insert_instruction_before_given(test_instruction, logical_not);
 
-		//If we are just being used by a branch, then the test instruction should
-		//be all that we need. If we are *not* just being used by a branch, then 
-		//we will need more than just the test instruction
+		/**
+		 * If we are just being used by a branch, then the test instruction should
+		 * be all that we need. If we are *not* just being used by a branch, then 
+		 * we will need more than just the test instruction
+		 */
 		if(used_by_branch_only == FALSE){
 			//Set to 1 if we're zero
 			instruction_t* set_if_equal = emit_sete_instruction(logical_not->operands.oir.assignee);
@@ -17795,7 +17817,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 	 */
 	} else {
 		//This is the variable that we will be comparing against
-		three_addr_var_t* comparing_against = emit_temp_var(logical_not->operands.oir.operand1->type);
+		three_addr_var_t* comparing_against = emit_temp_var(operand_type);
 
 		//First emit a PXOR instruction to zero out a variable. This is the variable that we will compare against
 		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(comparing_against);
@@ -17804,7 +17826,7 @@ static void handle_logical_not_instruction(instruction_window_t* window){
 		insert_instruction_before_given(pxor_instruction, logical_not);
 
 		//Now no matter what we also are going to need an unordered comparison instruction
-		instruction_t* unordered_comparison = emit_float_comparison_instruction(comparing_against, logical_not->operands.oir.operand1, TRUE);
+		instruction_t* unordered_comparison = emit_float_comparison_instruction(comparing_against, operand, TRUE);
 
 		//Insert this in right before the logical not
 		insert_instruction_before_given(unordered_comparison, logical_not);
@@ -18020,6 +18042,23 @@ static void handle_negation_instruction(instruction_window_t* window){
 	instruction_t* negation_instruction = window->instruction1;
 
 	/**
+	 * Extract both operands first
+	 */
+	three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
+	three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
+
+	/**
+	 * VERY IMPORTANT - the operand type will always comes from the instruction
+	 * itself, *NOT* the given variable. This is especially important to consider
+	 * in the event of cast expressions. If a converting move is required, we will
+	 * add that now
+	 */
+	generic_type_t* operand_type = negation_instruction->type_storage.result_type;
+	if(is_converting_move_required(operand_type, operand1->type) == TRUE){
+		operand1 = create_and_insert_converting_move_instruction(negation_instruction, operand1, operand_type);
+	}
+
+	/**
 	 * For non-floating point values, we will need to emit a temporary assignment
 	 * for the first operand in the event that it is not a temporary variable because
 	 * negation will modify the variable inplace.
@@ -18033,13 +18072,6 @@ static void handle_negation_instruction(instruction_window_t* window){
 	 * movl t6, t4
 	 */
 	if(IS_FLOATING_POINT(negation_instruction->operands.oir.assignee->type) == FALSE){
-		/**
-		 * Extract both operands first
-		 */
-		three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
-		three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
-		generic_type_t* operand_type = operand1->type;
-
 		/**
 		 * If this is not a temporary variable then we will need to emit and insert
 		 * a temp var here
@@ -18092,13 +18124,6 @@ static void handle_negation_instruction(instruction_window_t* window){
 	 * movss t5, t4
 	 */
 	} else {
-		/**
-		 * Extract the values that we're working with and the type
-		 */
-		three_addr_var_t* assignee = negation_instruction->operands.oir.assignee;
-		three_addr_var_t* operand1 = negation_instruction->operands.oir.operand1;
-		generic_type_t* operand_type = operand1->type;
-
 		/**
 		 * Before we do anything else, we will first move the first operand into a temporary
 		 * holding variable. We do this to avoid clobbering it's value
@@ -18208,14 +18233,26 @@ static void handle_negation_instruction(instruction_window_t* window){
  * Will become:
  * movl x_1, t3
  * notl t3
- *
  */
 static void handle_not_instruction(instruction_t* instruction){
+	/**
+	 * Extract the assignee, operand and operand type
+	 */
 	three_addr_var_t* assignee = instruction->operands.oir.assignee;
 	three_addr_var_t* operand = instruction->operands.oir.operand1;
+	generic_type_t* operand_type = instruction->type_storage.result_type;
 
 	/**
-	 * If the operand is not a temporary variable, we will need to emit
+	 * There is a chance that we need to emit a converting move here. If that
+	 * is the case, then we will insert our converting move right before the
+	 * given instruction
+	 */
+	if(is_converting_move_required(operand_type, operand->type) == TRUE){
+		operand = create_and_insert_converting_move_instruction(instruction, operand, operand_type);
+	}
+
+	/**
+	 * If the operand is still not a temporary variable, we will need to emit
 	 * an assignment instruction because the notX commands will modify
 	 * the register inplace
 	 */
@@ -18223,7 +18260,7 @@ static void handle_not_instruction(instruction_t* instruction){
 		/**
 		 * Emit the temp assignment as an x86 movX directly
 		 */
-		instruction_t* temp_assignment = emit_move_instruction(emit_temp_var(operand->type), operand);
+		instruction_t* temp_assignment = emit_move_instruction(emit_temp_var(operand_type), operand);
 		insert_instruction_before_given(temp_assignment, instruction);
 
 		/**
@@ -18235,7 +18272,7 @@ static void handle_not_instruction(instruction_t* instruction){
 	/**
 	 * Select the appropriate instruction type given the variable size
 	 */
-	switch(get_type_size(operand->type)){
+	switch(get_type_size(operand_type)){
 		case QUAD_WORD:
 			instruction->instruction_type = NOTQ;
 			break;
@@ -18834,14 +18871,25 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 	//Grab out what we're really after
 	instruction_t* instruction = window->instruction1;
 
+	/**
+	 * Extract the operand type. Note that this may be different than
+	 * the type of the variable being tested, so we'll emit and insert
+	 * a converting move if that's the case
+	 */
+	generic_type_t* operand_type = instruction->type_storage.result_type;
+	three_addr_var_t* operand = instruction->operands.oir.operand1;
+	if(is_converting_move_required(operand_type, operand->type) == TRUE){
+		operand = create_and_insert_converting_move_instruction(instruction, operand, operand_type);
+	}
+
 	//We expect the most common case to be non-floating point
-	if(IS_FLOATING_POINT(instruction->operands.oir.operand1->type) == FALSE){
+	if(IS_FLOATING_POINT(operand_type) == FALSE){
 		//Get the appopriate set statement here
-		instruction->instruction_type = select_appropriate_test_statement(instruction->operands.oir.operand1->variable_size);
+		instruction->instruction_type = select_appropriate_test_statement(operand->variable_size);
 
 		//Op1 is both sourced because we are testing against ourselves
-		instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
-		instruction->operands.x86.source_register2 = instruction->operands.oir.operand1;
+		instruction->operands.x86.source_register1 = operand;
+		instruction->operands.x86.source_register2 = operand;
 		
 		//Rebuild the window around this instruction
 		reconstruct_window(window, instruction);
@@ -18851,11 +18899,8 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 	 * be using a constant. Instead, we can zero out a given XMM register and use that instead
 	 */
 	} else {
-		//Grab this for use
-		generic_type_t* fp_type = instruction->operands.oir.operand1->type;
-
 		//Let's first zero out a given XMM register
-		three_addr_var_t* zeroed_out = emit_temp_var(fp_type);
+		three_addr_var_t* zeroed_out = emit_temp_var(operand_type);
 
 		//Emit the PXOR instruction to wipe it out
 		instruction_t* pxor_instruction = emit_sse_register_clear_instruction(zeroed_out);
@@ -18883,7 +18928,7 @@ static void handle_test_if_not_zero_instruction(instruction_window_t* window){
 		}
 
 		//Transfer over the old op1
-		instruction->operands.x86.source_register1 = instruction->operands.oir.operand1;
+		instruction->operands.x86.source_register1 = operand;
 
 		//And the second source is the register we just zeroed out
 		instruction->operands.x86.source_register2 = zeroed_out;
