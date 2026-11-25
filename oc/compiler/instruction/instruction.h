@@ -632,10 +632,11 @@ three_addr_const_t* sum_constant_with_raw_int64_value(three_addr_const_t* consta
 three_addr_const_t* multiply_constant_by_raw_int64_value(three_addr_const_t* constant, generic_type_t* i64_type, int64_t raw_constant);
 
 /**
- * Convert any given constant into an i64(signed long). This is mainly used for lea helpers
- * where we want to guarantee that everything is consistent
+ * Coerce the given three address constant to be of the given "new type". This will internally modify
+ * the constant value by putting it through C's converting move process, which is identical to Ollie's,
+ * so we will be set for this
  */
-three_addr_const_t* convert_constant_to_i64(three_addr_const_t* constant, generic_type_t* i64_type);
+void coerce_three_address_constant_to_given_type(three_addr_const_t* constant, generic_type_t* new_type);
 
 /**
  * Negate a three address constant

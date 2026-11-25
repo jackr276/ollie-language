@@ -157,14 +157,34 @@ static search_result_t search_for_variable_assignment_in_block(instruction_t* st
 				}
 
 				/**
-				 * If we have an ASSN statement then we've got some other variable. We
-				 * won't try to keep chaining with assignments as that is unlikely to 
-				 * work
+				 * If we have a regular assignment statement, there is a chance that this
+				 * is the end of the road for us. However, there is also a chance that this
+				 * is just another temp assignment along the way to the constant value that
+				 * we're after. See the below example:
+				 *
+				 * x_1 <- 5
+				 * t3 <- x_1
+				 * t4 <- logical not t3
+				 *
+				 * We should be able to trace our way up from t3 all the way to x1, so long as
+				 * we're in the same block
 				 */
 				case THREE_ADDR_CODE_ASSN_STMT: {
+					/**
+					 * Populate the search result first - there is a chance that this is as
+					 * far as we can go and this will be our end result
+					 */
 					search_result.result_type = SEARCH_RESULT_TYPE_VAR;
 					search_result.result.variable = cursor->operands.oir.operand1;
-					return search_result;
+
+					/**
+					 * However, like in the example above, there is also a chance
+					 * that we may find a constant assignment if we just keep searching.
+					 * We will change the variable that we are looking for and keep
+					 * going
+					 */
+					variable = search_result.result.variable;
+					break;
 				}
 
 				/**
@@ -817,6 +837,13 @@ static simulated_execution_result_t simulate_test_if_not_zero_flags_after_execut
 	}
 
 	/**
+	 * Once we have the constant operand, we will want to coerce it to be the exact operand type
+	 * that we are after. We'll do this now to make sure that we are truly simulating what would
+	 * have happened in the normal execution flow
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand, operand_type);
+
+	/**
 	 * Case 1: for non-floating point constants, the test command is simply the
 	 * "andX" instruction without setting results. This is easy enough to simulate
 	 * for us
@@ -879,6 +906,13 @@ simulated_execution_result_t simulate_logical_not_flags_after_execution(instruct
 	three_addr_const_t* constant_operand = search_result.result.constant;
 
 	/**
+	 * Once we have the constant operand, we will want to coerce it to be the exact operand type
+	 * that we are after. We'll do this now to make sure that we are truly simulating what would
+	 * have happened in the normal execution flow
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand, operand_type);
+
+	/**
 	 * Case 1: for non-floating point constants, the test command is simply the
 	 * "andX" instruction without setting results. This is easy enough to simulate
 	 * for us
@@ -935,11 +969,18 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 	}
 
 	/**
+	 * Extract the constant operand and coerce it to the type that was specified for the
+	 * given instruction itself
+	 */
+	three_addr_const_t* constant_operand = search_result.result.constant;
+	coerce_three_address_constant_to_given_type(constant_operand, operand_type);
+
+	/**
 	 * If we get here we know that the execution result is a pure constant and it's not a floating point
 	 * value. In this case we are able to simulate the execution of the negation. Integer negation
 	 * is in reality equivalent to doing "0 - x", so that is what we will simulate for our flags
 	 */
-	return simulate_flags_from_subtraction_with_constants(0UL, search_result.result.constant->constant_value.unsigned_long_constant, operand_type);
+	return simulate_flags_from_subtraction_with_constants(0UL, constant_operand->constant_value.unsigned_long_constant, operand_type);
 }
 
 
@@ -1000,9 +1041,10 @@ static inline generic_type_t* get_destination_type_for_binary_operation_instruct
 				break;
 			}
 
-			default:
+			default: {
 				fprintf(stderr, "Fatal interal compiler error: unrecognzied binary operatore in destination type determinator\n");
 				exit(1);
+			}
 		}
 	}
 
@@ -1069,6 +1111,15 @@ static simulated_execution_result_t simulate_binary_operation_flags_after_execut
 	 */
 	three_addr_const_t* constant_operand1 = op1_result.result.constant;
 	three_addr_const_t* constant_operand2 = op2_result.result.constant;
+
+	/**
+	 * Coerce both of these constants to be of the given operand type. We do this to
+	 * ensure that we are accurately simulating what the Ollie compiler would truly
+	 * emit. Since the Ollie compiler cares about constant coercion, we will add that
+	 * here as well
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand1, operand_type);
+	coerce_three_address_constant_to_given_type(constant_operand2, operand_type);
 
 	switch(instruction->op){
 		case CARROT: {
@@ -1212,6 +1263,15 @@ static simulated_execution_result_t simulate_binary_operation_with_constant_flag
 	 */
 	three_addr_const_t* constant_operand1 = op1_result.result.constant;
 	three_addr_const_t* constant_operand2 = instruction->operands.oir.constant_operand;
+
+	/**
+	 * Coerce both of these constants to be of the given operand type. We do this to
+	 * ensure that we are accurately simulating what the Ollie compiler would truly
+	 * emit. Since the Ollie compiler cares about constant coercion, we will add that
+	 * here as well
+	 */
+	coerce_three_address_constant_to_given_type(constant_operand1, operand_type);
+	coerce_three_address_constant_to_given_type(constant_operand2, operand_type);
 
 	/**
 	 * Simulate based on all of the valid operands that we have
