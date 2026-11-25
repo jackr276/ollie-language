@@ -9335,14 +9335,10 @@ static inline void perform_branch_elimination(dynamic_array_t* function_blocks, 
 		}
 
 		/**
+		 * If we make it here then we were able to eliminate at least 1 branch from the function CFG. Branch
+		 * reduction changes successor/predecessor relationships, and will corrupt existing dominance and control
+		 * flow relations. We will now do a 4-step process to remediate all of this
 		 *
-		 */
-
-	}
-
-	u_int8_t branch_elimination_occurred = branch_elimination_pass(function_blocks);
-	if(branch_elimination_occurred == TRUE){
-		/**
 		 * Step 1: we have altered the control flow in at least one way, possibly more, if we have done
 		 * a branch elimination. Before going forward we'll need to recompute all of the control flow 
 		 * relations based on this new CFG
