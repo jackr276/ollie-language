@@ -2530,7 +2530,8 @@ static inline three_addr_var_t* emit_automatic_load_from_memory(basic_block_t* b
 
 
 /**
- * TODO CONVERTING MOVE
+ * Emit an identifier from a given node. This helper will take into account type coercion and
+ * casting that has occurred for the given identifier node
  */
 static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast_node_t* ident_node){
 	/**
@@ -2641,23 +2642,19 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 */
 				} else {
 					/**
-					 * They're the same so a regular emittal is fine
+					 * This node *WAS* casted *AND* the type warrants a converting move, so we will add the temporary
+					 * assignment and return the variable with the updated type
 					 */
-					if(is_converting_move_required(inferred_type, variable_type) == FALSE){
-						return emit_var(variable);
-
-					/**
-					 * Otherwise they're different types, so we'll emit an assignment to a temp var of the
-					 * given type
- *
- * TODO UPDATE THIS TO BE ONLY IF IT WAS CASTED
-					 */
-					} else {
-						//printf("HERE FOR VARIABLE %s\n", variable->var_name.string);
-
+					if(was_casted == TRUE && is_converting_move_required(inferred_type, variable_type) == TRUE){
 						instruction_t* move_statement = emit_assignment_instruction(emit_temp_var(inferred_type), emit_var(variable), ident_node->line_number);
 						add_statement(basic_block, move_statement);
 						return move_statement->operands.oir.assignee;
+
+					/**
+					 * No casting/they're the same so regular emittal is fine
+					 */
+					} else {
+						return emit_var(variable);
 					}
 				}
 
@@ -2741,26 +2738,22 @@ static three_addr_var_t* emit_identifier(basic_block_t* basic_block, generic_ast
 				 * For regular variables, we may have undergone casting for this specific identifier
 				 * node that requires us to have a variable that is a different type when compared to the given
 				 * variable
- *
- * TODO UPDATE THIS TO BE ONLY IF IT WAS CASTED
 				 */
 				} else {
 					/**
-					 * They're the same so a regular emittal is fine
+					 * This node *WAS* casted *AND* the type warrants a converting move, so we will add the temporary
+					 * assignment and return the variable with the updated type
 					 */
-					if(is_converting_move_required(inferred_type, variable_type) == FALSE){
-						return emit_var(variable);
-
-					/**
-					 * Otherwise they're different types, so we'll emit an assignment to a temp var of the
-					 * given type
-					 */
-					} else {
-						//printf("HERE FOR VARIABLE %s\n", variable->var_name.string);
-
+					if(was_casted == TRUE && is_converting_move_required(inferred_type, variable_type) == TRUE){
 						instruction_t* move_statement = emit_assignment_instruction(emit_temp_var(inferred_type), emit_var(variable), ident_node->line_number);
 						add_statement(basic_block, move_statement);
 						return move_statement->operands.oir.assignee;
+
+					/**
+					 * No casting/they're the same so regular emittal is fine
+					 */
+					} else {
+						return emit_var(variable);
 					}
 				}
 
