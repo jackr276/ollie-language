@@ -773,16 +773,19 @@ static simulated_execution_result_t simulate_flags_from_f64_constant_comparison(
  */
 static simulated_execution_result_t simulate_test_if_not_zero_flags_after_execution(instruction_t* instruction){
 	/**
+	 * Extract the operand type from the type storage area
+	 */
+	generic_type_t* operand_type = instruction->type_storage.result_type;
+
+	/**
 	 * We need to have a constant operand in order for any simulation to work. If we, as
 	 * of right now, have a non-constant operand, we'll need to first attempt to find
 	 * a constant assignment for the non-constant operand. If we do not then this simulation
 	 * is considered impossible
 	 */
 	three_addr_const_t* constant_operand = NULL;
-	generic_type_t* operand_type = NULL;
 	if(instruction->operands.oir.operand1 != NULL){
 		three_addr_var_t* operand = instruction->operands.oir.operand1;
-		operand_type = operand->type;
 
 		/**
 		 * Let's see if we can find out what this variable was assigned to. There is a chance that
@@ -811,7 +814,6 @@ static simulated_execution_result_t simulate_test_if_not_zero_flags_after_execut
 	 */
 	} else {
 		constant_operand = instruction->operands.oir.constant_operand;
-		operand_type = constant_operand->type;
 	}
 
 	/**
@@ -859,7 +861,7 @@ simulated_execution_result_t simulate_logical_not_flags_after_execution(instruct
 	 * within the block
 	 */
 	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
-	generic_type_t* operand_type = logical_not_operand->type;
+	generic_type_t* operand_type = instruction->type_storage.result_type;
 	search_result_t search_result = search_for_variable_assignment_in_block(instruction, logical_not_operand);
 
 	/**
@@ -919,7 +921,7 @@ static simulated_execution_result_t simulate_negation_flags_after_execution(inst
 	 * a floating point operand we will panic
 	 */
 	three_addr_var_t* logical_not_operand = instruction->operands.oir.operand1;
-	generic_type_t* operand_type = logical_not_operand->type;
+	generic_type_t* operand_type = instruction->type_storage.result_type;
 	if(IS_FLOATING_POINT(operand_type) == TRUE){
 		trigger_ice_panic("Floating point negation has been invalidly marked for use as a flag setting statement");
 	}

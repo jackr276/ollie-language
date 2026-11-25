@@ -984,6 +984,68 @@ three_addr_var_t* emit_var(symtab_variable_record_t* var){
  * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
  * that they share is the overall variable that they're linked back to, which stores their type information,
  * etc.
+ */
+three_addr_var_t* emit_var_with_given_type(symtab_variable_record_t* var, generic_type_t* inferred_type){
+	//Let's first create the non-temp variable
+	three_addr_var_t* emitted_var = calloc(1, sizeof(three_addr_var_t));
+
+	/**
+	 * If we have an aliased variable(almost exclusively function
+	 * parameters), we will instead emit the alias of that variable instead
+	 * of the variable itself
+	 */
+	if(var->alias != NULL){
+		var = var->alias;
+	}
+
+	/**
+	 * When we emit variables, we want variables that share the
+	 * same symtab variable to have the same ID. So, if we notice
+	 * that this variable has been set before, we will set the
+	 * three_addr_var_t's id to be what this variable has. Otherwise
+	 * this is the first time we're doing this and we will generate
+	 * a new one
+	 */
+	if(var->associated_three_addr_var_ids.variable_id == NEVER_SET){
+		var->associated_three_addr_var_ids.variable_id = get_next_variable_id();
+	}
+
+	//Set this to match the symtab variable
+	emitted_var->variable_id = var->associated_three_addr_var_ids.variable_id;
+
+	/**
+	 * In this case we are using the type provided to us, not the literal type
+	 * of the underlying symtab variable
+	 */
+	emitted_var->type = inferred_type;
+	
+	//This is not temporary
+	emitted_var->variable_type = VARIABLE_TYPE_NON_TEMP;
+	//And store the symtab record
+	emitted_var->linked_var = var;
+
+	//Store the associate stack region(this is usually null)
+	emitted_var->associated_memory_region.stack_region = var->stack_region;
+
+	//The membership is also copied
+	emitted_var->membership = var->membership;
+
+	//Copy these over
+	emitted_var->class_relative_parameter_order = var->class_relative_function_parameter_order;
+
+	//Select the size of this variable
+	emitted_var->variable_size = get_type_size(emitted_var->type);
+
+	//And we're all done
+	return emitted_var;
+}
+
+
+/**
+ * Dynamically allocate and create a non-temp var. We emit a separate, distinct variable for 
+ * each SSA generation. For instance, if we emit x1 and x2, they are distinct. The only thing 
+ * that they share is the overall variable that they're linked back to, which stores their type information,
+ * etc.
  *
  * This version of emit var specifically will never use the "alias" field. It's designed specifically
  * for special cases in function inlining and is *not* meant for general use
@@ -6795,7 +6857,7 @@ instruction_t* emit_asm_inline_instruction(generic_ast_node_t* asm_inline_node, 
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested, u_int32_t line_number){
+instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_variable, three_addr_var_t* being_tested, generic_type_t* testing_type, u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
@@ -6806,6 +6868,12 @@ instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_var
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
 
+	/**
+	 * Store the type that we're testing based off of inside of the instruction's type storage. Remember
+	 * that this may be different than the operand's type, so it's important to store
+	 */
+	stmt->type_storage.result_type = testing_type;
+
 	//And give the statement back
 	stmt->line_number = line_number;
 	return stmt;
@@ -6815,13 +6883,19 @@ instruction_t* emit_test_if_not_zero_statement(three_addr_var_t* destination_var
 /**
  * Emit a "test if not 0 three address code statement"
  */
-instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested, u_int32_t line_number){
+instruction_t* emit_test_if_not_zero_for_const_statement(three_addr_var_t* destination_variable, three_addr_const_t* being_tested, generic_type_t* testing_type,  u_int32_t line_number){
 	//First we allocate it
 	instruction_t* stmt = calloc(1, sizeof(instruction_t));
 
 	//The assignee/op1 is passed through
 	stmt->operands.oir.assignee = destination_variable;
 	stmt->operands.oir.constant_operand = being_tested;
+
+	/**
+	 * Store the type that we're testing based off of inside of the instruction's type storage. Remember
+	 * that this may be different than the operand's type, so it's important to store
+	 */
+	stmt->type_storage.result_type = testing_type;
 
 	//Note what kind of node this is
 	stmt->statement_type = THREE_ADDR_CODE_TEST_IF_NOT_ZERO_STMT;
