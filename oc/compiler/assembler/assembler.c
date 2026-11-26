@@ -165,44 +165,6 @@ static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
 
 
 /**
- * Assemble the program by writing it to a .s file. This is specifically intended for when the user
- * does *not* want to actually compile the program and requests that we output an assembly file only.
- * This case really only happens when we are doing test runs
-*/
-static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_t* cfg){
-	//The output file(Null initally)
-	FILE* output = NULL;
-
-	//Open the file for the purpose of writing
-	output = fopen(options->output_file, "w");
-
-	//If the file is null, we fail out here
-	if(output == NULL){
-		sprintf(info, "[ASSEMBLER ERROR]: Failed to create the output file: %s\n", options->output_file);
-		print_assembler_message(MESSAGE_TYPE_ERROR, info);
-		error_count++;
-		return FAILURE;
-	}
-
-	//We'll first print the text segment of the program. Make sure that we use the basename
-	//for this
-	print_start_section(basename(options->output_file), output, cfg);
-
-	//Handle all of the global vars first
-	print_all_global_variables(output, &(cfg->global_variables));
-
-	//Print all of the local constants as well
-	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
-
-	//Once we're done, close the file
-	fclose(output);
-
-	//Tell the caller that all went well
-	return SUCCESS;
-}
-
-
-/**
  * Construct the assembly for the program and output it to a temp file. This temp file will 
  * be placed inside of the /tmp/oc/ directory while it is waiting for final assembly and linkage
  * into the file that we're after
@@ -332,67 +294,6 @@ static inline void create_temp_working_directory(char* directory_name){
 	if(mkdtemp(directory_name) == NULL){
 		trigger_ice_panic("Failed to create temporary directory for compilation");
 	}
-}
-
-
-/**
- * Recursively delete all files and directories inside of the "path"
- * directory
- *
- * TODO UPDATE THIS
- */
-static u_int8_t clear_directory_recursive(char* path){
-	//We need this for printing
-	char full_path[1000];
-
-	//Open up the temp directory
-	DIR* tmp_directory = opendir(path);
-	//Entry pointer
-	struct dirent* entry;
-	//Status struct
-	struct stat st;
-
-	/**
-	 * This should absolutely never happen. If it does it is a critcal error
-	 */
-	if(tmp_directory == NULL){
-		trigger_ice_panic("Attempt to open /tmp/oc/ failed");
-	}
-
-	//Infinite loop until we break out
-	while(TRUE){
-		//Seed the entry
-		entry = readdir(tmp_directory);
-
-		//We're done
-		if(entry == NULL){
-			break;
-		}
-
-		//Don't want to delete . or .. here, skip them
-		if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
-			continue;
-		}
-
-		//Here's our full path
-		snprintf(full_path, 1000, "%s/%s", path, entry->d_name);
-
-		//If we can read it
-		if(stat(full_path, &st) == 0){
-			if(S_ISDIR(st.st_mode)){
-				clear_directory_recursive(full_path);
-			} else {
-				if(unlink(full_path) != 0){
-					return FAILURE;
-				}
-			}
-		}
-	}
-
-	//Close it down before we leave
-	closedir(tmp_directory);
-
-	return SUCCESS;
 }
 
 
@@ -628,11 +529,44 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 }
 
 
+//================================================================== COMPILATION RUNNERS ==============================================================
+/**
+ * Assemble the program by writing it to a .s file. This is specifically intended for when the user
+ * does *not* want to actually compile the program and requests that we output an assembly file only.
+ * This case really only happens when we are doing test runs
+ */
+static u_int8_t compile_to_assembly(compiler_options_t* options, cfg_t* cfg){
+	/**
+	 * Create the given file for the purpose of writing
+	 */
+	FILE* output = fopen(options->output_file, "w");
+	if(output == NULL){
+		sprintf(info, "[ASSEMBLER ERROR]: Failed to create the output file: %s\n", options->output_file);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
+		error_count++;
+		return FAILURE;
+	}
+
+	/**
+	 * Generate the start section, then global variables, then local constants
+	 */
+	print_start_section(basename(options->output_file), output, cfg);
+	print_all_global_variables(output, &(cfg->global_variables));
+	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+
+	/**
+	 * Close the file and tell the caller that all went well
+	 */
+	fclose(output);
+	return SUCCESS;
+}
+
+
 /**
  * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory,
  * when we want to assemble and go directly to an object file with *no* linking
  */
-static inline void output_object_file_only(compiler_options_t* options, cfg_t* cfg){
+static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cfg){
 	/**
 	 * Step 0: before we do anything else, we need to validate that the /tmp/oc/ directory
 	 * exists for us to use
@@ -658,25 +592,10 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
 
 
 	/**
-	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
-	 * compiled files. This is the first step that we need to take to ensure we're good
-	 * to even go forward
-	 */
-
-	//TODO UPDATE THE TEMP DIR
-	u_int32_t directory_management_result = perform_tmp_directory_management();
-
-	//If this fails we're done
-	if(directory_management_result == FAILURE){
-		return;
-	}
-
-	/**
 	 * Step 2: we need to now output the cfg into a temporary .s assembly
 	 * file. We will place this temporary .s assembly file inside of the
 	 * oc/tmp directory waiting to be assembled
 	 */
-	dynamic_string_t assembly_file = dynamic_string_alloc();
 
 	//Let the helper produce this
 	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &assembly_file);
@@ -691,9 +610,6 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
 	 * file here will be stored at the custom destination that the user wanted
 	 */
 	run_file_through_assembler_custom_output(assembly_file.string, options->output_file, options->enable_debug_printing);
-
-	//Finally destroy the dynamic memory
-	dynamic_string_dealloc(&assembly_file);
 }
 
 
@@ -701,7 +617,7 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
  * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory
  * in order for us to compiler and link into a final executable
  */
-static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* options, cfg_t* cfg){
+static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t* cfg){
 	/**
 	 * Step 0: before we do anything else, we need to validate that the /tmp/oc/ directory
 	 * exists for us to use
@@ -719,13 +635,6 @@ static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* opt
 	char working_directory[DIRECTORY_LENGTH];
 	create_temp_working_directory(working_directory);
 
-
-	/**
-	 * Step 2: we need to now output the cfg into a temporary .s assembly
-	 * file. We will place this temporary .s assembly file inside of the
-	 * oc/tmp directory waiting to be assembled
-	 */
-	dynamic_string_t assembled_file = dynamic_string_alloc();
 
 	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &assembled_file);
 
@@ -746,9 +655,6 @@ static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* opt
 		return FAILURE;
 	}
 
-	//Destroy the dynamic string for this
-	dynamic_string_dealloc(&assembled_file);
-
 	/**
 	 * Step 4: take all of the .o files in /tmp/oc and link them together into our final
 	 * executable
@@ -763,6 +669,7 @@ static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* opt
 	//If we got to here it worked
 	return SUCCESS;
 }
+//================================================================== COMPILATION RUNNERS ==============================================================
 
 
 /**
@@ -773,9 +680,6 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	//Save these so we can update easily
 	error_count = num_errors;
 	warning_count = num_warnings;
-
-	//Store the result
-	u_int8_t result;
 
 	/**
 	 * Based on what we were given, should be able to output things appropriately here
@@ -794,7 +698,7 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 		 * NOTE: this does *NOT* require temporary directory management
 		 */
 		case OUTPUT_TYPE_ASSEMBLY_ONLY: {
-			output_generated_assembly_only(options, cfg);
+			compile_to_assembly(options, cfg);
 			break;
 		}
 		
@@ -804,7 +708,7 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 		 * NOTE: this *DOES* require temporary directory management
 		 */
 		case OUTPUT_TYPE_OBJECT_FILE: {
-			output_object_file_only(options, cfg);
+			compile_to_object_file(options, cfg);
 			break;
 		}
 
@@ -814,7 +718,7 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 		 * NOTE: this *DOES* require temporary directory management
 		 */
 		case OUTPUT_TYPE_FULL_COMPILATION: {
-			result = assemble_and_link_with_temp_files(options, cfg);
+			u_int8_t result = compile_to_executable(options, cfg);
 
 			//Give a good exit code if we failed
 			if(result == FAILURE){
