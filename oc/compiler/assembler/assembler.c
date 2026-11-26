@@ -3,17 +3,7 @@
  *
  * This file contains the implementations for the assembler.h file
  *
- *
- * TODO THIS IS NOW INACCURATE
- *
- *
- *
- *
  * GENERAL COMPILATION FLOW
- *
- *
- *
- *
  * User enters a file to be compiled(one .ol file)
  * The compiler uses the #link statements to determine what dependencies there are
  * The compiler will orient the linked statements into one giant token array and compile as a monolith
@@ -21,14 +11,18 @@
  * We will spit out generated assembly:
  * 	 Option 1: the user is compiling with "-a". -a means only output assembly. We will simply write out a .s file with the requested name(a.s if not)
  * 	 Option 2(most common): the user is just compiling:
- * 	 	We generate the assembly into a TEMPORARY .s file inside of /tmp/oc/
+ * 	 	We generate a unique temporary directory underneat /tmp/oc/ that will store all of our compilation artifacts
+ * 	 	We generate the assembly into a TEMPORARY .s file inside of /tmp/oc/<temp directory>
  * 	 	We invoke the GNU assembler(as) to assemble the file
  * 	 	We have the object(.o) file inside of the temp directory
  * 	 	We then compile __ostl_start_main.ol and put that in the temp directory
  * 	 	We then assemble _start.s and put that in the temp directory
- * 	 	We call the linked(ld) to link everything and put it into a final executable
-  */
-//For directory management
+ * 	 	We call the linked(ld) to link everything and put it into a final executable in the specified output file
+ *
+ * All temporary files should not survive past compilation. When done, the /tmp/oc/ directory should be entirely
+ * empty if everything is working properly
+ */
+
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
