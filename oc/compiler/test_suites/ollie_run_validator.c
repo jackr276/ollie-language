@@ -43,7 +43,6 @@
  */
 pthread_mutex_t stdout_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t compiler_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t error_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
@@ -438,12 +437,10 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
-	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
-	 * need to lock here to make this all work
+	 * Run the ollie compiler. The ollie compiler generates guaranteed unique temporary file names. There is
+	 * no need to perform any locking because of this
 	 */
-	pthread_mutex_lock(&compiler_mutex);
 	int32_t compilation_result = system(command_buffer);
-	pthread_mutex_unlock(&compiler_mutex);
 
 	/**
 	 * If for any reason we have a failure here, then
@@ -452,7 +449,7 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 	if(compilation_result != 0){
 		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
-		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, WEXITSTATUS(compilation_result));
 		pthread_mutex_unlock(&stdout_mutex);
 
 		//Add to the array and bump the count
@@ -542,12 +539,10 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
-	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
-	 * need to lock here to make this all work
+	 * Run the ollie compiler. The ollie compiler generates guaranteed unique temporary file names. There is
+	 * no need to perform any locking because of this
 	 */
-	pthread_mutex_lock(&compiler_mutex);
 	int32_t compilation_result = system(command_buffer);
-	pthread_mutex_unlock(&compiler_mutex);
 
 	/**
 	 * If the compilation result was *not* zero, then we have a compilation failure which is good in this case.
@@ -555,7 +550,7 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	if(compilation_result != 0){
 		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
-		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile as expected with exit code %d\n\n", thread_id, file_name, compilation_result);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile as expected with exit code %d\n\n", thread_id, file_name, WEXITSTATUS(compilation_result));
 		pthread_mutex_unlock(&stdout_mutex);
 
 	/**
@@ -1078,7 +1073,6 @@ int main(int argc, char** argv) {
 	//Destroy all of our mutices
 	pthread_mutex_destroy(&file_queue_mutex);
 	pthread_mutex_destroy(&stdout_mutex);
-	pthread_mutex_destroy(&compiler_mutex);
 	pthread_mutex_destroy(&error_queue_mutex);
 
 	return return_value;
