@@ -3,7 +3,16 @@
  *
  * This file contains the implementations for the assembler.h file
  *
+ *
+ * TODO THIS IS NOW INACCURATE
+ *
+ *
+ *
+ *
  * GENERAL COMPILATION FLOW
+ *
+ *
+ *
  *
  * User enters a file to be compiled(one .ol file)
  * The compiler uses the #link statements to determine what dependencies there are
@@ -36,6 +45,7 @@
 #include "../utils/dynamic_string/dynamic_string.h"
 
 #define TEMP_FILE_NAME_MAX_LENGTH 1000
+#define DIRECTORY_LENGTH 512
 #define MAX_COMMAND_LENGTH 2000
 
 //For any/all error printing
@@ -67,7 +77,7 @@ static void print_assembler_message(error_message_type_t message_type, char* inf
 	fprintf(stdout, "\n[COMPILER %s]: %s\n", type[message_type], info);
 }
 
-
+//====================================================== PRINTING UTILITIES =============================================================
 /**
  * Print an assembly block out
 */
@@ -151,6 +161,7 @@ static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
 	//Now that we've printed the text section, we need to print all basic blocks
 	print_all_basic_blocks(fl, cfg);
 }
+//====================================================== PRINTING UTILITIES =============================================================
 
 
 /**
@@ -250,66 +261,6 @@ static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_strin
 
 /**
  * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
- * will need to create it. We will not empty the directory in this step because that will
- * be handled by the cleanup function at the end of all compilation
- */
-static u_int8_t perform_tmp_directory_management(){
-	//Can we open /tmp?
-	DIR* root_temp_dir = opendir("/tmp");
-
-	/**
-	 * If we can't even open the /tmp directory then the user
-	 * is going to need to make it - we aren't going to mess
-	 * around with that
-	 */
-	if(root_temp_dir == NULL){
-		//Most likely thing - it just isn't there
-		if(errno == ENOENT){
-			print_assembler_message(MESSAGE_TYPE_ERROR, "The \"/tmp/\" directory does not exist on your system. Please create it and retry.");
-		} else {
-			print_assembler_message(MESSAGE_TYPE_ERROR, "Unable to open the \"/tmp/\" directory. If you are running linux, please create this directory and retry.");
-		}
-
-		(*error_count)++;
-		return FAILURE;
-	}
-
-	//Remove the resource when done
-	closedir(root_temp_dir);
-
-	//For holding our directory
-	struct stat stats = {0};
-
-	/**
-	 * Now that we know that the /tmp directory exists, we will
-	 * now need to create the /tmp/oc/ directory to store all
-	 * of our compiled files
-	 */
-	int32_t stat_result = stat("/tmp/oc/", &stats);
-
-	/**
-	 * If it's not here, then we need to make it
-	 */
-	if(stat_result != 0 || S_ISDIR(stats.st_mode) == FALSE){
-		//Invoke the system call to make it
-		int32_t mkdir_result = mkdir("/tmp/oc", 0777);
-
-		//Not being 0 is unsuccessful, not much we can do here but leave if this happens
-		if(mkdir_result != 0){
-			print_assembler_message(MESSAGE_TYPE_ERROR, "OC was unable to create the needed \"/tmp/oc/\" directory. Please create it manually.");
-			(*error_count)++;
-			return FAILURE;
-		}
-	}
-
-
-	//If we made it to here then this worked
-	return SUCCESS;
-}
-
-
-/**
- * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
  * will need to create it. This step is purely to guarantee that this folder is in existence
  * on the host machine. All other steps rely on this existing
  */
@@ -368,8 +319,27 @@ static u_int8_t validate_or_create_oc_tmp_folder(){
 
 
 /**
+ * Create a temporary working directory where all of the outputted .s/.o files will be stored
+ * during compilation. This working directory will be generated using mkdtemp() to guarantee complete
+ * uniqueness. We will print the entire directory name into the preallocated buffer provided to us
+ */
+static inline void create_temp_working_directory(char* directory_name){
+	sprintf(directory_name, "/tmp/oc/ollie_tmp_dir_XXXXXX");
+
+	/**
+	 * If we can't create it then fail out
+	 */
+	if(mkdtemp(directory_name) == NULL){
+		trigger_ice_panic("Failed to create temporary directory for compilation");
+	}
+}
+
+
+/**
  * Recursively delete all files and directories inside of the "path"
  * directory
+ *
+ * TODO UPDATE THIS
  */
 static u_int8_t clear_directory_recursive(char* path){
 	//We need this for printing
@@ -423,18 +393,6 @@ static u_int8_t clear_directory_recursive(char* path){
 	closedir(tmp_directory);
 
 	return SUCCESS;
-}
-
-
-/**
- * Perform the directory cleanup needed which includes wiping out all of the
- * object(.o) and assembly(.s) files that were placed in here. Ollie compilations 
- * are meant to never be incremental, and we enforce this by wiping out all of our
- * old compiled files at the end of every build
- */
-static inline u_int8_t perform_tmp_directory_cleanup(){
-	//Seed the helper and let it do the rest
-	return clear_directory_recursive("/tmp/oc");
 }
 
 
@@ -684,6 +642,14 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
 		trigger_ice_panic("Unable to validate or create the /tmp/oc/ folder");
 	}
 
+	/**
+	 * Step 2: once we know that /tmp/oc exists, we will create a temporary output
+	 * folder to hold all of our working files for this compilation run. This will
+	 * be done using mkdtemp
+	 */
+	char working_directory[DIRECTORY_LENGTH];
+	create_temp_working_directory(working_directory);
+
 
 
 
@@ -702,19 +668,6 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
 
 	//If this fails we're done
 	if(directory_management_result == FAILURE){
-		return;
-	}
-
-	/**
-	 * Step 2: We will now clean everything else inside of our directory out. There will
-	 * likely be stuff in here from old runs
-	 */
-
-	//TODO UPDATE THE TEMP DIR
-	u_int32_t directory_clean_result = perform_tmp_directory_cleanup();
-
-	//Fatal error here so we get out if it fails
-	if(directory_clean_result == FAILURE){
 		return;
 	}
 
@@ -758,32 +711,14 @@ static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* opt
 		trigger_ice_panic("Unable to validate or create the /tmp/oc/ folder");
 	}
 
-
-
-
-
-
-
-
-
 	/**
-	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
-	 * compiled files. This is the first step that we need to take to ensure we're good
-	 * to even go forward
+	 * Step 2: once we know that /tmp/oc exists, we will create a temporary output
+	 * folder to hold all of our working files for this compilation run. This will
+	 * be done using mkdtemp
 	 */
-	u_int32_t directory_management_result = perform_tmp_directory_management();
-	if(directory_management_result == FAILURE){
-		return FAILURE;
-	}
+	char working_directory[DIRECTORY_LENGTH];
+	create_temp_working_directory(working_directory);
 
-	/**
-	 * Step 2: We will now clean everything else inside of our directory out. There will
-	 * likely be stuff in here from old runs
-	 */
-	u_int32_t directory_clean_result = perform_tmp_directory_cleanup();
-	if(directory_clean_result == FAILURE){
-		return FAILURE;
-	}
 
 	/**
 	 * Step 2: we need to now output the cfg into a temporary .s assembly
