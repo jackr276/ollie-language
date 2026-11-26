@@ -519,7 +519,8 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options, c
 	 */
 	DIR* tmp_directory = opendir(working_directory);
 	if(tmp_directory == NULL){
-		trigger_ice_panic("Attempt to open /tmp/oc failed");
+		sprintf(info, "Attempt to open %s failed", working_directory);
+		trigger_ice_panic(info);
 	}
 
 	/**
@@ -618,8 +619,8 @@ static u_int8_t compile_to_assembly(compiler_options_t* options, cfg_t* cfg){
 
 
 /**
- * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory,
- * when we want to assemble and go directly to an object file with *no* linking
+ * Compile and assemble the given CFG into a .o file inside of the user provided
+ * output file
  */
 static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cfg){
 	/**
@@ -666,8 +667,8 @@ static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cf
 
 
 /**
- * This inlined helper will perform all of the work, including management of the /tmp/oc/ directory
- * in order for us to compiler and link into a final executable
+ * Compile, assemble and link the given CFG into a complete executable inside of the user provided
+ * output file
  */
 static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t* cfg){
 	/**
@@ -719,7 +720,7 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	}
 
 	/**
-	 * Step 4: the temporary directory that we've created is now useless. We will use the delete directoyr
+	 * Step 5: the temporary directory that we've created is now useless. We will use the delete directoyr
 	 * helper function to delete all temporary files and delete the temp directory
 	 */
 	delete_directory(working_directory);
@@ -729,6 +730,7 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	 */
 	return SUCCESS;
 }
+
 //================================================================== COMPILATION RUNNERS ==============================================================
 /**
  * Perform all of the assembly and linkage that we need to do here. This is the only
