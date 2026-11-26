@@ -44,8 +44,7 @@
 #include "../utils/error_management.h"
 #include "../utils/dynamic_string/dynamic_string.h"
 
-#define TEMP_FILE_NAME_MAX_LENGTH 1000
-#define DIRECTORY_LENGTH 512
+#define FILE_NAME_LENGTH 1024
 #define MAX_COMMAND_LENGTH 2000
 
 //For any/all error printing
@@ -162,6 +161,67 @@ static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
 	print_all_basic_blocks(fl, cfg);
 }
 //====================================================== PRINTING UTILITIES =============================================================
+
+//===================================================== DIRECTORY MANAGEMENT UTILTIES ==================================================
+//===================================================== DIRECTORY MANAGEMENT UTILTIES ==================================================
+
+
+
+
+
+
+
+
+
+/**
+ * Create a new temporary file underneath the given directory and populate it with the generated
+ * assembly. The newly made temporary file will be populated into the "file_name" buffer
+ */
+static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, char* temporary_directory_path, char* file_name){
+	/**
+	 * Print out the template using the given temp
+	 */
+	sprintf(file_name, "%s/ollie_asm_tmp_XXXXXX.s", temporary_directory_path);
+	int32_t file_descriptor = mkstemps(file_name, 2);
+
+	/**
+	 * Trigger a panic if this failed
+	 */
+	if(file_descriptor == -1){
+		trigger_ice_panic("OC was unable to generate a unique temporary assembly file");
+	}
+
+	/**
+	 * Close it when we're done. We will set the assembly file dynamic string to be equal
+	 * to this given file
+	 */
+	close(file_descriptor);
+
+	/**
+	 * Open the new temp file for the purpose of writing
+	 */
+	FILE* output = fopen(file_name, "w");
+	if(output == NULL){
+		sprintf(info, "Failed to create the output file: %s\n", file_name);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
+		error_count++;
+		return FAILURE;
+	}
+
+	/**
+	 * First print out the start section, then the global variables and finally all
+	 * local constants
+	 */
+	print_start_section(basename(file_name), output, cfg);
+	print_all_global_variables(output, &(cfg->global_variables));
+	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+
+	/**
+	 * Close the file and tell the caller that all went well
+	 */
+	fclose(output);
+	return SUCCESS;
+}
 
 
 /**
@@ -577,33 +637,25 @@ static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cf
 	}
 
 	/**
-	 * Step 2: once we know that /tmp/oc exists, we will create a temporary output
+	 * Step 1: once we know that /tmp/oc exists, we will create a temporary output
 	 * folder to hold all of our working files for this compilation run. This will
 	 * be done using mkdtemp
 	 */
-	char working_directory[DIRECTORY_LENGTH];
+	char working_directory[FILE_NAME_LENGTH];
 	create_temp_working_directory(working_directory);
 
-
-
-
-
-
-
-
 	/**
-	 * Step 2: we need to now output the cfg into a temporary .s assembly
-	 * file. We will place this temporary .s assembly file inside of the
-	 * oc/tmp directory waiting to be assembled
+	 * Step 2: now that we have a temporary working directory to use, we can
+	 * output the assembly to a temporary file that exists exclusively in that
+	 * directory. This helper function will populate the temporary file string
+	 * buffer with the file that it made
 	 */
-
-	//Let the helper produce this
-	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &assembly_file);
-
-	//It didn't work so don't bother going on
-	if(assembly_outputter_result == FAILURE){
+	char temporary_file[FILE_NAME_LENGTH];
+	u_int8_t temp_file_result = output_generated_assembly_to_temp_file(cfg, working_directory, temporary_file);
+	if(temp_file_result == FAILURE){
 		return;
 	}
+
 
 	/**
 	 * Step 3: Run the file through the assembler. Unlike in other runs, the object
@@ -628,11 +680,11 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	}
 
 	/**
-	 * Step 2: once we know that /tmp/oc exists, we will create a temporary output
+	 * Step 1: once we know that /tmp/oc exists, we will create a temporary output
 	 * folder to hold all of our working files for this compilation run. This will
 	 * be done using mkdtemp
 	 */
-	char working_directory[DIRECTORY_LENGTH];
+	char working_directory[FILE_NAME_LENGTH];
 	create_temp_working_directory(working_directory);
 
 
