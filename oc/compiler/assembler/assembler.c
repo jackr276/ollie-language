@@ -490,46 +490,49 @@ static u_int8_t assemble_builtins_and_code(compiler_options_t* options, char* wo
 
 /**
  * Link the code using ld and produce the final executable. Our strategy
- * for linking is simple - every single file inside of /tmp/oc/ that ends in 
- * a ".o" extension is being linked together.
- *
- * TODO THIS IS THE PROBLEM
+ * for linking is simple - every single file inside of the given working
+ * directory that ends in a .o file will be linked
  */
-static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
-	//We'll need a buffer for file printing
-	char buffer[TEMP_FILE_NAME_MAX_LENGTH];
-
-	//No real choice but to use dynamic allocation here
+static u_int8_t link_and_produce_final_executable(compiler_options_t* options, char* working_directory){
+	/**
+	 * We'll need a buffer for string printing. We'll use a dynamic string
+	 * for our command since this may get long
+	 */
+	char buffer[FILENAME_MAX];
 	dynamic_string_t command_string = dynamic_string_alloc();
 
-	//Print out the ld -o <output_name> part of our string
-	snprintf(buffer, TEMP_FILE_NAME_MAX_LENGTH, "ld -o %s ", options->output_file);
+	/**
+	 * Print out the ld -o <output_name> part of our string
+	 */
+	snprintf(buffer, FILENAME_MAX, "ld -o %s ", options->output_file);
 	dynamic_string_set(&command_string, buffer);
 
-	//Open up the tmp directory
-	DIR* tmp_directory = opendir("/tmp/oc");
-
-	//Entry pointer
-	struct dirent* entry;
-
 	/**
-	 * This should absolutely never happen. If it does it is a critcal error
+	 * Validate that we are able to access the working directory. Fail out
+	 * if we cannot
 	 */
+	DIR* tmp_directory = opendir(working_directory);
 	if(tmp_directory == NULL){
 		trigger_ice_panic("Attempt to open /tmp/oc failed");
 	}
 
-	//Infinite loop until we break out
+	/**
+	 * Run through every entry in the directory looking for object
+	 * files inside of it
+	 */
 	while(TRUE){
-		//Seed the entry
-		entry = readdir(tmp_directory);
-
-		//We're done
+		/**
+		 * Read the directory entry. If it's NULL then we've got
+		 * nothing left to read
+		 */
+		struct dirent* entry = readdir(tmp_directory);
 		if(entry == NULL){
 			break;
 		}
 
-		//Don't want to delete . or .. here, skip them
+		/**
+		 * We never want to access these files
+		 */
 		if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
 			continue;
 		}
@@ -545,30 +548,32 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 		 * dynamically construct what we need and go from there
 		 */
 		if(entry->d_name[file_length - 2] == '.' && entry->d_name[file_length - 1] == 'o'){
-			snprintf(buffer, TEMP_FILE_NAME_MAX_LENGTH, "/tmp/oc/%s ", entry->d_name);
+			snprintf(buffer, FILENAME_MAX, "%s/%s ", working_directory, entry->d_name);
 			dynamic_string_concatenate(&command_string, buffer);
 		}
 	}
 
-	//Close it down before we leave
+	/**
+	 * Close the directory and show the linker command if we're after that
+	 */
 	closedir(tmp_directory);
-
-	//Show the linker command if we're debugging
 	if(options->enable_debug_printing == TRUE){
 		printf("LINKER COMMAND: %s\n", command_string.string);
 	}
 
-	//We should now have a fully formed command string to run
+	/**
+	 * We should now have a fully formed command string to run. Execute the linker and
+	 * report back if it fails
+	 */
 	int32_t result = system(command_string.string);
-
-	//Fatal error if this fails
 	if(result != 0){
 		sprintf(info, "Linking failed. Linker command attempted was: %s", command_string.string);
 	}
 
-	//Destroy it
+	/**
+	 * Destroy the command string and tell the caller that all went well
+	 */
 	dynamic_string_dealloc(&command_string);
-
 	return SUCCESS;
 }
 
@@ -699,12 +704,10 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	}
 
 	/**
-	 * Step 4: take all of the .o files in /tmp/oc and link them together into our final
+	 * Step 4: take all of the .o files in the working directory and link them together into our final
 	 * executable
 	 */
-	u_int8_t linker_result = link_and_produce_final_executable(options);
-
-	//Hard fail here
+	u_int8_t linker_result = link_and_produce_final_executable(options, working_directory);
 	if(linker_result == FAILURE){
 		return FAILURE;
 	}
