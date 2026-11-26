@@ -413,8 +413,7 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 
 /**
  * Exit status validation requires both the compilation and execution of a given program. This 
- * helper does those steps in that order. This is a thread safe helper, locking is used to
- * maintain thread safety around the compiler as it is not inherently thread safe
+ * helper does those steps in that order
  */
 static inline void handle_exit_status_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count, test_parameters_t* parameters){
 	//All needed string buffers
@@ -635,12 +634,7 @@ void* worker(void* thread_parameters) {
 		}
 
 		/**
-		 * TODO UPDATE THIS
-		 *
-		 * We need to tokenize the file to get to any OUNIT directives
-		 *
-		 * NOTE: the lexer is NOT thread safe!!!! We need to do this in a lock
-		 * to avoid bizarre errors
+		 * We need to tokenize the file first to get to any OUNIT directives
 		 *
 		 * We have silent mode turned on for this
 		 */
