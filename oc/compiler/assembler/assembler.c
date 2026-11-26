@@ -309,6 +309,65 @@ static u_int8_t perform_tmp_directory_management(){
 
 
 /**
+ * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
+ * will need to create it. This step is purely to guarantee that this folder is in existence
+ * on the host machine. All other steps rely on this existing
+ */
+static u_int8_t validate_or_create_oc_tmp_folder(){
+	/**
+	 * If we can't even open the /tmp directory then the user
+	 * is going to need to make it - we aren't going to mess
+	 * around with that
+	 */
+	DIR* root_temp_dir = opendir("/tmp");
+	if(root_temp_dir == NULL){
+		//Most likely thing - it just isn't there
+		if(errno == ENOENT){
+			print_assembler_message(MESSAGE_TYPE_ERROR, "The \"/tmp/\" directory does not exist on your system. Please create it and retry.");
+		} else {
+			print_assembler_message(MESSAGE_TYPE_ERROR, "Unable to open the \"/tmp/\" directory. If you are running linux, please create this directory and retry.");
+		}
+
+		(*error_count)++;
+		return FAILURE;
+	}
+
+	//Remove the resource when done
+	closedir(root_temp_dir);
+
+	//For holding our directory
+	struct stat stats = {0};
+
+	/**
+	 * Now that we know the /tmp directory exists, we will need
+	 * to verify that /tmp/oc/ exists. This is the parent directory
+	 * where all of our program subdirectories will live
+	 */
+	int32_t stat_result = stat("/tmp/oc/", &stats);
+
+	/**
+	 * If it's not here, then we need to make it
+	 */
+	if(stat_result != 0 || S_ISDIR(stats.st_mode) == FALSE){
+		//Invoke the system call to make it
+		int32_t mkdir_result = mkdir("/tmp/oc", 0777);
+
+		//Not being 0 is unsuccessful, not much we can do here but leave if this happens
+		if(mkdir_result != 0){
+			print_assembler_message(MESSAGE_TYPE_ERROR, "OC was unable to create the needed \"/tmp/oc/\" directory. Please create it manually.");
+			(*error_count)++;
+			return FAILURE;
+		}
+	}
+
+	/**
+	 * If we made it to here then this worked and we are all ready to proceed
+	 */
+	return SUCCESS;
+}
+
+
+/**
  * Recursively delete all files and directories inside of the "path"
  * directory
  */
@@ -530,6 +589,8 @@ static u_int8_t assemble_code(compiler_options_t* options, dynamic_string_t* ass
  * Link the code using ld and produce the final executable. Our strategy
  * for linking is simple - every single file inside of /tmp/oc/ that ends in 
  * a ".o" extension is being linked together.
+ *
+ * TODO THIS IS THE PROBLEM
  */
 static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 	//We'll need a buffer for file printing
@@ -615,10 +676,28 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
  */
 static inline void output_object_file_only(compiler_options_t* options, cfg_t* cfg){
 	/**
+	 * Step 0: before we do anything else, we need to validate that the /tmp/oc/ directory
+	 * exists for us to use
+	 */
+	int32_t result = validate_or_create_oc_tmp_folder();
+	if(result == FAILURE){
+		trigger_ice_panic("Unable to validate or create the /tmp/oc/ folder");
+	}
+
+
+
+
+
+
+
+
+	/**
 	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
 	 * compiled files. This is the first step that we need to take to ensure we're good
 	 * to even go forward
 	 */
+
+	//TODO UPDATE THE TEMP DIR
 	u_int32_t directory_management_result = perform_tmp_directory_management();
 
 	//If this fails we're done
@@ -630,6 +709,8 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
 	 * Step 2: We will now clean everything else inside of our directory out. There will
 	 * likely be stuff in here from old runs
 	 */
+
+	//TODO UPDATE THE TEMP DIR
 	u_int32_t directory_clean_result = perform_tmp_directory_cleanup();
 
 	//Fatal error here so we get out if it fails
@@ -668,6 +749,23 @@ static inline void output_object_file_only(compiler_options_t* options, cfg_t* c
  * in order for us to compiler and link into a final executable
  */
 static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* options, cfg_t* cfg){
+	/**
+	 * Step 0: before we do anything else, we need to validate that the /tmp/oc/ directory
+	 * exists for us to use
+	 */
+	int32_t result = validate_or_create_oc_tmp_folder();
+	if(result == FAILURE){
+		trigger_ice_panic("Unable to validate or create the /tmp/oc/ folder");
+	}
+
+
+
+
+
+
+
+
+
 	/**
 	 * Step 1: OC requires that we have a /tmp/oc/ directory to hold all of our temporary
 	 * compiled files. This is the first step that we need to take to ensure we're good
@@ -748,24 +846,38 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	 * Based on what we were given, should be able to output things appropriately here
 	 */
 	switch(options->output_type){
-		//Just leave
+		/**
+		 * Just leave - nothing to do
+		 */
 		case OUTPUT_TYPE_NO_OUTPUT: {
 			return;
 		}
 
-		//Exclusively output assembly(.s)
+		/**
+		 * Exclusively output assembly(.s)
+		 *
+		 * NOTE: this does *NOT* require temporary directory management
+		 */
 		case OUTPUT_TYPE_ASSEMBLY_ONLY: {
 			output_generated_assembly_only(options, cfg);
 			break;
 		}
 		
-		//Exclusively output the object(.o) file
+		/**
+		 * Exclusively output the object(.o) file
+		 *
+		 * NOTE: this *DOES* require temporary directory management
+		 */
 		case OUTPUT_TYPE_OBJECT_FILE: {
 			output_object_file_only(options, cfg);
 			break;
 		}
 
-		//This is the most common case - full compilation
+		/**
+		 * Full compilation into an executable
+		 *
+		 * NOTE: this *DOES* require temporary directory management
+		 */
 		case OUTPUT_TYPE_FULL_COMPILATION: {
 			result = assemble_and_link_with_temp_files(options, cfg);
 
