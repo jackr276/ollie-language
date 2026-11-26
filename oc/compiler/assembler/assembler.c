@@ -203,7 +203,7 @@ static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_strin
 	 * name clashes are always avoided for this temp files. The 2 in the function specifies the suffix
 	 * length for us
 	 */
-	char outputted_assembly_file[] = "/tmp/oc/ollie_asm_tmpXXXXXXXXX.s";
+	char outputted_assembly_file[] = "/tmp/oc/ollie_asm_tmp_XXXXXX.s";
 	int32_t file_descriptor = mkstemps(outputted_assembly_file, 2);
 
 	/**
