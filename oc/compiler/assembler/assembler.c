@@ -674,8 +674,6 @@ static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* opt
 	 * to even go forward
 	 */
 	u_int32_t directory_management_result = perform_tmp_directory_management();
-
-	//If this fails we're done
 	if(directory_management_result == FAILURE){
 		return FAILURE;
 	}
@@ -685,8 +683,6 @@ static inline u_int8_t assemble_and_link_with_temp_files(compiler_options_t* opt
 	 * likely be stuff in here from old runs
 	 */
 	u_int32_t directory_clean_result = perform_tmp_directory_cleanup();
-
-	//Fatal error here so we get out if it fails
 	if(directory_clean_result == FAILURE){
 		return FAILURE;
 	}
@@ -753,29 +749,32 @@ void assemble_and_link(compiler_options_t* options, cfg_t* cfg, u_int32_t* num_e
 	 */
 	switch(options->output_type){
 		//Just leave
-		case OUTPUT_TYPE_NO_OUTPUT:
+		case OUTPUT_TYPE_NO_OUTPUT: {
 			return;
+		}
 
 		//Exclusively output assembly(.s)
-		case OUTPUT_TYPE_ASSEMBLY_ONLY:
+		case OUTPUT_TYPE_ASSEMBLY_ONLY: {
 			output_generated_assembly_only(options, cfg);
 			break;
+		}
 		
 		//Exclusively output the object(.o) file
-		case OUTPUT_TYPE_OBJECT_FILE:
+		case OUTPUT_TYPE_OBJECT_FILE: {
 			output_object_file_only(options, cfg);
 			break;
+		}
 
 		//This is the most common case - full compilation
-		case OUTPUT_TYPE_FULL_COMPILATION:
+		case OUTPUT_TYPE_FULL_COMPILATION: {
 			result = assemble_and_link_with_temp_files(options, cfg);
 
 			//Give a good exit code if we failed
 			if(result == FAILURE){
-				fprintf(stderr, "Program Compilation Failed\n");
-				exit(1);
+				trigger_ice_panic("Program Compilation Failed");
 			}
 
 			break;
+		}
 	}
 }
