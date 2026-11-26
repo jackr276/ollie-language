@@ -32,6 +32,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -153,6 +154,13 @@ static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
  * Print the .text section by running through and printing all of our basic blocks in assembly
  */
 static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
+	/**
+	 * Get the basename of our stripped file inside of a local copy
+	 */
+	char stripped_file_name[FILENAME_MAX];
+	strncpy(stripped_file_name, file_name, FILENAME_MAX);
+	basename(stripped_file_name);
+
 	//Declare the start of the new file to gas
 	fprintf(fl, "\t.file\t\"%s\"\n", file_name);
 
@@ -362,7 +370,7 @@ static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, char* tempora
 	 * First print out the start section, then the global variables and finally all
 	 * local constants
 	 */
-	print_start_section(basename(file_name), output, cfg);
+	print_start_section(file_name, output, cfg);
 	print_all_global_variables(output, &(cfg->global_variables));
 	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 
@@ -384,10 +392,9 @@ static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, char* tempora
  */
 static inline void convert_assembly_file_name_to_object_file_name(char* result, char* full_file_path){
 	/**
-	 * Get the base name and copy that into the result
+	 * Copy the entire thing into the result first
 	 */
-	char* base_name = basename((char*)full_file_path);
-	strncpy(result, base_name, FILENAME_MAX);
+	strncpy(result, full_file_path, FILENAME_MAX);
 
 	/**
 	 * Scan through the string until we're able to find the ".s" pattern. We simply
@@ -599,7 +606,7 @@ static u_int8_t compile_to_assembly(compiler_options_t* options, cfg_t* cfg){
 	/**
 	 * Generate the start section, then global variables, then local constants
 	 */
-	print_start_section(basename(options->output_file), output, cfg);
+	print_start_section(options->output_file, output, cfg);
 	print_all_global_variables(output, &(cfg->global_variables));
 	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
 
