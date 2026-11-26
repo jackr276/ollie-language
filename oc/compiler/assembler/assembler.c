@@ -656,7 +656,9 @@ static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cf
 	 * Step 4: the temporary directory that we've created is now useless. We will use the delete directoyr
 	 * helper function to delete all temporary files and delete the temp directory
 	 */
-	delete_directory(working_directory);
+	if(options->preserve_compilation_artifacts == FALSE){
+		delete_directory(working_directory);
+	}
 }
 
 
@@ -717,7 +719,9 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	 * Step 5: the temporary directory that we've created is now useless. We will use the delete directoyr
 	 * helper function to delete all temporary files and delete the temp directory
 	 */
-	delete_directory(working_directory);
+	if(options->preserve_compilation_artifacts == FALSE){
+		delete_directory(working_directory);
+	}
 	
 	/**
 	 * If we got to here it worked

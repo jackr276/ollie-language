@@ -71,8 +71,8 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 	 */
 	const struct option long_opts[] = {
 		{"to-object-file", no_argument, NULL, objectfile_opt},
-		{"preserve-compilation-artifacts", no_argument, NULL, objectfile_opt},
-		{"allow-undefined-functions", no_argument, NULL, preserve_comp_art_opt},
+		{"allow-undefined-functions", no_argument, NULL, undef_allowed_opt},
+		{"preserve-compilation-artifacts", no_argument, NULL, preserve_comp_art_opt},
 		//Null terminator
 		{0,0,0,0}
 	};
