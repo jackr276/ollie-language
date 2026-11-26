@@ -38,9 +38,6 @@
 #define TEMP_FILE_NAME_MAX_LENGTH 1000
 #define MAX_COMMAND_LENGTH 2000
 
-//The current tmp file id
-static u_int32_t current_tmp_file_id = 0;
-
 //For any/all error printing
 static char info[ERROR_SIZE * 3];
 
@@ -68,16 +65,6 @@ static void print_assembler_message(error_message_type_t message_type, char* inf
 
 	//Print this out on a single line
 	fprintf(stdout, "\n[COMPILER %s]: %s\n", type[message_type], info);
-}
-
-
-/**
- * Helper that grabs the file id for us
- */
-static inline u_int32_t increment_and_get_tmp_file_id(){
-	current_tmp_file_id++;
-
-	return current_tmp_file_id;
 }
 
 
@@ -210,22 +197,33 @@ static u_int8_t output_generated_assembly_only(compiler_options_t* options, cfg_
  * into the file that we're after
  */
 static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_string_t* assembly_file){
-	//The output file(Null initally)
-	FILE* output = NULL;
+	/**
+	 * We will need to create a filename that is guaranteed to be unique. We will use the linux
+	 * utility mkstemps() for this. This will enable the ollie copmiler to run multithreaded, as
+	 * name clashes are always avoided for this temp files. The 2 in the function specifies the suffix
+	 * length for us
+	 */
+	char outputted_assembly_file[] = "/tmp/oc/ollie_asm_tmpXXXXXXXXX.s";
+	int32_t file_descriptor = mkstemps(outputted_assembly_file, 2);
 
-	//We need to create the name ourselves
-	char outputted_assembly_file[1000];
-	
-	//Output it like so, we need to set the dynamic string to be this
-	sprintf(outputted_assembly_file, "/tmp/oc/ollie_asm_tmp%d.s", increment_and_get_tmp_file_id());
+	/**
+	 * Trigger a panic if this failed
+	 */
+	if(file_descriptor == -1){
+		trigger_ice_panic("OC was unable to generate a unique temporary assembly file");
+	}
 
-	//Set the dynamic string to be this
+	/**
+	 * Close it when we're done. We will set the assembly file dynamic string to be equal
+	 * to this given file
+	 */
+	close(file_descriptor);
 	dynamic_string_set(assembly_file, outputted_assembly_file);
 
-	//Open the file for the purpose of writing
-	output = fopen(outputted_assembly_file, "w");
-
-	//If the file is null, we fail out here
+	/**
+	 * Open the new temp file for the purpose of writing
+	 */
+	FILE* output = fopen(outputted_assembly_file, "w");
 	if(output == NULL){
 		sprintf(info, "Failed to create the output file: %s\n", outputted_assembly_file);
 		print_assembler_message(MESSAGE_TYPE_ERROR, info);
