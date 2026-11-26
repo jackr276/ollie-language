@@ -25,6 +25,10 @@
 #include "../utils/constants.h"
 //We will be doing this multithreaded
 #include <pthread.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <time.h>
 #include <stdio.h>
@@ -38,20 +42,11 @@
 #define MAX_EXIT_STATUS_VALUE 255
 
 /**
- * There are 4 potential things that we need to lock. To avoid holding
- * up other areas of the process with those locks unnecessarily, we will
- * maintain a separate mutex for each given item. The items that we need
- * to lock are
- *
- *  1.) STDOUT output
- *  2.) Lexer - not thread safe in its implementation
- *  3.) Compiler - not thread safe in its implementation
- *  4.) Error file queue
+ * We need mutices for our stdout printing, file queue that we source from,
+ * and error queue. All other operations can be performed multithreaded
  */
 pthread_mutex_t stdout_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t compiler_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t error_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /**
@@ -123,6 +118,63 @@ typedef enum {
 	OUNIT_TYPE_EXIT_STATUS_VALIDATION,
 	OUNIT_TYPE_FAIL_TO_COMPILE,
 } ounit_type_t;
+
+
+/**
+ * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
+ * will need to create it. This step is purely to guarantee that this folder is in existence
+ * on the host machine. All other steps rely on this existing
+ */
+static u_int8_t validate_or_create_oc_tmp_folder(){
+	/**
+	 * If we can't even open the /tmp directory then the user
+	 * is going to need to make it - we aren't going to mess
+	 * around with that
+	 */
+	DIR* root_temp_dir = opendir("/tmp");
+	if(root_temp_dir == NULL){
+		//Most likely thing - it just isn't there
+		if(errno == ENOENT){
+			fprintf(stderr, "The \"/tmp/\" directory does not exist on your system. Please create it and retry.");
+		} else {
+			fprintf(stderr, "Unable to open the \"/tmp/\" directory. If you are running linux, please create this directory and retry.");
+		}
+
+		return FAILURE;
+	}
+
+	//Remove the resource when done
+	closedir(root_temp_dir);
+
+	//For holding our directory
+	struct stat stats = {0};
+
+	/**
+	 * Now that we know the /tmp directory exists, we will need
+	 * to verify that /tmp/oc/ exists. This is the parent directory
+	 * where all of our program subdirectories will live
+	 */
+	int32_t stat_result = stat("/tmp/oc/", &stats);
+
+	/**
+	 * If it's not here, then we need to make it
+	 */
+	if(stat_result != 0 || S_ISDIR(stats.st_mode) == FALSE){
+		//Invoke the system call to make it
+		int32_t mkdir_result = mkdir("/tmp/oc", 0777);
+
+		//Not being 0 is unsuccessful, not much we can do here but leave if this happens
+		if(mkdir_result != 0){
+			fprintf(stderr, "The Ollie run validator was unable to create the needed \"/tmp/oc/\" directory. Please create it manually.");
+			return FAILURE;
+		}
+	}
+
+	/**
+	 * If we made it to here then this worked and we are all ready to proceed
+	 */
+	return SUCCESS;
+}
 
 
 /**
@@ -380,20 +432,22 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 
 		switch(to_copy){
 			//This should not happen
-			case '\0':
+			case '\0': {
 				fprintf(stderr, "Fatal internal compiler error: end of string hit without seeing .ol for file %s", file_name);
 				exit(1);
+			}
 
 			//Replace all slashes with _
-			case '/':
+			case '/': {
 				output_file_name[dest_index] = '_';
 				break;
+			}
 
 			/**
 			 * A dot is likely the filename. If it is a .ol file name, then we'll concatenate
 			 * the .test to it and leave. Otherwise this is an error
 			 */
-			case '.':
+			case '.': {
 				if(file_name[source_index + 1] == 'o' && file_name[source_index + 2] == 'l'){
 					strcat(output_file_name, ".test");
 					return;
@@ -402,11 +456,13 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 					fprintf(stderr, "Fatal internal compiler error: . detected in string %s before the ending .ol", file_name);
 					exit(1);
 				}
+			}
 
 			//Default is just to copy this character over
-			default:
+			default: {
 				output_file_name[dest_index] = to_copy;
 				break;
+			}
 		}
 
 		//Bump these both up
@@ -418,8 +474,7 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 
 /**
  * Exit status validation requires both the compilation and execution of a given program. This 
- * helper does those steps in that order. This is a thread safe helper, locking is used to
- * maintain thread safety around the compiler as it is not inherently thread safe
+ * helper does those steps in that order
  */
 static inline void handle_exit_status_validation(u_int32_t thread_id, char* file_name, u_int32_t* thread_error_count, test_parameters_t* parameters){
 	//All needed string buffers
@@ -442,12 +497,10 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
-	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
-	 * need to lock here to make this all work
+	 * Run the ollie compiler. The ollie compiler generates guaranteed unique temporary file names. There is
+	 * no need to perform any locking because of this
 	 */
-	pthread_mutex_lock(&compiler_mutex);
 	int32_t compilation_result = system(command_buffer);
-	pthread_mutex_unlock(&compiler_mutex);
 
 	/**
 	 * If for any reason we have a failure here, then
@@ -456,7 +509,7 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 	if(compilation_result != 0){
 		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
-		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, compilation_result);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile with exit code %d. Developer attention is required\n\n", thread_id, file_name, WEXITSTATUS(compilation_result));
 		pthread_mutex_unlock(&stdout_mutex);
 
 		//Add to the array and bump the count
@@ -546,12 +599,10 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
-	 * Run the compilation command. The compiler relies on a shared temporary output file, so we 
-	 * need to lock here to make this all work
+	 * Run the ollie compiler. The ollie compiler generates guaranteed unique temporary file names. There is
+	 * no need to perform any locking because of this
 	 */
-	pthread_mutex_lock(&compiler_mutex);
 	int32_t compilation_result = system(command_buffer);
-	pthread_mutex_unlock(&compiler_mutex);
 
 	/**
 	 * If the compilation result was *not* zero, then we have a compilation failure which is good in this case.
@@ -559,7 +610,7 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	if(compilation_result != 0){
 		pthread_mutex_lock(&stdout_mutex);
 		fprintf(stdout, "[Thread %d]: Ran compilation command: %s\n", thread_id, command_buffer);
-		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile as expected with exit code %d\n\n", thread_id, file_name, compilation_result);
+		fprintf(stdout, "[Thread %d]: The OUNIT configured test %s failed to compile as expected with exit code %d\n\n", thread_id, file_name, WEXITSTATUS(compilation_result));
 		pthread_mutex_unlock(&stdout_mutex);
 
 	/**
@@ -644,16 +695,11 @@ void* worker(void* thread_parameters) {
 		}
 
 		/**
-		 * We need to tokenize the file to get to any OUNIT directives
-		 *
-		 * NOTE: the lexer is NOT thread safe!!!! We need to do this in a lock
-		 * to avoid bizarre errors
+		 * We need to tokenize the file first to get to any OUNIT directives
 		 *
 		 * We have silent mode turned on for this
 		 */
-		pthread_mutex_lock(&lexer_mutex);
 		ollie_token_stream_t token_stream = tokenize(file_name, TRUE);
-		pthread_mutex_unlock(&lexer_mutex);
 
 		/**
 		 * If it failed(we have stuff that fails) then we need
@@ -676,29 +722,32 @@ void* worker(void* thread_parameters) {
 			/**
 			 * Easiest case just skip the whole thing
 			 */
-			case OUNIT_TYPE_NONE:
+			case OUNIT_TYPE_NONE: {
 				break;
+			}
 
 			/**
 			 * Let the helper handle the case where the tester is requesting to run and validate the exit status
 			 * for a test
 			 */
-			case OUNIT_TYPE_EXIT_STATUS_VALIDATION:
+			case OUNIT_TYPE_EXIT_STATUS_VALIDATION: {
 				handle_exit_status_validation(thread_id, file_name, &errors_per_thread, &test_parameters);
 				break;
+			}
 
 			/**
 			 * Let the helper handle the case where the tester is requesting that a test should fail to compile
 			 */
-			case OUNIT_TYPE_FAIL_TO_COMPILE:
+			case OUNIT_TYPE_FAIL_TO_COMPILE: {
 				handle_fail_to_compile_validation(thread_id, file_name, &errors_per_thread);
 				break;
+			}
 
 			/**
 			 * This means that the developer tried to make their test OUNIT compatible
 			 * but they messed it up somehow
 			 */
-			case OUNIT_TYPE_INVALID:
+			case OUNIT_TYPE_INVALID: {
 				pthread_mutex_lock(&stdout_mutex);
 				fprintf(stdout, "[Thread %d]: The file \"%s\" has an incorrect OUNIT configuration and will not be processed\n", thread_id, file_name);
 				pthread_mutex_unlock(&stdout_mutex);
@@ -712,6 +761,7 @@ void* worker(void* thread_parameters) {
 
 				//Onto the next file don't bother compiling
 				break;
+			}
 		}
 	}
 
@@ -972,6 +1022,24 @@ int main(int argc, char** argv) {
 	u_int32_t test_file_count = 0;
 
 	/**
+	 * Before we do anything else, we will validate that the /tmp/oc/ directory exists and create it
+	 * if it does not. This is a repetitive step as OC already does this, but since we will have oc
+	 * running in multiple threads, if OC has to create this directory it may lead to a race condition
+	 * that causes false failures
+	 *
+	 * The specific race condition that was discovered is a time-of-check vs. time-of-use issue. Multiple
+	 * threads running OC spin up at once. Each thread runs this validate_or_create_oc_tmp_folder helper. In
+	 * the event that the given folder does not exist, both threads go and try to create the folder(mkdir) at
+	 * the same time. For the winning thread this works, but for the failing thread this fails with an EEXIST
+	 * error because the other thread got there first. This then causes the assembler module to fail, even though
+	 * nothing went wrong
+	 */
+	if(validate_or_create_oc_tmp_folder() == FAILURE){
+		fprintf(stderr, "Fatal error: could not create /tmp/oc");
+		exit(1);
+	}
+
+	/**
 	 * Find the test file directory. It will have been passed in as a command line argument. If 
 	 * it wasn't fail out
 	 */
@@ -1078,8 +1146,6 @@ int main(int argc, char** argv) {
 	//Destroy all of our mutices
 	pthread_mutex_destroy(&file_queue_mutex);
 	pthread_mutex_destroy(&stdout_mutex);
-	pthread_mutex_destroy(&lexer_mutex);
-	pthread_mutex_destroy(&compiler_mutex);
 	pthread_mutex_destroy(&error_queue_mutex);
 
 	return return_value;

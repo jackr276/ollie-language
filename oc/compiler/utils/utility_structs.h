@@ -41,6 +41,8 @@ struct compiler_options_t {
 	u_int8_t module_specific_timing;
 	//Print intermediate representations
 	u_int8_t print_irs;
+	//Do not delete the compilation artifacts
+	u_int8_t preserve_compilation_artifacts;
 	//What kind of output have we been told to generate
 	compiler_output_type_t output_type;
 	//Allow undefined functions to pass through

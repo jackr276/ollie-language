@@ -15,6 +15,7 @@
 //Custom opts for getopt
 #define objectfile_opt 5
 #define undef_allowed_opt 6
+#define preserve_comp_art_opt 7
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -38,6 +39,7 @@ static void print_help(){
 	printf("\n######################################## Optional Fields #########################################\n");
 	printf("-o <filename>: Specificy the output file. If none is given, a.out will be used\n");
 	printf("--to-object-file: Compile the entire thing to an object(.o) file. If you do not know what this is then you shoud not be using it\n");
+	printf("--preserve-compilation-artifacts: Do not delete the compilation artifacts that are produced in /tmp/oc/\n");
 	printf("--allow-undefined-functions: Do not require functions to be defined to be called so long as they are predeclared\n");
 	printf("-s: Show a summary at the end of compilation\n");
 	printf("-a: Generate an assembly code file with a .s extension. Note that this will stop the actual assembler from running\n");
@@ -70,6 +72,7 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 	const struct option long_opts[] = {
 		{"to-object-file", no_argument, NULL, objectfile_opt},
 		{"allow-undefined-functions", no_argument, NULL, undef_allowed_opt},
+		{"preserve-compilation-artifacts", no_argument, NULL, preserve_comp_art_opt},
 		//Null terminator
 		{0,0,0,0}
 	};
@@ -170,6 +173,14 @@ compiler_options_t* parse_and_store_options(int argc, char** argv, u_int32_t* nu
 			 */
 			case undef_allowed_opt:
 				options->allow_undefined_functions = TRUE;
+				break;
+
+			/**
+			 * Specify that we do not want to delete the compilation artifacts that are
+			 * generated underneath the temporary directory in /tmp/oc
+			 */
+			case preserve_comp_art_opt:
+				options->preserve_compilation_artifacts = TRUE;
 				break;
 
 			//Specific output file
