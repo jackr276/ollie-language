@@ -159,10 +159,9 @@ static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
 	 */
 	char stripped_file_name[FILENAME_MAX];
 	strncpy(stripped_file_name, file_name, FILENAME_MAX);
-	basename(stripped_file_name);
 
 	//Declare the start of the new file to gas
-	fprintf(fl, "\t.file\t\"%s\"\n", file_name);
+	fprintf(fl, "\t.file\t\"%s\"\n", basename(stripped_file_name));
 
 	//Now that we've printed the text section, we need to print all basic blocks
 	print_all_basic_blocks(fl, cfg);
