@@ -1026,6 +1026,13 @@ int main(int argc, char** argv) {
 	 * if it does not. This is a repetitive step as OC already does this, but since we will have oc
 	 * running in multiple threads, if OC has to create this directory it may lead to a race condition
 	 * that causes false failures
+	 *
+	 * The specific race condition that was discovered is a time-of-check vs. time-of-use issue. Multiple
+	 * threads running OC spin up at once. Each thread runs this validate_or_create_oc_tmp_folder helper. In
+	 * the event that the given folder does not exist, both threads go and try to create the folder(mkdir) at
+	 * the same time. For the winning thread this works, but for the failing thread this fails with an EEXIST
+	 * error because the other thread got there first. This then causes the assembler module to fail, even though
+	 * nothing went wrong
 	 */
 	if(validate_or_create_oc_tmp_folder() == FAILURE){
 		fprintf(stderr, "Fatal error: could not create /tmp/oc");
