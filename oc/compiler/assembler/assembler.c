@@ -448,44 +448,42 @@ static inline u_int8_t run_file_through_assembler(char* source_file_path, char* 
 /**
  * Take all of the generated assembly that we've produced and convert
  * it into object files using AS. These object files will also reside in
- * /tmp/oc/ and are only alive for the duration of the program
- *
- * NOTE: This will spawn child processes so that we can run the GNU assembler
+ * the dedicated temporary directory and are only alive for the duration of the program
  */
-static u_int8_t assemble_code(compiler_options_t* options, dynamic_string_t* assembly_file){
+static u_int8_t assemble_builtins_and_code(compiler_options_t* options, char* working_directory, char* temp_asm_file){
+	char output_file[FILENAME_MAX];
 	u_int8_t result;
 
 	/**
-	 * Step 1: assemble the builtin _start.s file into /tmp/oc/_start.o
+	 * Step 1: assemble the builtin _start.s file into <working_directory>/_start.o
 	 */
-	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/_start.s", options->enable_debug_printing);
-
+	sprintf(output_file, "%s/_start.o", working_directory);
+	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/_start.s", output_file, options->enable_debug_printing);
 	if(result == FAILURE){
 		return FAILURE;
 	}
 
 	/**
-	 * Step 2: assemble the builtin __ostl_start_main.s file into /tmp/oc/__ostl_start_main.o
+	 * Step 2: assemble the builtin __ostl_start_main.s file into <working_directory>/__ostl_start_main.o
 	 */
-	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/__ostl_start_main.s", options->enable_debug_printing);
-
+	sprintf(output_file, "%s/__ostl_start_main.o", working_directory);
+	result = run_file_through_assembler("./oc/builtins/precompiled_builtins/__ostl_start_main.s", output_file, options->enable_debug_printing);
 	if(result == FAILURE){
 		return FAILURE;
 	}
 
 	/**
-	 * Step 3: For everything in our list of temporary assembly files, assembly
-	 * them into their own .o files respectively
+	 * Step 3: assemble the temporary asm file into an object file underneath the working directory
 	 */
-	//Run it through the assembler
-	result = run_file_through_assembler(assembly_file->string, options->enable_debug_printing);
-
-	//The error already got printed out by the callee so just fail out
+	convert_assembly_file_name_to_object_file_name(output_file, temp_asm_file);
+	result = run_file_through_assembler(temp_asm_file, output_file, options->enable_debug_printing);
 	if(result == FAILURE){
 		return FAILURE;
 	}
 
-	//If we have made it to here then we have success
+	/**
+	 * If we have made it to here then we have success
+	 */
 	return SUCCESS;
 }
 
@@ -692,12 +690,10 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 
 	/**
 	 * Step 3: we now need to take that assembly *and* the compiler builtins that we have and
-	 * assemble them into .o files. These .o files will also all reside inside of the /oc/tmp/
-	 * directory. If any of these files fail to assemble then we fail out
+	 * assemble them into .o files. These .o files will all reside in the dedicated temporary directory
+	 * that we have
 	 */
-	u_int8_t assembler_result = assemble_code(options, &assembled_file);
-
-	//This means we generated incorrect assembly which would be bad
+	u_int8_t assembler_result = assemble_builtins_and_code(options, working_directory, temporary_file);
 	if(assembler_result == FAILURE){
 		return FAILURE;
 	}
@@ -712,8 +708,16 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	if(linker_result == FAILURE){
 		return FAILURE;
 	}
+
+	/**
+	 * Step 4: the temporary directory that we've created is now useless. We will use the delete directoyr
+	 * helper function to delete all temporary files and delete the temp directory
+	 */
+	delete_directory(working_directory);
 	
-	//If we got to here it worked
+	/**
+	 * If we got to here it worked
+	 */
 	return SUCCESS;
 }
 //================================================================== COMPILATION RUNNERS ==============================================================
