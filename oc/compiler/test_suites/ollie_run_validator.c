@@ -25,6 +25,10 @@
 #include "../utils/constants.h"
 //We will be doing this multithreaded
 #include <pthread.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <time.h>
 #include <stdio.h>
@@ -114,6 +118,63 @@ typedef enum {
 	OUNIT_TYPE_EXIT_STATUS_VALIDATION,
 	OUNIT_TYPE_FAIL_TO_COMPILE,
 } ounit_type_t;
+
+
+/**
+ * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
+ * will need to create it. This step is purely to guarantee that this folder is in existence
+ * on the host machine. All other steps rely on this existing
+ */
+static u_int8_t validate_or_create_oc_tmp_folder(){
+	/**
+	 * If we can't even open the /tmp directory then the user
+	 * is going to need to make it - we aren't going to mess
+	 * around with that
+	 */
+	DIR* root_temp_dir = opendir("/tmp");
+	if(root_temp_dir == NULL){
+		//Most likely thing - it just isn't there
+		if(errno == ENOENT){
+			fprintf(stderr, "The \"/tmp/\" directory does not exist on your system. Please create it and retry.");
+		} else {
+			fprintf(stderr, "Unable to open the \"/tmp/\" directory. If you are running linux, please create this directory and retry.");
+		}
+
+		return FAILURE;
+	}
+
+	//Remove the resource when done
+	closedir(root_temp_dir);
+
+	//For holding our directory
+	struct stat stats = {0};
+
+	/**
+	 * Now that we know the /tmp directory exists, we will need
+	 * to verify that /tmp/oc/ exists. This is the parent directory
+	 * where all of our program subdirectories will live
+	 */
+	int32_t stat_result = stat("/tmp/oc/", &stats);
+
+	/**
+	 * If it's not here, then we need to make it
+	 */
+	if(stat_result != 0 || S_ISDIR(stats.st_mode) == FALSE){
+		//Invoke the system call to make it
+		int32_t mkdir_result = mkdir("/tmp/oc", 0777);
+
+		//Not being 0 is unsuccessful, not much we can do here but leave if this happens
+		if(mkdir_result != 0){
+			fprintf(stderr, "The Ollie run validator was unable to create the needed \"/tmp/oc/\" directory. Please create it manually.");
+			return FAILURE;
+		}
+	}
+
+	/**
+	 * If we made it to here then this worked and we are all ready to proceed
+	 */
+	return SUCCESS;
+}
 
 
 /**
@@ -959,6 +1020,17 @@ static inline void get_all_multi_file_tests(char* directory_name){
 int main(int argc, char** argv) {
 	u_int32_t return_value = 0;
 	u_int32_t test_file_count = 0;
+
+	/**
+	 * Before we do anything else, we will validate that the /tmp/oc/ directory exists and create it
+	 * if it does not. This is a repetitive step as OC already does this, but since we will have oc
+	 * running in multiple threads, if OC has to create this directory it may lead to a race condition
+	 * that causes false failures
+	 */
+	if(validate_or_create_oc_tmp_folder() == FAILURE){
+		fprintf(stderr, "Fatal error: could not create /tmp/oc");
+		exit(1);
+	}
 
 	/**
 	 * Find the test file directory. It will have been passed in as a command line argument. If 
