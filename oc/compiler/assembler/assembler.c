@@ -6,8 +6,8 @@
  * GENERAL COMPILATION FLOW
  *
  * User enters a file to be compiled(one .ol file)
- * The compiler uses the #link statements to determine what dependencies there are - NOT IMPLEMENTED/SPEC NOT FINALIZED
- * The compiler will orient the linked statements into one giant token array and compile as a monolith - NOT IMPLEMENTED/SPEC NOT FINALIZED
+ * The compiler uses the #link statements to determine what dependencies there are
+ * The compiler will orient the linked statements into one giant token array and compile as a monolith
  * Following all of that, we end up in the file builder(here)
  * We will spit out generated assembly:
  * 	 Option 1: the user is compiling with "-a". -a means only output assembly. We will simply write out a .s file with the requested name(a.s if not)
@@ -47,6 +47,17 @@ static char info[ERROR_SIZE * 3];
 //Hold all of our error counts
 static u_int32_t* error_count;
 static u_int32_t* warning_count;
+
+/**
+ * Trigger a compiler panic with the given message
+ * 
+ * NOTE: this will intentionally crash the program
+ */
+static inline void trigger_ice_panic(char* message){
+	fprintf(stderr, "Fatal internal compiler error: %s\n", message);
+	exit(1);
+}
+
 
 /**
  * Simply prints a parse message in a nice formatted way
@@ -318,8 +329,7 @@ static u_int8_t clear_directory_recursive(char* path){
 	 * This should absolutely never happen. If it does it is a critcal error
 	 */
 	if(tmp_directory == NULL){
-		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc/ failed\n");
-		return FAILURE;
+		trigger_ice_panic("Attempt to open /tmp/oc/ failed");
 	}
 
 	//Infinite loop until we break out
@@ -400,8 +410,11 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
 		pointer++;
 	}
 
-	//If we somehow got here then we actually didn't find a .s at all
-	fprintf(stderr, "Fatal internal compiler error: string %s does not end in the standard assembly .s extension\n", full_file_path);
+	/**
+	 * If we somehow got here then we actually didn't find a .s at all
+	 */
+	sprintf(info, "String %s does not end in the standard assembly .s extension", full_file_path);
+	trigger_ice_panic(info);
 }
 
 
@@ -541,9 +554,7 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 	 * This should absolutely never happen. If it does it is a critcal error
 	 */
 	if(tmp_directory == NULL){
-		fprintf(stderr, "Fatal internal compiler error: Attempt to open /tmp/oc failed\n");
-		(*error_count)++;
-		return FAILURE;
+		trigger_ice_panic("Attempt to open /tmp/oc failed");
 	}
 
 	//Infinite loop until we break out
@@ -590,9 +601,7 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options){
 
 	//Fatal error if this fails
 	if(result != 0){
-		fprintf(stderr, "Fatal internal compiler error: Linking failed. Linker command attempted was: %s\n", command_string.string);
-		(*error_count)++;
-		return FAILURE;
+		sprintf(info, "Linking failed. Linker command attempted was: %s", command_string.string);
 	}
 
 	//Destroy it
