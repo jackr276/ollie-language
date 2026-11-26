@@ -5,22 +5,23 @@
  *
  * GENERAL COMPILATION FLOW
  * User enters a file to be compiled(one .ol file)
- * The compiler uses the #link statements to determine what dependencies there are
+ * The compiler uses the $import statements to determine what dependencies there are
  * The compiler will orient the linked statements into one giant token array and compile as a monolith
  * Following all of that, we end up in the file builder(here)
  * We will spit out generated assembly:
  * 	 Option 1: the user is compiling with "-a". -a means only output assembly. We will simply write out a .s file with the requested name(a.s if not)
- * 	 Option 2(most common): the user is just compiling:
- * 	 	We generate a unique temporary directory underneat /tmp/oc/ that will store all of our compilation artifacts
+ * 	 Option 2: the user is compiling with --to-object-file, which means that they will only want an object file(.o) with the requested name
+ * 	 Option 3(most common): the user is just compiling:
+ * 	 	We generate a unique temporary directory underneath /tmp/oc/ that will store all of our compilation artifacts
  * 	 	We generate the assembly into a TEMPORARY .s file inside of /tmp/oc/<temp directory>
  * 	 	We invoke the GNU assembler(as) to assemble the file
  * 	 	We have the object(.o) file inside of the temp directory
- * 	 	We then compile __ostl_start_main.ol and put that in the temp directory
+ * 	 	We then compile __ostl_start_main.s and put that in the temp directory
  * 	 	We then assemble _start.s and put that in the temp directory
  * 	 	We call the linked(ld) to link everything and put it into a final executable in the specified output file
  *
- * All temporary files should not survive past compilation. When done, the /tmp/oc/ directory should be entirely
- * empty if everything is working properly
+ * All temporary files will not survive past compilation. When done, the /tmp/oc/ directory should be entirely
+ * empty if everything is working properly. If at any point temporary folders remain, then that is an issue
  */
 
 #include <dirent.h>
@@ -128,7 +129,7 @@ static inline void print_assembly_block(FILE* fl, basic_block_t* block){
  */
 static void print_all_basic_blocks(FILE* fl, cfg_t* cfg){
 	//Run through all blocks here
-	for(u_int16_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
+	for(int32_t i = 0; i < cfg->function_entry_blocks.current_index; i++){
 		//Grab the head block out
 		basic_block_t* current = dynamic_array_get_at(&(cfg->function_entry_blocks), i);
 
@@ -315,6 +316,7 @@ static u_int8_t delete_directory(char* directory_path){
 	 */
 	if(rmdir(directory_path) == -1){
 		fprintf(stderr, "Failed to delete directory %s", directory_path);
+		return FAILURE;
 	}
 
 	/**
@@ -377,11 +379,10 @@ static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, char* tempora
 
 /**
  * Convert an assembly file name into a .o file name. This is really
- * as simple as replacing the ".s" with a ".o". We return a new string for
- * this
+ * as simple as replacing the ".s" with a ".o".
  *
  * This assumes we have a pre-allocated result buffer that we will be storing
- * to. We return void because there's no case where this fails
+ * to. We return void because there's no case where this fails and we don't panic
  */
 static inline void convert_assembly_file_name_to_object_file_name(char* result, char* full_file_path){
 	/**
@@ -413,7 +414,7 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
 
 
 /**
- * Use the system() command to invoke the GNU assembly on the source file, with the output
+ * Use the system() command to invoke the GNU assembler on the source file, with the output
  * directed towards the destination file
  */
 static inline u_int8_t run_file_through_assembler(char* source_file_path, char* dest_file_path, u_int8_t debug_printing){
@@ -473,7 +474,9 @@ static u_int8_t assemble_builtins_and_code(compiler_options_t* options, char* wo
 	}
 
 	/**
-	 * Step 3: assemble the temporary asm file into an object file underneath the working directory
+	 * Step 3: assemble the temporary asm file into an object file underneath the working directory. We use
+	 * a special helper to convert the .s into a .o. The two names should be the same with the exception of the
+	 * extension
 	 */
 	convert_assembly_file_name_to_object_file_name(output_file, temp_asm_file);
 	result = run_file_through_assembler(temp_asm_file, output_file, options->enable_debug_printing);
@@ -540,9 +543,13 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options, c
 
 		/**
 		 * We now need to determine if this file ends in a ".o". If it does it's
-		 * going onto the list
+		 * going onto the list. We'll make sure the file length is at least 2 characters
+		 * long to avoid any errors below
 		 */
 		int32_t file_length = strlen(entry->d_name);
+		if(file_length < 2){
+			continue;
+		}
 
 		/**
 		 * If we end in ".o", it's coming along for the ride in the linker. We will
@@ -555,7 +562,7 @@ static u_int8_t link_and_produce_final_executable(compiler_options_t* options, c
 	}
 
 	/**
-	 * Close the directory and show the linker command if we're after that
+	 * Close the directory and show the linker command if debug printing is enabled
 	 */
 	closedir(tmp_directory);
 	if(options->enable_debug_printing == TRUE){
@@ -653,7 +660,7 @@ static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cf
 	run_file_through_assembler(temporary_file, options->output_file, options->enable_debug_printing);
 
 	/**
-	 * Step 4: the temporary directory that we've created is now useless. We will use the delete directoyr
+	 * Step 4: the temporary directory that we've created is now useless. We will use the delete directory
 	 * helper function to delete all temporary files and delete the temp directory
 	 */
 	if(options->preserve_compilation_artifacts == FALSE){
