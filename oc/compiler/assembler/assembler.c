@@ -44,7 +44,6 @@
 #include "../utils/error_management.h"
 #include "../utils/dynamic_string/dynamic_string.h"
 
-#define FILE_NAME_LENGTH 1024
 #define MAX_COMMAND_LENGTH 2000
 
 //For any/all error printing
@@ -163,124 +162,6 @@ static inline void print_start_section(char* file_name, FILE* fl, cfg_t* cfg){
 //====================================================== PRINTING UTILITIES =============================================================
 
 //===================================================== DIRECTORY MANAGEMENT UTILTIES ==================================================
-//===================================================== DIRECTORY MANAGEMENT UTILTIES ==================================================
-
-
-
-
-
-
-
-
-
-/**
- * Create a new temporary file underneath the given directory and populate it with the generated
- * assembly. The newly made temporary file will be populated into the "file_name" buffer
- */
-static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, char* temporary_directory_path, char* file_name){
-	/**
-	 * Print out the template using the given temp
-	 */
-	sprintf(file_name, "%s/ollie_asm_tmp_XXXXXX.s", temporary_directory_path);
-	int32_t file_descriptor = mkstemps(file_name, 2);
-
-	/**
-	 * Trigger a panic if this failed
-	 */
-	if(file_descriptor == -1){
-		trigger_ice_panic("OC was unable to generate a unique temporary assembly file");
-	}
-
-	/**
-	 * Close it when we're done. We will set the assembly file dynamic string to be equal
-	 * to this given file
-	 */
-	close(file_descriptor);
-
-	/**
-	 * Open the new temp file for the purpose of writing
-	 */
-	FILE* output = fopen(file_name, "w");
-	if(output == NULL){
-		sprintf(info, "Failed to create the output file: %s\n", file_name);
-		print_assembler_message(MESSAGE_TYPE_ERROR, info);
-		error_count++;
-		return FAILURE;
-	}
-
-	/**
-	 * First print out the start section, then the global variables and finally all
-	 * local constants
-	 */
-	print_start_section(basename(file_name), output, cfg);
-	print_all_global_variables(output, &(cfg->global_variables));
-	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
-
-	/**
-	 * Close the file and tell the caller that all went well
-	 */
-	fclose(output);
-	return SUCCESS;
-}
-
-
-/**
- * Construct the assembly for the program and output it to a temp file. This temp file will 
- * be placed inside of the /tmp/oc/ directory while it is waiting for final assembly and linkage
- * into the file that we're after
- */
-static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, dynamic_string_t* assembly_file){
-	/**
-	 * We will need to create a filename that is guaranteed to be unique. We will use the linux
-	 * utility mkstemps() for this. This will enable the ollie copmiler to run multithreaded, as
-	 * name clashes are always avoided for this temp files. The 2 in the function specifies the suffix
-	 * length for us
-	 */
-	char outputted_assembly_file[] = "/tmp/oc/ollie_asm_tmp_XXXXXX.s";
-	int32_t file_descriptor = mkstemps(outputted_assembly_file, 2);
-
-	/**
-	 * Trigger a panic if this failed
-	 */
-	if(file_descriptor == -1){
-		trigger_ice_panic("OC was unable to generate a unique temporary assembly file");
-	}
-
-	/**
-	 * Close it when we're done. We will set the assembly file dynamic string to be equal
-	 * to this given file
-	 */
-	close(file_descriptor);
-	dynamic_string_set(assembly_file, outputted_assembly_file);
-
-	/**
-	 * Open the new temp file for the purpose of writing
-	 */
-	FILE* output = fopen(outputted_assembly_file, "w");
-	if(output == NULL){
-		sprintf(info, "Failed to create the output file: %s\n", outputted_assembly_file);
-		print_assembler_message(MESSAGE_TYPE_ERROR, info);
-		error_count++;
-		return FAILURE;
-	}
-
-	//We'll first print the text segment of the program
-	print_start_section(basename(outputted_assembly_file), output, cfg);
-
-	//Handle all of the global vars first
-	print_all_global_variables(output, &(cfg->global_variables));
-
-	//Print all of the local constants as well
-	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
-
-	//Once we're done, close the file
-	fclose(output);
-
-	//Tell the caller that all went well
-	return SUCCESS;
-}
-
-
 /**
  * We need to verify if the /tmp/oc/ directory exists on the machine. If it does not, we
  * will need to create it. This step is purely to guarantee that this folder is in existence
@@ -354,6 +235,142 @@ static inline void create_temp_working_directory(char* directory_name){
 	if(mkdtemp(directory_name) == NULL){
 		trigger_ice_panic("Failed to create temporary directory for compilation");
 	}
+}
+
+
+/**
+ * Delete an entire directory by first deleting all files and subdirectories and then
+ * deleting the directory itself
+ */
+static u_int8_t delete_directory(char* directory_path){
+	/**
+	 * Full path for our filename
+	 */
+	char full_path[FILENAME_MAX];
+
+	/**
+	 * This should absolutely never happen. If it does it is a critcal error
+	 */
+	DIR* tmp_directory = opendir(directory_path);
+	if(tmp_directory == NULL){
+		sprintf(info, "Unable to open directory %s", directory_path);
+		trigger_ice_panic(info);
+	}
+
+	/**
+	 * Loop infinitely until we have nothing left
+	 */
+	while(TRUE){
+		/**
+		 * Try to read the directory entry. If we can't read it
+		 * then we're done
+		 */
+		struct dirent* entry = readdir(tmp_directory);
+		if(entry == NULL){
+			break;
+		}
+
+		/**
+		 * Don't want to delete . or .. here, skip them
+		 */
+		if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0){
+			continue;
+		}
+
+		/**
+		 * Generate the fully qualified name for this entry
+		 */
+		snprintf(full_path, FILENAME_MAX, "%s/%s", directory_path, entry->d_name);
+
+		/**
+		 * Attempt to read the entry's full path to take action on deletion
+		 */
+		struct stat st;
+		if(stat(full_path, &st) == 0){
+			/**
+			 * If this is a directory then recursively call this function
+			 */
+			if(S_ISDIR(st.st_mode)){
+				delete_directory(full_path);
+
+			/**
+			 * Otherwise attempt to delete the entry
+			 */
+			} else {
+				if(unlink(full_path) != 0){
+					return FAILURE;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Close the directory before leaving
+	 */
+	closedir(tmp_directory);
+
+	/**
+	 * This should now be empty, so we can use rmdir() to delete it
+	 */
+	if(rmdir(directory_path) == -1){
+		fprintf(stderr, "Failed to delete directory %s", directory_path);
+	}
+
+	/**
+	 * Otherwise this worked so tell the caller that all went well
+	 */
+	return SUCCESS;
+}
+//===================================================== DIRECTORY MANAGEMENT UTILTIES ==================================================
+
+/**
+ * Create a new temporary file underneath the given directory and populate it with the generated
+ * assembly. The newly made temporary file will be populated into the "file_name" buffer
+ */
+static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, char* temporary_directory_path, char* file_name){
+	/**
+	 * Print out the template using the given temp
+	 */
+	sprintf(file_name, "%s/ollie_asm_tmp_XXXXXX.s", temporary_directory_path);
+	int32_t file_descriptor = mkstemps(file_name, 2);
+
+	/**
+	 * Trigger a panic if this failed
+	 */
+	if(file_descriptor == -1){
+		trigger_ice_panic("OC was unable to generate a unique temporary assembly file");
+	}
+
+	/**
+	 * Close it when we're done. We will set the assembly file dynamic string to be equal
+	 * to this given file
+	 */
+	close(file_descriptor);
+
+	/**
+	 * Open the new temp file for the purpose of writing
+	 */
+	FILE* output = fopen(file_name, "w");
+	if(output == NULL){
+		sprintf(info, "Failed to create the output file: %s\n", file_name);
+		print_assembler_message(MESSAGE_TYPE_ERROR, info);
+		error_count++;
+		return FAILURE;
+	}
+
+	/**
+	 * First print out the start section, then the global variables and finally all
+	 * local constants
+	 */
+	print_start_section(basename(file_name), output, cfg);
+	print_all_global_variables(output, &(cfg->global_variables));
+	print_local_constants(output, &(cfg->local_string_constants), &(cfg->local_f32_constants), &(cfg->local_f64_constants), &(cfg->local_xmm128_constants));
+
+	/**
+	 * Close the file and tell the caller that all went well
+	 */
+	fclose(output);
+	return SUCCESS;
 }
 
 
