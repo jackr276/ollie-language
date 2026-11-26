@@ -38,19 +38,11 @@
 #define MAX_EXIT_STATUS_VALUE 255
 
 /**
- * There are 4 potential things that we need to lock. To avoid holding
- * up other areas of the process with those locks unnecessarily, we will
- * maintain a separate mutex for each given item. The items that we need
- * to lock are
- *
- *  1.) STDOUT output
- *  2.) Lexer - not thread safe in its implementation
- *  3.) Compiler - not thread safe in its implementation
- *  4.) Error file queue
+ * We need mutices for our stdout printing, file queue that we source from,
+ * and error queue. All other operations can be performed multithreaded
  */
 pthread_mutex_t stdout_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t file_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t lexer_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t compiler_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t error_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -380,20 +372,22 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 
 		switch(to_copy){
 			//This should not happen
-			case '\0':
+			case '\0': {
 				fprintf(stderr, "Fatal internal compiler error: end of string hit without seeing .ol for file %s", file_name);
 				exit(1);
+			}
 
 			//Replace all slashes with _
-			case '/':
+			case '/': {
 				output_file_name[dest_index] = '_';
 				break;
+			}
 
 			/**
 			 * A dot is likely the filename. If it is a .ol file name, then we'll concatenate
 			 * the .test to it and leave. Otherwise this is an error
 			 */
-			case '.':
+			case '.': {
 				if(file_name[source_index + 1] == 'o' && file_name[source_index + 2] == 'l'){
 					strcat(output_file_name, ".test");
 					return;
@@ -402,11 +396,13 @@ static inline void construct_output_file_name_from_full_path(char* output_file_n
 					fprintf(stderr, "Fatal internal compiler error: . detected in string %s before the ending .ol", file_name);
 					exit(1);
 				}
+			}
 
 			//Default is just to copy this character over
-			default:
+			default: {
 				output_file_name[dest_index] = to_copy;
 				break;
+			}
 		}
 
 		//Bump these both up
@@ -644,6 +640,8 @@ void* worker(void* thread_parameters) {
 		}
 
 		/**
+		 * TODO UPDATE THIS
+		 *
 		 * We need to tokenize the file to get to any OUNIT directives
 		 *
 		 * NOTE: the lexer is NOT thread safe!!!! We need to do this in a lock
@@ -651,9 +649,7 @@ void* worker(void* thread_parameters) {
 		 *
 		 * We have silent mode turned on for this
 		 */
-		pthread_mutex_lock(&lexer_mutex);
 		ollie_token_stream_t token_stream = tokenize(file_name, TRUE);
-		pthread_mutex_unlock(&lexer_mutex);
 
 		/**
 		 * If it failed(we have stuff that fails) then we need
@@ -676,29 +672,32 @@ void* worker(void* thread_parameters) {
 			/**
 			 * Easiest case just skip the whole thing
 			 */
-			case OUNIT_TYPE_NONE:
+			case OUNIT_TYPE_NONE: {
 				break;
+			}
 
 			/**
 			 * Let the helper handle the case where the tester is requesting to run and validate the exit status
 			 * for a test
 			 */
-			case OUNIT_TYPE_EXIT_STATUS_VALIDATION:
+			case OUNIT_TYPE_EXIT_STATUS_VALIDATION: {
 				handle_exit_status_validation(thread_id, file_name, &errors_per_thread, &test_parameters);
 				break;
+			}
 
 			/**
 			 * Let the helper handle the case where the tester is requesting that a test should fail to compile
 			 */
-			case OUNIT_TYPE_FAIL_TO_COMPILE:
+			case OUNIT_TYPE_FAIL_TO_COMPILE: {
 				handle_fail_to_compile_validation(thread_id, file_name, &errors_per_thread);
 				break;
+			}
 
 			/**
 			 * This means that the developer tried to make their test OUNIT compatible
 			 * but they messed it up somehow
 			 */
-			case OUNIT_TYPE_INVALID:
+			case OUNIT_TYPE_INVALID: {
 				pthread_mutex_lock(&stdout_mutex);
 				fprintf(stdout, "[Thread %d]: The file \"%s\" has an incorrect OUNIT configuration and will not be processed\n", thread_id, file_name);
 				pthread_mutex_unlock(&stdout_mutex);
@@ -712,6 +711,7 @@ void* worker(void* thread_parameters) {
 
 				//Onto the next file don't bother compiling
 				break;
+			}
 		}
 	}
 
@@ -1078,7 +1078,6 @@ int main(int argc, char** argv) {
 	//Destroy all of our mutices
 	pthread_mutex_destroy(&file_queue_mutex);
 	pthread_mutex_destroy(&stdout_mutex);
-	pthread_mutex_destroy(&lexer_mutex);
 	pthread_mutex_destroy(&compiler_mutex);
 	pthread_mutex_destroy(&error_queue_mutex);
 
