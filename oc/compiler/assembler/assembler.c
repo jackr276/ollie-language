@@ -383,18 +383,18 @@ static u_int8_t output_generated_assembly_to_temp_file(cfg_t* cfg, char* tempora
  * to. We return void because there's no case where this fails
  */
 static inline void convert_assembly_file_name_to_object_file_name(char* result, char* full_file_path){
-	//Get the base name
+	/**
+	 * Get the base name and copy that into the result
+	 */
 	char* base_name = basename((char*)full_file_path);
+	strncpy(result, base_name, FILENAME_MAX);
 
-	//Copy the base name into the result
-	strncpy(result, base_name, TEMP_FILE_NAME_MAX_LENGTH);
-
-	//Convert the .s into a .o
+	/**
+	 * Scan through the string until we're able to find the ".s" pattern. We simply
+	 * replace the "s" with an "o" and get out
+	 */
 	char* pointer = result;
-
-	//Run through everything here - the null terminator is more of a precaution
 	while(*pointer != '\0'){
-		//If we find the .s just make the s into an o
 		if(*pointer == '.' && *(pointer + 1) == 's'){
 			*(pointer + 1) = 'o';
 			return;
@@ -404,7 +404,8 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
 	}
 
 	/**
-	 * If we somehow got here then we actually didn't find a .s at all
+	 * If we somehow got here then we actually didn't find a .s at all. This should never happen, but
+	 * if it does wwe will panic
 	 */
 	sprintf(info, "String %s does not end in the standard assembly .s extension", full_file_path);
 	trigger_ice_panic(info);
@@ -412,63 +413,31 @@ static inline void convert_assembly_file_name_to_object_file_name(char* result, 
 
 
 /**
- * Handle all of the process management using fork() to call as on a given
- * full file path. These full files will always output to /oc/tmp/ as
- * .o files
+ * Use the system() command to invoke the GNU assembly on the source file, with the output
+ * directed towards the destination file
  */
-static inline u_int8_t run_file_through_assembler(char* full_file_path, u_int8_t debug_printing){
-	//We will need this for the eventual output
-	char object_file_name[TEMP_FILE_NAME_MAX_LENGTH];
+static inline u_int8_t run_file_through_assembler(char* source_file_path, char* dest_file_path, u_int8_t debug_printing){
+	/**
+	 * Generate the command to use AS
+	 */
 	char command[MAX_COMMAND_LENGTH];
+	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o %s", source_file_path, dest_file_path);
 
-	//Let the converter get us the .o file name
-	convert_assembly_file_name_to_object_file_name(object_file_name, full_file_path);
-
-	//Now create the command
-	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o /tmp/oc/%s", full_file_path, object_file_name);
-
-	//Show the assembler command if we're debugging
+	/**
+	 * Show the assembler command if we're debugging
+	 */
 	if(debug_printing == TRUE){
 		printf("ASSEMBLER COMMAND: %s\n", command);
 	}
 
-	//Run the command in the shell
+	/**
+	 * Run the command in a subshell. Display any errors if we fail
+	 */
 	int result = system(command);
-
 	if(result == 0) { 
 		return SUCCESS;
 	} else {
-		sprintf(info, "The command %s failed with the error code %d", command, result);
-		print_assembler_message(MESSAGE_TYPE_ERROR, info);
-		(*error_count)++;
-		return FAILURE;
-	}
-}
-
-
-/**
- * Run the file throw GNU assembler and output it to a custom destination as opposed to automatically generating
- * the objectfile name. This is only invoked for custom runs where the user has specifically said that they
- * want an object file
- */
-static inline u_int8_t run_file_through_assembler_custom_output(char* full_source_file_path, char* full_dest_file_path, u_int8_t debug_printing){
-	char command[MAX_COMMAND_LENGTH];
-
-	//Now create the command
-	snprintf(command, MAX_COMMAND_LENGTH, "as %s -o %s", full_source_file_path, full_dest_file_path);
-
-	//Show the assembler command if we're debugging
-	if(debug_printing == TRUE){
-		printf("ASSEMBLER COMMAND: %s\n", command);
-	}
-
-	//Run the command in the shell
-	int result = system(command);
-
-	if(result == 0) { 
-		return SUCCESS;
-	} else {
-		sprintf(info, "The command %s failed with the error code %d", command, result);
+		sprintf(info, "The command %s failed with the error code %d", command, WEXITSTATUS(result));
 		print_assembler_message(MESSAGE_TYPE_ERROR, info);
 		(*error_count)++;
 		return FAILURE;
@@ -658,7 +627,7 @@ static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cf
 	 * folder to hold all of our working files for this compilation run. This will
 	 * be done using mkdtemp
 	 */
-	char working_directory[FILE_NAME_LENGTH];
+	char working_directory[FILENAME_MAX];
 	create_temp_working_directory(working_directory);
 
 	/**
@@ -667,18 +636,23 @@ static inline void compile_to_object_file(compiler_options_t* options, cfg_t* cf
 	 * directory. This helper function will populate the temporary file string
 	 * buffer with the file that it made
 	 */
-	char temporary_file[FILE_NAME_LENGTH];
+	char temporary_file[FILENAME_MAX];
 	u_int8_t temp_file_result = output_generated_assembly_to_temp_file(cfg, working_directory, temporary_file);
 	if(temp_file_result == FAILURE){
 		return;
 	}
 
+	/**
+	 * Step 3: Invoke the helper to run this temporary file through the assembler(GAS) and output
+	 * it to the proveded output file
+	 */
+	run_file_through_assembler(temporary_file, options->output_file, options->enable_debug_printing);
 
 	/**
-	 * Step 3: Run the file through the assembler. Unlike in other runs, the object
-	 * file here will be stored at the custom destination that the user wanted
+	 * Step 4: the temporary directory that we've created is now useless. We will use the delete directoyr
+	 * helper function to delete all temporary files and delete the temp directory
 	 */
-	run_file_through_assembler_custom_output(assembly_file.string, options->output_file, options->enable_debug_printing);
+	delete_directory(working_directory);
 }
 
 
@@ -701,14 +675,18 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	 * folder to hold all of our working files for this compilation run. This will
 	 * be done using mkdtemp
 	 */
-	char working_directory[FILE_NAME_LENGTH];
+	char working_directory[FILENAME_MAX];
 	create_temp_working_directory(working_directory);
 
-
-	u_int8_t assembly_outputter_result = output_generated_assembly_to_temp_file(cfg, &assembled_file);
-
-	//It didn't work so don't bother going on
-	if(assembly_outputter_result == FAILURE){
+	/**
+	 * Step 2: now that we have a temporary working directory to use, we can
+	 * output the assembly to a temporary file that exists exclusively in that
+	 * directory. This helper function will populate the temporary file string
+	 * buffer with the file that it made
+	 */
+	char temporary_file[FILENAME_MAX];
+	u_int8_t temp_file_result = output_generated_assembly_to_temp_file(cfg, working_directory, temporary_file);
+	if(temp_file_result == FAILURE){
 		return FAILURE;
 	}
 
@@ -739,8 +717,6 @@ static inline u_int8_t compile_to_executable(compiler_options_t* options, cfg_t*
 	return SUCCESS;
 }
 //================================================================== COMPILATION RUNNERS ==============================================================
-
-
 /**
  * Perform all of the assembly and linkage that we need to do here. This is the only
  * API that is accessible for the final builder
