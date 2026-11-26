@@ -434,7 +434,7 @@ static inline void handle_exit_status_validation(u_int32_t thread_id, char* file
 	 * Otherwise it is compatible so we will begin our testing
 	 * here by first compiling the actual item
 	 */
-	sprintf(command_buffer, "%s/oc -d -f %s -o %s", output_directory, file_name, output_file_name);
+	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
 	 * Run the ollie compiler. The ollie compiler generates guaranteed unique temporary file names. There is
@@ -536,7 +536,7 @@ static inline void handle_fail_to_compile_validation(u_int32_t thread_id, char* 
 	 * Use the @ flag to avoid directing this into an output file. We should
 	 * just see it fail to compile
 	 */
-	sprintf(command_buffer, "%s/oc -d -f %s -o %s", output_directory, file_name, output_file_name);
+	sprintf(command_buffer, "%s/oc -f %s -o %s > /dev/null 2>&1", output_directory, file_name, output_file_name);
 
 	/**
 	 * Run the ollie compiler. The ollie compiler generates guaranteed unique temporary file names. There is
