@@ -6755,7 +6755,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		changed = TRUE;
 	}
 
-
 	/**
 	 * --------------------- Simplifying binary operations with non-constants ----------------------
 	 * If we have binary operations that are non-constant, there is still a chance that we're able
@@ -7031,7 +7030,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * by the first operand internally
 		 */
 		switch(second->op){
-			case PLUS:
+			case PLUS: {
 				switch(first->op){
 					/**
 					 * Combine:
@@ -7041,7 +7040,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 + 8 + 7
 					 * 	t6 <- t4 + 15
 					 */
-					case PLUS:
+					case PLUS: {
 						//Add the two constants together
 						add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
 						
@@ -7058,6 +7057,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 
 					/**
 					 * Combine:
@@ -7067,7 +7067,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 - 8 + 7
 					 * 	t6 <- t4 + -1 
 					 */
-					case MINUS:
+					case MINUS: {
 						//Subtract the two constants
 						subtract_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
 						
@@ -7084,6 +7084,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 					
 					/**
 					 * Another unsupported case that we don't handle so we'll skip
@@ -7093,8 +7094,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 
 				break;
+			}
 				
-			case MINUS:
+			case MINUS: {
 				switch(first->op){
 					/**
 					 * Combine:
@@ -7104,7 +7106,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 - 8 + 7
 					 * 	t6 <- t4 - 1
 					 */
-					case PLUS:
+					case PLUS: {
 						//Now that we've negated it, we can add it to the second address offset
 						subtract_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
 
@@ -7121,6 +7123,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 
 					/**
 					 * Combine:
@@ -7130,7 +7133,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 - 7 - 8
 					 * 	t6 <- t4 - 15
 					 */
-					case MINUS:
+					case MINUS: {
 						//First thing that we'll do is negate these both
 						negate_three_address_consant(second->operands.oir.constant_operand);
 
@@ -7161,6 +7164,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 
 					/**
 					 * Another unsupported case that we don't handle so we'll skip
@@ -7170,6 +7174,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 
 				break;
+			}
 
 			/**
 			 * Some unsupported use case, we'll just bail out
