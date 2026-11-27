@@ -6360,6 +6360,12 @@ static void convert_OIR_constant_to_local_constant_if_required(instruction_t* in
  * cannocalize an instruction by reorienting the operands(if applicable) so that they are
  * in a predictable order. This will assist in GVN as we may recognize more operations
  * that are the exact same
+ *
+ * ORDERING RULES:
+ * 	1.) Temporary variables always come last after non-temps
+ * 		Example: t4 <- t5 + x_1 =====> t4 <- x_1 + t5
+ * 	2.) Temporary/non-temporary variables are ordered by variable ID
+ * 		Example: t4 <- t3 + t1 =====> t4 <- t1 + t3
  */
 static u_int8_t canonicalize_instruction(instruction_t* instruction){
 	/**
@@ -6382,10 +6388,47 @@ static u_int8_t canonicalize_instruction(instruction_t* instruction){
 	 * around. We'll also extract both operands as well
 	 */
 	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
+	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
+	three_addr_var_t* operand2 = instruction->operands.oir.operand2;
 
+	/**
+	 * One final check - if this operation is not commutative over this type, then
+	 * there is nothing that we're able to do to rearrange things so leave now
+	 */
+	if(is_binary_operator_commutative(instruction->op, operand_type) == FALSE){
+		return FALSE;
+	}
 
+	/**
+	 * Case 1: operand1 is a temp var and operand 2 is not. Rule 1 states that:
+	 * 	1.) Temporary variables always come last after non-temps
+	 * 		Example: t4 <- t5 + x_1 =====> t4 <- x_1 + t5
+	 * We will reorder here
+	 */
+	if(operand1->variable_type == VARIABLE_TYPE_TEMP && operand2->variable_type != VARIABLE_TYPE_TEMP){
+		instruction->operands.oir.operand1 = operand2;
+		instruction->operands.oir.operand2 = operand1;
+		return TRUE;
+	}
+
+	/**
+	 * Case 2: operand 1's variable identifier is higher than operand 2's. Rule 2
+	 * states that:
+	 * 	2.) Temporary/non-temporary variables are ordered by variable ID
+	 * 		Example: t4 <- t3 + t1 =====> t4 <- t1 + t3
+	 * We will reorder here
+	 */
+	if(operand1->variable_id > operand2->variable_id){
+		instruction->operands.oir.operand1 = operand2;
+		instruction->operands.oir.operand2 = operand1;
+		return TRUE;
+	}
+
+	/**
+	 * If we get here then the instruction was fine
+	 */
+	return FALSE;
 }
-
 
 
 /**
@@ -6448,9 +6491,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	/**
 	 * TODO DOC
 	 */
-	canonicalize_instruction(window->instruction1);
-	canonicalize_instruction(window->instruction2);
-	canonicalize_instruction(window->instruction3);
+	changed |= canonicalize_instruction(window->instruction1);
+	changed |= canonicalize_instruction(window->instruction2);
+	changed |= canonicalize_instruction(window->instruction3);
 
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
