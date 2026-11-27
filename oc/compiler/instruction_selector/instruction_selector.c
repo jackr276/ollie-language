@@ -6355,10 +6355,6 @@ static void convert_OIR_constant_to_local_constant_if_required(instruction_t* in
 }
 
 
-static inline 
-
-
-
 /**
  * Perform instruction canonicalization on eligible three address code statements. We will
  * cannocalize an instruction by reorienting the operands(if applicable) so that they are
