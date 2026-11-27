@@ -6355,6 +6355,43 @@ static void convert_OIR_constant_to_local_constant_if_required(instruction_t* in
 }
 
 
+static inline 
+
+
+
+/**
+ * Perform instruction canonicalization on eligible three address code statements. We will
+ * cannocalize an instruction by reorienting the operands(if applicable) so that they are
+ * in a predictable order. This will assist in GVN as we may recognize more operations
+ * that are the exact same
+ */
+static u_int8_t canonicalize_instruction(instruction_t* instruction){
+	/**
+	 * NULL instruction/not a binary operation, we don't care so leave
+	 */
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_BIN_OP_STMT){
+		return FALSE;
+	}
+
+	/**
+	 * Some binary operation instructions already have been canonicalized by default if they've
+	 * had a load instruction merged into them. Nothing more to do here
+	 */
+	if(instruction->memory_access_type == READ_FROM_MEMORY){
+		return FALSE;
+	}
+
+	/**
+	 * Get the operand type out. This will be important in determining if we can or cannot move things
+	 * around. We'll also extract both operands as well
+	 */
+	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
+
+
+}
+
+
+
 /**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
@@ -6411,6 +6448,13 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	convert_OIR_constant_to_local_constant_if_required(window->instruction1, &changed);
 	convert_OIR_constant_to_local_constant_if_required(window->instruction2, &changed);
 	convert_OIR_constant_to_local_constant_if_required(window->instruction3, &changed);
+
+	/**
+	 * TODO DOC
+	 */
+	canonicalize_instruction(window->instruction1);
+	canonicalize_instruction(window->instruction2);
+	canonicalize_instruction(window->instruction3);
 
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
