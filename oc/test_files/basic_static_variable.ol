@@ -17,5 +17,6 @@ pub fn main() -> i32 {
 	@reentrant(2);
 	@reentrant(3);
 
+	OUNIT: [exit_status = 15]
 	ret @reentrant(4);
 }

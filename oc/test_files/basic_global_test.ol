@@ -25,5 +25,6 @@ pub fn reassign_global(z:i32) -> void {
 pub fn main() -> i32 {
 	x = 32;
 
+	OUNIT: [exit_status = 32]
 	ret x;
 }
