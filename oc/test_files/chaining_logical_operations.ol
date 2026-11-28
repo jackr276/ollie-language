@@ -10,5 +10,6 @@ pub fn main() -> i32 {
 	let a:i32 = 125;
 	let b:i32 = 33;
 
+	OUNIT: [exit_status = 1]
 	ret (a > 3) || (b < 7) && (y + x > 3);
 }

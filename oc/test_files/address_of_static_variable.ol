@@ -21,5 +21,6 @@ pub fn static_var(x:i32) -> i32 {
 
 
 pub fn main() -> i32 {
-	ret 0;
+	OUNIT: [exit_status = 5]
+	ret @static_var(11);
 }

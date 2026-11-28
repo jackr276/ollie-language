@@ -560,4 +560,55 @@ static inline u_int8_t does_OIR_statement_set_branch_eligible_flags(instruction_
 		}
 	}
 }
+
+
+/**
+ * Is the given binary operator commutative? This relies on the
+ * operator and the type. Some operations(like multiplication) are
+ * commutative for integers but noncommutative for floats
+ */
+static inline u_int8_t is_binary_operator_commutative(ollie_token_t op, generic_type_t* operand_type){
+	switch(op){
+		/**
+		 * Bitwse operations(&, |, ^) are always commutative
+		 */
+		case SINGLE_AND:
+		case SINGLE_OR:
+		case CARROT: {
+			return TRUE;
+		}
+
+		/**
+		 * Logical operations are also always commutative
+		 */
+		case DOUBLE_AND:
+		case DOUBLE_OR: {
+			return TRUE;
+		}
+
+		/**
+		 * ==/!= are reversible and as such commutative
+		 */
+		case DOUBLE_EQUALS:
+		case NOT_EQUALS: {
+			return TRUE;
+		}
+
+		/**
+		 * Multiplcation and addition are commutative for non-floats only
+		 */
+		case STAR:
+		case PLUS: {
+			return !(IS_FLOATING_POINT(operand_type));
+		}
+
+		/**
+		 * Everything else is by default non-commutative
+		 */
+		default: {
+			return FALSE;
+		}
+	}
+}
+
 #endif /* OLLIE_INSTRUCTION_H */

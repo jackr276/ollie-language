@@ -6356,6 +6356,82 @@ static void convert_OIR_constant_to_local_constant_if_required(instruction_t* in
 
 
 /**
+ * Perform instruction canonicalization on eligible three address code statements. We will
+ * cannocalize an instruction by reorienting the operands(if applicable) so that they are
+ * in a predictable order. This will assist in GVN as we may recognize more operations
+ * that are the exact same
+ *
+ * ORDERING RULES:
+ * 	1.) Temporary variables always come last after non-temps
+ * 		Example: t4 <- t5 + x_1 =====> t4 <- x_1 + t5
+ * 	2.) Temporary/non-temporary variables are ordered by variable ID
+ * 		Example: t4 <- t3 + t1 =====> t4 <- t1 + t3
+ */
+static u_int8_t canonicalize_instruction(instruction_t* instruction){
+	/**
+	 * NULL instruction/not a binary operation, we don't care so leave
+	 */
+	if(instruction == NULL || instruction->statement_type != THREE_ADDR_CODE_BIN_OP_STMT){
+		return FALSE;
+	}
+
+	/**
+	 * Some binary operation instructions already have been canonicalized by default if they've
+	 * had a load instruction merged into them. Nothing more to do here
+	 */
+	if(instruction->memory_access_type == READ_FROM_MEMORY){
+		return FALSE;
+	}
+
+	/**
+	 * Get the operand type out. This will be important in determining if we can or cannot move things
+	 * around. We'll also extract both operands as well
+	 */
+	generic_type_t* operand_type = get_destination_type_for_binary_operation_instruction(instruction);
+	three_addr_var_t* operand1 = instruction->operands.oir.operand1;
+	three_addr_var_t* operand2 = instruction->operands.oir.operand2;
+
+	/**
+	 * One final check - if this operation is not commutative over this type, then
+	 * there is nothing that we're able to do to rearrange things so leave now
+	 */
+	if(is_binary_operator_commutative(instruction->op, operand_type) == FALSE){
+		return FALSE;
+	}
+
+	/**
+	 * Case 1: operand1 is a temp var and operand 2 is not. Rule 1 states that:
+	 * 	1.) Temporary variables always come last after non-temps
+	 * 		Example: t4 <- t5 + x_1 =====> t4 <- x_1 + t5
+	 * We will reorder here
+	 */
+	if(operand1->variable_type == VARIABLE_TYPE_TEMP && operand2->variable_type != VARIABLE_TYPE_TEMP){
+		instruction->operands.oir.operand1 = operand2;
+		instruction->operands.oir.operand2 = operand1;
+		return TRUE;
+	}
+
+	/**
+	 * Case 2: operand 1's variable identifier is higher than operand 2's. Rule 2
+	 * states that:
+	 * 	2.) Temporary/non-temporary variables are ordered by variable ID
+	 * 		Example: t4 <- t3 + t1 =====> t4 <- t1 + t3
+	 * We will reorder here
+	 */
+	if(operand1->variable_id > operand2->variable_id){
+		instruction->operands.oir.operand1 = operand2;
+		instruction->operands.oir.operand2 = operand1;
+		return TRUE;
+	}
+
+	/**
+	 * If we get here then the instruction was fine
+	 */
+	return FALSE;
+}
+
+
+/**
  * The pattern optimizer takes in a window and performs hyperlocal optimzations
  * on passing instructions. If we do end up deleting instructions, we'll need
  * to take care with how that affects the window that we take in
@@ -6411,6 +6487,15 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	convert_OIR_constant_to_local_constant_if_required(window->instruction1, &changed);
 	convert_OIR_constant_to_local_constant_if_required(window->instruction2, &changed);
 	convert_OIR_constant_to_local_constant_if_required(window->instruction3, &changed);
+
+	/**
+	 * For binary operations specifically, we want to "canonicalize" them. This means
+	 * that we want a certain operand ordering to be guaranteed(ours is ascending by
+	 * variable ID). We will do that nwo for all binary operation instructions
+	 */
+	changed |= canonicalize_instruction(window->instruction1);
+	changed |= canonicalize_instruction(window->instruction2);
+	changed |= canonicalize_instruction(window->instruction3);
 
 	/**
 	 * ================== CONSTANT ASSINGNMENT FOLDING ==========================
@@ -6755,7 +6840,6 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		changed = TRUE;
 	}
 
-
 	/**
 	 * --------------------- Simplifying binary operations with non-constants ----------------------
 	 * If we have binary operations that are non-constant, there is still a chance that we're able
@@ -7031,7 +7115,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 		 * by the first operand internally
 		 */
 		switch(second->op){
-			case PLUS:
+			case PLUS: {
 				switch(first->op){
 					/**
 					 * Combine:
@@ -7041,7 +7125,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 + 8 + 7
 					 * 	t6 <- t4 + 15
 					 */
-					case PLUS:
+					case PLUS: {
 						//Add the two constants together
 						add_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
 						
@@ -7058,6 +7142,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 
 					/**
 					 * Combine:
@@ -7067,7 +7152,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 - 8 + 7
 					 * 	t6 <- t4 + -1 
 					 */
-					case MINUS:
+					case MINUS: {
 						//Subtract the two constants
 						subtract_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
 						
@@ -7084,6 +7169,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 					
 					/**
 					 * Another unsupported case that we don't handle so we'll skip
@@ -7093,8 +7179,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 
 				break;
+			}
 				
-			case MINUS:
+			case MINUS: {
 				switch(first->op){
 					/**
 					 * Combine:
@@ -7104,7 +7191,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 - 8 + 7
 					 * 	t6 <- t4 - 1
 					 */
-					case PLUS:
+					case PLUS: {
 						//Now that we've negated it, we can add it to the second address offset
 						subtract_constants(second->operands.oir.constant_operand, first->operands.oir.constant_operand);
 
@@ -7121,6 +7208,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 
 					/**
 					 * Combine:
@@ -7130,7 +7218,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 					 * 	t6 <- t4 - 7 - 8
 					 * 	t6 <- t4 - 15
 					 */
-					case MINUS:
+					case MINUS: {
 						//First thing that we'll do is negate these both
 						negate_three_address_consant(second->operands.oir.constant_operand);
 
@@ -7161,6 +7249,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 
 						changed = TRUE;
 						break;
+					}
 
 					/**
 					 * Another unsupported case that we don't handle so we'll skip
@@ -7170,6 +7259,7 @@ static u_int8_t simplify_window(instruction_window_t* window){
 				}
 
 				break;
+			}
 
 			/**
 			 * Some unsupported use case, we'll just bail out

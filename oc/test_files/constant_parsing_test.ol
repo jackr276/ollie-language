@@ -9,5 +9,6 @@ pub fn main() -> i32 {
 	//Should parse fine
 	let x:i32 = y - -3;
 
+	OUNIT: [exit_status = 69]
 	ret x + y;
 }
