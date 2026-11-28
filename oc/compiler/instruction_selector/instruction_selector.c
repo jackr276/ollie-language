@@ -6489,7 +6489,9 @@ static u_int8_t simplify_window(instruction_window_t* window){
 	convert_OIR_constant_to_local_constant_if_required(window->instruction3, &changed);
 
 	/**
-	 * TODO DOC
+	 * For binary operations specifically, we want to "canonicalize" them. This means
+	 * that we want a certain operand ordering to be guaranteed(ours is ascending by
+	 * variable ID). We will do that nwo for all binary operation instructions
 	 */
 	changed |= canonicalize_instruction(window->instruction1);
 	changed |= canonicalize_instruction(window->instruction2);
