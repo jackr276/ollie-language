@@ -8,5 +8,6 @@ pub fn main() -> i32 {
 	let y:mut i32 = 3;
 	let z:mut i32 = 3;
 
+	OUNIT: [exit_status = 0]
 	ret x == y == z;
 }

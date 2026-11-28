@@ -12,5 +12,6 @@ pub fn main(arc:i32, argv:char**) -> i32 {
 	let a:i32 = z && y;
 	let c:i32 = !a;
 	
-	ret x + a + c;
+	OUNIT: [exit_status = 2]
+	ret z + a + c;
 }
