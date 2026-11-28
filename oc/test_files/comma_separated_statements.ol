@@ -8,5 +8,6 @@ pub fn main() -> i32 {
 
 	x += 1, y += 2, z += 3;
 
+	OUNIT: [exit_status = 18]
 	ret x + y + z;
 }
